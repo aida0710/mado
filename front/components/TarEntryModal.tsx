@@ -73,7 +73,7 @@ function AudioBody({ url }: { url: string }) {
 function TextBody({
   bucket, archiveKey, entry,
 }: { bucket: string; archiveKey: string; entry: string }) {
-  const [text, setText] = useState<string>('loading…')
+  const [text, setText] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   useEffect(() => {
     let cancelled = false
@@ -82,13 +82,34 @@ function TextBody({
       .catch((e: Error) => { if (!cancelled) setError(e.message) })
     return () => { cancelled = true }
   }, [bucket, archiveKey, entry])
+
   if (error) return <p className="error">{error}</p>
-  // Pretty-print JSON if it parses cleanly.
+  if (text === null) return <p className="muted">loading…</p>
+
+  // .json (single document) gets pretty-printed; .jsonl / .ndjson are
+  // newline-separated JSON values per line, so leave raw.
   let display = text
-  if (entry.toLowerCase().endsWith('.json')) {
-    try { display = JSON.stringify(JSON.parse(text), null, 2) } catch { /* leave raw */ }
+  const lower = entry.toLowerCase()
+  if (lower.endsWith('.json') && !lower.endsWith('.jsonl')) {
+    try {
+      display = JSON.stringify(JSON.parse(text), null, 2)
+    } catch {
+      /* leave raw */
+    }
   }
-  return <pre className="entry-text">{display}</pre>
+
+  // Trailing newline shouldn't inflate the line count.
+  const trimmed = display.endsWith('\n') ? display.slice(0, -1) : display
+  const lines = trimmed.length === 0 ? 0 : trimmed.split('\n').length
+
+  return (
+    <div className="entry-text-wrap">
+      <p className="muted--small tabular entry-text-meta">
+        <span>{lines} 行</span>
+      </p>
+      <pre className="entry-text">{display}</pre>
+    </div>
+  )
 }
 
 function UnknownBody({ url, name }: { url: string; name: string }) {

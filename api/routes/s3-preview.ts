@@ -57,7 +57,10 @@ function detectArchive(key: string): ArchiveKind | null {
 }
 
 const TEXT_EXT = new Set([
-  'txt', 'md', 'json', 'yaml', 'yml', 'csv', 'tsv', 'log',
+  'txt', 'md',
+  'jsonl', 'ndjson',
+  'yaml', 'yml',
+  'csv', 'tsv', 'log',
 ])
 
 // MIME type for a tar entry name (used by /api/s3/preview/tar-entry).
@@ -65,8 +68,8 @@ function entryContentType(name: string): string {
   const e = ext(name)
   if (IMAGE_MIME[e]) return IMAGE_MIME[e]
   if (AUDIO_MIME[e]) return AUDIO_MIME[e]
-  if (TEXT_EXT.has(e)) return 'text/plain; charset=utf-8'
   if (e === 'json') return 'application/json; charset=utf-8'
+  if (TEXT_EXT.has(e)) return 'text/plain; charset=utf-8'
   return 'application/octet-stream'
 }
 
