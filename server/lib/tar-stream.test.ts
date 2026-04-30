@@ -11,53 +11,68 @@ const big = 1_000_000
 
 describe('listTarEntries', () => {
   it('lists entries in plain tar', async () => {
-    const entries = await listTarEntries(
+    const r = await listTarEntries(
       createReadStream(fix('sample.tar')),
       'tar',
       { entryLimit: 10, byteLimit: big },
     )
-    const names = entries.map(e => e.name)
-    expect(names).toEqual(expect.arrayContaining([
+    expect(r.truncated).toBe(false)
+    expect(r.entries.map(e => e.name)).toEqual(expect.arrayContaining([
       'd/a.txt', 'd/b.txt', 'd/c.txt',
     ]))
   })
 
   it('lists entries in tar.gz', async () => {
-    const entries = await listTarEntries(
+    const r = await listTarEntries(
       createReadStream(fix('sample.tar.gz')),
       'gz',
       { entryLimit: 10, byteLimit: big },
     )
-    const names = entries.map(e => e.name).sort()
-    expect(names).toEqual(['d/', 'd/a.txt', 'd/b.txt', 'd/c.txt'])
+    expect(r.truncated).toBe(false)
+    expect(r.entries.map(e => e.name).sort())
+      .toEqual(['d/', 'd/a.txt', 'd/b.txt', 'd/c.txt'])
   })
 
   it('lists entries in tar.xz', async () => {
-    const entries = await listTarEntries(
+    const r = await listTarEntries(
       createReadStream(fix('sample.tar.xz')),
       'xz',
       { entryLimit: 10, byteLimit: big },
     )
-    const names = entries.map(e => e.name).sort()
-    expect(names).toEqual(['d/', 'd/a.txt', 'd/b.txt', 'd/c.txt'])
+    expect(r.truncated).toBe(false)
+    expect(r.entries.map(e => e.name).sort())
+      .toEqual(['d/', 'd/a.txt', 'd/b.txt', 'd/c.txt'])
   })
 
-  it('stops at entryLimit', async () => {
-    const entries = await listTarEntries(
+  it('stops at entryLimit and marks truncated', async () => {
+    const r = await listTarEntries(
       createReadStream(fix('sample.tar')),
       'tar',
       { entryLimit: 2, byteLimit: big },
     )
-    expect(entries).toHaveLength(2)
+    expect(r.entries).toHaveLength(2)
+    expect(r.truncated).toBe(true)
+  })
+
+  it('stops at byteLimit and marks truncated', async () => {
+    // The decompressed sample.tar.xz exceeds 50 bytes; the byte counter sits
+    // after the decompressor so this is enforced on the inflated stream.
+    const r = await listTarEntries(
+      createReadStream(fix('sample.tar.xz')),
+      'xz',
+      { entryLimit: 10, byteLimit: 50 },
+    )
+    expect(r.truncated).toBe(true)
+    expect(r.entries.length).toBeLessThan(4)
   })
 
   it('reports size on entries', async () => {
-    const entries = await listTarEntries(
+    const r = await listTarEntries(
       createReadStream(fix('sample.tar')),
       'tar',
       { entryLimit: 10, byteLimit: big },
     )
-    const a = entries.find(e => e.name === 'd/a.txt')
+    const a = r.entries.find(e => e.name === 'd/a.txt')
     expect(a?.size).toBe(6) // 'alpha\n'
   })
 })

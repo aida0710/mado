@@ -1,5 +1,5 @@
 import { createGunzip } from 'node:zlib'
-import { Transform } from 'node:stream'
+import { PassThrough, Transform, pipeline } from 'node:stream'
 import { createRequire } from 'node:module'
 import { extract as tarExtract } from 'tar-stream'
 
@@ -16,6 +16,11 @@ export interface TarEntry {
 export interface TarOptions {
   entryLimit: number
   byteLimit: number
+}
+
+export interface TarListing {
+  entries: TarEntry[]
+  truncated: boolean
 }
 
 function makeXzDecompressor(): NodeJS.ReadWriteStream {
@@ -39,24 +44,30 @@ export function listTarEntries(
   source: NodeJS.ReadableStream,
   kind: ArchiveKind,
   opts: TarOptions,
-): Promise<TarEntry[]> {
+): Promise<TarListing> {
   return new Promise((resolveP, rejectP) => {
     const ext = tarExtract()
     const out: TarEntry[] = []
     let bytes = 0
     let stopped = false
+    let truncated = false
 
-    const stop = () => {
+    const stop = (reason: 'entry' | 'byte' | null) => {
       if (stopped) return
       stopped = true
+      truncated = reason !== null
+      // Destroying the head of the pipeline propagates through node:stream's
+      // pipeline() helper and closes upstream (e.g., the S3 socket) instead
+      // of leaving us reading bytes we have already decided to discard.
+      ;(source as NodeJS.ReadableStream & { destroy?: () => void }).destroy?.()
       ext.destroy()
-      resolveP(out)
+      resolveP({ entries: out, truncated })
     }
 
     ext.on('entry', (header, stream, next) => {
       if (out.length >= opts.entryLimit) {
         stream.resume()
-        stop()
+        stop('entry')
         return
       }
       out.push({
@@ -67,27 +78,31 @@ export function listTarEntries(
       stream.on('end', next)
       stream.resume()
     })
-    ext.on('finish', () => resolveP(out))
-    ext.on('error', rejectP)
 
     const counter = new Transform({
       transform(chunk, _enc, cb) {
+        if (stopped) return cb()
         bytes += (chunk as Buffer).byteLength
         if (bytes > opts.byteLimit) {
-          stop()
-          cb()
-          return
+          stop('byte')
+          return cb()
         }
         cb(null, chunk)
       },
     })
 
-    let pipeline: NodeJS.ReadableStream
-    if (kind === 'tar') pipeline = source
-    else if (kind === 'gz') pipeline = source.pipe(createGunzip())
-    else pipeline = source.pipe(makeXzDecompressor() as never)
+    const decompressor: NodeJS.ReadWriteStream =
+      kind === 'tar' ? new PassThrough()
+      : kind === 'gz' ? createGunzip()
+      : makeXzDecompressor()
 
-    pipeline.pipe(counter).pipe(ext)
-    pipeline.on('error', rejectP)
+    // node:stream's pipeline() forwards errors and cleans up all stages on
+    // any failure or destruction. The completion callback is the single
+    // place that resolves on natural EOF or rejects on error.
+    pipeline(source, decompressor, counter, ext, err => {
+      if (stopped) return
+      if (err) rejectP(err)
+      else resolveP({ entries: out, truncated })
+    })
   })
 }
