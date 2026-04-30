@@ -77,17 +77,71 @@ export const api = {
     return PutReadmeOk.parse(json)
   },
 
-  tarPreview: (
+  // Streams NDJSON: one `{entry}` line per discovered tar entry, then a
+  // final `{done}` line. Calls `onEntry` for each entry as it arrives so
+  // the UI can show running progress, and resolves with the full TarPreview
+  // shape once `done` lands.
+  tarPreview: async (
     bucket: string,
     key: string,
     opts: { limit?: number; offset?: number } = {},
-  ) =>
-    getJson(buildUrl('/api/s3/preview/tar', {
+    onEntry?: (e: z.infer<typeof TarPreview>['entries'][number]) => void,
+  ): Promise<z.infer<typeof TarPreview>> => {
+    const url = buildUrl('/api/s3/preview/tar', {
       bucket,
       key,
       limit:  opts.limit  != null ? String(opts.limit)  : undefined,
       offset: opts.offset != null ? String(opts.offset) : undefined,
-    }), TarPreview),
+    })
+    const res = await fetch(url)
+    if (!res.ok) {
+      let msg = res.statusText
+      try {
+        const errBody = (await res.json()) as { error?: string }
+        if (errBody.error) msg = errBody.error
+      } catch {
+        /* keep statusText */
+      }
+      throw new Error(msg)
+    }
+    interface DoneShape {
+      truncated: boolean
+      hasMore: boolean
+      offset: number
+      limit: number
+    }
+    const reader = res.body!.getReader()
+    const dec = new TextDecoder()
+    const entries: z.infer<typeof TarPreview>['entries'] = []
+    let done: DoneShape | null = null
+    let buf = ''
+
+    while (true) {
+      const { value, done: streamDone } = await reader.read()
+      if (streamDone) break
+      buf += dec.decode(value, { stream: true })
+      let nl = buf.indexOf('\n')
+      while (nl !== -1) {
+        const line = buf.slice(0, nl)
+        buf = buf.slice(nl + 1)
+        if (line.length > 0) {
+          const obj = JSON.parse(line) as Record<string, unknown>
+          if ('entry' in obj) {
+            const entry = obj.entry as { name: string; size: number; type: string }
+            entries.push(entry)
+            onEntry?.(entry)
+          } else if ('done' in obj) {
+            done = obj.done as DoneShape
+          } else if ('error' in obj) {
+            throw new Error(String(obj.error))
+          }
+        }
+        nl = buf.indexOf('\n')
+      }
+    }
+    if (!done) throw new Error('tar stream ended without done marker')
+    return TarPreview.parse({ entries, ...done })
+  },
 
   textPreviewUrl: (bucket: string, key: string): string =>
     buildUrl('/api/s3/preview/text', { bucket, key }),

@@ -49,6 +49,7 @@ export function listTarEntries(
   source: NodeJS.ReadableStream,
   kind: ArchiveKind,
   opts: TarOptions,
+  onEntry?: (entry: TarEntry) => void,
 ): Promise<TarListing> {
   const offset = opts.offset ?? 0
   return new Promise((resolveP, rejectP) => {
@@ -87,11 +88,13 @@ export function listTarEntries(
         stop('entry')
         return
       }
-      out.push({
+      const entry: TarEntry = {
         name: header.name,
         size: header.size ?? 0,
         type: header.type ?? 'file',
-      })
+      }
+      out.push(entry)
+      onEntry?.(entry)
       stream.on('end', next)
       stream.resume()
     })

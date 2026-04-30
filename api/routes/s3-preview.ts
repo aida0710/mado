@@ -193,15 +193,40 @@ export function mountS3PreviewRoutes(app: Hono, deps: S3PreviewDeps): void {
     const byteLimit = kind === 'xz'
       ? deps.env.PREVIEW_TARXZ_BYTE_LIMIT
       : 1024 * 1024 * 1024 // 1 GiB ceiling for tar/tar.gz
-    try {
-      const listing = await listTarEntries(stream, kind, {
-        entryLimit: limit,
-        byteLimit,
-        offset,
-      })
-      return c.json({ ...listing, offset, limit })
-    } catch (e) {
-      return c.json({ error: (e as Error).message }, 500)
-    }
+
+    // Stream NDJSON: one `{entry: ...}` line per discovered entry, then a
+    // final `{done: ...}` line. Front-end can show running progress
+    // ("loading entries… 423 件") without waiting for the whole archive.
+    const enc = new TextEncoder()
+    const body = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        const write = (obj: unknown): void => {
+          controller.enqueue(enc.encode(JSON.stringify(obj) + '\n'))
+        }
+        try {
+          const result = await listTarEntries(
+            stream,
+            kind,
+            { entryLimit: limit, byteLimit, offset },
+            entry => write({ entry }),
+          )
+          write({
+            done: {
+              truncated: result.truncated,
+              hasMore: result.hasMore,
+              offset,
+              limit,
+            },
+          })
+        } catch (e) {
+          write({ error: (e as Error).message })
+        } finally {
+          controller.close()
+        }
+      },
+    })
+    return new Response(body, {
+      headers: { 'Content-Type': 'application/x-ndjson; charset=utf-8' },
+    })
   })
 }

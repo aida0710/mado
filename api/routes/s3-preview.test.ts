@@ -169,8 +169,31 @@ describe('GET /api/s3/preview/audio', () => {
   })
 })
 
+interface NdjsonEntryLine { entry: { name: string; size: number; type: string } }
+interface NdjsonDoneLine {
+  done: { truncated: boolean; hasMore: boolean; offset: number; limit: number }
+}
+interface NdjsonErrorLine { error: string }
+type NdjsonLine = NdjsonEntryLine | NdjsonDoneLine | NdjsonErrorLine
+
+async function readNdjson(res: Response): Promise<NdjsonLine[]> {
+  const text = await res.text()
+  return text
+    .split('\n')
+    .filter(l => l.length > 0)
+    .map(l => JSON.parse(l) as NdjsonLine)
+}
+
+function entriesOf(lines: NdjsonLine[]): { name: string; size: number; type: string }[] {
+  return lines.flatMap(l => ('entry' in l ? [l.entry] : []))
+}
+
+function doneOf(lines: NdjsonLine[]): NdjsonDoneLine['done'] | undefined {
+  return lines.find((l): l is NdjsonDoneLine => 'done' in l)?.done
+}
+
 describe('GET /api/s3/preview/tar', () => {
-  it('returns entries from a tar.gz', async () => {
+  it('streams entries from a tar.gz as NDJSON ending with done', async () => {
     s3Mock.on(GetObjectCommand).resolves({
       Body: createReadStream(fixture('sample.tar.gz')) as never,
     })
@@ -178,17 +201,16 @@ describe('GET /api/s3/preview/tar', () => {
       '/api/s3/preview/tar?bucket=b&key=foo/sample.tar.gz',
     )
     expect(res.status).toBe(200)
-    const body = (await res.json()) as {
-      entries: { name: string; size: number; type: string }[]
-      truncated: boolean
-    }
-    expect(body.truncated).toBe(false)
-    expect(body.entries.map(e => e.name)).toEqual(
+    expect(res.headers.get('content-type')).toMatch(/x-ndjson/)
+    const lines = await readNdjson(res)
+    const done = doneOf(lines)
+    expect(done?.truncated).toBe(false)
+    expect(entriesOf(lines).map(e => e.name)).toEqual(
       expect.arrayContaining(['d/a.txt', 'd/b.txt', 'd/c.txt']),
     )
   })
 
-  it('returns entries from a plain tar', async () => {
+  it('streams entries from a plain tar', async () => {
     s3Mock.on(GetObjectCommand).resolves({
       Body: createReadStream(fixture('sample.tar')) as never,
     })
@@ -196,14 +218,13 @@ describe('GET /api/s3/preview/tar', () => {
       '/api/s3/preview/tar?bucket=b&key=foo/sample.tar',
     )
     expect(res.status).toBe(200)
-    const body = (await res.json()) as { entries: { name: string }[] }
-    const names = body.entries.map(e => e.name)
+    const names = entriesOf(await readNdjson(res)).map(e => e.name)
     expect(names).toEqual(expect.arrayContaining([
       'd/a.txt', 'd/b.txt', 'd/c.txt',
     ]))
   })
 
-  it('returns entries from a tar.xz', async () => {
+  it('streams entries from a tar.xz', async () => {
     s3Mock.on(GetObjectCommand).resolves({
       Body: createReadStream(fixture('sample.tar.xz')) as never,
     })
@@ -211,13 +232,11 @@ describe('GET /api/s3/preview/tar', () => {
       '/api/s3/preview/tar?bucket=b&key=foo/sample.tar.xz',
     )
     expect(res.status).toBe(200)
-    const body = (await res.json()) as { entries: { name: string }[] }
-    expect(body.entries.map(e => e.name).sort()).toEqual([
-      'd/', 'd/a.txt', 'd/b.txt', 'd/c.txt',
-    ])
+    const names = entriesOf(await readNdjson(res)).map(e => e.name).sort()
+    expect(names).toEqual(['d/', 'd/a.txt', 'd/b.txt', 'd/c.txt'])
   })
 
-  it('respects ?limit=2 and reports hasMore:true', async () => {
+  it('respects ?limit=2 and reports hasMore:true in the done line', async () => {
     s3Mock.on(GetObjectCommand).resolves({
       Body: createReadStream(fixture('sample.tar.gz')) as never,
     })
@@ -225,51 +244,42 @@ describe('GET /api/s3/preview/tar', () => {
       '/api/s3/preview/tar?bucket=b&key=foo/sample.tar.gz&limit=2',
     )
     expect(res.status).toBe(200)
-    const body = (await res.json()) as {
-      entries: { name: string }[]
-      truncated: boolean
-      hasMore: boolean
-      offset: number
-      limit: number
-    }
-    expect(body.entries).toHaveLength(2)
-    expect(body.hasMore).toBe(true)
-    expect(body.truncated).toBe(false)
-    expect(body.offset).toBe(0)
-    expect(body.limit).toBe(2)
+    const lines = await readNdjson(res)
+    expect(entriesOf(lines)).toHaveLength(2)
+    const done = doneOf(lines)
+    expect(done?.hasMore).toBe(true)
+    expect(done?.truncated).toBe(false)
+    expect(done?.offset).toBe(0)
+    expect(done?.limit).toBe(2)
   })
 
   it('paginates with ?offset', async () => {
     s3Mock.on(GetObjectCommand).resolves({
       Body: createReadStream(fixture('sample.tar.gz')) as never,
     })
-    const res1 = await app.request(
+    const r1 = await app.request(
       '/api/s3/preview/tar?bucket=b&key=s.tar.gz&limit=2&offset=0',
     )
-    const body1 = (await res1.json()) as {
-      entries: { name: string }[]; hasMore: boolean; offset: number
-    }
-    expect(body1.entries).toHaveLength(2)
-    expect(body1.hasMore).toBe(true)
-    expect(body1.offset).toBe(0)
+    const lines1 = await readNdjson(r1)
+    const e1 = entriesOf(lines1)
+    expect(e1).toHaveLength(2)
+    expect(doneOf(lines1)?.hasMore).toBe(true)
 
     s3Mock.reset()
     s3Mock.on(GetObjectCommand).resolves({
       Body: createReadStream(fixture('sample.tar.gz')) as never,
     })
-    const res2 = await app.request(
+    const r2 = await app.request(
       '/api/s3/preview/tar?bucket=b&key=s.tar.gz&limit=2&offset=2',
     )
-    const body2 = (await res2.json()) as {
-      entries: { name: string }[]; hasMore: boolean; offset: number
-    }
-    expect(body2.entries).toHaveLength(2)
-    expect(body2.hasMore).toBe(false)
-    expect(body2.offset).toBe(2)
+    const lines2 = await readNdjson(r2)
+    const e2 = entriesOf(lines2)
+    expect(e2).toHaveLength(2)
+    expect(doneOf(lines2)?.hasMore).toBe(false)
+    expect(doneOf(lines2)?.offset).toBe(2)
 
-    const allNames = [...body1.entries, ...body2.entries]
-      .map(e => e.name).sort()
-    expect(allNames).toEqual(['d/', 'd/a.txt', 'd/b.txt', 'd/c.txt'])
+    expect([...e1, ...e2].map(e => e.name).sort())
+      .toEqual(['d/', 'd/a.txt', 'd/b.txt', 'd/c.txt'])
   })
 
   it('400 for unsupported extension (.zip)', async () => {

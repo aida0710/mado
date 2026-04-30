@@ -13,6 +13,7 @@ export function PreviewArchive({ bucket, k }: { bucket: string; k: string }) {
   const [offset, setOffset] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [progress, setProgress] = useState(0)
 
   // Reset to page 1 whenever the file changes.
   useEffect(() => { setOffset(0) }, [bucket, k])
@@ -21,7 +22,11 @@ export function PreviewArchive({ bucket, k }: { bucket: string; k: string }) {
     let cancelled = false
     setLoading(true)
     setError(null)
-    api.tarPreview(bucket, k, { limit: PAGE_SIZE, offset })
+    setData(null)
+    setProgress(0)
+    api.tarPreview(bucket, k, { limit: PAGE_SIZE, offset }, () => {
+      if (!cancelled) setProgress(p => p + 1)
+    })
       .then(r => { if (!cancelled) setData(r) })
       .catch((e: Error) => { if (!cancelled) setError(e.message) })
       .finally(() => { if (!cancelled) setLoading(false) })
@@ -29,7 +34,13 @@ export function PreviewArchive({ bucket, k }: { bucket: string; k: string }) {
   }, [bucket, k, offset])
 
   if (error) return <p className="error">{error}</p>
-  if (!data) return <p className="muted">loading entries…</p>
+  if (!data) {
+    return (
+      <p className="muted">
+        loading entries… <span className="tabular">{progress}</span> 件
+      </p>
+    )
+  }
 
   const start = data.offset + 1
   const end = data.offset + data.entries.length
