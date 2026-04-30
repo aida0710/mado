@@ -24,11 +24,19 @@ for db in dashboard dashboard_test; do
   psql -v ON_ERROR_STOP=1 --username "postgres" --dbname "$db" \
     -f /docker-entrypoint-initdb.d/01-schema.sql
 
-  # Grant ro access on every existing and future table in public.
+  # Transfer ownership of the schema objects to dashboard_rw so it can
+  # TRUNCATE / ALTER / DROP them as needed (GRANT alone is not enough for
+  # operations like TRUNCATE ... RESTART IDENTITY).
+  # ro keeps SELECT-only access via explicit GRANT.
   psql -v ON_ERROR_STOP=1 --username "postgres" --dbname "$db" <<-EOSQL
-    GRANT USAGE  ON SCHEMA public                       TO dashboard_ro;
-    GRANT SELECT ON ALL TABLES IN SCHEMA public         TO dashboard_ro;
-    ALTER DEFAULT PRIVILEGES IN SCHEMA public
+    ALTER TABLE    hpc_metrics        OWNER TO dashboard_rw;
+    ALTER SEQUENCE hpc_metrics_id_seq OWNER TO dashboard_rw;
+    ALTER VIEW     hpc_metrics_latest OWNER TO dashboard_rw;
+    ALTER TABLE    s3_readme_meta     OWNER TO dashboard_rw;
+
+    GRANT USAGE  ON SCHEMA public                  TO dashboard_ro;
+    GRANT SELECT ON ALL TABLES IN SCHEMA public    TO dashboard_ro;
+    ALTER DEFAULT PRIVILEGES FOR ROLE dashboard_rw IN SCHEMA public
       GRANT SELECT ON TABLES TO dashboard_ro;
 EOSQL
 done
