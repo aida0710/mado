@@ -11,12 +11,13 @@ describe('requireWriteToken', () => {
     expect(res.status).toBe(401)
   })
 
-  it('rejects wrong token with 401', async () => {
+  it('rejects wrong token with 401 and standard error shape', async () => {
     const res = await app.request('/secure', {
       method: 'POST',
       headers: { Authorization: 'Bearer NOPE' },
     })
     expect(res.status).toBe(401)
+    expect(await res.json()).toEqual({ error: 'unauthorized' })
   })
 
   it('rejects malformed Bearer line with 401', async () => {
