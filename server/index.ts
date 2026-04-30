@@ -3,6 +3,7 @@ import { Hono } from 'hono'
 import { logger } from 'hono/logger'
 import { loadEnv } from './env.js'
 import { createPools, closePools } from './db.js'
+import { mountHpcRoutes } from './routes/hpc.js'
 
 const env = loadEnv()
 const pools = createPools({ rw: env.DATABASE_URL_RW, ro: env.DATABASE_URL_RO })
@@ -10,6 +11,7 @@ const app = new Hono()
 
 app.use('*', logger())
 app.get('/healthz', c => c.text('ok'))
+mountHpcRoutes(app, { pools, writeToken: env.WRITE_TOKEN })
 
 const server = serve({ fetch: app.fetch, port: env.PORT }, info => {
   console.log(`server listening on http://localhost:${info.port}`)

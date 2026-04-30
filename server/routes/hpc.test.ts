@@ -1,0 +1,70 @@
+import { Hono } from 'hono'
+import { afterAll, beforeEach, describe, expect, it } from 'vitest'
+import { createPools, closePools } from '../db.js'
+import { mountHpcRoutes } from './hpc.js'
+
+const RW = process.env.DATABASE_URL_RW_TEST
+  ?? 'postgres://dashboard_rw:CHANGEME@localhost:5432/dashboard_test'
+const RO = RW.replace('dashboard_rw', 'dashboard_ro')
+const pools = createPools({ rw: RW, ro: RO })
+
+const app = new Hono()
+mountHpcRoutes(app, { pools, writeToken: 'TKN' })
+
+beforeEach(async () => {
+  await pools.rw.query('TRUNCATE hpc_metrics RESTART IDENTITY')
+})
+afterAll(() => closePools(pools))
+
+describe('POST /api/hpc/push', () => {
+  it('inserts a row with body as output', async () => {
+    const body = 'job1 R\njob2 Q\n'
+    const res = await app.request(
+      '/api/hpc/push?host=miyabi&command=qstat',
+      {
+        method: 'POST',
+        headers: { Authorization: 'Bearer TKN', 'Content-Type': 'text/plain' },
+        body,
+      }
+    )
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ ok: true })
+    const r = await pools.rw.query(
+      'SELECT host, command, output FROM hpc_metrics'
+    )
+    expect(r.rows).toEqual([
+      { host: 'miyabi', command: 'qstat', output: body },
+    ])
+  })
+
+  it('rejects without token (401)', async () => {
+    const res = await app.request('/api/hpc/push?host=m&command=q', {
+      method: 'POST',
+      body: 'x',
+    })
+    expect(res.status).toBe(401)
+    const r = await pools.rw.query('SELECT count(*) FROM hpc_metrics')
+    expect(r.rows[0].count).toBe('0')
+  })
+
+  it('400 if host missing', async () => {
+    const res = await app.request('/api/hpc/push?command=q', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer TKN' },
+      body: 'x',
+    })
+    expect(res.status).toBe(400)
+    expect(await res.json()).toEqual({
+      error: 'host and command query params are required',
+    })
+  })
+
+  it('400 if command missing', async () => {
+    const res = await app.request('/api/hpc/push?host=m', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer TKN' },
+      body: 'x',
+    })
+    expect(res.status).toBe(400)
+  })
+})
