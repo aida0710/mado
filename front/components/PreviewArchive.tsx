@@ -13,19 +13,42 @@ export function PreviewArchive({ bucket, k }: { bucket: string; k: string }) {
   const [offset, setOffset] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
-  const [progress, setProgress] = useState(0)
+  const [progress, setProgress] = useState({
+    entries: 0,
+    bytes: 0,
+    requests: 0,
+    mode: '' as '' | 'range' | 'stream',
+    startedAt: Date.now(),
+    elapsed: 0,
+  })
 
   // Reset to page 1 whenever the file changes.
   useEffect(() => { setOffset(0) }, [bucket, k])
 
   useEffect(() => {
     let cancelled = false
+    const startedAt = Date.now()
     setLoading(true)
     setError(null)
     setData(null)
-    setProgress(0)
-    api.tarPreview(bucket, k, { limit: PAGE_SIZE, offset }, () => {
-      if (!cancelled) setProgress(p => p + 1)
+    setProgress({ entries: 0, bytes: 0, requests: 0, mode: '', startedAt, elapsed: 0 })
+
+    api.tarPreview(bucket, k, { limit: PAGE_SIZE, offset }, {
+      onMode: mode => {
+        if (!cancelled) setProgress(p => ({ ...p, mode }))
+      },
+      onEntry: () => {
+        if (!cancelled) setProgress(p => ({ ...p, entries: p.entries + 1 }))
+      },
+      onProgress: ({ bytes, requests }) => {
+        if (!cancelled) {
+          setProgress(p => ({
+            ...p,
+            bytes,
+            requests: requests ?? p.requests,
+          }))
+        }
+      },
     })
       .then(r => { if (!cancelled) setData(r) })
       .catch((e: Error) => { if (!cancelled) setError(e.message) })
@@ -33,12 +56,40 @@ export function PreviewArchive({ bucket, k }: { bucket: string; k: string }) {
     return () => { cancelled = true }
   }, [bucket, k, offset])
 
+  // Tick the elapsed counter while loading.
+  useEffect(() => {
+    if (data || error) return
+    const t = setInterval(() => {
+      setProgress(p => ({ ...p, elapsed: (Date.now() - p.startedAt) / 1000 }))
+    }, 200)
+    return () => clearInterval(t)
+  }, [data, error])
+
   if (error) return <p className="error">{error}</p>
   if (!data) {
+    const modeLabel =
+      progress.mode === 'range'  ? 'range request'
+      : progress.mode === 'stream' ? 'streaming decode'
+      : 'connecting'
     return (
-      <p className="muted">
-        loading entries… <span className="tabular">{progress}</span> 件
-      </p>
+      <div className="muted">
+        <p>
+          <span>{modeLabel}…</span>{' '}
+          <span className="tabular">{progress.entries}</span>
+          {' 件 · '}
+          <span className="tabular">{fmtSize(progress.bytes)}</span>
+          {progress.requests > 0 && (
+            <>
+              {' · '}
+              <span className="tabular">{progress.requests}</span>
+              {' req'}
+            </>
+          )}
+          {' · '}
+          <span className="tabular">{progress.elapsed.toFixed(1)}</span>
+          {'s'}
+        </p>
+      </div>
     )
   }
 
@@ -78,7 +129,7 @@ export function PreviewArchive({ bucket, k }: { bucket: string; k: string }) {
         </span>
         <button
           onClick={() => setOffset(offset + PAGE_SIZE)}
-          disabled={!data.hasMore || data.truncated || loading}
+          disabled={data.truncated || loading || data.entries.length === 0}
         >Next →</button>
       </div>
     </div>

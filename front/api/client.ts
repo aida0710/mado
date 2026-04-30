@@ -77,15 +77,23 @@ export const api = {
     return PutReadmeOk.parse(json)
   },
 
-  // Streams NDJSON: one `{entry}` line per discovered tar entry, then a
-  // final `{done}` line. Calls `onEntry` for each entry as it arrives so
-  // the UI can show running progress, and resolves with the full TarPreview
-  // shape once `done` lands.
+  // Streams NDJSON. Lines are one of:
+  //   {"mode":"range"|"stream"}
+  //   {"entry":{name,size,type}}
+  //   {"progress":{bytes,requests?}}
+  //   {"done":{truncated,hasMore,offset,limit}}
+  //   {"error":"..."}
+  // Calls back per kind so the UI can show "X 件 / Y MB / mode" while the
+  // stream is in flight, then resolves with the assembled TarPreview.
   tarPreview: async (
     bucket: string,
     key: string,
     opts: { limit?: number; offset?: number } = {},
-    onEntry?: (e: z.infer<typeof TarPreview>['entries'][number]) => void,
+    cb: {
+      onMode?: (mode: 'range' | 'stream') => void
+      onEntry?: (e: z.infer<typeof TarPreview>['entries'][number]) => void
+      onProgress?: (p: { bytes: number; requests?: number }) => void
+    } = {},
   ): Promise<z.infer<typeof TarPreview>> => {
     const url = buildUrl('/api/s3/preview/tar', {
       bucket,
@@ -126,10 +134,14 @@ export const api = {
         buf = buf.slice(nl + 1)
         if (line.length > 0) {
           const obj = JSON.parse(line) as Record<string, unknown>
-          if ('entry' in obj) {
+          if ('mode' in obj) {
+            cb.onMode?.(obj.mode as 'range' | 'stream')
+          } else if ('entry' in obj) {
             const entry = obj.entry as { name: string; size: number; type: string }
             entries.push(entry)
-            onEntry?.(entry)
+            cb.onEntry?.(entry)
+          } else if ('progress' in obj) {
+            cb.onProgress?.(obj.progress as { bytes: number; requests?: number })
           } else if ('done' in obj) {
             done = obj.done as DoneShape
           } else if ('error' in obj) {

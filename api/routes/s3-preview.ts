@@ -6,6 +6,7 @@ import {
 import type { Hono, Context } from 'hono'
 import { Readable } from 'node:stream'
 import { listTarEntries, type ArchiveKind } from '../lib/tar-stream.js'
+import { listTarHeadersByRange, makeS3RangeReader } from '../lib/tar-range.js'
 
 export interface PreviewEnv {
   PREVIEW_TEXT_LIMIT: number
@@ -166,58 +167,109 @@ export function mountS3PreviewRoutes(app: Hono, deps: S3PreviewDeps): void {
     if (!kind) {
       return c.json({ error: 'unsupported archive extension' }, 400)
     }
-    // Clamp ?limit so a NaN/empty value falls back to the env default
-    // (otherwise `out.length >= NaN` is always false and the entry cap
-    // silently disables itself), and a positive value is bounded above.
     const rawLimit = Number(c.req.query('limit') ?? deps.env.PREVIEW_TAR_ENTRY_LIMIT)
     const limit = Number.isFinite(rawLimit) && rawLimit > 0
       ? Math.min(Math.floor(rawLimit), 10_000)
       : deps.env.PREVIEW_TAR_ENTRY_LIMIT
-    // ?offset is the pagination cursor — Number-parse with the same
-    // guarding so a stray "?offset=abc" falls back to 0 cleanly.
     const rawOffset = Number(c.req.query('offset') ?? 0)
     const offset = Number.isFinite(rawOffset) && rawOffset > 0
       ? Math.floor(rawOffset)
       : 0
 
-    let stream: NodeJS.ReadableStream
-    try {
-      const r = await deps.s3.send(
-        new GetObjectCommand({ Bucket: bucket, Key: key }),
-      )
-      stream = r.Body as unknown as NodeJS.ReadableStream
-    } catch (e) {
-      return s3Error(c, e)
-    }
-
     const byteLimit = kind === 'xz'
       ? deps.env.PREVIEW_TARXZ_BYTE_LIMIT
       : 1024 * 1024 * 1024 // 1 GiB ceiling for tar/tar.gz
 
-    // Stream NDJSON: one `{entry: ...}` line per discovered entry, then a
-    // final `{done: ...}` line. Front-end can show running progress
-    // ("loading entries… 423 件") without waiting for the whole archive.
+    // Stream NDJSON. Lines are one of:
+    //   {"mode":"range"|"stream"}              — first line, signals strategy
+    //   {"entry":{name,size,type}}             — per discovered entry
+    //   {"progress":{bytes,requests?}}         — periodic progress
+    //   {"done":{truncated,hasMore,offset,limit}}
+    //   {"error":"…"}
     const enc = new TextEncoder()
     const body = new ReadableStream<Uint8Array>({
       async start(controller) {
         const write = (obj: unknown): void => {
           controller.enqueue(enc.encode(JSON.stringify(obj) + '\n'))
         }
+
         try {
-          const result = await listTarEntries(
-            stream,
-            kind,
-            { entryLimit: limit, byteLimit, offset },
-            entry => write({ entry }),
-          )
-          write({
-            done: {
-              truncated: result.truncated,
-              hasMore: result.hasMore,
-              offset,
-              limit,
-            },
-          })
+          if (kind === 'tar') {
+            // Plain tar: skip entry bodies via HTTP Range — for a 1 GB
+            // WebDataset shard with mostly-body bytes, 100 entries cost
+            // tens of KB of network instead of hundreds of MB.
+            write({ mode: 'range' })
+            const baseReader = makeS3RangeReader(deps.s3, bucket, key)
+            let bytes = 0
+            let requests = 0
+            const reader: typeof baseReader = async (start, length) => {
+              requests++
+              const buf = await baseReader(start, length)
+              bytes += buf.byteLength
+              write({ progress: { bytes, requests } })
+              return buf
+            }
+            const result = await listTarHeadersByRange(
+              reader,
+              { entryLimit: limit, offset },
+              entry => write({ entry }),
+            )
+            write({
+              done: {
+                truncated: false,
+                hasMore: result.hasMore,
+                offset,
+                limit,
+              },
+            })
+          } else {
+            write({ mode: 'stream' })
+            // Compressed: must read every byte sequentially, so pipe the
+            // S3 body through gunzip / lzma → tar-stream and emit entries
+            // as they're parsed. Periodically emit byte progress.
+            let s3stream: NodeJS.ReadableStream
+            try {
+              const r = await deps.s3.send(
+                new GetObjectCommand({ Bucket: bucket, Key: key }),
+              )
+              s3stream = r.Body as unknown as NodeJS.ReadableStream
+            } catch (e) {
+              if (e instanceof NoSuchKey) {
+                write({ error: 'not found' })
+              } else {
+                write({ error: (e as Error).message })
+              }
+              return
+            }
+
+            // Wrap the source so we can count compressed bytes downloaded.
+            let bytes = 0
+            let lastReported = 0
+            const PROGRESS_STEP = 4 * 1024 * 1024 // every 4 MB
+            ;(s3stream as NodeJS.ReadableStream).on('data', (chunk: Buffer) => {
+              bytes += chunk.byteLength
+              if (bytes - lastReported >= PROGRESS_STEP) {
+                lastReported = bytes
+                write({ progress: { bytes } })
+              }
+            })
+
+            const result = await listTarEntries(
+              s3stream,
+              kind,
+              { entryLimit: limit, byteLimit, offset },
+              entry => write({ entry }),
+            )
+            write({ progress: { bytes } })
+            write({
+              done: {
+                truncated: result.truncated,
+                hasMore: result.hasMore,
+                offset,
+                limit,
+              },
+            })
+          }
         } catch (e) {
           write({ error: (e as Error).message })
         } finally {

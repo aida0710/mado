@@ -304,13 +304,20 @@ describe('GET /api/s3/preview/tar', () => {
     expect(res.status).toBe(400)
   })
 
-  it('404 when S3 returns NoSuchKey', async () => {
+  it('emits {error} line when S3 returns NoSuchKey (status 200, error in body)', async () => {
     s3Mock.on(GetObjectCommand).rejects(
       new NoSuchKey({ message: 'no', $metadata: {} })
     )
     const res = await app.request(
       '/api/s3/preview/tar?bucket=b&key=foo.tar.gz',
     )
-    expect(res.status).toBe(404)
+    // The stream has already opened a 200 response by the time we discover
+    // the missing key, so the error surfaces as an NDJSON `{error: ...}`
+    // line rather than an HTTP status. Front-end treats it as a thrown
+    // error during stream consumption.
+    expect(res.status).toBe(200)
+    const lines = await readNdjson(res)
+    const errLine = lines.find((l): l is { error: string } => 'error' in l)
+    expect(errLine?.error).toMatch(/not found|NoSuchKey|no/i)
   })
 })
