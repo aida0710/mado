@@ -8,6 +8,7 @@ import { mountHpcRoutes } from './routes/hpc.js'
 import { mountSqlRoutes } from './routes/sql.js'
 import { mountS3ListRoutes } from './routes/s3-list.js'
 import { mountS3ReadmeRoutes } from './routes/s3-readme.js'
+import { mountS3PreviewRoutes } from './routes/s3-preview.js'
 
 const env = loadEnv()
 const pools = createPools({ rw: env.DATABASE_URL_RW, ro: env.DATABASE_URL_RO })
@@ -20,6 +21,7 @@ mountHpcRoutes(app, { pools, writeToken: env.WRITE_TOKEN })
 mountSqlRoutes(app, { pools, writeToken: env.WRITE_TOKEN })
 mountS3ListRoutes(app, { s3 })
 mountS3ReadmeRoutes(app, { s3, pools })
+mountS3PreviewRoutes(app, { s3, env })
 
 const server = serve({ fetch: app.fetch, port: env.PORT }, info => {
   console.log(`server listening on http://localhost:${info.port}`)
