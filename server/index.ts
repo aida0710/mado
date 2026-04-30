@@ -12,6 +12,7 @@ import { mountSqlRoutes } from './routes/sql.js'
 import { mountS3ListRoutes } from './routes/s3-list.js'
 import { mountS3ReadmeRoutes } from './routes/s3-readme.js'
 import { mountS3PreviewRoutes } from './routes/s3-preview.js'
+import { mountS3FavoritesRoutes } from './routes/s3-favorites.js'
 
 const env = loadEnv()
 const pools = createPools({ rw: env.DATABASE_URL_RW, ro: env.DATABASE_URL_RO })
@@ -25,6 +26,7 @@ mountSqlRoutes(app, { pools, writeToken: env.WRITE_TOKEN })
 mountS3ListRoutes(app, { s3 })
 mountS3ReadmeRoutes(app, { s3, pools })
 mountS3PreviewRoutes(app, { s3, env })
+mountS3FavoritesRoutes(app, { pools })
 
 const distDir = resolve(process.cwd(), 'dist')
 const distIndex = resolve(distDir, 'index.html')

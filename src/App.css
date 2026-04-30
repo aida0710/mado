@@ -270,3 +270,30 @@ pre {
   text-align: left;
 }
 .archive-list th { color: #666; font-weight: 500; }
+
+.bucket-section {
+  margin: 20px 0 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #555;
+}
+.bucket-section:first-of-type { margin-top: 8px; }
+
+.bucket-list li {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.fav-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  padding: 0;
+  color: #ccc;
+  transition: color 0.15s;
+}
+.fav-btn:hover { color: #f5a623; }
+.fav-btn.on { color: #f5a623; }

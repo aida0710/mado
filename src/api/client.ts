@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import {
+  FavoriteBuckets,
   HpcMetrics,
   ListBuckets,
   PutReadmeOk,
@@ -91,4 +92,22 @@ export const api = {
 
   audioUrl: (bucket: string, key: string): string =>
     buildUrl('/api/s3/preview/audio', { bucket, key }),
+
+  favorites: () => getJson('/api/s3/favorites', FavoriteBuckets),
+
+  addFavorite: async (bucket: string): Promise<void> => {
+    const res = await fetch(
+      `/api/s3/favorites/${encodeURIComponent(bucket)}`,
+      { method: 'PUT' },
+    )
+    if (!res.ok) throw new Error(res.statusText)
+  },
+
+  removeFavorite: async (bucket: string): Promise<void> => {
+    const res = await fetch(
+      `/api/s3/favorites/${encodeURIComponent(bucket)}`,
+      { method: 'DELETE' },
+    )
+    if (!res.ok) throw new Error(res.statusText)
+  },
 }

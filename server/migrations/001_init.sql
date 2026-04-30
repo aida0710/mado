@@ -23,3 +23,10 @@ CREATE TABLE IF NOT EXISTS s3_readme_meta (
   size_bytes      INTEGER,
   PRIMARY KEY (bucket, prefix)
 );
+
+-- Lab-shared favorite-bucket list. A bucket appears here = pinned for
+-- everyone. No per-user state, no ordering — alphabetic in the UI.
+CREATE TABLE IF NOT EXISTS s3_favorite_buckets (
+  bucket     TEXT        PRIMARY KEY,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
