@@ -166,7 +166,13 @@ export function mountS3PreviewRoutes(app: Hono, deps: S3PreviewDeps): void {
     if (!kind) {
       return c.json({ error: 'unsupported archive extension' }, 400)
     }
-    const limit = Number(c.req.query('limit') ?? deps.env.PREVIEW_TAR_ENTRY_LIMIT)
+    // Clamp ?limit so a NaN/empty value falls back to the env default
+    // (otherwise `out.length >= NaN` is always false and the entry cap
+    // silently disables itself), and a positive value is bounded above.
+    const rawLimit = Number(c.req.query('limit') ?? deps.env.PREVIEW_TAR_ENTRY_LIMIT)
+    const limit = Number.isFinite(rawLimit) && rawLimit > 0
+      ? Math.min(Math.floor(rawLimit), 10_000)
+      : deps.env.PREVIEW_TAR_ENTRY_LIMIT
 
     let stream: NodeJS.ReadableStream
     try {
@@ -181,10 +187,14 @@ export function mountS3PreviewRoutes(app: Hono, deps: S3PreviewDeps): void {
     const byteLimit = kind === 'xz'
       ? deps.env.PREVIEW_TARXZ_BYTE_LIMIT
       : 1024 * 1024 * 1024 // 1 GiB ceiling for tar/tar.gz
-    const listing = await listTarEntries(stream, kind, {
-      entryLimit: limit,
-      byteLimit,
-    })
-    return c.json(listing)
+    try {
+      const listing = await listTarEntries(stream, kind, {
+        entryLimit: limit,
+        byteLimit,
+      })
+      return c.json(listing)
+    } catch (e) {
+      return c.json({ error: (e as Error).message }, 500)
+    }
   })
 }
