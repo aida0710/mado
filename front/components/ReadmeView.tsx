@@ -35,7 +35,7 @@ export function ReadmeView({ bucket, prefix }: Props) {
       </header>
       {data.exists
         ? <pre className="readme__body">{data.body}</pre>
-        : <p className="muted">README なし — クリックで作成</p>}
+        : <p className="muted">README なし</p>}
       {editing && (
         <ReadmeEditor
           bucket={bucket}

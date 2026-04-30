@@ -326,6 +326,7 @@ pre { font-family: var(--font-mono); font-size: 12px; }
   background: var(--paper);
   color: var(--ink-11);
   cursor: pointer;
+  text-decoration: none;
   font: inherit;
   font-size: 14px;
   line-height: 1;
@@ -334,6 +335,7 @@ pre { font-family: var(--font-mono); font-size: 12px; }
 .breadcrumb__back:hover {
   background: var(--ink-1);
   border-color: var(--ink-5);
+  text-decoration: none;
 }
 
 .s3-list {
