@@ -1,7 +1,16 @@
 import type { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
+import { z } from 'zod'
 import type { Pools } from '../db.js'
 import { requireWriteToken } from '../auth.js'
+import { HpcResponseSchema } from '../shared/types.js'
+
+const HpcRowFromDb = z.object({
+  host: z.string(),
+  command: z.string(),
+  output: z.string(),
+  collected_at: z.date(),
+})
 
 export interface HpcDeps {
   pools: Pools
@@ -39,12 +48,10 @@ export function mountHpcRoutes(app: Hono, deps: HpcDeps): void {
          FROM hpc_metrics_latest
          ORDER BY host, command`
     )
-    const rows = r.rows.map(row => ({
-      host: row.host as string,
-      command: row.command as string,
-      output: row.output as string,
-      collected_at: (row.collected_at as Date).toISOString(),
-    }))
-    return c.json(rows)
+    const rows = r.rows.map(raw => {
+      const row = HpcRowFromDb.parse(raw)
+      return { ...row, collected_at: row.collected_at.toISOString() }
+    })
+    return c.json(HpcResponseSchema.parse(rows))
   })
 }

@@ -115,4 +115,25 @@ describe('GET /api/hpc', () => {
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual([])
   })
+
+  it('treats (host, command) as the latest key', async () => {
+    // Same host, two commands — both should appear, latest each.
+    await pools.rw.query(
+      `INSERT INTO hpc_metrics(host, command, output, collected_at) VALUES
+       ('miyabi','qstat','q-old', now() - interval '1 hour'),
+       ('miyabi','qstat','q-new', now()),
+       ('miyabi','df',   'd-old', now() - interval '2 hour'),
+       ('miyabi','df',   'd-new', now())`
+    )
+    const res = await app.request('/api/hpc')
+    const rows = (await res.json()) as Array<{
+      host: string; command: string; output: string
+    }>
+    expect(rows).toHaveLength(2)
+    const byCommand = Object.fromEntries(
+      rows.map(r => [r.command, r.output]),
+    )
+    expect(byCommand.qstat).toBe('q-new')
+    expect(byCommand.df).toBe('d-new')
+  })
 })
