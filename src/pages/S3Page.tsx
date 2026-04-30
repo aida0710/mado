@@ -1,8 +1,12 @@
+import { Route, Routes } from 'react-router-dom'
+import S3Index from './S3Index'
+import S3Bucket from './S3Bucket'
+
 export default function S3Page() {
   return (
-    <section>
-      <h2>mdx S3</h2>
-      <p>準備中</p>
-    </section>
+    <Routes>
+      <Route path="/"          element={<S3Index  />} />
+      <Route path=":bucket/*"  element={<S3Bucket />} />
+    </Routes>
   )
 }
