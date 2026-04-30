@@ -11,11 +11,11 @@ The dashboard uses Postgres with two distinct roles:
 docker compose up -d
 ```
 
-This brings up Postgres 16 on `localhost:5432`. On first launch the init scripts in `db/init/` run automatically:
+This brings up Postgres 16 on `127.0.0.1:5432`. On first launch the init pipeline runs automatically:
 
-1. `00-init.sh` creates the two roles and the `dashboard_test` database.
-2. `01-schema.sql` creates the schema in both `dashboard` and `dashboard_test`.
-3. `00-init.sh` then grants `SELECT` on all current and future tables to `dashboard_ro`.
+1. `db/init/00-init.sh` creates the two roles and the `dashboard_test` database.
+2. The same script applies the canonical schema (`server/migrations/001_init.sql`, mounted at `/migrations/` inside the container) to both DBs.
+3. It transfers ownership of the schema objects to `dashboard_rw` and grants `SELECT` to `dashboard_ro` (including `ALTER DEFAULT PRIVILEGES` so future tables created by `dashboard_rw` via `/sql/write` are also readable by ro).
 
 To re-bootstrap from scratch:
 
@@ -26,7 +26,7 @@ docker compose up -d
 
 ## Schema source of truth
 
-`server/migrations/001_init.sql` is the canonical schema. It is duplicated at `db/init/01-schema.sql` for the Docker init pipeline. When changing the schema, edit BOTH files (or eventually replace this with a single-file migration runner).
+`server/migrations/001_init.sql` is the only schema file. The Docker init script reads it via the `./server/migrations:/migrations:ro` bind mount in `compose.yml`, so there is nothing to keep in sync.
 
 ## Manual setup (non-Docker)
 
@@ -47,9 +47,14 @@ SQL
 for db in dashboard dashboard_test; do
   psql -U postgres -d "$db" -f server/migrations/001_init.sql
   psql -U postgres -d "$db" <<'SQL'
-GRANT USAGE  ON SCHEMA public                       TO dashboard_ro;
-GRANT SELECT ON ALL TABLES IN SCHEMA public         TO dashboard_ro;
-ALTER DEFAULT PRIVILEGES IN SCHEMA public
+ALTER TABLE    hpc_metrics        OWNER TO dashboard_rw;
+ALTER SEQUENCE hpc_metrics_id_seq OWNER TO dashboard_rw;
+ALTER VIEW     hpc_metrics_latest OWNER TO dashboard_rw;
+ALTER TABLE    s3_readme_meta     OWNER TO dashboard_rw;
+
+GRANT USAGE  ON SCHEMA public                  TO dashboard_ro;
+GRANT SELECT ON ALL TABLES IN SCHEMA public    TO dashboard_ro;
+ALTER DEFAULT PRIVILEGES FOR ROLE dashboard_rw IN SCHEMA public
   GRANT SELECT ON TABLES TO dashboard_ro;
 SQL
 done
