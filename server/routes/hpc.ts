@@ -32,4 +32,19 @@ export function mountHpcRoutes(app: Hono, deps: HpcDeps): void {
       return c.json({ ok: true })
     },
   )
+
+  app.get('/api/hpc', async c => {
+    const r = await deps.pools.ro.query(
+      `SELECT host, command, output, collected_at
+         FROM hpc_metrics_latest
+         ORDER BY host, command`
+    )
+    const rows = r.rows.map(row => ({
+      host: row.host as string,
+      command: row.command as string,
+      output: row.output as string,
+      collected_at: (row.collected_at as Date).toISOString(),
+    }))
+    return c.json(rows)
+  })
 }

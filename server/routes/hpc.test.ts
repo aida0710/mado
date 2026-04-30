@@ -85,3 +85,34 @@ describe('POST /api/hpc/push', () => {
     expect(await res.json()).toEqual({ error: 'request body too large' })
   })
 })
+
+describe('GET /api/hpc', () => {
+  it('returns latest row per (host, command)', async () => {
+    await pools.rw.query(
+      `INSERT INTO hpc_metrics(host, command, output, collected_at) VALUES
+       ('miyabi','qstat','old', now() - interval '1 hour'),
+       ('miyabi','qstat','new', now()),
+       ('osaka', 'pjstat','o',  now())`
+    )
+    const res = await app.request('/api/hpc')
+    expect(res.status).toBe(200)
+    const rows = (await res.json()) as Array<{
+      host: string; command: string; output: string; collected_at: string
+    }>
+    const byHost = Object.fromEntries(rows.map(r => [r.host, r.output]))
+    expect(byHost.miyabi).toBe('new')
+    expect(byHost.osaka).toBe('o')
+    expect(rows).toHaveLength(2)
+    // collected_at must be ISO 8601, not a Date object or epoch number
+    for (const row of rows) {
+      expect(typeof row.collected_at).toBe('string')
+      expect(() => new Date(row.collected_at).toISOString()).not.toThrow()
+    }
+  })
+
+  it('returns empty array when table is empty', async () => {
+    const res = await app.request('/api/hpc')
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual([])
+  })
+})
