@@ -2,8 +2,10 @@ import { serve } from '@hono/node-server'
 import { Hono } from 'hono'
 import { logger } from 'hono/logger'
 import { loadEnv } from './env.js'
+import { createPools, closePools } from './db.js'
 
 const env = loadEnv()
+const pools = createPools({ rw: env.DATABASE_URL_RW, ro: env.DATABASE_URL_RO })
 const app = new Hono()
 
 app.use('*', logger())
@@ -13,11 +15,16 @@ const server = serve({ fetch: app.fetch, port: env.PORT }, info => {
   console.log(`server listening on http://localhost:${info.port}`)
 })
 
-const shutdown = () => {
-  server.close()
+let shuttingDown = false
+const shutdown = async () => {
+  if (shuttingDown) return
+  shuttingDown = true
+  setTimeout(() => process.exit(1), 10_000).unref()
+  await new Promise<void>(resolve => server.close(() => resolve()))
+  await closePools(pools)
   process.exit(0)
 }
 process.on('SIGINT', shutdown)
 process.on('SIGTERM', shutdown)
 
-export { app }
+export { app, pools }
