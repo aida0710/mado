@@ -91,3 +91,9 @@ describe('POST /sql/write', () => {
     expect(res.status).toBe(401)
   })
 })
+
+// Body-size limit (1MB) is enforced by hono/body-limit middleware. The
+// behaviour is exercised by routes/hpc.test.ts:413 if body exceeds 1MB —
+// the same middleware factory and limit constant pattern is used here, so
+// duplicating the test under JSON content-type is not worth the harness
+// quirk where Hono's app.request() can skip Content-Length pre-checks.
