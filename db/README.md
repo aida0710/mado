@@ -14,7 +14,7 @@ docker compose up -d
 This brings up Postgres 16 on `127.0.0.1:5432`. On first launch the init pipeline runs automatically:
 
 1. `db/init/00-init.sh` creates the two roles and the `dashboard_test` database.
-2. The same script applies the canonical schema (`server/migrations/001_init.sql`, mounted at `/migrations/` inside the container) to both DBs.
+2. The same script applies the canonical schema (`db/migrations/001_init.sql`, mounted at `/migrations/` inside the container) to both DBs.
 3. It transfers ownership of the schema objects to `dashboard_rw` and grants `SELECT` to `dashboard_ro` (including `ALTER DEFAULT PRIVILEGES` so future tables created by `dashboard_rw` via `/sql/write` are also readable by ro).
 
 To re-bootstrap from scratch:
@@ -26,7 +26,7 @@ docker compose up -d
 
 ## Schema source of truth
 
-`server/migrations/001_init.sql` is the only schema file. The Docker init script reads it via the `./server/migrations:/migrations:ro` bind mount in `compose.yml`, so there is nothing to keep in sync.
+`db/migrations/001_init.sql` is the only schema file. The Docker init script reads it via the `./db/migrations:/migrations:ro` bind mount in `compose.yml`, so there is nothing to keep in sync.
 
 ## Manual setup (non-Docker)
 
@@ -45,7 +45,7 @@ GRANT CONNECT ON DATABASE dashboard_test TO dashboard_ro;
 SQL
 
 for db in dashboard dashboard_test; do
-  psql -U postgres -d "$db" -f server/migrations/001_init.sql
+  psql -U postgres -d "$db" -f db/migrations/001_init.sql
   psql -U postgres -d "$db" <<'SQL'
 ALTER TABLE    hpc_metrics        OWNER TO dashboard_rw;
 ALTER SEQUENCE hpc_metrics_id_seq OWNER TO dashboard_rw;

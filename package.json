@@ -5,13 +5,13 @@
   "type": "module",
   "scripts": {
     "dev:web": "vite",
-    "dev:server": "tsx watch --env-file=.env server/index.ts",
+    "dev:server": "tsx watch --env-file=.env api/index.ts",
     "dev": "concurrently -k -n web,server -c blue,magenta \"npm:dev:web\" \"npm:dev:server\"",
     "build:web": "tsc -b && vite build",
-    "build:server": "tsc -p server/tsconfig.json",
+    "build:server": "tsc -p api/tsconfig.json",
     "build": "npm run build:web && npm run build:server",
     "preview:web": "vite preview",
-    "start": "node server/dist/index.js",
+    "start": "node api/dist/index.js",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "eslint ."

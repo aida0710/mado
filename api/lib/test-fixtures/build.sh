@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Regenerate sample.tar / sample.tar.gz / sample.tar.xz from a fixed
-# directory tree. Run from repo root: bash server/lib/test-fixtures/build.sh
+# directory tree. Run from repo root: bash api/lib/test-fixtures/build.sh
 set -euo pipefail
 cd "$(dirname "$0")"
 

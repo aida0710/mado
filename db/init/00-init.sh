@@ -20,7 +20,7 @@ psql -v ON_ERROR_STOP=1 --username "postgres" <<-EOSQL
 EOSQL
 
 # Apply the schema to both DBs. The canonical schema lives at
-# server/migrations/001_init.sql; compose mounts it at /migrations/.
+# db/migrations/001_init.sql; compose mounts it at /migrations/.
 for db in dashboard dashboard_test; do
   psql -v ON_ERROR_STOP=1 --username "postgres" --dbname "$db" \
     -f /migrations/001_init.sql
