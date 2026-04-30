@@ -5,6 +5,7 @@ import {
 } from '@aws-sdk/client-s3'
 import type { Hono, Context } from 'hono'
 import { Readable } from 'node:stream'
+import { listTarEntries, type ArchiveKind } from '../lib/tar-stream.js'
 
 export interface PreviewEnv {
   PREVIEW_TEXT_LIMIT: number
@@ -35,6 +36,14 @@ const AUDIO_MIME: Record<string, string> = {
 function ext(key: string): string {
   const m = /\.([a-z0-9]+)$/i.exec(key)
   return m ? m[1].toLowerCase() : ''
+}
+
+function detectArchive(key: string): ArchiveKind | null {
+  const k = key.toLowerCase()
+  if (k.endsWith('.tar.gz') || k.endsWith('.tgz')) return 'gz'
+  if (k.endsWith('.tar.xz')) return 'xz'
+  if (k.endsWith('.tar'))    return 'tar'
+  return null
 }
 
 async function readN(
@@ -145,5 +154,37 @@ export function mountS3PreviewRoutes(app: Hono, deps: S3PreviewDeps): void {
       Readable.toWeb(stream) as unknown as ReadableStream<Uint8Array>,
       { status, headers },
     )
+  })
+
+  app.get('/api/s3/preview/tar', async c => {
+    const bucket = c.req.query('bucket')
+    const key = c.req.query('key')
+    if (!bucket || !key) {
+      return c.json({ error: 'bucket and key required' }, 400)
+    }
+    const kind = detectArchive(key)
+    if (!kind) {
+      return c.json({ error: 'unsupported archive extension' }, 400)
+    }
+    const limit = Number(c.req.query('limit') ?? deps.env.PREVIEW_TAR_ENTRY_LIMIT)
+
+    let stream: NodeJS.ReadableStream
+    try {
+      const r = await deps.s3.send(
+        new GetObjectCommand({ Bucket: bucket, Key: key }),
+      )
+      stream = r.Body as unknown as NodeJS.ReadableStream
+    } catch (e) {
+      return s3Error(c, e)
+    }
+
+    const byteLimit = kind === 'xz'
+      ? deps.env.PREVIEW_TARXZ_BYTE_LIMIT
+      : 1024 * 1024 * 1024 // 1 GiB ceiling for tar/tar.gz
+    const listing = await listTarEntries(stream, kind, {
+      entryLimit: limit,
+      byteLimit,
+    })
+    return c.json(listing)
   })
 }
