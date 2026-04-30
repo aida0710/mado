@@ -6,11 +6,13 @@ import { fmtSize } from '../lib/format'
 
 type Resp = z.infer<typeof TarPreview>
 
-const PAGE_SIZE = 100
+const PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const
+const DEFAULT_PAGE_SIZE = 10
 
 export function PreviewArchive({ bucket, k }: { bucket: string; k: string }) {
   const [data, setData] = useState<Resp | null>(null)
   const [offset, setOffset] = useState(0)
+  const [pageSize, setPageSize] = useState<number>(DEFAULT_PAGE_SIZE)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [progress, setProgress] = useState({
@@ -22,8 +24,8 @@ export function PreviewArchive({ bucket, k }: { bucket: string; k: string }) {
     elapsed: 0,
   })
 
-  // Reset to page 1 whenever the file changes.
-  useEffect(() => { setOffset(0) }, [bucket, k])
+  // Reset to page 1 whenever the file or page size changes.
+  useEffect(() => { setOffset(0) }, [bucket, k, pageSize])
 
   useEffect(() => {
     let cancelled = false
@@ -33,7 +35,7 @@ export function PreviewArchive({ bucket, k }: { bucket: string; k: string }) {
     setData(null)
     setProgress({ entries: 0, bytes: 0, requests: 0, mode: '', startedAt, elapsed: 0 })
 
-    api.tarPreview(bucket, k, { limit: PAGE_SIZE, offset }, {
+    api.tarPreview(bucket, k, { limit: pageSize, offset }, {
       onMode: mode => {
         if (!cancelled) setProgress(p => ({ ...p, mode }))
       },
@@ -54,7 +56,7 @@ export function PreviewArchive({ bucket, k }: { bucket: string; k: string }) {
       .catch((e: Error) => { if (!cancelled) setError(e.message) })
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
-  }, [bucket, k, offset])
+  }, [bucket, k, offset, pageSize])
 
   // Tick the elapsed counter while loading.
   useEffect(() => {
@@ -64,6 +66,21 @@ export function PreviewArchive({ bucket, k }: { bucket: string; k: string }) {
     }, 200)
     return () => clearInterval(t)
   }, [data, error])
+
+  const sizeSelect = (
+    <label className="archive-pagesize">
+      <span className="muted--small">page size</span>
+      <select
+        value={pageSize}
+        onChange={e => setPageSize(Number(e.target.value))}
+        disabled={loading}
+      >
+        {PAGE_SIZE_OPTIONS.map(n => (
+          <option key={n} value={n}>{n}</option>
+        ))}
+      </select>
+    </label>
+  )
 
   if (error) return <p className="error">{error}</p>
   if (!data) {
@@ -95,7 +112,7 @@ export function PreviewArchive({ bucket, k }: { bucket: string; k: string }) {
 
   const start = data.offset + 1
   const end = data.offset + data.entries.length
-  const page = Math.floor(data.offset / PAGE_SIZE) + 1
+  const page = Math.floor(data.offset / pageSize) + 1
 
   return (
     <div>
@@ -117,7 +134,7 @@ export function PreviewArchive({ bucket, k }: { bucket: string; k: string }) {
       </table>
       <div className="pager">
         <button
-          onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
+          onClick={() => setOffset(Math.max(0, offset - pageSize))}
           disabled={offset === 0 || loading}
         >← Prev</button>
         <span>
@@ -128,9 +145,10 @@ export function PreviewArchive({ bucket, k }: { bucket: string; k: string }) {
           {data.hasMore || data.truncated ? '+' : ''}
         </span>
         <button
-          onClick={() => setOffset(offset + PAGE_SIZE)}
+          onClick={() => setOffset(offset + pageSize)}
           disabled={data.truncated || loading || data.entries.length === 0}
         >Next →</button>
+        {sizeSelect}
       </div>
     </div>
   )

@@ -167,10 +167,13 @@ export function mountS3PreviewRoutes(app: Hono, deps: S3PreviewDeps): void {
     if (!kind) {
       return c.json({ error: 'unsupported archive extension' }, 400)
     }
+    // Hard upper bound on a single page. The UI offers 10 / 25 / 50 / 100;
+    // anything past 100 would also blow up tar.gz/.xz decode memory.
+    const MAX_LIMIT = 100
     const rawLimit = Number(c.req.query('limit') ?? deps.env.PREVIEW_TAR_ENTRY_LIMIT)
     const limit = Number.isFinite(rawLimit) && rawLimit > 0
-      ? Math.min(Math.floor(rawLimit), 10_000)
-      : deps.env.PREVIEW_TAR_ENTRY_LIMIT
+      ? Math.min(Math.floor(rawLimit), MAX_LIMIT)
+      : Math.min(deps.env.PREVIEW_TAR_ENTRY_LIMIT, MAX_LIMIT)
     const rawOffset = Number(c.req.query('offset') ?? 0)
     const offset = Number.isFinite(rawOffset) && rawOffset > 0
       ? Math.floor(rawOffset)

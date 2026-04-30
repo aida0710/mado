@@ -564,6 +564,24 @@ pre { font-family: var(--font-mono); font-size: 12px; }
 .prev-img { max-width: 100%; height: auto; display: block; border-radius: var(--radius-2); }
 .prev-audio { width: 100%; }
 
+.archive-pagesize {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin-left: auto;
+  font-size: 12px;
+}
+.archive-pagesize select {
+  font: inherit;
+  padding: 2px 6px;
+  border: 1px solid var(--ink-3);
+  border-radius: var(--radius-1);
+  background: var(--paper);
+  color: var(--ink-11);
+  cursor: pointer;
+}
+.archive-pagesize select:disabled { opacity: 0.5; cursor: default; }
+
 .archive-list {
   width: 100%;
   border-collapse: collapse;
