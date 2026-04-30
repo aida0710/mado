@@ -1,5 +1,6 @@
 import {
   GetObjectCommand,
+  NoSuchKey,
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3'
@@ -48,7 +49,7 @@ describe('GET /api/s3/readme', () => {
 
   it('returns exists:false when README is absent', async () => {
     s3Mock.on(GetObjectCommand).rejects(
-      Object.assign(new Error('NoSuchKey'), { name: 'NoSuchKey' })
+      new NoSuchKey({ message: 'no', $metadata: {} })
     )
     const res = await app.request('/api/s3/readme?bucket=b&prefix=missing/')
     expect(res.status).toBe(200)
@@ -146,5 +147,44 @@ describe('PUT /api/s3/readme', () => {
       body: JSON.stringify({ bucket: 'b' }), // missing prefix, body, editor
     })
     expect(res.status).toBe(400)
+  })
+
+  it('returns ok+meta_stale when DB write fails after S3 PUT succeeds', async () => {
+    s3Mock.on(PutObjectCommand).resolves({})
+    // Force the DB write to fail by referencing a non-existent prefix path
+    // through a constraint violation. The simplest reliable way: poison the
+    // pool with a query that errors. Use a sentinel `editor` value that we
+    // pre-fail by wrapping `pools.rw.query` once; but since this test stays
+    // black-box, force failure by passing prefix > permissible by an
+    // ad-hoc CHECK we add via a one-shot SQL preface.
+    await pools.rw.query(
+      `ALTER TABLE s3_readme_meta ADD CONSTRAINT temp_no_z
+         CHECK (last_editor <> 'POISON')`
+    )
+    try {
+      const res = await app.request('/api/s3/readme', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          bucket: 'b', prefix: 'a/', body: 'x', editor: 'POISON',
+        }),
+      })
+      expect(res.status).toBe(200)
+      const body = (await res.json()) as {
+        ok: true; meta_stale: true; size_bytes: number
+      }
+      expect(body.ok).toBe(true)
+      expect(body.meta_stale).toBe(true)
+      expect(body.size_bytes).toBe(1)
+      // S3 PUT did happen
+      expect(s3Mock.commandCalls(PutObjectCommand)).toHaveLength(1)
+      // DB row stayed empty
+      const r = await pools.rw.query('SELECT count(*) FROM s3_readme_meta')
+      expect(r.rows[0].count).toBe('0')
+    } finally {
+      await pools.rw.query(
+        `ALTER TABLE s3_readme_meta DROP CONSTRAINT IF EXISTS temp_no_z`
+      )
+    }
   })
 })

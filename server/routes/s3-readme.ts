@@ -1,11 +1,17 @@
 import {
   GetObjectCommand,
+  NoSuchKey,
   PutObjectCommand,
   type S3Client,
 } from '@aws-sdk/client-s3'
 import type { Hono } from 'hono'
 import { z } from 'zod'
 import type { Pools } from '../db.js'
+
+// Both GET and PUT are intentionally unauthenticated. `editor` is self-reported
+// (honor system) — see spec § "前提" / "脅威モデル". Defense lives at the LAN
+// boundary, not in this handler. Do not add a Bearer middleware without
+// reviewing the threat model in the spec.
 
 export interface S3ReadmeDeps {
   s3: S3Client
@@ -27,12 +33,6 @@ async function streamToString(stream: NodeJS.ReadableStream): Promise<string> {
   return Buffer.concat(chunks).toString('utf-8')
 }
 
-function isNoSuchKey(e: unknown): boolean {
-  if (typeof e !== 'object' || e === null) return false
-  const x = e as { name?: string; Code?: string }
-  return x.name === 'NoSuchKey' || x.Code === 'NoSuchKey'
-}
-
 export function mountS3ReadmeRoutes(app: Hono, deps: S3ReadmeDeps): void {
   app.get('/api/s3/readme', async c => {
     const bucket = c.req.query('bucket')
@@ -44,10 +44,10 @@ export function mountS3ReadmeRoutes(app: Hono, deps: S3ReadmeDeps): void {
     try {
       const r = await deps.s3.send(new GetObjectCommand({ Bucket: bucket, Key }))
       body = await streamToString(
-        r.Body as unknown as NodeJS.ReadableStream
+        r.Body as unknown as NodeJS.ReadableStream,
       )
     } catch (e) {
-      if (isNoSuchKey(e)) return c.json({ exists: false })
+      if (e instanceof NoSuchKey) return c.json({ exists: false })
       throw e
     }
 
@@ -64,7 +64,7 @@ export function mountS3ReadmeRoutes(app: Hono, deps: S3ReadmeDeps): void {
       body,
       last_editor: m?.last_editor ?? null,
       last_edited_at: m?.last_edited_at?.toISOString() ?? null,
-      size_bytes: m?.size_bytes ?? body.length,
+      size_bytes: m?.size_bytes ?? Buffer.byteLength(body, 'utf-8'),
     })
   })
 
@@ -85,15 +85,29 @@ export function mountS3ReadmeRoutes(app: Hono, deps: S3ReadmeDeps): void {
       return c.json({ error: (e as Error).message }, 500)
     }
 
-    await deps.pools.rw.query(
-      `INSERT INTO s3_readme_meta(bucket, prefix, last_editor, last_edited_at, size_bytes)
-       VALUES($1,$2,$3, now(), $4)
-       ON CONFLICT (bucket, prefix) DO UPDATE
-         SET last_editor    = EXCLUDED.last_editor,
-             last_edited_at = EXCLUDED.last_edited_at,
-             size_bytes     = EXCLUDED.size_bytes`,
-      [bucket, prefix, editor, buf.byteLength]
-    )
+    // S3 PUT succeeded. If the meta UPSERT now fails, the README body is
+    // already on S3 — we still return 200 so the user knows their save was
+    // persisted, but flag `meta_stale: true` so the front-end can show a
+    // soft warning. The console.error gives the operator a breadcrumb to
+    // investigate divergence between S3 and DB.
+    try {
+      await deps.pools.rw.query(
+        `INSERT INTO s3_readme_meta(bucket, prefix, last_editor, last_edited_at, size_bytes)
+         VALUES($1,$2,$3, now(), $4)
+         ON CONFLICT (bucket, prefix) DO UPDATE
+           SET last_editor    = EXCLUDED.last_editor,
+               last_edited_at = EXCLUDED.last_edited_at,
+               size_bytes     = EXCLUDED.size_bytes`,
+        [bucket, prefix, editor, buf.byteLength]
+      )
+    } catch (e) {
+      console.error(JSON.stringify({
+        ev: 's3.readme.meta_failed',
+        bucket, prefix, editor,
+        error: (e as Error).message,
+      }))
+      return c.json({ ok: true, meta_stale: true, size_bytes: buf.byteLength })
+    }
 
     return c.json({ ok: true, size_bytes: buf.byteLength })
   })
