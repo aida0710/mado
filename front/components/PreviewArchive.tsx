@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { api } from '../api/client'
 import type { z } from 'zod'
 import { TarPreview } from '../api/types'
+import { fmtSize } from '../lib/format'
 
 type Resp = z.infer<typeof TarPreview>
 
@@ -47,7 +48,7 @@ export function PreviewArchive({ bucket, k }: { bucket: string; k: string }) {
           {data.entries.map(e => (
             <tr key={e.name}>
               <td>{e.name}</td>
-              <td>{e.size}</td>
+              <td>{fmtSize(e.size)}</td>
             </tr>
           ))}
         </tbody>
@@ -56,7 +57,7 @@ export function PreviewArchive({ bucket, k }: { bucket: string; k: string }) {
         <button
           onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
           disabled={offset === 0 || loading}
-        >◀ Prev</button>
+        >← Prev</button>
         <span>
           {data.entries.length > 0
             ? `${start}–${end}`
@@ -67,7 +68,7 @@ export function PreviewArchive({ bucket, k }: { bucket: string; k: string }) {
         <button
           onClick={() => setOffset(offset + PAGE_SIZE)}
           disabled={!data.hasMore || data.truncated || loading}
-        >Next ▶</button>
+        >Next →</button>
       </div>
     </div>
   )

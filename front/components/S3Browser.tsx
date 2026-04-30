@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type KeyboardEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { z } from 'zod'
 import { api } from '../api/client'
 import { S3List } from '../api/types'
+import { fmtSize } from '../lib/format'
 
 interface Props {
   bucket: string
@@ -11,13 +12,6 @@ interface Props {
 }
 
 type ListResp = z.infer<typeof S3List>
-
-function fmtSize(n: number): string {
-  if (n < 1024) return `${n} B`
-  if (n < 1024 ** 2) return `${(n / 1024).toFixed(1)} KB`
-  if (n < 1024 ** 3) return `${(n / 1024 ** 2).toFixed(1)} MB`
-  return `${(n / 1024 ** 3).toFixed(1)} GB`
-}
 
 export function S3Browser({ bucket, prefix, onSelectFile }: Props) {
   const navigate = useNavigate()
@@ -59,6 +53,13 @@ export function S3Browser({ bucket, prefix, onSelectFile }: Props) {
     load(history[newIdx])
   }
 
+  const activate = (fn: () => void) => (e: KeyboardEvent<HTMLTableRowElement>) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault()
+      fn()
+    }
+  }
+
   if (error) return <p className="error">{error}</p>
   if (!page) return <p className="muted">{loading ? 'loading…' : ''}</p>
 
@@ -66,46 +67,56 @@ export function S3Browser({ bucket, prefix, onSelectFile }: Props) {
     <div>
       <table className="s3-list">
         <thead>
-          <tr><th>Name</th><th>Size</th><th>Modified</th></tr>
+          <tr>
+            <th>Name</th>
+            <th className="col-size">Size</th>
+            <th className="col-modified">Modified</th>
+          </tr>
         </thead>
         <tbody>
           {page.directories.map(d => {
             const tail = d.startsWith(prefix) ? d.slice(prefix.length) : d
+            const go = () => navigate(`/s3/${encodeURIComponent(bucket)}/${d}`)
             return (
               <tr
                 key={d}
                 className="s3-row dir"
-                onClick={() =>
-                  navigate(`/s3/${encodeURIComponent(bucket)}/${d}`)
-                }
+                role="link"
+                tabIndex={0}
+                onClick={go}
+                onKeyDown={activate(go)}
               >
                 <td>📁 {tail}</td>
-                <td>—</td>
-                <td>—</td>
+                <td className="col-size">—</td>
+                <td className="col-modified">—</td>
               </tr>
             )
           })}
           {page.files.map(f => {
             const tail = f.key.startsWith(prefix) ? f.key.slice(prefix.length) : f.key
+            const select = () => onSelectFile?.(f.key)
             return (
               <tr
                 key={f.key}
                 className="s3-row file"
-                onClick={() => onSelectFile?.(f.key)}
+                role="button"
+                tabIndex={0}
+                onClick={select}
+                onKeyDown={activate(select)}
               >
                 <td>📄 {tail}</td>
-                <td>{fmtSize(f.size)}</td>
-                <td>{f.lastModified?.slice(0, 10) ?? ''}</td>
+                <td className="col-size">{fmtSize(f.size)}</td>
+                <td className="col-modified">{f.lastModified?.slice(0, 10) ?? ''}</td>
               </tr>
             )
           })}
         </tbody>
       </table>
       <div className="pager">
-        <button onClick={prev} disabled={pageIdx === 0 || loading}>◀ Prev</button>
+        <button onClick={prev} disabled={pageIdx === 0 || loading}>← Prev</button>
         <span>page {pageIdx + 1}{page.nextContinuation ? '+' : ''}</span>
         <button onClick={next} disabled={!page.nextContinuation || loading}>
-          Next ▶
+          Next →
         </button>
       </div>
     </div>

@@ -16,7 +16,7 @@ export function PreviewDrawer({ bucket, k, onClose }: Props) {
   return (
     <aside className="drawer">
       <header className="drawer__head">
-        <h4 className="drawer__title">{k}</h4>
+        <p className="drawer__title">{k}</p>
         <button className="ghost" onClick={onClose} aria-label="Close preview">✕</button>
       </header>
       <div className="drawer__body">

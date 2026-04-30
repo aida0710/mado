@@ -44,8 +44,9 @@ export function ReadmeEditor({
         onClick={e => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
+        aria-labelledby="readme-editor-title"
       >
-        <h3>Edit README — {prefix || '(root)'}</h3>
+        <h3 id="readme-editor-title">Edit README — {prefix || '(root)'}</h3>
         <label>
           <span className="label">README</span>
           <textarea
@@ -53,6 +54,7 @@ export function ReadmeEditor({
             rows={16}
             value={body}
             onChange={e => setBody(e.target.value)}
+            spellCheck={false}
           />
         </label>
         <label>
@@ -62,9 +64,11 @@ export function ReadmeEditor({
             value={editor}
             onChange={e => setEditor(e.target.value)}
             placeholder="e.g. tanaka"
+            autoComplete="nickname"
+            spellCheck={false}
           />
         </label>
-        {error && <p className="error">{error}</p>}
+        {error && <p className="error" aria-live="polite">{error}</p>}
         <div className="modal-actions">
           <button onClick={onClose} disabled={saving}>Cancel</button>
           <button
