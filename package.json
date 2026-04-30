@@ -10,6 +10,7 @@
     "build:web": "tsc -b && vite build",
     "build:server": "tsc -p server/tsconfig.json",
     "build": "npm run build:web && npm run build:server",
+    "preview:web": "vite preview",
     "start": "node server/dist/index.js",
     "test": "vitest run",
     "test:watch": "vitest",
