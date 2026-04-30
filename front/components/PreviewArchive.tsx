@@ -69,7 +69,7 @@ export function PreviewArchive({ bucket, k }: { bucket: string; k: string }) {
 
   const sizeSelect = (
     <label className="archive-pagesize">
-      <span className="muted--small">page size</span>
+      <span className="muted--small">表示件数</span>
       <select
         value={pageSize}
         onChange={e => setPageSize(Number(e.target.value))}
@@ -89,8 +89,9 @@ export function PreviewArchive({ bucket, k }: { bucket: string; k: string }) {
       : progress.mode === 'stream' ? 'streaming decode'
       : 'connecting'
     return (
-      <div className="muted">
-        <p>
+      <div>
+        <div className="archive-toolbar">{sizeSelect}</div>
+        <p className="muted">
           <span>{modeLabel}…</span>{' '}
           <span className="tabular">{progress.entries}</span>
           {' 件 · '}
@@ -116,6 +117,7 @@ export function PreviewArchive({ bucket, k }: { bucket: string; k: string }) {
 
   return (
     <div>
+      <div className="archive-toolbar">{sizeSelect}</div>
       {data.truncated && (
         <p className="muted">
           バイト上限に到達しました。これ以降は読み込めません。
@@ -148,7 +150,6 @@ export function PreviewArchive({ bucket, k }: { bucket: string; k: string }) {
           onClick={() => setOffset(offset + pageSize)}
           disabled={data.truncated || loading || data.entries.length === 0}
         >Next →</button>
-        {sizeSelect}
       </div>
     </div>
   )

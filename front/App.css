@@ -564,11 +564,15 @@ pre { font-family: var(--font-mono); font-size: 12px; }
 .prev-img { max-width: 100%; height: auto; display: block; border-radius: var(--radius-2); }
 .prev-audio { width: 100%; }
 
+.archive-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0 0 var(--space-2);
+}
 .archive-pagesize {
   display: inline-flex;
   align-items: center;
   gap: var(--space-1);
-  margin-left: auto;
   font-size: 12px;
 }
 .archive-pagesize select {
