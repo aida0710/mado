@@ -101,3 +101,63 @@ describe('GET /api/s3/preview/image', () => {
     expect(res.status).toBe(404)
   })
 })
+
+describe('GET /api/s3/preview/audio', () => {
+  it('forwards Range header to S3 and returns 206', async () => {
+    s3Mock.on(GetObjectCommand, {
+      Bucket: 'b', Key: 'a.mp3', Range: 'bytes=0-9',
+    }).resolves({
+      Body: Readable.from(Buffer.from('1234567890')) as never,
+      ContentLength: 10,
+      ContentRange: 'bytes 0-9/100',
+    })
+    const res = await app.request('/api/s3/preview/audio?bucket=b&key=a.mp3', {
+      headers: { Range: 'bytes=0-9' },
+    })
+    expect(res.status).toBe(206)
+    expect(res.headers.get('content-range')).toBe('bytes 0-9/100')
+    expect(res.headers.get('content-length')).toBe('10')
+    expect(res.headers.get('content-type')).toBe('audio/mpeg')
+    expect(res.headers.get('accept-ranges')).toBe('bytes')
+  })
+
+  it('returns 200 without Range', async () => {
+    s3Mock.on(GetObjectCommand).resolves({
+      Body: Readable.from(Buffer.from('full')) as never,
+      ContentLength: 4,
+    })
+    const res = await app.request('/api/s3/preview/audio?bucket=b&key=a.wav')
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-type')).toBe('audio/wav')
+    expect(res.headers.get('accept-ranges')).toBe('bytes')
+    expect(res.headers.get('content-range')).toBeNull()
+  })
+
+  it.each([
+    ['a.mp3',  'audio/mpeg'],
+    ['a.wav',  'audio/wav'],
+    ['a.flac', 'audio/flac'],
+    ['a.ogg',  'audio/ogg'],
+  ])('content-type for %s -> %s', async (key, expected) => {
+    s3Mock.on(GetObjectCommand).resolves({
+      Body: Readable.from(Buffer.from([1])) as never,
+    })
+    const res = await app.request(
+      `/api/s3/preview/audio?bucket=b&key=${key}`,
+    )
+    expect(res.headers.get('content-type')).toBe(expected)
+  })
+
+  it('400 if bucket or key missing', async () => {
+    const res = await app.request('/api/s3/preview/audio?bucket=b')
+    expect(res.status).toBe(400)
+  })
+
+  it('404 when S3 returns NoSuchKey', async () => {
+    s3Mock.on(GetObjectCommand).rejects(
+      new NoSuchKey({ message: 'no', $metadata: {} })
+    )
+    const res = await app.request('/api/s3/preview/audio?bucket=b&key=missing.mp3')
+    expect(res.status).toBe(404)
+  })
+})

@@ -25,6 +25,13 @@ const IMAGE_MIME: Record<string, string> = {
   gif:  'image/gif',
 }
 
+const AUDIO_MIME: Record<string, string> = {
+  mp3:  'audio/mpeg',
+  wav:  'audio/wav',
+  flac: 'audio/flac',
+  ogg:  'audio/ogg',
+}
+
 function ext(key: string): string {
   const m = /\.([a-z0-9]+)$/i.exec(key)
   return m ? m[1].toLowerCase() : ''
@@ -103,6 +110,40 @@ export function mountS3PreviewRoutes(app: Hono, deps: S3PreviewDeps): void {
     return new Response(
       Readable.toWeb(stream) as unknown as ReadableStream<Uint8Array>,
       { headers },
+    )
+  })
+
+  app.get('/api/s3/preview/audio', async c => {
+    const bucket = c.req.query('bucket')
+    const key = c.req.query('key')
+    if (!bucket || !key) {
+      return c.json({ error: 'bucket and key required' }, 400)
+    }
+    const range = c.req.header('Range')
+    let stream: Readable
+    let contentLength: number | undefined
+    let contentRange: string | undefined
+    try {
+      const r = await deps.s3.send(new GetObjectCommand({
+        Bucket: bucket, Key: key, Range: range,
+      }))
+      stream = r.Body as unknown as Readable
+      contentLength = r.ContentLength
+      contentRange = r.ContentRange
+    } catch (e) {
+      return s3Error(c, e)
+    }
+    const mime = AUDIO_MIME[ext(key)] ?? 'application/octet-stream'
+    const headers: Record<string, string> = {
+      'Content-Type': mime,
+      'Accept-Ranges': 'bytes',
+    }
+    if (contentLength != null) headers['Content-Length'] = String(contentLength)
+    if (contentRange) headers['Content-Range'] = contentRange
+    const status = contentRange ? 206 : 200
+    return new Response(
+      Readable.toWeb(stream) as unknown as ReadableStream<Uint8Array>,
+      { status, headers },
     )
   })
 }
