@@ -3,16 +3,24 @@ import { api } from '../api/client'
 import type { HpcMetric } from '../api/types'
 import { HpcCard } from '../components/HpcCard'
 
+function formatTime(d: Date): string {
+  return d.toLocaleTimeString('ja-JP', { hour12: false })
+}
+
 export default function HpcPage() {
   const [metrics, setMetrics] = useState<HpcMetric[]>([])
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [fetchedAt, setFetchedAt] = useState<Date | null>(null)
 
   const refresh = useCallback(() => {
     setLoading(true)
     setError(null)
     api.hpc()
-      .then(setMetrics)
+      .then(rows => {
+        setMetrics(rows)
+        setFetchedAt(new Date())
+      })
       .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false))
   }, [])
@@ -38,6 +46,9 @@ export default function HpcPage() {
           {loading ? '...' : 'refresh'}
         </button>
         <span className="muted">直近 1 時間のデータ</span>
+        {fetchedAt && (
+          <span className="muted">最終更新 {formatTime(fetchedAt)}</span>
+        )}
       </header>
       {error && <p className="error">{error}</p>}
       {!loading && !error && metrics.length === 0 && (
