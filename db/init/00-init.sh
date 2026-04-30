@@ -28,6 +28,7 @@ for db in dashboard dashboard_test; do
   # Transfer ownership of the schema objects to dashboard_rw so it can
   # TRUNCATE / ALTER / DROP them as needed (GRANT alone is not enough for
   # operations like TRUNCATE ... RESTART IDENTITY).
+  # rw also gets CREATE on schema public so /sql/write can create new tables.
   # ro keeps SELECT-only access via explicit GRANT.
   psql -v ON_ERROR_STOP=1 --username "postgres" --dbname "$db" <<-EOSQL
     ALTER TABLE    hpc_metrics        OWNER TO dashboard_rw;
@@ -35,6 +36,7 @@ for db in dashboard dashboard_test; do
     ALTER VIEW     hpc_metrics_latest OWNER TO dashboard_rw;
     ALTER TABLE    s3_readme_meta     OWNER TO dashboard_rw;
 
+    GRANT CREATE ON SCHEMA public                  TO dashboard_rw;
     GRANT USAGE  ON SCHEMA public                  TO dashboard_ro;
     GRANT SELECT ON ALL TABLES IN SCHEMA public    TO dashboard_ro;
     ALTER DEFAULT PRIVILEGES FOR ROLE dashboard_rw IN SCHEMA public

@@ -52,6 +52,7 @@ ALTER SEQUENCE hpc_metrics_id_seq OWNER TO dashboard_rw;
 ALTER VIEW     hpc_metrics_latest OWNER TO dashboard_rw;
 ALTER TABLE    s3_readme_meta     OWNER TO dashboard_rw;
 
+GRANT CREATE ON SCHEMA public                  TO dashboard_rw;
 GRANT USAGE  ON SCHEMA public                  TO dashboard_ro;
 GRANT SELECT ON ALL TABLES IN SCHEMA public    TO dashboard_ro;
 ALTER DEFAULT PRIVILEGES FOR ROLE dashboard_rw IN SCHEMA public
