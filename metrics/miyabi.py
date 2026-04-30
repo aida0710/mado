@@ -18,6 +18,7 @@ from db import push  # noqa: E402
 
 HOST = "miyabi"
 COMMAND = "qstat"
+CATEGORY = "ジョブ一覧"
 ARGV = ["qstat", "-a"]
 
 
@@ -34,7 +35,7 @@ def main() -> int:
         output = (
             f"{output}\n--- stderr ---\n{proc.stderr}\n(exit {proc.returncode})\n"
         )
-    push(HOST, COMMAND, output)
+    push(HOST, COMMAND, output, category=CATEGORY)
     return 0
 
 

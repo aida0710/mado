@@ -7,6 +7,7 @@ import { z } from 'zod'
 export const HpcMetricSchema = z.object({
   host: z.string(),
   command: z.string(),
+  category: z.string(),
   output: z.string(),
   collected_at: z.string().datetime(),
 })

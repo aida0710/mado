@@ -297,3 +297,15 @@ pre {
 }
 .fav-btn:hover { color: #f5a623; }
 .fav-btn.on { color: #f5a623; }
+
+.hpc-category {
+  margin: 20px 0 12px;
+}
+.hpc-category__title {
+  margin: 0 0 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #555;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 4px;
+}

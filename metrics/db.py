@@ -1,8 +1,9 @@
 """Shared push client for HPC-side metric collectors.
 
-`push(host, command, output)` POSTs raw stdout to the dashboard's
-`/api/hpc/push` endpoint. Reads `DASHBOARD_URL` and `WRITE_TOKEN` from
-the environment (typically set per-cron-line on the HPC login node).
+`push(host, command, output, category=...)` POSTs raw stdout to the
+dashboard's `/api/hpc/push` endpoint. Reads `DASHBOARD_URL` and
+`WRITE_TOKEN` from the environment (typically set per-cron-line on the
+HPC login node).
 
 Standard library only — HPCs often have no `pip install`-able envs and
 the standard image's Python may be 3.8.
@@ -16,8 +17,18 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 
-def push(host: str, command: str, output: str, *, timeout: int = 30) -> None:
+def push(
+    host: str,
+    command: str,
+    output: str,
+    *,
+    category: str = "general",
+    timeout: int = 30,
+) -> None:
     """POST `output` to /api/hpc/push as text/plain.
+
+    `category` is a free-text bucket used by the front-end to group cards
+    into sections — e.g. "ジョブ一覧", "node使用率", "トークン数".
 
     Exits the process with a non-zero status on configuration error or HTTP
     failure so cron's `MAILTO` surfaces the problem.
@@ -27,7 +38,7 @@ def push(host: str, command: str, output: str, *, timeout: int = 30) -> None:
     if not base or not token:
         sys.exit("DASHBOARD_URL and WRITE_TOKEN must be set in the environment")
 
-    qs = urlencode({"host": host, "command": command})
+    qs = urlencode({"host": host, "command": command, "category": category})
     url = f"{base.rstrip('/')}/api/hpc/push?{qs}"
     body = output.encode("utf-8")
     req = Request(

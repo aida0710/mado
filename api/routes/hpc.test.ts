@@ -17,7 +17,7 @@ beforeEach(async () => {
 afterAll(() => closePools(pools))
 
 describe('POST /api/hpc/push', () => {
-  it('inserts a row with body as output', async () => {
+  it('inserts a row with body as output, category defaults to general', async () => {
     const body = 'job1 R\njob2 Q\n'
     const res = await app.request(
       '/api/hpc/push?host=miyabi&command=qstat',
@@ -30,11 +30,27 @@ describe('POST /api/hpc/push', () => {
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ ok: true })
     const r = await pools.rw.query(
-      'SELECT host, command, output FROM hpc_metrics'
+      'SELECT host, command, category, output FROM hpc_metrics'
     )
     expect(r.rows).toEqual([
-      { host: 'miyabi', command: 'qstat', output: body },
+      { host: 'miyabi', command: 'qstat', category: 'general', output: body },
     ])
+  })
+
+  it('uses ?category= when provided', async () => {
+    const res = await app.request(
+      '/api/hpc/push?host=miyabi&command=qstat&category=ジョブ一覧',
+      {
+        method: 'POST',
+        headers: { Authorization: 'Bearer TKN', 'Content-Type': 'text/plain' },
+        body: 'x',
+      }
+    )
+    expect(res.status).toBe(200)
+    const r = await pools.rw.query(
+      'SELECT category FROM hpc_metrics'
+    )
+    expect(r.rows).toEqual([{ category: 'ジョブ一覧' }])
   })
 
   it('rejects without token (401)', async () => {
@@ -87,24 +103,25 @@ describe('POST /api/hpc/push', () => {
 })
 
 describe('GET /api/hpc', () => {
-  it('returns latest row per (host, command)', async () => {
+  it('returns latest row per (host, command, category) including category', async () => {
     await pools.rw.query(
-      `INSERT INTO hpc_metrics(host, command, output, collected_at) VALUES
-       ('miyabi','qstat','old', now() - interval '1 hour'),
-       ('miyabi','qstat','new', now()),
-       ('osaka', 'pjstat','o',  now())`
+      `INSERT INTO hpc_metrics(host, command, category, output, collected_at) VALUES
+       ('miyabi','qstat','ジョブ一覧','old', now() - interval '30 minutes'),
+       ('miyabi','qstat','ジョブ一覧','new', now()),
+       ('osaka', 'pjstat','ジョブ一覧','o',  now())`
     )
     const res = await app.request('/api/hpc')
     expect(res.status).toBe(200)
     const rows = (await res.json()) as Array<{
-      host: string; command: string; output: string; collected_at: string
+      host: string; command: string; category: string;
+      output: string; collected_at: string
     }>
+    expect(rows).toHaveLength(2)
     const byHost = Object.fromEntries(rows.map(r => [r.host, r.output]))
     expect(byHost.miyabi).toBe('new')
     expect(byHost.osaka).toBe('o')
-    expect(rows).toHaveLength(2)
-    // collected_at must be ISO 8601, not a Date object or epoch number
     for (const row of rows) {
+      expect(row.category).toBe('ジョブ一覧')
       expect(typeof row.collected_at).toBe('string')
       expect(() => new Date(row.collected_at).toISOString()).not.toThrow()
     }
@@ -116,24 +133,34 @@ describe('GET /api/hpc', () => {
     expect(await res.json()).toEqual([])
   })
 
-  it('treats (host, command) as the latest key', async () => {
-    // Same host, two commands — both should appear, latest each.
+  it('excludes rows older than 1 hour', async () => {
     await pools.rw.query(
-      `INSERT INTO hpc_metrics(host, command, output, collected_at) VALUES
-       ('miyabi','qstat','q-old', now() - interval '1 hour'),
-       ('miyabi','qstat','q-new', now()),
-       ('miyabi','df',   'd-old', now() - interval '2 hour'),
-       ('miyabi','df',   'd-new', now())`
+      `INSERT INTO hpc_metrics(host, command, category, output, collected_at) VALUES
+       ('stale','qstat','x','old', now() - interval '2 hours'),
+       ('fresh','qstat','x','new', now())`
+    )
+    const res = await app.request('/api/hpc')
+    const rows = (await res.json()) as Array<{ host: string }>
+    expect(rows.map(r => r.host)).toEqual(['fresh'])
+  })
+
+  it('keeps separate latest rows per category for the same host/command', async () => {
+    await pools.rw.query(
+      `INSERT INTO hpc_metrics(host, command, category, output, collected_at) VALUES
+       ('miyabi','qstat','ジョブ一覧','jobs',  now()),
+       ('miyabi','qstat','node使用率','nodes', now()),
+       ('miyabi','qstat','トークン数','toks',  now())`
     )
     const res = await app.request('/api/hpc')
     const rows = (await res.json()) as Array<{
-      host: string; command: string; output: string
+      host: string; category: string; output: string
     }>
-    expect(rows).toHaveLength(2)
-    const byCommand = Object.fromEntries(
-      rows.map(r => [r.command, r.output]),
+    expect(rows).toHaveLength(3)
+    const byCategory = Object.fromEntries(
+      rows.map(r => [r.category, r.output]),
     )
-    expect(byCommand.qstat).toBe('q-new')
-    expect(byCommand.df).toBe('d-new')
+    expect(byCategory['ジョブ一覧']).toBe('jobs')
+    expect(byCategory['node使用率']).toBe('nodes')
+    expect(byCategory['トークン数']).toBe('toks')
   })
 })
