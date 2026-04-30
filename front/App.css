@@ -89,13 +89,17 @@ body {
 }
 .brand { margin: 0; font-size: 18px; font-weight: 600; letter-spacing: -0.01em; }
 
-.tabs { display: flex; gap: var(--space-1); }
+.tabs { display: flex; gap: var(--space-1); align-items: stretch; }
 .tab {
-  padding: var(--space-1) var(--space-3);
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
+  padding: 0 var(--space-3);
   border-radius: var(--radius-2);
   text-decoration: none;
   color: var(--ink-9);
   font-weight: 500;
+  line-height: 1;
   transition: background var(--transition-fast), color var(--transition-fast);
 }
 .tab:hover { background: var(--ink-1); color: var(--ink-11); }
@@ -249,19 +253,46 @@ pre { font-family: var(--font-mono); font-size: 12px; }
 }
 .bucket-list a:hover { text-decoration: underline; }
 
-.fav-btn {
-  background: none;
-  border: none;
+/* In-use checkbox on each bucket row. Native checkbox styled to match
+   the monochrome scale; large hit target so the user doesn't have to
+   aim. */
+.use-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
   cursor: pointer;
-  font-size: 16px;
-  line-height: 1;
-  padding: 4px;
-  color: var(--ink-3);
-  border-radius: var(--radius-2);
-  transition: color var(--transition-fast), background var(--transition-fast);
 }
-.fav-btn:hover { color: var(--ink-9); background: var(--ink-1); }
-.fav-btn.on { color: var(--ink-12); }
+.use-toggle input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  border: 1.5px solid var(--ink-5);
+  border-radius: var(--radius-1);
+  background: var(--paper);
+  cursor: pointer;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+.use-toggle input[type="checkbox"]:hover { border-color: var(--ink-9); }
+.use-toggle input[type="checkbox"]:checked {
+  background: var(--ink-12);
+  border-color: var(--ink-12);
+}
+/* Tick mark — drawn with a clipped CSS background to avoid inline SVG. */
+.use-toggle input[type="checkbox"]:checked::after {
+  content: "";
+  display: block;
+  width: 9px;
+  height: 5px;
+  margin: 3px auto 0;
+  border-left: 1.5px solid var(--paper);
+  border-bottom: 1.5px solid var(--paper);
+  transform: rotate(-45deg);
+}
 
 /* ---------------------------------------------------------------------- */
 /*  S3 — bucket / prefix browser                                          */

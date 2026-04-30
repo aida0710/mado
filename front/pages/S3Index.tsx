@@ -57,13 +57,13 @@ export default function S3Index() {
 
       {favoriteRows.length > 0 && (
         <>
-          <h3 className="bucket-section">⭐ お気に入り</h3>
+          <h3 className="bucket-section">現在使っているバケット</h3>
           <ul className="bucket-list">
             {favoriteRows.map(b => (
               <BucketLi
                 key={b.name}
                 bucket={b}
-                isFavorite
+                inUse
                 onToggle={() => toggleFavorite(b.name)}
               />
             ))}
@@ -79,7 +79,7 @@ export default function S3Index() {
               <BucketLi
                 key={b.name}
                 bucket={b}
-                isFavorite={false}
+                inUse={false}
                 onToggle={() => toggleFavorite(b.name)}
               />
             ))}
@@ -91,21 +91,26 @@ export default function S3Index() {
 }
 
 function BucketLi({
-  bucket, isFavorite, onToggle,
+  bucket, inUse, onToggle,
 }: {
-  bucket: BucketRow; isFavorite: boolean; onToggle: () => void
+  bucket: BucketRow; inUse: boolean; onToggle: () => void
 }) {
+  const checkboxId = `use-${bucket.name}`
   return (
     <li>
-      <button
-        type="button"
-        className={`fav-btn ${isFavorite ? 'on' : ''}`}
-        onClick={onToggle}
-        aria-label={isFavorite ? 'unfavorite' : 'favorite'}
-        title={isFavorite ? 'お気に入りから外す' : 'お気に入りに追加'}
+      <label
+        className="use-toggle"
+        htmlFor={checkboxId}
+        title={inUse ? '使用中から外す' : '現在使っているバケットに追加'}
       >
-        {isFavorite ? '★' : '☆'}
-      </button>
+        <input
+          id={checkboxId}
+          type="checkbox"
+          checked={inUse}
+          onChange={onToggle}
+          aria-label={`${bucket.name} を現在使っているバケットに${inUse ? '外す' : '追加'}`}
+        />
+      </label>
       <Link to={`/s3/${encodeURIComponent(bucket.name)}/`}>{bucket.name}</Link>
       {bucket.creationDate && (
         <span className="muted"> · {bucket.creationDate.slice(0, 10)}</span>
