@@ -304,6 +304,7 @@ pre { font-family: var(--font-mono); font-size: 12px; }
   display: flex;
   flex-wrap: wrap;
   align-items: center;
+  gap: var(--space-1);
 }
 .breadcrumb a {
   color: var(--ink-11);
@@ -313,6 +314,27 @@ pre { font-family: var(--font-mono); font-size: 12px; }
 }
 .breadcrumb a:hover { background: var(--ink-1); }
 .breadcrumb__sep { color: var(--ink-3); padding: 0 2px; }
+.breadcrumb__back {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin-right: var(--space-1);
+  border: 1px solid var(--ink-3);
+  border-radius: var(--radius-2);
+  background: var(--paper);
+  color: var(--ink-11);
+  cursor: pointer;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+.breadcrumb__back:hover {
+  background: var(--ink-1);
+  border-color: var(--ink-5);
+}
 
 .s3-list {
   width: 100%;
