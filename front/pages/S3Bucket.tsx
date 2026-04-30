@@ -14,8 +14,8 @@ export default function S3Bucket() {
     <section className="s3-bucket">
       <div className="s3-main">
         <Breadcrumb bucket={bucket} prefix={prefix} />
-        <S3Browser bucket={bucket} prefix={prefix} onSelectFile={setSelected} />
         <ReadmeView bucket={bucket} prefix={prefix} />
+        <S3Browser bucket={bucket} prefix={prefix} onSelectFile={setSelected} />
       </div>
       <PreviewDrawer
         bucket={bucket}

@@ -398,9 +398,9 @@ pre { font-family: var(--font-mono); font-size: 12px; }
 /* ---------------------------------------------------------------------- */
 
 .readme {
-  margin-top: var(--space-5);
-  padding-top: var(--space-4);
-  border-top: 1px solid var(--ink-2);
+  margin-bottom: var(--space-5);
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--ink-2);
 }
 .readme__head { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
 .readme__head h3 { margin: 0; font-size: 14px; font-weight: 600; }
