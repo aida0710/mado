@@ -51,6 +51,9 @@ export const TarPreview = z.object({
     type: z.string(),
   })),
   truncated: z.boolean(),
+  hasMore: z.boolean(),
+  offset: z.number(),
+  limit: z.number(),
 })
 
 export const FavoriteBuckets = z.array(z.string())

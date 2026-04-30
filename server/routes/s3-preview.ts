@@ -173,6 +173,12 @@ export function mountS3PreviewRoutes(app: Hono, deps: S3PreviewDeps): void {
     const limit = Number.isFinite(rawLimit) && rawLimit > 0
       ? Math.min(Math.floor(rawLimit), 10_000)
       : deps.env.PREVIEW_TAR_ENTRY_LIMIT
+    // ?offset is the pagination cursor — Number-parse with the same
+    // guarding so a stray "?offset=abc" falls back to 0 cleanly.
+    const rawOffset = Number(c.req.query('offset') ?? 0)
+    const offset = Number.isFinite(rawOffset) && rawOffset > 0
+      ? Math.floor(rawOffset)
+      : 0
 
     let stream: NodeJS.ReadableStream
     try {
@@ -191,8 +197,9 @@ export function mountS3PreviewRoutes(app: Hono, deps: S3PreviewDeps): void {
       const listing = await listTarEntries(stream, kind, {
         entryLimit: limit,
         byteLimit,
+        offset,
       })
-      return c.json(listing)
+      return c.json({ ...listing, offset, limit })
     } catch (e) {
       return c.json({ error: (e as Error).message }, 500)
     }

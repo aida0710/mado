@@ -16,11 +16,16 @@ export interface TarEntry {
 export interface TarOptions {
   entryLimit: number
   byteLimit: number
+  /** Skip this many entries before starting to collect — pagination cursor. */
+  offset?: number
 }
 
 export interface TarListing {
   entries: TarEntry[]
+  /** byte budget (or entry budget mid-archive) hit; result is incomplete. */
   truncated: boolean
+  /** at least one more entry exists past the returned page. */
+  hasMore: boolean
 }
 
 function makeXzDecompressor(): NodeJS.ReadWriteStream {
@@ -45,26 +50,38 @@ export function listTarEntries(
   kind: ArchiveKind,
   opts: TarOptions,
 ): Promise<TarListing> {
+  const offset = opts.offset ?? 0
   return new Promise((resolveP, rejectP) => {
     const ext = tarExtract()
     const out: TarEntry[] = []
+    let skipped = 0
     let bytes = 0
     let stopped = false
     let truncated = false
+    let hasMore = false
 
     const stop = (reason: 'entry' | 'byte' | null) => {
       if (stopped) return
       stopped = true
-      truncated = reason !== null
+      truncated = reason === 'byte'
+      if (reason === 'entry') hasMore = true
       // Destroying the head of the pipeline propagates through node:stream's
       // pipeline() helper and closes upstream (e.g., the S3 socket) instead
       // of leaving us reading bytes we have already decided to discard.
       ;(source as NodeJS.ReadableStream & { destroy?: () => void }).destroy?.()
       ext.destroy()
-      resolveP({ entries: out, truncated })
+      resolveP({ entries: out, truncated, hasMore })
     }
 
     ext.on('entry', (header, stream, next) => {
+      // Skip past the cursor first.
+      if (skipped < offset) {
+        skipped++
+        stream.on('end', next)
+        stream.resume()
+        return
+      }
+      // Got a full page already; the existence of this entry means hasMore.
       if (out.length >= opts.entryLimit) {
         stream.resume()
         stop('entry')
@@ -102,7 +119,7 @@ export function listTarEntries(
     pipeline(source, decompressor, counter, ext, err => {
       if (stopped) return
       if (err) rejectP(err)
-      else resolveP({ entries: out, truncated })
+      else resolveP({ entries: out, truncated, hasMore })
     })
   })
 }

@@ -217,7 +217,7 @@ describe('GET /api/s3/preview/tar', () => {
     ])
   })
 
-  it('respects ?limit=2 and reports truncated:true', async () => {
+  it('respects ?limit=2 and reports hasMore:true', async () => {
     s3Mock.on(GetObjectCommand).resolves({
       Body: createReadStream(fixture('sample.tar.gz')) as never,
     })
@@ -226,10 +226,50 @@ describe('GET /api/s3/preview/tar', () => {
     )
     expect(res.status).toBe(200)
     const body = (await res.json()) as {
-      entries: { name: string }[]; truncated: boolean
+      entries: { name: string }[]
+      truncated: boolean
+      hasMore: boolean
+      offset: number
+      limit: number
     }
     expect(body.entries).toHaveLength(2)
-    expect(body.truncated).toBe(true)
+    expect(body.hasMore).toBe(true)
+    expect(body.truncated).toBe(false)
+    expect(body.offset).toBe(0)
+    expect(body.limit).toBe(2)
+  })
+
+  it('paginates with ?offset', async () => {
+    s3Mock.on(GetObjectCommand).resolves({
+      Body: createReadStream(fixture('sample.tar.gz')) as never,
+    })
+    const res1 = await app.request(
+      '/api/s3/preview/tar?bucket=b&key=s.tar.gz&limit=2&offset=0',
+    )
+    const body1 = (await res1.json()) as {
+      entries: { name: string }[]; hasMore: boolean; offset: number
+    }
+    expect(body1.entries).toHaveLength(2)
+    expect(body1.hasMore).toBe(true)
+    expect(body1.offset).toBe(0)
+
+    s3Mock.reset()
+    s3Mock.on(GetObjectCommand).resolves({
+      Body: createReadStream(fixture('sample.tar.gz')) as never,
+    })
+    const res2 = await app.request(
+      '/api/s3/preview/tar?bucket=b&key=s.tar.gz&limit=2&offset=2',
+    )
+    const body2 = (await res2.json()) as {
+      entries: { name: string }[]; hasMore: boolean; offset: number
+    }
+    expect(body2.entries).toHaveLength(2)
+    expect(body2.hasMore).toBe(false)
+    expect(body2.offset).toBe(2)
+
+    const allNames = [...body1.entries, ...body2.entries]
+      .map(e => e.name).sort()
+    expect(allNames).toEqual(['d/', 'd/a.txt', 'd/b.txt', 'd/c.txt'])
   })
 
   it('400 for unsupported extension (.zip)', async () => {

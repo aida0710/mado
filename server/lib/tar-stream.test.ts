@@ -17,6 +17,7 @@ describe('listTarEntries', () => {
       { entryLimit: 10, byteLimit: big },
     )
     expect(r.truncated).toBe(false)
+    expect(r.hasMore).toBe(false)
     expect(r.entries.map(e => e.name)).toEqual(expect.arrayContaining([
       'd/a.txt', 'd/b.txt', 'd/c.txt',
     ]))
@@ -29,6 +30,7 @@ describe('listTarEntries', () => {
       { entryLimit: 10, byteLimit: big },
     )
     expect(r.truncated).toBe(false)
+    expect(r.hasMore).toBe(false)
     expect(r.entries.map(e => e.name).sort())
       .toEqual(['d/', 'd/a.txt', 'd/b.txt', 'd/c.txt'])
   })
@@ -40,18 +42,53 @@ describe('listTarEntries', () => {
       { entryLimit: 10, byteLimit: big },
     )
     expect(r.truncated).toBe(false)
+    expect(r.hasMore).toBe(false)
     expect(r.entries.map(e => e.name).sort())
       .toEqual(['d/', 'd/a.txt', 'd/b.txt', 'd/c.txt'])
   })
 
-  it('stops at entryLimit and marks truncated', async () => {
+  it('stops at entryLimit and signals hasMore', async () => {
     const r = await listTarEntries(
       createReadStream(fix('sample.tar')),
       'tar',
       { entryLimit: 2, byteLimit: big },
     )
     expect(r.entries).toHaveLength(2)
-    expect(r.truncated).toBe(true)
+    expect(r.hasMore).toBe(true)
+    // entryLimit hit is not "truncated" — pagination can recover.
+    expect(r.truncated).toBe(false)
+  })
+
+  it('paginates with offset', async () => {
+    // sample.tar.gz has 4 entries: d/, d/a.txt, d/b.txt, d/c.txt
+    const page1 = await listTarEntries(
+      createReadStream(fix('sample.tar.gz')),
+      'gz',
+      { entryLimit: 2, byteLimit: big, offset: 0 },
+    )
+    expect(page1.entries).toHaveLength(2)
+    expect(page1.hasMore).toBe(true)
+
+    const page2 = await listTarEntries(
+      createReadStream(fix('sample.tar.gz')),
+      'gz',
+      { entryLimit: 2, byteLimit: big, offset: 2 },
+    )
+    expect(page2.entries).toHaveLength(2)
+    expect(page2.hasMore).toBe(false)
+
+    const allNames = [...page1.entries, ...page2.entries].map(e => e.name).sort()
+    expect(allNames).toEqual(['d/', 'd/a.txt', 'd/b.txt', 'd/c.txt'])
+  })
+
+  it('offset past the end returns empty without hasMore', async () => {
+    const r = await listTarEntries(
+      createReadStream(fix('sample.tar.gz')),
+      'gz',
+      { entryLimit: 100, byteLimit: big, offset: 100 },
+    )
+    expect(r.entries).toEqual([])
+    expect(r.hasMore).toBe(false)
   })
 
   it('stops at byteLimit and marks truncated', async () => {

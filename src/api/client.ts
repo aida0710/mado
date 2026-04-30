@@ -77,11 +77,16 @@ export const api = {
     return PutReadmeOk.parse(json)
   },
 
-  tarPreview: (bucket: string, key: string, limit = 200) =>
+  tarPreview: (
+    bucket: string,
+    key: string,
+    opts: { limit?: number; offset?: number } = {},
+  ) =>
     getJson(buildUrl('/api/s3/preview/tar', {
       bucket,
       key,
-      limit: String(limit),
+      limit:  opts.limit  != null ? String(opts.limit)  : undefined,
+      offset: opts.offset != null ? String(opts.offset) : undefined,
     }), TarPreview),
 
   textPreviewUrl: (bucket: string, key: string): string =>
