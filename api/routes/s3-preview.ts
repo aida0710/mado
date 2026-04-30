@@ -5,7 +5,11 @@ import {
 } from '@aws-sdk/client-s3'
 import type { Hono, Context } from 'hono'
 import { Readable } from 'node:stream'
-import { listTarEntries, type ArchiveKind } from '../lib/tar-stream.js'
+import {
+  extractTarEntry,
+  listTarEntries,
+  type ArchiveKind,
+} from '../lib/tar-stream.js'
 import { listTarHeadersByRange, makeS3RangeReader } from '../lib/tar-range.js'
 
 export interface PreviewEnv {
@@ -18,6 +22,11 @@ export interface S3PreviewDeps {
   s3: S3Client
   env: PreviewEnv
 }
+
+// Cap the size of a single tar entry we'll buffer in memory. 100 MB
+// covers typical WebDataset audio samples while keeping a malicious
+// archive from OOM-ing the dashboard.
+const TAR_ENTRY_MAX_BYTES = 100 * 1024 * 1024
 
 const IMAGE_MIME: Record<string, string> = {
   jpg: 'image/jpeg',
@@ -45,6 +54,20 @@ function detectArchive(key: string): ArchiveKind | null {
   if (k.endsWith('.tar.xz')) return 'xz'
   if (k.endsWith('.tar'))    return 'tar'
   return null
+}
+
+const TEXT_EXT = new Set([
+  'txt', 'md', 'json', 'yaml', 'yml', 'csv', 'tsv', 'log',
+])
+
+// MIME type for a tar entry name (used by /api/s3/preview/tar-entry).
+function entryContentType(name: string): string {
+  const e = ext(name)
+  if (IMAGE_MIME[e]) return IMAGE_MIME[e]
+  if (AUDIO_MIME[e]) return AUDIO_MIME[e]
+  if (TEXT_EXT.has(e)) return 'text/plain; charset=utf-8'
+  if (e === 'json') return 'application/json; charset=utf-8'
+  return 'application/octet-stream'
 }
 
 async function readN(
@@ -282,6 +305,51 @@ export function mountS3PreviewRoutes(app: Hono, deps: S3PreviewDeps): void {
     })
     return new Response(body, {
       headers: { 'Content-Type': 'application/x-ndjson; charset=utf-8' },
+    })
+  })
+
+  // Pull a single entry out of a tar archive and return its body. The
+  // front-end uses this to play a `.wav` or render a `.json` from inside a
+  // WebDataset shard without downloading the full tar.
+  app.get('/api/s3/preview/tar-entry', async c => {
+    const bucket = c.req.query('bucket')
+    const key = c.req.query('key')
+    const entry = c.req.query('entry')
+    if (!bucket || !key || !entry) {
+      return c.json({ error: 'bucket, key and entry are required' }, 400)
+    }
+    const kind = detectArchive(key)
+    if (!kind) {
+      return c.json({ error: 'unsupported archive extension' }, 400)
+    }
+
+    let stream: NodeJS.ReadableStream
+    try {
+      const r = await deps.s3.send(
+        new GetObjectCommand({ Bucket: bucket, Key: key }),
+      )
+      stream = r.Body as unknown as NodeJS.ReadableStream
+    } catch (e) {
+      return s3Error(c, e)
+    }
+
+    let buf: Buffer | null
+    try {
+      buf = await extractTarEntry(stream, kind, entry, TAR_ENTRY_MAX_BYTES)
+    } catch (e) {
+      return c.json({ error: (e as Error).message }, 500)
+    }
+    if (!buf) {
+      return c.json({ error: `entry not found: ${entry}` }, 404)
+    }
+
+    const body = new Uint8Array(buf.byteLength)
+    body.set(buf)
+    return new Response(body, {
+      headers: {
+        'Content-Type': entryContentType(entry),
+        'Content-Length': String(buf.byteLength),
+      },
     })
   })
 }

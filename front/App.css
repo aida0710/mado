@@ -608,3 +608,66 @@ pre { font-family: var(--font-mono); font-size: 12px; }
   text-align: left;
 }
 .archive-list td:last-child { width: 1%; white-space: nowrap; color: var(--ink-7); }
+.archive-row { cursor: pointer; transition: background var(--transition-fast); }
+.archive-row:hover { background: var(--ink-0); }
+.archive-row:focus-visible { background: var(--ink-1); }
+
+/* ---------------------------------------------------------------------- */
+/*  Layer 3: tar entry modal                                              */
+/*                                                                        */
+/*  Sits on top of the right-side preview drawer (which is layer 2). The  */
+/*  backdrop here is a touch darker and the surface is wider/elevated to  */
+/*  visually communicate that we drilled one level deeper.                */
+/* ---------------------------------------------------------------------- */
+
+.modal-backdrop--entry {
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 80;
+}
+.modal--entry {
+  width: min(960px, 100%);
+  max-width: min(960px, calc(100vw - 32px));
+  padding: 0;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.32);
+  border: 1px solid var(--ink-3);
+  display: flex;
+  flex-direction: column;
+}
+.modal--entry .modal__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--ink-2);
+  background: var(--ink-0);
+  border-radius: var(--radius-4) var(--radius-4) 0 0;
+}
+.modal__breadcrumb {
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  word-break: break-all;
+}
+.modal--entry .modal__body {
+  padding: var(--space-4);
+  overflow: auto;
+  max-height: calc(90vh - 64px);
+}
+
+.entry-img { max-width: 100%; height: auto; display: block; margin: 0 auto; border-radius: var(--radius-2); }
+.entry-audio { width: 100%; }
+.entry-text {
+  margin: 0;
+  white-space: pre-wrap;
+  font-size: 12px;
+  line-height: 1.55;
+  background: var(--ink-0);
+  border: 1px solid var(--ink-2);
+  padding: var(--space-3);
+  border-radius: var(--radius-2);
+  max-height: 70vh;
+  overflow: auto;
+}
+.entry-unknown { display: flex; flex-direction: column; gap: var(--space-3); align-items: flex-start; }
+.entry-unknown a { text-decoration: none; }

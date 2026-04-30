@@ -45,6 +45,63 @@ function makeXzDecompressor(): NodeJS.ReadWriteStream {
   }
 }
 
+// Pull a single named entry's body out of a tar stream and resolve to its
+// bytes. Used by the tar-entry preview route. `byteLimit` caps the body so
+// a malicious archive entry can't exhaust memory.
+export function extractTarEntry(
+  source: NodeJS.ReadableStream,
+  kind: ArchiveKind,
+  entryName: string,
+  byteLimit: number,
+): Promise<Buffer | null> {
+  return new Promise((resolveP, rejectP) => {
+    const ext = tarExtract()
+    let found = false
+    let truncated = false
+
+    ext.on('entry', (header, stream, next) => {
+      if (header.name !== entryName || found) {
+        // Drain non-matching entries to advance the parser.
+        stream.on('end', next)
+        stream.resume()
+        return
+      }
+      found = true
+      const chunks: Buffer[] = []
+      let total = 0
+      stream.on('data', (chunk: Buffer) => {
+        if (total >= byteLimit) {
+          truncated = true
+          return
+        }
+        const remaining = byteLimit - total
+        const piece = chunk.byteLength <= remaining ? chunk : chunk.subarray(0, remaining)
+        chunks.push(piece)
+        total += piece.byteLength
+      })
+      stream.on('end', () => {
+        // Tear down the rest of the pipeline so we stop downloading.
+        ;(source as NodeJS.ReadableStream & { destroy?: () => void }).destroy?.()
+        ext.destroy()
+        resolveP(Buffer.concat(chunks))
+      })
+      stream.resume()
+      void truncated // silence unused-variable warning; reserved for caller use later
+    })
+
+    const decompressor: NodeJS.ReadWriteStream =
+      kind === 'tar' ? new PassThrough()
+      : kind === 'gz' ? createGunzip()
+      : makeXzDecompressor()
+
+    pipeline(source, decompressor, ext, err => {
+      if (found) return // already resolved with body
+      if (err) rejectP(err)
+      else resolveP(null) // natural EOF without finding the entry
+    })
+  })
+}
+
 export function listTarEntries(
   source: NodeJS.ReadableStream,
   kind: ArchiveKind,

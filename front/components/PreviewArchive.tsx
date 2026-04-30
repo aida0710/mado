@@ -1,15 +1,18 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type KeyboardEvent } from 'react'
 import { api } from '../api/client'
 import type { z } from 'zod'
 import { TarPreview } from '../api/types'
 import { fmtSize } from '../lib/format'
+import { TarEntryModal } from './TarEntryModal'
 
 type Resp = z.infer<typeof TarPreview>
+type Entry = Resp['entries'][number]
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const
 const DEFAULT_PAGE_SIZE = 10
 
 export function PreviewArchive({ bucket, k }: { bucket: string; k: string }) {
+  const [openedEntry, setOpenedEntry] = useState<Entry | null>(null)
   const [data, setData] = useState<Resp | null>(null)
   const [offset, setOffset] = useState(0)
   const [pageSize, setPageSize] = useState<number>(DEFAULT_PAGE_SIZE)
@@ -127,7 +130,19 @@ export function PreviewArchive({ bucket, k }: { bucket: string; k: string }) {
         <thead><tr><th>Name</th><th>Size</th></tr></thead>
         <tbody>
           {data.entries.map(e => (
-            <tr key={e.name}>
+            <tr
+              key={e.name}
+              className="archive-row"
+              role="button"
+              tabIndex={0}
+              onClick={() => setOpenedEntry(e)}
+              onKeyDown={(ev: KeyboardEvent<HTMLTableRowElement>) => {
+                if (ev.key === 'Enter' || ev.key === ' ') {
+                  ev.preventDefault()
+                  setOpenedEntry(e)
+                }
+              }}
+            >
               <td>{e.name}</td>
               <td>{fmtSize(e.size)}</td>
             </tr>
@@ -151,6 +166,14 @@ export function PreviewArchive({ bucket, k }: { bucket: string; k: string }) {
           disabled={data.truncated || loading || data.entries.length === 0}
         >Next →</button>
       </div>
+      {openedEntry && (
+        <TarEntryModal
+          bucket={bucket}
+          archiveKey={k}
+          entry={openedEntry}
+          onClose={() => setOpenedEntry(null)}
+        />
+      )}
     </div>
   )
 }

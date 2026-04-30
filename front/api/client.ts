@@ -164,6 +164,26 @@ export const api = {
   audioUrl: (bucket: string, key: string): string =>
     buildUrl('/api/s3/preview/audio', { bucket, key }),
 
+  // URL form for `<img src>` / `<audio src>` to a single tar entry's body.
+  tarEntryUrl: (bucket: string, key: string, entry: string): string =>
+    buildUrl('/api/s3/preview/tar-entry', { bucket, key, entry }),
+
+  // Fetch the entry body as text. Throws on 4xx/5xx (entry not found, etc.).
+  tarEntryText: async (
+    bucket: string, key: string, entry: string,
+  ): Promise<string> => {
+    const res = await fetch(api.tarEntryUrl(bucket, key, entry))
+    if (!res.ok) {
+      let msg = res.statusText
+      try {
+        const j = (await res.json()) as { error?: string }
+        if (j.error) msg = j.error
+      } catch { /* keep statusText */ }
+      throw new Error(msg)
+    }
+    return res.text()
+  },
+
   favorites: () => getJson('/api/s3/favorites', FavoriteBuckets),
 
   addFavorite: async (bucket: string): Promise<void> => {

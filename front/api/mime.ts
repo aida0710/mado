@@ -14,3 +14,11 @@ export function classify(key: string): PreviewKind {
   }
   return 'unknown'
 }
+
+// Subset for entries inside a tar — tar-in-tar isn't a thing we render.
+export type EntryKind = Exclude<PreviewKind, 'archive'>
+
+export function classifyEntry(name: string): EntryKind {
+  const k = classify(name)
+  return k === 'archive' ? 'unknown' : k
+}
