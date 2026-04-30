@@ -101,3 +101,38 @@ pre {
   font-weight: 500;
 }
 .bucket-list a:hover { text-decoration: underline; }
+
+.breadcrumb { padding: 8px 0; font-size: 14px; }
+.breadcrumb a { color: #1a1a1a; text-decoration: none; }
+.breadcrumb a:hover { text-decoration: underline; }
+.breadcrumb__sep { color: #aaa; padding: 0 4px; }
+
+.s3-list { width: 100%; border-collapse: collapse; }
+.s3-list th,
+.s3-list td {
+  text-align: left;
+  padding: 6px 8px;
+  border-bottom: 1px solid #f0f0f0;
+  font-size: 13px;
+}
+.s3-list th { color: #666; font-weight: 500; }
+.s3-row { cursor: pointer; }
+.s3-row:hover { background: #f7f7f7; }
+.s3-row.dir td:first-child { font-weight: 600; }
+
+.pager {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+  justify-content: center;
+}
+.pager button {
+  padding: 4px 12px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+  font: inherit;
+}
+.pager button:disabled { opacity: 0.4; cursor: default; }

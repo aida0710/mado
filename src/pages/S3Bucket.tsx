@@ -1,4 +1,6 @@
 import { useParams } from 'react-router-dom'
+import { Breadcrumb } from '../components/Breadcrumb'
+import { S3Browser } from '../components/S3Browser'
 
 export default function S3Bucket() {
   const params = useParams<{ bucket: string; '*': string }>()
@@ -6,10 +8,8 @@ export default function S3Bucket() {
   const prefix = params['*'] ?? ''
   return (
     <section>
-      <header className="page-head">
-        <h2>{bucket}</h2>
-      </header>
-      <p className="muted">prefix: {prefix || '(root)'} — 準備中</p>
+      <Breadcrumb bucket={bucket} prefix={prefix} />
+      <S3Browser bucket={bucket} prefix={prefix} />
     </section>
   )
 }
