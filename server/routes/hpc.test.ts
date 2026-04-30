@@ -66,5 +66,22 @@ describe('POST /api/hpc/push', () => {
       body: 'x',
     })
     expect(res.status).toBe(400)
+    expect(await res.json()).toEqual({
+      error: 'host and command query params are required',
+    })
+  })
+
+  it('413 if body exceeds 1MB', async () => {
+    const big = 'x'.repeat(1_000_001)
+    const res = await app.request(
+      '/api/hpc/push?host=m&command=q',
+      {
+        method: 'POST',
+        headers: { Authorization: 'Bearer TKN', 'Content-Type': 'text/plain' },
+        body: big,
+      },
+    )
+    expect(res.status).toBe(413)
+    expect(await res.json()).toEqual({ error: 'request body too large' })
   })
 })
