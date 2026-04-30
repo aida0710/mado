@@ -1,4 +1,4 @@
-import { GetObjectCommand, S3Client } from '@aws-sdk/client-s3'
+import { GetObjectCommand, NoSuchKey, S3Client } from '@aws-sdk/client-s3'
 import { mockClient } from 'aws-sdk-client-mock'
 import { Readable } from 'node:stream'
 import { Hono } from 'hono'
@@ -37,6 +37,15 @@ describe('GET /api/s3/preview/text', () => {
     const res = await app.request('/api/s3/preview/text?key=a.txt')
     expect(res.status).toBe(400)
   })
+
+  it('404 when S3 returns NoSuchKey', async () => {
+    s3Mock.on(GetObjectCommand).rejects(
+      new NoSuchKey({ message: 'no', $metadata: {} })
+    )
+    const res = await app.request('/api/s3/preview/text?bucket=b&key=missing.txt')
+    expect(res.status).toBe(404)
+    expect(await res.json()).toEqual({ error: 'not found' })
+  })
 })
 
 describe('GET /api/s3/preview/image', () => {
@@ -71,5 +80,24 @@ describe('GET /api/s3/preview/image', () => {
   it('400 if bucket or key missing', async () => {
     const res = await app.request('/api/s3/preview/image?bucket=b')
     expect(res.status).toBe(400)
+  })
+
+  it('forwards Content-Length when known', async () => {
+    s3Mock.on(GetObjectCommand).resolves({
+      Body: Readable.from(Buffer.from([1, 2, 3, 4, 5])) as never,
+      ContentLength: 5,
+    })
+    const res = await app.request(
+      '/api/s3/preview/image?bucket=b&key=a.png',
+    )
+    expect(res.headers.get('content-length')).toBe('5')
+  })
+
+  it('404 when S3 returns NoSuchKey', async () => {
+    s3Mock.on(GetObjectCommand).rejects(
+      new NoSuchKey({ message: 'no', $metadata: {} })
+    )
+    const res = await app.request('/api/s3/preview/image?bucket=b&key=missing.jpg')
+    expect(res.status).toBe(404)
   })
 })

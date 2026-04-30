@@ -1,5 +1,10 @@
-import { GetObjectCommand, type S3Client } from '@aws-sdk/client-s3'
-import type { Hono } from 'hono'
+import {
+  GetObjectCommand,
+  NoSuchKey,
+  type S3Client,
+} from '@aws-sdk/client-s3'
+import type { Hono, Context } from 'hono'
+import { Readable } from 'node:stream'
 
 export interface PreviewEnv {
   PREVIEW_TEXT_LIMIT: number
@@ -40,14 +45,11 @@ async function readN(
   return Buffer.concat(chunks).subarray(0, n)
 }
 
-function nodeToWeb(node: NodeJS.ReadableStream): ReadableStream<Uint8Array> {
-  return new ReadableStream({
-    start(controller) {
-      node.on('data',  c => controller.enqueue(c as Uint8Array))
-      node.on('end',   () => controller.close())
-      node.on('error', e => controller.error(e))
-    },
-  })
+function s3Error(c: Context, e: unknown): Response {
+  if (e instanceof NoSuchKey) {
+    return c.json({ error: 'not found' }, 404)
+  }
+  return c.json({ error: (e as Error).message }, 500)
 }
 
 export function mountS3PreviewRoutes(app: Hono, deps: S3PreviewDeps): void {
@@ -57,13 +59,18 @@ export function mountS3PreviewRoutes(app: Hono, deps: S3PreviewDeps): void {
     if (!bucket || !key) {
       return c.json({ error: 'bucket and key required' }, 400)
     }
-    const r = await deps.s3.send(
-      new GetObjectCommand({ Bucket: bucket, Key: key }),
-    )
-    const buf = await readN(
-      r.Body as unknown as NodeJS.ReadableStream,
-      deps.env.PREVIEW_TEXT_LIMIT,
-    )
+    let buf: Buffer
+    try {
+      const r = await deps.s3.send(
+        new GetObjectCommand({ Bucket: bucket, Key: key }),
+      )
+      buf = await readN(
+        r.Body as unknown as NodeJS.ReadableStream,
+        deps.env.PREVIEW_TEXT_LIMIT,
+      )
+    } catch (e) {
+      return s3Error(c, e)
+    }
     // Copy into a fresh ArrayBuffer-backed Uint8Array so it satisfies
     // BodyInit (ArrayBufferView<ArrayBuffer>) under TS strict typings.
     const body = new Uint8Array(buf.byteLength)
@@ -79,13 +86,23 @@ export function mountS3PreviewRoutes(app: Hono, deps: S3PreviewDeps): void {
     if (!bucket || !key) {
       return c.json({ error: 'bucket and key required' }, 400)
     }
-    const r = await deps.s3.send(
-      new GetObjectCommand({ Bucket: bucket, Key: key }),
-    )
+    let stream: Readable
+    let contentLength: number | undefined
+    try {
+      const r = await deps.s3.send(
+        new GetObjectCommand({ Bucket: bucket, Key: key }),
+      )
+      stream = r.Body as unknown as Readable
+      contentLength = r.ContentLength
+    } catch (e) {
+      return s3Error(c, e)
+    }
     const mime = IMAGE_MIME[ext(key)] ?? 'application/octet-stream'
-    const stream = r.Body as unknown as NodeJS.ReadableStream
-    return new Response(nodeToWeb(stream), {
-      headers: { 'Content-Type': mime },
-    })
+    const headers: Record<string, string> = { 'Content-Type': mime }
+    if (contentLength != null) headers['Content-Length'] = String(contentLength)
+    return new Response(
+      Readable.toWeb(stream) as unknown as ReadableStream<Uint8Array>,
+      { headers },
+    )
   })
 }
