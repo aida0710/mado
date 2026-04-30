@@ -39,3 +39,49 @@ pre {
     Consolas, "Liberation Mono", monospace;
   font-size: 12px;
 }
+
+.page-head { display: flex; align-items: baseline; gap: 12px; }
+.page-head h2 { margin: 8px 0; }
+.ghost {
+  background: none;
+  border: 1px solid #ccc;
+  padding: 4px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font: inherit;
+}
+.ghost:disabled { opacity: 0.5; cursor: default; }
+.error { color: #b00020; }
+.muted { color: #888; }
+
+.hpc-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+  gap: 12px;
+}
+
+.hpc-card {
+  border: 1px solid #e5e5e5;
+  border-radius: 8px;
+  padding: 8px 12px;
+  background: #fff;
+}
+.hpc-card__head {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #f0f0f0;
+}
+.hpc-card__host { font-weight: 600; }
+.hpc-card__cmd  { color: #666; }
+.hpc-card__time { margin-left: auto; color: #888; font-size: 12px; }
+.hpc-card__body {
+  max-height: 240px;
+  overflow: auto;
+  margin: 8px 0 0;
+  padding: 8px;
+  background: #fafafa;
+  border-radius: 4px;
+  white-space: pre;
+}
