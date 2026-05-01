@@ -80,22 +80,8 @@ export function MetricsHelpModal({ onClose }: Props) {
 
           <Section title="古いデータは消えます">
             <p className="m-0 text-sm">
-              直近 <strong>1 時間</strong>に push したものだけが画面に出る。cron が止まると勝手に画面から消える（DB には残る）。
+              直近 <strong>1 時間</strong>に push したものだけが画面に出る（DB には残る）。
             </p>
-          </Section>
-
-          <Section title="届かないとき">
-            <ol className="m-0 flex list-decimal flex-col gap-2 pl-5 text-sm">
-              <li>
-                <strong>cron 自体が動いてる？</strong> — <code>crontab -l</code> でエントリ確認。実行ログ（<code>/var/log/cron</code> や journal）で直近の起動を確認。
-              </li>
-              <li>
-                <strong>環境変数がセットされてる？</strong> — <code>DASHBOARD_URL</code> と <code>WRITE_TOKEN</code> の両方。cron の実行環境はログインシェルとは別なので、<code>.bashrc</code> などからは引き継がれない。
-              </li>
-              <li>
-                <strong>最後の push から 1 時間以内？</strong> — 経ってれば画面に出ない（仕様）。送信側で <code>date</code> をログに残しておくと判別しやすい。
-              </li>
-            </ol>
           </Section>
 
           <Section title="もっと知りたい人へ">
