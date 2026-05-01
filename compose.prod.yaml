@@ -50,8 +50,10 @@ services:
       context: .
       dockerfile: nginx/Dockerfile
     container_name: web-dashboard-nginx-prod
+    # nginx は非 root user (uid 101) で動くため container 内では :8080 を listen する。
+    # host 側のみ 80 を晒す。
     ports:
-      - "80:80"
+      - "80:8080"
     depends_on:
       - api-internal
       - api-external

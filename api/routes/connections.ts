@@ -14,9 +14,33 @@ export interface ConnectionsDeps {
   invalidate: (id: string) => void
 }
 
+// SSRF 緩和: cloud metadata (169.254.169.254) や同一ホスト内サービスへの
+// 到達経路を断つ。RFC1918 (10/172.16/192.168) は LAN 内 MinIO 等の正当な
+// ユースケースがあるため敢えて許可する。本リスト外の uri を反転検知する
+// ホワイトリスト方式は LAN 信頼モデル下では過剰なので採用しない。
+function isAllowedEndpoint(value: string): boolean {
+  let parsed: URL
+  try {
+    parsed = new URL(value)
+  } catch {
+    return false
+  }
+  const host = parsed.hostname.replace(/^\[|\]$/g, '').toLowerCase()
+  if (host === '' || host === 'localhost' || host === '0.0.0.0' || host === '::' || host === '::1') return false
+  if (/^127\./.test(host)) return false                    // IPv4 loopback
+  if (/^169\.254\./.test(host)) return false               // IPv4 link-local (cloud metadata 含む)
+  if (/^fe[89ab][0-9a-f]?:/i.test(host)) return false      // IPv6 link-local
+  if (/^0\.0\.0\.0/.test(host)) return false               // unspecified
+  return true
+}
+
+const endpointSchema = z.string().url().max(512).refine(isAllowedEndpoint, {
+  message: 'endpoint must not point to loopback, link-local, or unspecified addresses',
+})
+
 const CreateBody = z.object({
   name: z.string().min(1).max(64),
-  endpoint: z.string().url().max(512),
+  endpoint: endpointSchema,
   region: z.string().min(1).max(64).default('auto'),
   accessKeyId: z.string().min(1).max(256),
   secretAccessKey: z.string().min(1).max(256),
@@ -25,7 +49,7 @@ const CreateBody = z.object({
 
 const UpdateBody = z.object({
   name: z.string().min(1).max(64).optional(),
-  endpoint: z.string().url().max(512).optional(),
+  endpoint: endpointSchema.optional(),
   region: z.string().min(1).max(64).optional(),
   accessKeyId: z.string().min(1).max(256).optional(),
   secretAccessKey: z.string().min(1).max(256).optional(),

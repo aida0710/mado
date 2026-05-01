@@ -77,7 +77,7 @@ export function mountStorageReadmeRoutes(app: Hono, deps: StorageReadmeDeps): vo
     if (r instanceof Response) return r
     const storage = r
     const connId = c.req.param('connId')
-    const parsed = PutBody.safeParse(await c.req.json())
+    const parsed = PutBody.safeParse(await c.req.json().catch(() => null))
     if (!parsed.success) {
       return c.json({ error: parsed.error.message }, 400)
     }

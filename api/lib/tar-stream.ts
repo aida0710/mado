@@ -45,15 +45,23 @@ function makeXzDecompressor(): NodeJS.ReadWriteStream {
   }
 }
 
+export interface TarEntryBody {
+  buffer: Buffer
+  /** byteLimit を超えてエントリ本体が打ち切られた場合 true。呼び出し元は 413 を返すべき。 */
+  truncated: boolean
+}
+
 // tar ストリームから特定の名前のエントリ本体を取り出してバイト列として解決する。
 // tar-entry プレビュールートで使用。`byteLimit` で本体サイズを制限し、
 // 悪意あるアーカイブエントリによるメモリ枯渇を防ぐ。
+// 上限到達時はバッファに収集済みのバイトと `truncated: true` を返し、
+// 呼び出し元が 413 等で明示的に扱えるようにする (silent truncation を避ける)。
 export function extractTarEntry(
   source: NodeJS.ReadableStream,
   kind: ArchiveKind,
   entryName: string,
   byteLimit: number,
-): Promise<Buffer | null> {
+): Promise<TarEntryBody | null> {
   return new Promise((resolveP, rejectP) => {
     const ext = tarExtract()
     let found = false
@@ -78,15 +86,18 @@ export function extractTarEntry(
         const piece = chunk.byteLength <= remaining ? chunk : chunk.subarray(0, remaining)
         chunks.push(piece)
         total += piece.byteLength
+        if (chunk.byteLength > remaining) {
+          // chunk を途中で切り捨てた = 本体は byteLimit より大きい。
+          truncated = true
+        }
       })
       stream.on('end', () => {
         // パイプラインの残りを破棄してダウンロードを停止する。
         ;(source as NodeJS.ReadableStream & { destroy?: () => void }).destroy?.()
         ext.destroy()
-        resolveP(Buffer.concat(chunks))
+        resolveP({ buffer: Buffer.concat(chunks), truncated })
       })
       stream.resume()
-      void truncated // 未使用変数の警告を抑制; 将来の呼び出し元用に予約
     })
 
     const decompressor: NodeJS.ReadWriteStream =

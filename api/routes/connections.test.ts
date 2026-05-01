@@ -147,6 +147,26 @@ describe('POST /connections', () => {
     expect(res.status).toBe(400)
   })
 
+  it.each([
+    ['cloud metadata',   'http://169.254.169.254/latest/meta-data/'],
+    ['IPv4 loopback',    'http://127.0.0.1/'],
+    ['localhost',        'http://localhost:9000/'],
+    ['unspecified IPv4', 'http://0.0.0.0/'],
+    ['IPv6 loopback',    'http://[::1]:9000/'],
+    ['IPv6 link-local',  'http://[fe80::1]:9000/'],
+  ])('returns 400 on SSRF-prone endpoint (%s)', async (_label, endpoint) => {
+    const res = await app.request('/connections', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: `ssrf-${Math.random().toString(36).slice(2, 8)}`,
+        endpoint,
+        accessKeyId: 'a', secretAccessKey: 'b',
+      }),
+    })
+    expect(res.status).toBe(400)
+  })
+
   it('returns 409 on duplicate name', async () => {
     await createOne({ name: 'dup' })
     const res = await app.request('/connections', {

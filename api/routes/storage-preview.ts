@@ -351,16 +351,22 @@ export function mountStoragePreviewRoutes(app: Hono, deps: StoragePreviewDeps): 
       return storageError(c, e)
     }
 
-    let buf: Buffer | null
+    let result: { buffer: Buffer; truncated: boolean } | null
     try {
-      buf = await extractTarEntry(stream, kind, entry, TAR_ENTRY_MAX_BYTES)
+      result = await extractTarEntry(stream, kind, entry, TAR_ENTRY_MAX_BYTES)
     } catch (e) {
       return c.json({ error: (e as Error).message }, 500)
     }
-    if (!buf) {
+    if (!result) {
       return c.json({ error: `entry not found: ${entry}` }, 404)
     }
+    if (result.truncated) {
+      return c.json({
+        error: `entry exceeds preview limit (${TAR_ENTRY_MAX_BYTES} bytes)`,
+      }, 413)
+    }
 
+    const buf = result.buffer
     const body = new Uint8Array(buf.byteLength)
     body.set(buf)
     return new Response(body, {
