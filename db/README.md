@@ -2,8 +2,8 @@
 
 The dashboard uses Postgres with two distinct roles:
 
-- `dashboard_rw` — owns and writes to the schema. Used by `/sql/write` and `/api/metrics/push`.
-- `dashboard_ro` — read-only. Used by `/api/*` read paths so a buggy front-end can never DROP TABLE.
+- `dashboard_rw` — owns and writes to the schema. Used by `/api/internal/sql/write` and `/api/external/metrics/push`.
+- `dashboard_ro` — read-only. Used by `/api/internal/*` read paths so a buggy front-end can never DROP TABLE.
 
 ## Local development (Docker — recommended)
 

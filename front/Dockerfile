@@ -3,9 +3,8 @@ FROM node:22-alpine
 
 WORKDIR /app
 
-COPY package.json ./
-# TODO(Task 15 / workspaces 解体後): COPY package-lock.json ./ + npm ci に戻す
-RUN npm install
+COPY package.json package-lock.json ./
+RUN npm ci
 
 COPY . .
 
