@@ -42,7 +42,7 @@ beforeEach(async () => {
 })
 afterAll(() => closePools(pools))
 
-describe('GET /api/storage/:connId/readme', () => {
+describe('GET /storage/:connId/readme', () => {
   it('returns body and meta when README exists', async () => {
     storageMock.on(GetObjectCommand, { Bucket: 'b', Key: 'voice/jp/README.md' })
       .resolves({
@@ -54,7 +54,7 @@ describe('GET /api/storage/:connId/readme', () => {
       [TEST_CONN_ID],
     )
     const res = await app.request(
-      `/api/storage/${TEST_CONN_ID}/readme?bucket=b&prefix=voice/jp/`,
+      `/storage/${TEST_CONN_ID}/readme?bucket=b&prefix=voice/jp/`,
     )
     expect(res.status).toBe(200)
     const body = (await res.json()) as {
@@ -70,7 +70,7 @@ describe('GET /api/storage/:connId/readme', () => {
       new NoSuchKey({ message: 'no', $metadata: {} })
     )
     const res = await app.request(
-      `/api/storage/${TEST_CONN_ID}/readme?bucket=b&prefix=missing/`,
+      `/storage/${TEST_CONN_ID}/readme?bucket=b&prefix=missing/`,
     )
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ exists: false })
@@ -81,22 +81,22 @@ describe('GET /api/storage/:connId/readme', () => {
       .resolves({
         Body: Readable.from(Buffer.from('root')) as never,
       })
-    const res = await app.request(`/api/storage/${TEST_CONN_ID}/readme?bucket=b&prefix=`)
+    const res = await app.request(`/storage/${TEST_CONN_ID}/readme?bucket=b&prefix=`)
     expect(res.status).toBe(200)
     const body = (await res.json()) as { exists: true; body: string }
     expect(body.body).toBe('root')
   })
 
   it('400 when bucket missing', async () => {
-    const res = await app.request(`/api/storage/${TEST_CONN_ID}/readme`)
+    const res = await app.request(`/storage/${TEST_CONN_ID}/readme`)
     expect(res.status).toBe(400)
   })
 })
 
-describe('PUT /api/storage/:connId/readme', () => {
+describe('PUT /storage/:connId/readme', () => {
   it('uploads body and upserts meta', async () => {
     storageMock.on(PutObjectCommand).resolves({})
-    const res = await app.request(`/api/storage/${TEST_CONN_ID}/readme`, {
+    const res = await app.request(`/storage/${TEST_CONN_ID}/readme`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -136,7 +136,7 @@ describe('PUT /api/storage/:connId/readme', () => {
        VALUES($1,'b','voice/jp/','tanaka',5)`,
       [TEST_CONN_ID],
     )
-    const res = await app.request(`/api/storage/${TEST_CONN_ID}/readme`, {
+    const res = await app.request(`/storage/${TEST_CONN_ID}/readme`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -152,7 +152,7 @@ describe('PUT /api/storage/:connId/readme', () => {
 
   it('does NOT touch DB when storage PUT fails (atomicity)', async () => {
     storageMock.on(PutObjectCommand).rejects(new Error('storage down'))
-    const res = await app.request(`/api/storage/${TEST_CONN_ID}/readme`, {
+    const res = await app.request(`/storage/${TEST_CONN_ID}/readme`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -165,7 +165,7 @@ describe('PUT /api/storage/:connId/readme', () => {
   })
 
   it('400 on malformed JSON body', async () => {
-    const res = await app.request(`/api/storage/${TEST_CONN_ID}/readme`, {
+    const res = await app.request(`/storage/${TEST_CONN_ID}/readme`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ bucket: 'b' }), // missing prefix, body, editor
@@ -186,7 +186,7 @@ describe('PUT /api/storage/:connId/readme', () => {
          CHECK (last_editor <> 'POISON')`
     )
     try {
-      const res = await app.request(`/api/storage/${TEST_CONN_ID}/readme`, {
+      const res = await app.request(`/storage/${TEST_CONN_ID}/readme`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -223,7 +223,7 @@ describe('connection-not-found behaviour', () => {
       getStorage: async (id: string) => { throw new ConnectionNotFoundError(id) },
       pools,
     })
-    const res = await localApp.request('/api/storage/missing0001/readme?bucket=b')
+    const res = await localApp.request('/storage/missing0001/readme?bucket=b')
     expect(res.status).toBe(404)
     expect(await res.json()).toEqual({ error: 'connection not found' })
   })

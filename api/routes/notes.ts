@@ -21,7 +21,7 @@ interface NoteRow {
 }
 
 export function mountNotesRoutes(app: Hono, deps: NotesDeps): void {
-  app.get('/api/notes/:slug', async c => {
+  app.get('/notes/:slug', async c => {
     const slug = c.req.param('slug')
     const r = await deps.pools.ro.query<NoteRow>(
       `SELECT body, last_editor, last_edited_at FROM notes WHERE slug = $1`,
@@ -37,7 +37,7 @@ export function mountNotesRoutes(app: Hono, deps: NotesDeps): void {
     })
   })
 
-  app.put('/api/notes/:slug', async c => {
+  app.put('/notes/:slug', async c => {
     const slug = c.req.param('slug')
     if (slug.length < 1 || slug.length > 64) {
       return c.json({ error: 'invalid slug' }, 400)

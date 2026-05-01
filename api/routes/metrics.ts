@@ -36,7 +36,7 @@ export function mountMetricsRoutes(app: Hono, deps: MetricsDeps): void {
   }
 
   app.post(
-    '/api/metrics/push',
+    '/metrics/push',
     requireMetricsEnabled,
     requireWriteToken(deps.writeToken),
     bodyLimit({
@@ -60,7 +60,7 @@ export function mountMetricsRoutes(app: Hono, deps: MetricsDeps): void {
     },
   )
 
-  app.get('/api/metrics', requireMetricsEnabled, async c => {
+  app.get('/metrics', requireMetricsEnabled, async c => {
     const r = await deps.pools.ro.query(
       `SELECT host, command, category, output, collected_at
          FROM metrics_latest

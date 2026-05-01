@@ -57,7 +57,7 @@ async function createOne(overrides: Partial<{
     secretAccessKey: overrides.secretAccessKey ?? 'super-secret-value-9999',
     forcePathStyle: overrides.forcePathStyle ?? true,
   }
-  const res = await app.request('/api/connections', {
+  const res = await app.request('/connections', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -66,16 +66,16 @@ async function createOne(overrides: Partial<{
   return (await res.json()) as MaskedConnection
 }
 
-describe('GET /api/connections', () => {
+describe('GET /connections', () => {
   it('returns [] when no connections exist', async () => {
-    const res = await app.request('/api/connections')
+    const res = await app.request('/connections')
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual([])
   })
 
   it('returns the masked record after a POST', async () => {
     const created = await createOne()
-    const res = await app.request('/api/connections')
+    const res = await app.request('/connections')
     expect(res.status).toBe(200)
     const list = (await res.json()) as MaskedConnection[]
     expect(list).toHaveLength(1)
@@ -87,7 +87,7 @@ describe('GET /api/connections', () => {
   })
 })
 
-describe('POST /api/connections', () => {
+describe('POST /connections', () => {
   it('creates a connection: 200, returns masked record (id is 10 chars)', async () => {
     const created = await createOne()
     expect(created.id).toHaveLength(10)
@@ -127,7 +127,7 @@ describe('POST /api/connections', () => {
   })
 
   it('returns 400 on malformed body (missing required fields)', async () => {
-    const res = await app.request('/api/connections', {
+    const res = await app.request('/connections', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: 'x' }), // missing endpoint, accessKeyId, secretAccessKey
@@ -136,7 +136,7 @@ describe('POST /api/connections', () => {
   })
 
   it('returns 400 on non-URL endpoint', async () => {
-    const res = await app.request('/api/connections', {
+    const res = await app.request('/connections', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -149,7 +149,7 @@ describe('POST /api/connections', () => {
 
   it('returns 409 on duplicate name', async () => {
     await createOne({ name: 'dup' })
-    const res = await app.request('/api/connections', {
+    const res = await app.request('/connections', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -163,7 +163,7 @@ describe('POST /api/connections', () => {
   })
 })
 
-describe('PUT /api/connections/:id', () => {
+describe('PUT /connections/:id', () => {
   it('updates name only: returns updated record, encrypted keys unchanged in DB', async () => {
     const created = await createOne()
     const before = await pools.rw.query<DbRow>(
@@ -172,7 +172,7 @@ describe('PUT /api/connections/:id', () => {
       [created.id],
     )
 
-    const res = await app.request(`/api/connections/${created.id}`, {
+    const res = await app.request(`/connections/${created.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: 'renamed' }),
@@ -203,7 +203,7 @@ describe('PUT /api/connections/:id', () => {
       [created.id],
     )
 
-    const res = await app.request(`/api/connections/${created.id}`, {
+    const res = await app.request(`/connections/${created.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -235,7 +235,7 @@ describe('PUT /api/connections/:id', () => {
 
   it('with empty body returns current record (no update, no invalidate)', async () => {
     const created = await createOne()
-    const res = await app.request(`/api/connections/${created.id}`, {
+    const res = await app.request(`/connections/${created.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({}),
@@ -250,7 +250,7 @@ describe('PUT /api/connections/:id', () => {
   })
 
   it('returns 404 for non-existent id', async () => {
-    const res = await app.request('/api/connections/doesnotexist', {
+    const res = await app.request('/connections/doesnotexist', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: 'whatever' }),
@@ -260,10 +260,10 @@ describe('PUT /api/connections/:id', () => {
 
 })
 
-describe('DELETE /api/connections/:id', () => {
+describe('DELETE /connections/:id', () => {
   it('removes record and invokes invalidate', async () => {
     const created = await createOne()
-    const res = await app.request(`/api/connections/${created.id}`, {
+    const res = await app.request(`/connections/${created.id}`, {
       method: 'DELETE',
     })
     expect(res.status).toBe(200)
@@ -274,7 +274,7 @@ describe('DELETE /api/connections/:id', () => {
   })
 
   it('returns 404 for non-existent id', async () => {
-    const res = await app.request('/api/connections/doesnotexist', {
+    const res = await app.request('/connections/doesnotexist', {
       method: 'DELETE',
     })
     expect(res.status).toBe(404)

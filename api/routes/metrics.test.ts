@@ -17,11 +17,11 @@ beforeEach(async () => {
 })
 afterAll(() => closePools(pools))
 
-describe('POST /api/metrics/push', () => {
+describe('POST /metrics/push', () => {
   it('inserts a row with body as output, category defaults to general', async () => {
     const body = 'job1 R\njob2 Q\n'
     const res = await app.request(
-      '/api/metrics/push?host=example&command=uptime',
+      '/metrics/push?host=example&command=uptime',
       {
         method: 'POST',
         headers: { Authorization: 'Bearer TKN', 'Content-Type': 'text/plain' },
@@ -40,7 +40,7 @@ describe('POST /api/metrics/push', () => {
 
   it('uses ?category= when provided', async () => {
     const res = await app.request(
-      '/api/metrics/push?host=example&command=uptime&category=ジョブ一覧',
+      '/metrics/push?host=example&command=uptime&category=ジョブ一覧',
       {
         method: 'POST',
         headers: { Authorization: 'Bearer TKN', 'Content-Type': 'text/plain' },
@@ -55,7 +55,7 @@ describe('POST /api/metrics/push', () => {
   })
 
   it('rejects without token (401)', async () => {
-    const res = await app.request('/api/metrics/push?host=m&command=q', {
+    const res = await app.request('/metrics/push?host=m&command=q', {
       method: 'POST',
       body: 'x',
     })
@@ -65,7 +65,7 @@ describe('POST /api/metrics/push', () => {
   })
 
   it('400 if host missing', async () => {
-    const res = await app.request('/api/metrics/push?command=q', {
+    const res = await app.request('/metrics/push?command=q', {
       method: 'POST',
       headers: { Authorization: 'Bearer TKN' },
       body: 'x',
@@ -77,7 +77,7 @@ describe('POST /api/metrics/push', () => {
   })
 
   it('400 if command missing', async () => {
-    const res = await app.request('/api/metrics/push?host=m', {
+    const res = await app.request('/metrics/push?host=m', {
       method: 'POST',
       headers: { Authorization: 'Bearer TKN' },
       body: 'x',
@@ -92,7 +92,7 @@ describe('POST /api/metrics/push', () => {
     await pools.rw.query(
       `UPDATE feature_flags SET enabled = FALSE WHERE name = 'metrics'`,
     )
-    const res = await app.request('/api/metrics/push?host=m&command=q', {
+    const res = await app.request('/metrics/push?host=m&command=q', {
       method: 'POST',
       headers: { Authorization: 'Bearer TKN', 'Content-Type': 'text/plain' },
       body: 'x',
@@ -105,7 +105,7 @@ describe('POST /api/metrics/push', () => {
   it('413 if body exceeds 1MB', async () => {
     const big = 'x'.repeat(1_000_001)
     const res = await app.request(
-      '/api/metrics/push?host=m&command=q',
+      '/metrics/push?host=m&command=q',
       {
         method: 'POST',
         headers: { Authorization: 'Bearer TKN', 'Content-Type': 'text/plain' },
@@ -117,7 +117,7 @@ describe('POST /api/metrics/push', () => {
   })
 })
 
-describe('GET /api/metrics', () => {
+describe('GET /metrics', () => {
   it('returns latest row per (host, command, category) including category', async () => {
     await pools.rw.query(
       `INSERT INTO metrics(host, command, category, output, collected_at) VALUES
@@ -125,7 +125,7 @@ describe('GET /api/metrics', () => {
        ('alpha','uptime','ジョブ一覧','new', now()),
        ('beta', 'df',    'ジョブ一覧','o',  now())`
     )
-    const res = await app.request('/api/metrics')
+    const res = await app.request('/metrics')
     expect(res.status).toBe(200)
     const rows = (await res.json()) as Array<{
       host: string; command: string; category: string;
@@ -143,7 +143,7 @@ describe('GET /api/metrics', () => {
   })
 
   it('returns empty array when table is empty', async () => {
-    const res = await app.request('/api/metrics')
+    const res = await app.request('/metrics')
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual([])
   })
@@ -154,7 +154,7 @@ describe('GET /api/metrics', () => {
        ('stale','uptime','x','old', now() - interval '2 hours'),
        ('fresh','uptime','x','new', now())`
     )
-    const res = await app.request('/api/metrics')
+    const res = await app.request('/metrics')
     const rows = (await res.json()) as Array<{ host: string }>
     expect(rows.map(r => r.host)).toEqual(['fresh'])
   })
@@ -163,7 +163,7 @@ describe('GET /api/metrics', () => {
     await pools.rw.query(
       `UPDATE feature_flags SET enabled = FALSE WHERE name = 'metrics'`,
     )
-    const res = await app.request('/api/metrics')
+    const res = await app.request('/metrics')
     expect(res.status).toBe(503)
     const body = (await res.json()) as { error: string }
     expect(body.error).toMatch(/disabled/)
@@ -176,7 +176,7 @@ describe('GET /api/metrics', () => {
        ('alpha','uptime','node使用率','nodes', now()),
        ('alpha','uptime','トークン数','toks',  now())`
     )
-    const res = await app.request('/api/metrics')
+    const res = await app.request('/metrics')
     const rows = (await res.json()) as Array<{
       host: string; category: string; output: string
     }>

@@ -63,7 +63,7 @@ const TEXT_EXT = new Set([
   'csv', 'tsv', 'log',
 ])
 
-// MIME type for a tar entry name (used by /api/storage/:connId/preview/tar-entry).
+// MIME type for a tar entry name (used by /storage/:connId/preview/tar-entry).
 function entryContentType(name: string): string {
   const e = ext(name)
   if (IMAGE_MIME[e]) return IMAGE_MIME[e]
@@ -96,7 +96,7 @@ function storageError(c: Context, e: unknown): Response {
 }
 
 export function mountStoragePreviewRoutes(app: Hono, deps: StoragePreviewDeps): void {
-  app.get('/api/storage/:connId/preview/text', async c => {
+  app.get('/storage/:connId/preview/text', async c => {
     const r0 = await resolveStorageOrFail(c, deps.getStorage)
     if (r0 instanceof Response) return r0
     const storage = r0
@@ -126,7 +126,7 @@ export function mountStoragePreviewRoutes(app: Hono, deps: StoragePreviewDeps): 
     })
   })
 
-  app.get('/api/storage/:connId/preview/image', async c => {
+  app.get('/storage/:connId/preview/image', async c => {
     const r0 = await resolveStorageOrFail(c, deps.getStorage)
     if (r0 instanceof Response) return r0
     const storage = r0
@@ -155,7 +155,7 @@ export function mountStoragePreviewRoutes(app: Hono, deps: StoragePreviewDeps): 
     )
   })
 
-  app.get('/api/storage/:connId/preview/audio', async c => {
+  app.get('/storage/:connId/preview/audio', async c => {
     const r0 = await resolveStorageOrFail(c, deps.getStorage)
     if (r0 instanceof Response) return r0
     const storage = r0
@@ -192,7 +192,7 @@ export function mountStoragePreviewRoutes(app: Hono, deps: StoragePreviewDeps): 
     )
   })
 
-  app.get('/api/storage/:connId/preview/tar', async c => {
+  app.get('/storage/:connId/preview/tar', async c => {
     const r0 = await resolveStorageOrFail(c, deps.getStorage)
     if (r0 instanceof Response) return r0
     const storage = r0
@@ -326,7 +326,7 @@ export function mountStoragePreviewRoutes(app: Hono, deps: StoragePreviewDeps): 
   // Pull a single entry out of a tar archive and return its body. The
   // front-end uses this to play a `.wav` or render a `.json` from inside a
   // WebDataset shard without downloading the full tar.
-  app.get('/api/storage/:connId/preview/tar-entry', async c => {
+  app.get('/storage/:connId/preview/tar-entry', async c => {
     const r0 = await resolveStorageOrFail(c, deps.getStorage)
     if (r0 instanceof Response) return r0
     const storage = r0

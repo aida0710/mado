@@ -28,13 +28,13 @@ mountStoragePreviewRoutes(app, {
 
 beforeEach(() => storageMock.reset())
 
-describe('GET /api/storage/:connId/preview/text', () => {
+describe('GET /storage/:connId/preview/text', () => {
   it('returns first PREVIEW_TEXT_LIMIT bytes with text/plain', async () => {
     storageMock.on(GetObjectCommand).resolves({
       Body: Readable.from(Buffer.from('hello world!! more content')) as never,
       ContentLength: 26,
     })
-    const res = await app.request(`/api/storage/${TEST_CONN_ID}/preview/text?bucket=b&key=a.txt`)
+    const res = await app.request(`/storage/${TEST_CONN_ID}/preview/text?bucket=b&key=a.txt`)
     expect(res.status).toBe(200)
     const text = await res.text()
     expect(text.length).toBeLessThanOrEqual(8)
@@ -43,7 +43,7 @@ describe('GET /api/storage/:connId/preview/text', () => {
   })
 
   it('400 if bucket or key missing', async () => {
-    const res = await app.request(`/api/storage/${TEST_CONN_ID}/preview/text?key=a.txt`)
+    const res = await app.request(`/storage/${TEST_CONN_ID}/preview/text?key=a.txt`)
     expect(res.status).toBe(400)
   })
 
@@ -51,19 +51,19 @@ describe('GET /api/storage/:connId/preview/text', () => {
     storageMock.on(GetObjectCommand).rejects(
       new NoSuchKey({ message: 'no', $metadata: {} })
     )
-    const res = await app.request(`/api/storage/${TEST_CONN_ID}/preview/text?bucket=b&key=missing.txt`)
+    const res = await app.request(`/storage/${TEST_CONN_ID}/preview/text?bucket=b&key=missing.txt`)
     expect(res.status).toBe(404)
     expect(await res.json()).toEqual({ error: 'not found' })
   })
 })
 
-describe('GET /api/storage/:connId/preview/image', () => {
+describe('GET /storage/:connId/preview/image', () => {
   it('proxies image bytes with content-type guessed from key', async () => {
     storageMock.on(GetObjectCommand).resolves({
       Body: Readable.from(Buffer.from([0xff, 0xd8, 0xff])) as never,
     })
     const res = await app.request(
-      `/api/storage/${TEST_CONN_ID}/preview/image?bucket=b&key=cat.jpg`,
+      `/storage/${TEST_CONN_ID}/preview/image?bucket=b&key=cat.jpg`,
     )
     expect(res.status).toBe(200)
     expect(res.headers.get('content-type')).toBe('image/jpeg')
@@ -81,13 +81,13 @@ describe('GET /api/storage/:connId/preview/image', () => {
       Body: Readable.from(Buffer.from([1, 2, 3])) as never,
     })
     const res = await app.request(
-      `/api/storage/${TEST_CONN_ID}/preview/image?bucket=b&key=${key}`,
+      `/storage/${TEST_CONN_ID}/preview/image?bucket=b&key=${key}`,
     )
     expect(res.headers.get('content-type')).toBe(expected)
   })
 
   it('400 if bucket or key missing', async () => {
-    const res = await app.request(`/api/storage/${TEST_CONN_ID}/preview/image?bucket=b`)
+    const res = await app.request(`/storage/${TEST_CONN_ID}/preview/image?bucket=b`)
     expect(res.status).toBe(400)
   })
 
@@ -97,7 +97,7 @@ describe('GET /api/storage/:connId/preview/image', () => {
       ContentLength: 5,
     })
     const res = await app.request(
-      `/api/storage/${TEST_CONN_ID}/preview/image?bucket=b&key=a.png`,
+      `/storage/${TEST_CONN_ID}/preview/image?bucket=b&key=a.png`,
     )
     expect(res.headers.get('content-length')).toBe('5')
   })
@@ -106,12 +106,12 @@ describe('GET /api/storage/:connId/preview/image', () => {
     storageMock.on(GetObjectCommand).rejects(
       new NoSuchKey({ message: 'no', $metadata: {} })
     )
-    const res = await app.request(`/api/storage/${TEST_CONN_ID}/preview/image?bucket=b&key=missing.jpg`)
+    const res = await app.request(`/storage/${TEST_CONN_ID}/preview/image?bucket=b&key=missing.jpg`)
     expect(res.status).toBe(404)
   })
 })
 
-describe('GET /api/storage/:connId/preview/audio', () => {
+describe('GET /storage/:connId/preview/audio', () => {
   it('forwards Range header to storage and returns 206', async () => {
     storageMock.on(GetObjectCommand, {
       Bucket: 'b', Key: 'a.mp3', Range: 'bytes=0-9',
@@ -120,7 +120,7 @@ describe('GET /api/storage/:connId/preview/audio', () => {
       ContentLength: 10,
       ContentRange: 'bytes 0-9/100',
     })
-    const res = await app.request(`/api/storage/${TEST_CONN_ID}/preview/audio?bucket=b&key=a.mp3`, {
+    const res = await app.request(`/storage/${TEST_CONN_ID}/preview/audio?bucket=b&key=a.mp3`, {
       headers: { Range: 'bytes=0-9' },
     })
     expect(res.status).toBe(206)
@@ -135,7 +135,7 @@ describe('GET /api/storage/:connId/preview/audio', () => {
       Body: Readable.from(Buffer.from('full')) as never,
       ContentLength: 4,
     })
-    const res = await app.request(`/api/storage/${TEST_CONN_ID}/preview/audio?bucket=b&key=a.wav`)
+    const res = await app.request(`/storage/${TEST_CONN_ID}/preview/audio?bucket=b&key=a.wav`)
     expect(res.status).toBe(200)
     expect(res.headers.get('content-type')).toBe('audio/wav')
     expect(res.headers.get('accept-ranges')).toBe('bytes')
@@ -152,13 +152,13 @@ describe('GET /api/storage/:connId/preview/audio', () => {
       Body: Readable.from(Buffer.from([1])) as never,
     })
     const res = await app.request(
-      `/api/storage/${TEST_CONN_ID}/preview/audio?bucket=b&key=${key}`,
+      `/storage/${TEST_CONN_ID}/preview/audio?bucket=b&key=${key}`,
     )
     expect(res.headers.get('content-type')).toBe(expected)
   })
 
   it('400 if bucket or key missing', async () => {
-    const res = await app.request(`/api/storage/${TEST_CONN_ID}/preview/audio?bucket=b`)
+    const res = await app.request(`/storage/${TEST_CONN_ID}/preview/audio?bucket=b`)
     expect(res.status).toBe(400)
   })
 
@@ -166,7 +166,7 @@ describe('GET /api/storage/:connId/preview/audio', () => {
     storageMock.on(GetObjectCommand).rejects(
       new NoSuchKey({ message: 'no', $metadata: {} })
     )
-    const res = await app.request(`/api/storage/${TEST_CONN_ID}/preview/audio?bucket=b&key=missing.mp3`)
+    const res = await app.request(`/storage/${TEST_CONN_ID}/preview/audio?bucket=b&key=missing.mp3`)
     expect(res.status).toBe(404)
   })
 })
@@ -194,13 +194,13 @@ function doneOf(lines: NdjsonLine[]): NdjsonDoneLine['done'] | undefined {
   return lines.find((l): l is NdjsonDoneLine => 'done' in l)?.done
 }
 
-describe('GET /api/storage/:connId/preview/tar', () => {
+describe('GET /storage/:connId/preview/tar', () => {
   it('streams entries from a tar.gz as NDJSON ending with done', async () => {
     storageMock.on(GetObjectCommand).resolves({
       Body: createReadStream(fixture('sample.tar.gz')) as never,
     })
     const res = await app.request(
-      `/api/storage/${TEST_CONN_ID}/preview/tar?bucket=b&key=foo/sample.tar.gz`,
+      `/storage/${TEST_CONN_ID}/preview/tar?bucket=b&key=foo/sample.tar.gz`,
     )
     expect(res.status).toBe(200)
     expect(res.headers.get('content-type')).toMatch(/x-ndjson/)
@@ -217,7 +217,7 @@ describe('GET /api/storage/:connId/preview/tar', () => {
       Body: createReadStream(fixture('sample.tar')) as never,
     })
     const res = await app.request(
-      `/api/storage/${TEST_CONN_ID}/preview/tar?bucket=b&key=foo/sample.tar`,
+      `/storage/${TEST_CONN_ID}/preview/tar?bucket=b&key=foo/sample.tar`,
     )
     expect(res.status).toBe(200)
     const names = entriesOf(await readNdjson(res)).map(e => e.name)
@@ -231,7 +231,7 @@ describe('GET /api/storage/:connId/preview/tar', () => {
       Body: createReadStream(fixture('sample.tar.xz')) as never,
     })
     const res = await app.request(
-      `/api/storage/${TEST_CONN_ID}/preview/tar?bucket=b&key=foo/sample.tar.xz`,
+      `/storage/${TEST_CONN_ID}/preview/tar?bucket=b&key=foo/sample.tar.xz`,
     )
     expect(res.status).toBe(200)
     const names = entriesOf(await readNdjson(res)).map(e => e.name).sort()
@@ -243,7 +243,7 @@ describe('GET /api/storage/:connId/preview/tar', () => {
       Body: createReadStream(fixture('sample.tar.gz')) as never,
     })
     const res = await app.request(
-      `/api/storage/${TEST_CONN_ID}/preview/tar?bucket=b&key=foo/sample.tar.gz&limit=2`,
+      `/storage/${TEST_CONN_ID}/preview/tar?bucket=b&key=foo/sample.tar.gz&limit=2`,
     )
     expect(res.status).toBe(200)
     const lines = await readNdjson(res)
@@ -260,7 +260,7 @@ describe('GET /api/storage/:connId/preview/tar', () => {
       Body: createReadStream(fixture('sample.tar.gz')) as never,
     })
     const r1 = await app.request(
-      `/api/storage/${TEST_CONN_ID}/preview/tar?bucket=b&key=s.tar.gz&limit=2&offset=0`,
+      `/storage/${TEST_CONN_ID}/preview/tar?bucket=b&key=s.tar.gz&limit=2&offset=0`,
     )
     const lines1 = await readNdjson(r1)
     const e1 = entriesOf(lines1)
@@ -272,7 +272,7 @@ describe('GET /api/storage/:connId/preview/tar', () => {
       Body: createReadStream(fixture('sample.tar.gz')) as never,
     })
     const r2 = await app.request(
-      `/api/storage/${TEST_CONN_ID}/preview/tar?bucket=b&key=s.tar.gz&limit=2&offset=2`,
+      `/storage/${TEST_CONN_ID}/preview/tar?bucket=b&key=s.tar.gz&limit=2&offset=2`,
     )
     const lines2 = await readNdjson(r2)
     const e2 = entriesOf(lines2)
@@ -286,7 +286,7 @@ describe('GET /api/storage/:connId/preview/tar', () => {
 
   it('400 for unsupported extension (.zip)', async () => {
     const res = await app.request(
-      `/api/storage/${TEST_CONN_ID}/preview/tar?bucket=b&key=foo.zip`,
+      `/storage/${TEST_CONN_ID}/preview/tar?bucket=b&key=foo.zip`,
     )
     expect(res.status).toBe(400)
   })
@@ -296,13 +296,13 @@ describe('GET /api/storage/:connId/preview/tar', () => {
       Body: createReadStream(fixture('sample.tar.gz')) as never,
     })
     const res = await app.request(
-      `/api/storage/${TEST_CONN_ID}/preview/tar?bucket=b&key=foo/sample.tgz`,
+      `/storage/${TEST_CONN_ID}/preview/tar?bucket=b&key=foo/sample.tgz`,
     )
     expect(res.status).toBe(200)
   })
 
   it('400 if bucket or key missing', async () => {
-    const res = await app.request(`/api/storage/${TEST_CONN_ID}/preview/tar?bucket=b`)
+    const res = await app.request(`/storage/${TEST_CONN_ID}/preview/tar?bucket=b`)
     expect(res.status).toBe(400)
   })
 
@@ -311,7 +311,7 @@ describe('GET /api/storage/:connId/preview/tar', () => {
       new NoSuchKey({ message: 'no', $metadata: {} })
     )
     const res = await app.request(
-      `/api/storage/${TEST_CONN_ID}/preview/tar?bucket=b&key=foo.tar.gz`,
+      `/storage/${TEST_CONN_ID}/preview/tar?bucket=b&key=foo.tar.gz`,
     )
     // The stream has already opened a 200 response by the time we discover
     // the missing key, so the error surfaces as an NDJSON `{error: ...}`

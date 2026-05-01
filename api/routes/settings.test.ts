@@ -17,18 +17,18 @@ beforeEach(async () => {
 })
 afterAll(() => closePools(pools))
 
-describe('GET /api/settings/flags', () => {
+describe('GET /settings/flags', () => {
   it('returns the seeded flags map', async () => {
-    const res = await app.request('/api/settings/flags')
+    const res = await app.request('/settings/flags')
     expect(res.status).toBe(200)
     const body = (await res.json()) as Record<string, boolean>
     expect(body.metrics).toBe(true)
   })
 })
 
-describe('PUT /api/settings/flags/:name', () => {
+describe('PUT /settings/flags/:name', () => {
   it('disables a flag and GET reflects it', async () => {
-    const put = await app.request('/api/settings/flags/metrics', {
+    const put = await app.request('/settings/flags/metrics', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ enabled: false }),
@@ -36,30 +36,30 @@ describe('PUT /api/settings/flags/:name', () => {
     expect(put.status).toBe(200)
     expect(await put.json()).toEqual({ ok: true, name: 'metrics', enabled: false })
 
-    const get = await app.request('/api/settings/flags')
+    const get = await app.request('/settings/flags')
     const body = (await get.json()) as Record<string, boolean>
     expect(body.metrics).toBe(false)
   })
 
   it('re-enables a flag', async () => {
-    await app.request('/api/settings/flags/metrics', {
+    await app.request('/settings/flags/metrics', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ enabled: false }),
     })
-    const put = await app.request('/api/settings/flags/metrics', {
+    const put = await app.request('/settings/flags/metrics', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ enabled: true }),
     })
     expect(put.status).toBe(200)
-    const get = await app.request('/api/settings/flags')
+    const get = await app.request('/settings/flags')
     const body = (await get.json()) as Record<string, boolean>
     expect(body.metrics).toBe(true)
   })
 
   it('returns 400 on malformed body', async () => {
-    const res = await app.request('/api/settings/flags/metrics', {
+    const res = await app.request('/settings/flags/metrics', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({}),
@@ -68,7 +68,7 @@ describe('PUT /api/settings/flags/:name', () => {
   })
 
   it('returns 404 for unknown flag', async () => {
-    const res = await app.request('/api/settings/flags/nonexistent', {
+    const res = await app.request('/settings/flags/nonexistent', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ enabled: false }),

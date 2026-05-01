@@ -57,7 +57,7 @@ function toMasked(row: ConnectionRow) {
 }
 
 export function mountConnectionsRoutes(app: Hono, deps: ConnectionsDeps): void {
-  app.get('/api/connections', async c => {
+  app.get('/connections', async c => {
     const r = await deps.pools.ro.query<ConnectionRow>(
       `SELECT id, name, endpoint, region, access_key_id_masked, force_path_style, created_at, updated_at
          FROM storage_connections ORDER BY name`,
@@ -65,7 +65,7 @@ export function mountConnectionsRoutes(app: Hono, deps: ConnectionsDeps): void {
     return c.json(r.rows.map(toMasked))
   })
 
-  app.post('/api/connections', async c => {
+  app.post('/connections', async c => {
     const parsed = CreateBody.safeParse(await c.req.json().catch(() => null))
     if (!parsed.success) return c.json({ error: parsed.error.message }, 400)
     const { name, endpoint, region, accessKeyId, secretAccessKey, forcePathStyle } = parsed.data
@@ -94,7 +94,7 @@ export function mountConnectionsRoutes(app: Hono, deps: ConnectionsDeps): void {
     }
   })
 
-  app.put('/api/connections/:id', async c => {
+  app.put('/connections/:id', async c => {
     const id = c.req.param('id')
     const parsed = UpdateBody.safeParse(await c.req.json().catch(() => null))
     if (!parsed.success) return c.json({ error: parsed.error.message }, 400)
@@ -144,7 +144,7 @@ export function mountConnectionsRoutes(app: Hono, deps: ConnectionsDeps): void {
     }
   })
 
-  app.delete('/api/connections/:id', async c => {
+  app.delete('/connections/:id', async c => {
     const id = c.req.param('id')
     const r = await deps.pools.rw.query(
       `DELETE FROM storage_connections WHERE id = $1`, [id],
