@@ -1,15 +1,18 @@
 import { Hono } from 'hono'
 import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import { createPools, closePools } from '../db.js'
-import { mountMetricsRoutes } from './metrics.js'
+import { mountMetricsReadRoutes, mountMetricsPushRoutes } from './metrics.js'
 
 const RW = process.env.DATABASE_URL_RW_TEST
   ?? 'postgres://dashboard_rw:CHANGEME@localhost:5432/dashboard_test'
 const RO = RW.replace('dashboard_rw', 'dashboard_ro')
 const pools = createPools({ rw: RW, ro: RO })
 
-const app = new Hono()
-mountMetricsRoutes(app, { pools, writeToken: 'TKN' })
+const pushApp = new Hono()
+mountMetricsPushRoutes(pushApp, { pools, writeToken: 'TKN' })
+
+const readApp = new Hono()
+mountMetricsReadRoutes(readApp, { pools })
 
 beforeEach(async () => {
   await pools.rw.query('TRUNCATE metrics RESTART IDENTITY')
@@ -20,7 +23,7 @@ afterAll(() => closePools(pools))
 describe('POST /metrics/push', () => {
   it('inserts a row with body as output, category defaults to general', async () => {
     const body = 'job1 R\njob2 Q\n'
-    const res = await app.request(
+    const res = await pushApp.request(
       '/metrics/push?host=example&command=uptime',
       {
         method: 'POST',
@@ -39,7 +42,7 @@ describe('POST /metrics/push', () => {
   })
 
   it('uses ?category= when provided', async () => {
-    const res = await app.request(
+    const res = await pushApp.request(
       '/metrics/push?host=example&command=uptime&category=ジョブ一覧',
       {
         method: 'POST',
@@ -55,7 +58,7 @@ describe('POST /metrics/push', () => {
   })
 
   it('rejects without token (401)', async () => {
-    const res = await app.request('/metrics/push?host=m&command=q', {
+    const res = await pushApp.request('/metrics/push?host=m&command=q', {
       method: 'POST',
       body: 'x',
     })
@@ -65,7 +68,7 @@ describe('POST /metrics/push', () => {
   })
 
   it('400 if host missing', async () => {
-    const res = await app.request('/metrics/push?command=q', {
+    const res = await pushApp.request('/metrics/push?command=q', {
       method: 'POST',
       headers: { Authorization: 'Bearer TKN' },
       body: 'x',
@@ -77,7 +80,7 @@ describe('POST /metrics/push', () => {
   })
 
   it('400 if command missing', async () => {
-    const res = await app.request('/metrics/push?host=m', {
+    const res = await pushApp.request('/metrics/push?host=m', {
       method: 'POST',
       headers: { Authorization: 'Bearer TKN' },
       body: 'x',
@@ -92,7 +95,7 @@ describe('POST /metrics/push', () => {
     await pools.rw.query(
       `UPDATE feature_flags SET enabled = FALSE WHERE name = 'metrics'`,
     )
-    const res = await app.request('/metrics/push?host=m&command=q', {
+    const res = await pushApp.request('/metrics/push?host=m&command=q', {
       method: 'POST',
       headers: { Authorization: 'Bearer TKN', 'Content-Type': 'text/plain' },
       body: 'x',
@@ -104,7 +107,7 @@ describe('POST /metrics/push', () => {
 
   it('413 if body exceeds 1MB', async () => {
     const big = 'x'.repeat(1_000_001)
-    const res = await app.request(
+    const res = await pushApp.request(
       '/metrics/push?host=m&command=q',
       {
         method: 'POST',
@@ -125,7 +128,7 @@ describe('GET /metrics', () => {
        ('alpha','uptime','ジョブ一覧','new', now()),
        ('beta', 'df',    'ジョブ一覧','o',  now())`
     )
-    const res = await app.request('/metrics')
+    const res = await readApp.request('/metrics')
     expect(res.status).toBe(200)
     const rows = (await res.json()) as Array<{
       host: string; command: string; category: string;
@@ -143,7 +146,7 @@ describe('GET /metrics', () => {
   })
 
   it('returns empty array when table is empty', async () => {
-    const res = await app.request('/metrics')
+    const res = await readApp.request('/metrics')
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual([])
   })
@@ -154,7 +157,7 @@ describe('GET /metrics', () => {
        ('stale','uptime','x','old', now() - interval '2 hours'),
        ('fresh','uptime','x','new', now())`
     )
-    const res = await app.request('/metrics')
+    const res = await readApp.request('/metrics')
     const rows = (await res.json()) as Array<{ host: string }>
     expect(rows.map(r => r.host)).toEqual(['fresh'])
   })
@@ -163,7 +166,7 @@ describe('GET /metrics', () => {
     await pools.rw.query(
       `UPDATE feature_flags SET enabled = FALSE WHERE name = 'metrics'`,
     )
-    const res = await app.request('/metrics')
+    const res = await readApp.request('/metrics')
     expect(res.status).toBe(503)
     const body = (await res.json()) as { error: string }
     expect(body.error).toMatch(/disabled/)
@@ -176,7 +179,7 @@ describe('GET /metrics', () => {
        ('alpha','uptime','node使用率','nodes', now()),
        ('alpha','uptime','トークン数','toks',  now())`
     )
-    const res = await app.request('/metrics')
+    const res = await readApp.request('/metrics')
     const rows = (await res.json()) as Array<{
       host: string; category: string; output: string
     }>

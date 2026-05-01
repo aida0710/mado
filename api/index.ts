@@ -9,7 +9,7 @@ import { loadEnv } from './env.js'
 import { createPools, closePools } from './db.js'
 import { createCrypto } from './crypto.js'
 import { createStorageFactory } from './storage.js'
-import { mountMetricsRoutes } from './routes/metrics.js'
+import { mountMetricsReadRoutes, mountMetricsPushRoutes } from './routes/metrics.js'
 import { mountSqlRoutes } from './routes/sql.js'
 import { mountStorageListRoutes } from './routes/storage-list.js'
 import { mountStorageReadmeRoutes } from './routes/storage-readme.js'
@@ -27,7 +27,8 @@ const app = new Hono()
 
 app.use('*', logger())
 app.get('/healthz', c => c.text('ok'))
-mountMetricsRoutes(app, { pools, writeToken: env.WRITE_TOKEN })
+mountMetricsReadRoutes(app, { pools })
+mountMetricsPushRoutes(app, { pools, writeToken: env.WRITE_TOKEN })
 mountSqlRoutes(app, { pools, writeToken: env.WRITE_TOKEN })
 mountConnectionsRoutes(app, {
   pools,
