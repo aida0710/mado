@@ -27,7 +27,7 @@ for db in dashboard dashboard_test; do
   # スキーマオブジェクトの所有権を dashboard_rw に移譲する。これにより
   # TRUNCATE / ALTER / DROP が可能になる (GRANT だけでは TRUNCATE ... RESTART IDENTITY
   # などの操作が不十分)。
-  # rw は /sql/write が新しいテーブルを作成できるよう schema public に CREATE 権限も取得する。
+  # rw は将来の psql 経由マイグレーション用に schema public の CREATE 権限も取得する。
   # ro は明示的な GRANT により SELECT のみのアクセスを維持する。
   psql -v ON_ERROR_STOP=1 --username "postgres" --dbname "$db" <<-EOSQL
     ALTER TABLE    metrics                              OWNER TO dashboard_rw;

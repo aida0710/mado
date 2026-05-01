@@ -7,7 +7,6 @@ import { createPools, closePools } from './db.js'
 import { createCrypto } from './crypto.js'
 import { createStorageFactory } from './storage.js'
 import { mountMetricsReadRoutes } from './routes/metrics.js'
-import { mountSqlRoutes } from './routes/sql.js'
 import { mountStorageListRoutes } from './routes/storage-list.js'
 import { mountStorageReadmeRoutes } from './routes/storage-readme.js'
 import { mountStoragePreviewRoutes } from './routes/storage-preview.js'
@@ -27,7 +26,6 @@ app.get('/healthz', c => c.text('ok'))
 
 const api = new Hono()
 mountMetricsReadRoutes(api, { pools })
-mountSqlRoutes(api, { pools, writeToken: env.WRITE_TOKEN })
 mountConnectionsRoutes(api, {
   pools,
   crypto,

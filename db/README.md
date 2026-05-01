@@ -2,7 +2,7 @@
 
 The dashboard uses Postgres with two distinct roles:
 
-- `dashboard_rw` — owns and writes to the schema. Used by `/api/internal/sql/write` and `/api/external/metrics/push`.
+- `dashboard_rw` — owns and writes to the schema. Used by `/api/external/metrics/push` and the internal write paths (connections, notes, settings, readme, favorites).
 - `dashboard_ro` — read-only. Used by `/api/internal/*` read paths so a buggy front-end can never DROP TABLE.
 
 ## Local development (Docker — recommended)
@@ -15,7 +15,7 @@ This brings up Postgres 16 on `127.0.0.1:5432`. On first launch the init pipelin
 
 1. `db/init/00-init.sh` creates the two roles and the `dashboard_test` database.
 2. The same script applies the canonical schema (`db/migrations/001_init.sql`, mounted at `/migrations/` inside the container) to both DBs.
-3. It transfers ownership of the schema objects to `dashboard_rw` and grants `SELECT` to `dashboard_ro` (including `ALTER DEFAULT PRIVILEGES` so future tables created by `dashboard_rw` via `/sql/write` are also readable by ro).
+3. It transfers ownership of the schema objects to `dashboard_rw` and grants `SELECT` to `dashboard_ro` (including `ALTER DEFAULT PRIVILEGES` so future tables created by `dashboard_rw` — e.g. via direct `psql` migrations — are also readable by ro).
 
 To re-bootstrap from scratch:
 
