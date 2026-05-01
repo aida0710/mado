@@ -1,0 +1,61 @@
+# compose.prod.yaml
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: web-dashboard-postgres-prod
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: dashboard
+      DASHBOARD_PASSWORD: CHANGEME
+    volumes:
+      - db_data_prod:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+      - ./db/migrations:/migrations:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d dashboard"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api-internal:
+    build: ./api
+    container_name: web-dashboard-api-internal-prod
+    command: ["sh", "-c", "npm run build && node dist/internal.js"]
+    env_file:
+      - .env
+    environment:
+      PORT: 3000
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  api-external:
+    build: ./api
+    container_name: web-dashboard-api-external-prod
+    command: ["sh", "-c", "npm run build && node dist/external.js"]
+    env_file:
+      - .env
+    environment:
+      PORT: 3001
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  nginx:
+    build:
+      context: .
+      dockerfile: nginx/Dockerfile
+    container_name: web-dashboard-nginx-prod
+    ports:
+      - "80:80"
+    depends_on:
+      - api-internal
+      - api-external
+    restart: unless-stopped
+
+volumes:
+  db_data_prod:
