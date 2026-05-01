@@ -26,7 +26,7 @@ function Tab({ to, label }: { to: string; label: string }) {
   )
 }
 
-// Re-mount StoragePage when connId changes so all in-memory state resets.
+// connId が変わったときに StoragePage を再マウントしてインメモリ状態をすべてリセットする。
 function StoragePageWithKey() {
   const { connId } = useParams<{ connId: string }>()
   return <StoragePage key={connId} connId={connId!} />

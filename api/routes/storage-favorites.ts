@@ -1,9 +1,9 @@
 import type { Hono } from 'hono'
 import type { Pools } from '../db.js'
 
-// LAN-shared favorites: any LAN user can pin/unpin a bucket. The list is
-// global per connection. PUT and DELETE are unauthenticated, mirroring the
-// README PUT honor-system contract — defense lives at the LAN boundary.
+// LAN 共有のお気に入り: LAN の任意ユーザーがバケットをピン留め/解除できる。
+// リストは接続ごとにグローバル。PUT/DELETE は認証なしで、
+// README の PUT オナーシステム契約を踏襲する — 防御は LAN 境界に委ねる。
 
 export interface StorageFavoritesDeps {
   pools: Pools

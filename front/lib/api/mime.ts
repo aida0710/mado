@@ -20,7 +20,7 @@ export function classify(key: string): PreviewKind {
   return 'unknown'
 }
 
-// Subset for entries inside a tar — tar-in-tar isn't a thing we render.
+// tar 内エントリ用のサブセット — tar-in-tar はレンダリングしない。
 export type EntryKind = Exclude<PreviewKind, 'archive'>
 
 export function classifyEntry(name: string): EntryKind {

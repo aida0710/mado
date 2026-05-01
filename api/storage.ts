@@ -3,12 +3,12 @@ import type { Pools } from './db.js'
 import type { CryptoModule } from './crypto.js'
 
 export interface StorageFactory {
-  /** Returns a cached S3Client for the given connectionId.
-   *  Throws { code: 'NOT_FOUND' } (Error with .code) if the connection doesn't exist. */
+  /** 指定した connectionId のキャッシュ済み S3Client を返す。
+   *  接続が存在しない場合は { code: 'NOT_FOUND' } (Error に .code あり) を投げる。 */
   getStorage(connId: string): Promise<S3Client>
-  /** Drop the cached client for a connectionId (called after UPDATE/DELETE). */
+  /** connectionId のキャッシュを破棄する (UPDATE/DELETE 後に呼び出す)。 */
   invalidate(connId: string): void
-  /** Destroy all cached clients on shutdown. */
+  /** シャットダウン時にすべてのキャッシュ済みクライアントを破棄する。 */
   close(): Promise<void>
 }
 

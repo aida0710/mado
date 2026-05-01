@@ -1,12 +1,12 @@
-"""Shared push client for metric collectors.
+"""メトリクスコレクター共通のプッシュクライアント。
 
-`push(host, command, output, category=...)` POSTs raw stdout to the
-dashboard's `/api/external/metrics/push` endpoint. Reads `DASHBOARD_URL` and
-`WRITE_TOKEN` from the environment (typically set per-cron-line on the
-source host).
+`push(host, command, output, category=...)` は生の stdout を
+ダッシュボードの `/api/external/metrics/push` エンドポイントに POST する。
+環境変数から `DASHBOARD_URL` と `WRITE_TOKEN` を読み取る
+(通常はソースホスト上で cron 行ごとに設定)。
 
-Standard library only — many target hosts have no `pip install`-able envs
-and the standard image's Python may be 3.8.
+標準ライブラリのみ使用 — 多くのターゲットホストは `pip install` できる環境がなく、
+標準イメージの Python は 3.8 の場合がある。
 """
 from __future__ import annotations
 
@@ -25,13 +25,13 @@ def push(
     category: str = "general",
     timeout: int = 30,
 ) -> None:
-    """POST `output` to /api/external/metrics/push as text/plain.
+    """text/plain として /api/external/metrics/push に `output` を POST する。
 
-    `category` is a free-text bucket used by the front-end to group cards
-    into sections — e.g. "load", "ジョブ一覧", "node使用率".
+    `category` はフロントエンドがカードをセクションごとにグループ化する際に
+    使用する自由文字列 — 例: "load"、"ジョブ一覧"、"node使用率"。
 
-    Exits the process with a non-zero status on configuration error or HTTP
-    failure so cron's `MAILTO` surfaces the problem.
+    設定エラーや HTTP 失敗時はゼロ以外のステータスでプロセスを終了し、
+    cron の `MAILTO` に問題を通知する。
     """
     base = os.environ.get("DASHBOARD_URL")
     token = os.environ.get("WRITE_TOKEN")

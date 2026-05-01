@@ -2,8 +2,8 @@ import type { Hono } from 'hono'
 import { z } from 'zod'
 import type { Pools } from '../db.js'
 
-// LAN honor-system: GET and PUT are both unauthenticated. Defense lives at the
-// LAN boundary; `editor` is self-reported, mirroring the README pattern.
+// LAN オナーシステム: GET/PUT はどちらも認証なし。防御は LAN 境界に委ねる。
+// `editor` は自己申告制で、README パターンを踏襲している。
 
 export interface NotesDeps {
   pools: Pools

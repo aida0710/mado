@@ -15,7 +15,7 @@ export function TarEntryModal({ connId, bucket, archiveKey, entry, onClose }: Pr
   const kind = classifyEntry(entry.name)
   const url = api.tarEntryUrl(connId, bucket, archiveKey, entry.name)
 
-  // Close on Escape.
+  // Escape で閉じる。
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose()
@@ -87,19 +87,19 @@ function TextBody({
   if (error) return <p className="error">{error}</p>
   if (text === null) return <p className="text-ink-7">loading…</p>
 
-  // .json (single document) gets pretty-printed; .jsonl / .ndjson are
-  // newline-separated JSON values per line, so leave raw.
+  // .json (単一ドキュメント) はプリティプリントする。.jsonl / .ndjson は
+  // 1行1JSON値の形式なのでそのまま表示する。
   let display = text
   const lower = entry.toLowerCase()
   if (lower.endsWith('.json') && !lower.endsWith('.jsonl')) {
     try {
       display = JSON.stringify(JSON.parse(text), null, 2)
     } catch {
-      /* leave raw */
+      /* そのまま表示 */
     }
   }
 
-  // Trailing newline shouldn't inflate the line count.
+  // 末尾の改行で行数が余分に増えないようにする。
   const trimmed = display.endsWith('\n') ? display.slice(0, -1) : display
   const lines = trimmed.length === 0 ? 0 : trimmed.split('\n').length
 

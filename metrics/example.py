@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
-"""Example metric collector: push `uptime` output to the dashboard.
+"""メトリクスコレクターのサンプル: `uptime` の出力をダッシュボードにプッシュする。
 
-Run from cron on any target host:
+任意のターゲットホスト上で cron から実行する:
 
     */5 * * * * DASHBOARD_URL=http://dashboard.lan:3000 \
         WRITE_TOKEN=xxxxxxxx /home/me/web-dashboard/metrics/example.py
 
-Copy and adapt this file (HOST / COMMAND / CATEGORY / ARGV) to add another
-collector — e.g. `df.py` for `df -h /`, or `vmstat.py` for `vmstat 1 5`.
+別のコレクターを追加するにはこのファイルをコピーして
+(HOST / COMMAND / CATEGORY / ARGV) を変更する —
+例: `df -h /` 用の `df.py`、`vmstat 1 5` 用の `vmstat.py`。
 """
 from __future__ import annotations
 
@@ -15,7 +16,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-# Allow running this file directly without `python -m metrics.example`.
+# `python -m metrics.example` を使わずに直接このファイルを実行できるようにする。
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from db import push  # noqa: E402
 
@@ -34,7 +35,7 @@ def main() -> int:
     )
     output = proc.stdout
     if proc.returncode != 0:
-        # Push stderr alongside stdout so an operator sees what broke.
+        # オペレーターが問題を確認できるよう stderr を stdout と一緒にプッシュする。
         output = (
             f"{output}\n--- stderr ---\n{proc.stderr}\n(exit {proc.returncode})\n"
         )

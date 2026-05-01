@@ -26,7 +26,7 @@ const rowClass =
 export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) {
   const navigate = useNavigate()
   const [page, setPage] = useState<ListResp | null>(null)
-  // history of continuation tokens. history[0] is always null (= page 1).
+  // continuation トークンの履歴。history[0] は常に null (= 1ページ目)。
   const [history, setHistory] = useState<Array<string | null>>([null])
   const [pageIdx, setPageIdx] = useState(0)
   const [loading, setLoading] = useState(false)
@@ -41,7 +41,7 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
       .finally(() => setLoading(false))
   }
 
-  // When connection/bucket/prefix changes, reset paging back to the first page.
+  // 接続/バケット/プレフィックスが変わったときにページングを先頭ページにリセットする。
   useEffect(() => {
     setHistory([null])
     setPageIdx(0)

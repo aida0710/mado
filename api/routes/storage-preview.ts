@@ -23,9 +23,9 @@ export interface StoragePreviewDeps {
   env: PreviewEnv
 }
 
-// Cap the size of a single tar entry we'll buffer in memory. 100 MB
-// covers typical WebDataset audio samples while keeping a malicious
-// archive from OOM-ing the dashboard.
+// メモリにバッファするtarエントリ1つのサイズ上限。100 MB は
+// 典型的な WebDataset の音声サンプルをカバーしつつ、悪意あるアーカイブによる
+// ダッシュボードの OOM を防ぐ。
 const TAR_ENTRY_MAX_BYTES = 100 * 1024 * 1024
 
 const IMAGE_MIME: Record<string, string> = {
@@ -63,7 +63,7 @@ const TEXT_EXT = new Set([
   'csv', 'tsv', 'log',
 ])
 
-// MIME type for a tar entry name (used by /storage/:connId/preview/tar-entry).
+// tar エントリ名の MIME タイプ (/storage/:connId/preview/tar-entry で使用)。
 function entryContentType(name: string): string {
   const e = ext(name)
   if (IMAGE_MIME[e]) return IMAGE_MIME[e]
@@ -117,8 +117,8 @@ export function mountStoragePreviewRoutes(app: Hono, deps: StoragePreviewDeps): 
     } catch (e) {
       return storageError(c, e)
     }
-    // Copy into a fresh ArrayBuffer-backed Uint8Array so it satisfies
-    // BodyInit (ArrayBufferView<ArrayBuffer>) under TS strict typings.
+    // TS の strict 型 (ArrayBufferView<ArrayBuffer>) で BodyInit を満たすため
+    // 新しい ArrayBuffer バックの Uint8Array にコピーする。
     const body = new Uint8Array(buf.byteLength)
     body.set(buf)
     return new Response(body, {
@@ -205,8 +205,8 @@ export function mountStoragePreviewRoutes(app: Hono, deps: StoragePreviewDeps): 
     if (!kind) {
       return c.json({ error: 'unsupported archive extension' }, 400)
     }
-    // Hard upper bound on a single page. The UI offers 10 / 25 / 50 / 100;
-    // anything past 100 would also blow up tar.gz/.xz decode memory.
+    // 1ページの上限。UI は 10 / 25 / 50 / 100 を提供している;
+    // 100 を超えると tar.gz/.xz デコードのメモリも爆発する。
     const MAX_LIMIT = 100
     const rawLimit = Number(c.req.query('limit') ?? deps.env.PREVIEW_TAR_ENTRY_LIMIT)
     const limit = Number.isFinite(rawLimit) && rawLimit > 0
@@ -219,12 +219,12 @@ export function mountStoragePreviewRoutes(app: Hono, deps: StoragePreviewDeps): 
 
     const byteLimit = kind === 'xz'
       ? deps.env.PREVIEW_TARXZ_BYTE_LIMIT
-      : 1024 * 1024 * 1024 // 1 GiB ceiling for tar/tar.gz
+      : 1024 * 1024 * 1024 // tar/tar.gz の上限 1 GiB
 
-    // Stream NDJSON. Lines are one of:
-    //   {"mode":"range"|"stream"}              — first line, signals strategy
-    //   {"entry":{name,size,type}}             — per discovered entry
-    //   {"progress":{bytes,requests?}}         — periodic progress
+    // NDJSON をストリーミングする。各行は以下のいずれか:
+    //   {"mode":"range"|"stream"}              — 最初の行、戦略を示す
+    //   {"entry":{name,size,type}}             — 発見したエントリごと
+    //   {"progress":{bytes,requests?}}         — 定期的な進捗
     //   {"done":{truncated,hasMore,offset,limit}}
     //   {"error":"…"}
     const enc = new TextEncoder()
@@ -236,9 +236,9 @@ export function mountStoragePreviewRoutes(app: Hono, deps: StoragePreviewDeps): 
 
         try {
           if (kind === 'tar') {
-            // Plain tar: skip entry bodies via HTTP Range — for a 1 GB
-            // WebDataset shard with mostly-body bytes, 100 entries cost
-            // tens of KB of network instead of hundreds of MB.
+            // プレーン tar: HTTP Range でエントリ本体をスキップ — 本体データが大半の
+            // 1 GB の WebDataset シャードで 100 エントリのコストが数百 MB ではなく
+            // 数十 KB になる。
             write({ mode: 'range' })
             const baseReader = makeStorageRangeReader(storage, bucket, key)
             let bytes = 0
@@ -265,9 +265,9 @@ export function mountStoragePreviewRoutes(app: Hono, deps: StoragePreviewDeps): 
             })
           } else {
             write({ mode: 'stream' })
-            // Compressed: must read every byte sequentially, so pipe the
-            // object body through gunzip / lzma -> tar-stream and emit entries
-            // as they're parsed. Periodically emit byte progress.
+            // 圧縮: 全バイトを順次読む必要があるため、オブジェクト本体を
+            // gunzip / lzma -> tar-stream にパイプし、パース済みのエントリを
+            // 都度出力する。定期的にバイト進捗も出力する。
             let objStream: NodeJS.ReadableStream
             try {
               const r = await storage.send(
@@ -283,10 +283,10 @@ export function mountStoragePreviewRoutes(app: Hono, deps: StoragePreviewDeps): 
               return
             }
 
-            // Wrap the source so we can count compressed bytes downloaded.
+            // ダウンロードした圧縮バイト数をカウントできるようソースをラップする。
             let bytes = 0
             let lastReported = 0
-            const PROGRESS_STEP = 4 * 1024 * 1024 // every 4 MB
+            const PROGRESS_STEP = 4 * 1024 * 1024 // 4 MB ごと
             ;(objStream as NodeJS.ReadableStream).on('data', (chunk: Buffer) => {
               bytes += chunk.byteLength
               if (bytes - lastReported >= PROGRESS_STEP) {
@@ -323,9 +323,9 @@ export function mountStoragePreviewRoutes(app: Hono, deps: StoragePreviewDeps): 
     })
   })
 
-  // Pull a single entry out of a tar archive and return its body. The
-  // front-end uses this to play a `.wav` or render a `.json` from inside a
-  // WebDataset shard without downloading the full tar.
+  // tar アーカイブから単一のエントリを取り出してその本体を返す。
+  // フロントエンドはこれを使って tar 全体をダウンロードせずに WebDataset シャード内の
+  // `.wav` を再生したり `.json` を表示したりする。
   app.get('/storage/:connId/preview/tar-entry', async c => {
     const r0 = await resolveStorageOrFail(c, deps.getStorage)
     if (r0 instanceof Response) return r0

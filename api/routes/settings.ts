@@ -2,8 +2,8 @@ import type { Hono } from 'hono'
 import { z } from 'zod'
 import type { Pools } from '../db.js'
 
-// Runtime feature flags. GET returns the current map, PUT toggles one.
-// Honor-system: defense lives at the LAN boundary.
+// ランタイム機能フラグ。GET は現在のマップを返し、PUT は1つを切り替える。
+// オナーシステム: 防御は LAN 境界に委ねる。
 
 export interface SettingsDeps {
   pools: Pools
@@ -43,9 +43,9 @@ export function mountSettingsRoutes(app: Hono, deps: SettingsDeps): void {
   })
 }
 
-// Throws 503 inside a Hono handler when the named flag is disabled.
-// Returns true if enabled (or unknown — fail-open). Cached per-request via
-// the Hono context to avoid redundant queries when multiple checks happen.
+// 指定フラグが無効の場合 Hono ハンドラ内で 503 を返す。
+// 有効 (または未知 — フェイルオープン) の場合は true を返す。
+// 複数チェックが発生したときの冗長なクエリを避けるため Hono コンテキスト経由でリクエストごとにキャッシュする。
 export async function isFlagEnabled(
   pools: Pools,
   name: string,

@@ -1,20 +1,17 @@
-// Range-based tar header listing.
+// Range リクエストを使った tar ヘッダー列挙。
 //
-// Plain `.tar` is just `[header(512B) | body(padded to 512B)]*`. The streaming
-// approach in tar-stream.ts has to *drain* every entry body to advance to the
-// next header; for a 1 GB WebDataset shard with ~1 GB of body data, that means
-// downloading ~1 GB just to enumerate the names. This file uses HTTP Range
-// requests to skip the bodies entirely — for typical WebDataset shards, the
-// first 100 entries cost ~100 × 512 B = 51 KB of network instead of hundreds
-// of MB.
+// プレーン `.tar` は `[header(512B) | body(512Bパディング済み)]*` の繰り返しで構成される。
+// tar-stream.ts のストリーミング方式は次のヘッダーへ進むためにエントリ本体を *ドレイン*
+// しなければならない。1 GB の WebDataset シャード (本体 ~1 GB) ではファイル名の列挙だけで
+// ~1 GB のダウンロードが発生する。本ファイルは HTTP Range リクエストを使って本体を丸ごとスキップ
+// する。典型的な WebDataset シャードで最初の 100 エントリは ~100 × 512 B = 51 KB で済む。
 //
-// Limitations:
-//   * Only ustar / GNU-tar's `prefix` long-name layout is parsed. GNU `L`
-//     long-link records and POSIX pax `x` headers fall back to whatever the
-//     truncated 100-byte name field contains (still useful for WebDataset
-//     keys, which are short).
-//   * Only used for kind === 'tar'. Compressed archives go through the
-//     streaming reader because the byte stream isn't seekable.
+// 制限:
+//   * ustar / GNU-tar の `prefix` 形式の長名のみパース。GNU `L` (long-link レコード) や
+//     POSIX pax `x` ヘッダーは切り詰め済みの 100 バイト名フィールドにフォールバックする
+//     (WebDataset のキーは短いため実用上は問題ない)。
+//   * kind === 'tar' のみ使用。圧縮アーカイブはバイトストリームがシーク不可なため
+//     ストリーミングリーダーを使う。
 
 import { GetObjectCommand, type S3Client } from '@aws-sdk/client-s3'
 import type { TarEntry } from './tar-stream.js'
@@ -30,8 +27,8 @@ export interface RangeListing {
 }
 
 const HEADER_SIZE = 512
-// Larger reads amortize per-request latency when the archive has many tiny
-// entries packed back-to-back (e.g. WebDataset).
+// 大きめのチャンクで読むことで、WebDataset のように小さなエントリが連続する場合の
+// リクエスト往復コストを分散できる。
 const CHUNK_SIZE = 256 * 1024
 
 export type RangeReader = (start: number, length: number) => Promise<Buffer>
@@ -86,14 +83,14 @@ export async function listTarHeadersByRange(
       break
     }
     if (header.length < HEADER_SIZE) { exhausted = true; break }
-    if (header[0] === 0) { exhausted = true; break } // tar end-of-archive
+    if (header[0] === 0) { exhausted = true; break } // tar アーカイブ終端
 
     const parsed = parseTarHeader(header)
     if (!parsed) { exhausted = true; break }
 
-    // tar metadata records (POSIX pax `x` / `g`, GNU long-name `L` / long-
-    // link `K`) precede a real entry — they are not files in the archive.
-    // Advance past them positionally but don't surface them.
+    // tar メタデータレコード (POSIX pax `x` / `g`、GNU 長名 `L` / long-link `K`) は
+    // 実エントリの前置レコードであり、アーカイブ内のファイルではない。
+    // 位置的にスキップするが列挙結果には含めない。
     const isMetadata =
       parsed.type === 'x' || parsed.type === 'g' ||
       parsed.type === 'L' || parsed.type === 'K'
@@ -110,8 +107,8 @@ export async function listTarHeadersByRange(
     pos += HEADER_SIZE + padded
   }
 
-  // If we hit the entry cap, peek one header further to know whether
-  // pagination has more.
+  // エントリ上限に達した場合、もう1つ先のヘッダーを確認してページネーションの
+  // 続きがあるか判定する。
   let hasMore = false
   if (!exhausted && out.length >= opts.entryLimit) {
     try {
@@ -126,7 +123,7 @@ export async function listTarHeadersByRange(
 }
 
 function parseTarHeader(buf: Buffer): TarEntry | null {
-  // All-zero block = end-of-archive.
+  // 全ゼロブロック = アーカイブ終端。
   let allZero = true
   for (let i = 0; i < HEADER_SIZE; i++) {
     if (buf[i] !== 0) { allZero = false; break }
@@ -144,7 +141,7 @@ function parseTarHeader(buf: Buffer): TarEntry | null {
     tflag === '0' || tflag === '\0' ? 'file' :
     tflag === '5' ? 'directory' :
     tflag === '2' ? 'symlink' :
-    tflag  // L (GNU long name), x (pax), etc. — surface the raw flag
+    tflag  // L (GNU 長名)、x (pax) など — 生のフラグをそのまま返す
 
   return { name, size, type }
 }

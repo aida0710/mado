@@ -4,10 +4,10 @@ import { nanoid } from 'nanoid'
 import type { Pools } from '../db.js'
 import type { CryptoModule } from '../crypto.js'
 
-// All endpoints are unauthenticated, mirroring the README/favorites honor-system
-// contract — defense lives at the LAN boundary, not in the handler. The
-// credentials themselves are encrypted at rest with ENCRYPTION_KEY, so an
-// unauthorized create/update doesn't leak existing keys.
+// すべてのエンドポイントは認証なし。README/お気に入りのオナーシステム契約を踏襲し、
+// 防御は LAN 境界に委ねる (ハンドラ内には持たない)。
+// 認証情報は ENCRYPTION_KEY で保存時に暗号化されるため、
+// 不正な作成/更新が既存のキーを漏洩させることはない。
 export interface ConnectionsDeps {
   pools: Pools
   crypto: CryptoModule
@@ -100,7 +100,7 @@ export function mountConnectionsRoutes(app: Hono, deps: ConnectionsDeps): void {
     if (!parsed.success) return c.json({ error: parsed.error.message }, 400)
     const u = parsed.data
 
-    // Build dynamic SET clause for the fields that were provided.
+    // 指定されたフィールドのみで動的な SET 句を構築する。
     const sets: string[] = []
     const values: unknown[] = []
     let i = 1
@@ -116,7 +116,7 @@ export function mountConnectionsRoutes(app: Hono, deps: ConnectionsDeps): void {
       sets.push(`secret_access_key_enc = $${i++}`); values.push(deps.crypto.encrypt(u.secretAccessKey))
     }
     if (sets.length === 0) {
-      // Nothing to update — just return current row.
+      // 更新するフィールドがない — 現在の行をそのまま返す。
       const r = await deps.pools.ro.query<ConnectionRow>(
         `SELECT id, name, endpoint, region, access_key_id_masked, force_path_style, created_at, updated_at
            FROM storage_connections WHERE id = $1`,

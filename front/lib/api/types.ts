@@ -73,8 +73,8 @@ export type Connection = z.infer<typeof Connection>
 
 export const ConnectionList = z.array(Connection)
 
-// What the form sends to POST /api/internal/connections.
-// All fields required; secret/access key plaintext, transmitted over HTTP(S) on LAN.
+// フォームが POST /api/internal/connections に送信するデータ。
+// 全フィールド必須; シークレット/アクセスキーは平文で LAN 上の HTTP(S) で送信される。
 export interface ConnectionCreateInput {
   name: string
   endpoint: string
@@ -84,7 +84,7 @@ export interface ConnectionCreateInput {
   forcePathStyle: boolean
 }
 
-// PUT /api/internal/connections/:id — partial. Omit credential fields to keep the existing values.
+// PUT /api/internal/connections/:id — 部分更新。認証情報フィールドを省略すると既存の値が保持される。
 export interface ConnectionUpdateInput {
   name?: string
   endpoint?: string

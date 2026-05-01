@@ -14,7 +14,7 @@ const MetricRowFromDb = z.object({
   collected_at: z.date(),
 })
 
-// Only show metrics from the last hour — older rows mean the cron stopped.
+// 直近1時間のメトリクスのみ表示 — 古い行は cron が停止していることを意味する。
 const FRESHNESS_INTERVAL = '1 hour'
 
 const PUSH_BODY_LIMIT = 1_000_000

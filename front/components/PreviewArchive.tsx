@@ -33,7 +33,7 @@ export function PreviewArchive({ connId, bucket, k }: { connId: string; bucket: 
     elapsed: 0,
   })
 
-  // Reset to page 1 whenever the file or page size changes.
+  // ファイルまたはページサイズが変わったときにページ1にリセットする。
   useEffect(() => { setOffset(0) }, [connId, bucket, k, pageSize])
 
   useEffect(() => {
@@ -67,7 +67,7 @@ export function PreviewArchive({ connId, bucket, k }: { connId: string; bucket: 
     return () => { cancelled = true }
   }, [connId, bucket, k, offset, pageSize])
 
-  // Tick the elapsed counter while loading.
+  // ローディング中に経過時間カウンターを更新する。
   useEffect(() => {
     if (data || error) return
     const t = setInterval(() => {

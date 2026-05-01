@@ -80,7 +80,7 @@ describe('GET /connections', () => {
     const list = (await res.json()) as MaskedConnection[]
     expect(list).toHaveLength(1)
     expect(list[0]).toEqual(created)
-    // Sanity: nothing in the response looks like plaintext credentials.
+    // サニティチェック: レスポンスに平文の認証情報が含まれていないことを確認。
     const dump = JSON.stringify(list[0])
     expect(dump).not.toContain('super-secret-value-9999')
     expect(dump).not.toContain('AKIAEXAMPLE12345')
@@ -98,7 +98,7 @@ describe('POST /connections', () => {
     expect(created.forcePathStyle).toBe(true)
     expect(typeof created.createdAt).toBe('string')
     expect(typeof created.updatedAt).toBe('string')
-    // Plaintext fields must not be present in the response.
+    // 平文フィールドはレスポンスに含まれてはならない。
     const dump = JSON.stringify(created)
     expect(dump).not.toContain('super-secret-value-9999')
     expect(dump).not.toContain('AKIAEXAMPLE12345')
@@ -113,16 +113,16 @@ describe('POST /connections', () => {
     )
     expect(r.rows).toHaveLength(1)
     const row = r.rows[0]
-    // Encrypted columns should NOT contain plaintext values.
+    // 暗号化カラムは平文を含んではならない。
     expect(row.access_key_id_enc).not.toContain('AKIAEXAMPLE12345')
     expect(row.secret_access_key_enc).not.toContain('super-secret-value-9999')
-    // They should be packed ciphertext (v1:iv:tag:ct).
+    // パック済み暗号文 (v1:iv:tag:ct) であること。
     expect(row.access_key_id_enc.startsWith('v1:')).toBe(true)
     expect(row.secret_access_key_enc.startsWith('v1:')).toBe(true)
-    // Decrypting should recover originals (sanity check on storage path).
+    // 復号すると元の値が復元される (ストレージパスのサニティチェック)。
     expect(crypto.decrypt(row.access_key_id_enc)).toBe('AKIAEXAMPLE12345')
     expect(crypto.decrypt(row.secret_access_key_enc)).toBe('super-secret-value-9999')
-    // Masked column matches what the route returned.
+    // マスク済みカラムがルートの返した値と一致する。
     expect(row.access_key_id_masked).toBe('AKIA…2345')
   })
 
@@ -182,7 +182,7 @@ describe('PUT /connections/:id', () => {
     expect(updated.name).toBe('renamed')
     expect(updated.id).toBe(created.id)
 
-    // Encrypted columns + mask should be unchanged.
+    // 暗号化カラムとマスクは変更されていないはず。
     const after = await pools.rw.query<DbRow>(
       `SELECT id, access_key_id_enc, secret_access_key_enc, access_key_id_masked
          FROM storage_connections WHERE id = $1`,
@@ -220,12 +220,12 @@ describe('PUT /connections/:id', () => {
          FROM storage_connections WHERE id = $1`,
       [created.id],
     )
-    // Both encrypted values should differ.
+    // 両方の暗号化値が変更されているはず。
     expect(after.rows[0].access_key_id_enc)
       .not.toBe(before.rows[0].access_key_id_enc)
     expect(after.rows[0].secret_access_key_enc)
       .not.toBe(before.rows[0].secret_access_key_enc)
-    // Decrypt sanity-check.
+    // 復号サニティチェック。
     expect(crypto.decrypt(after.rows[0].access_key_id_enc)).toBe('AKIANEWVALUE0001')
     expect(crypto.decrypt(after.rows[0].secret_access_key_enc)).toBe('brand-new-secret-value')
     expect(after.rows[0].access_key_id_masked).toBe('AKIA…0001')
@@ -245,7 +245,7 @@ describe('PUT /connections/:id', () => {
     expect(got.id).toBe(created.id)
     expect(got.name).toBe(created.name)
     expect(got.accessKeyIdMasked).toBe(created.accessKeyIdMasked)
-    // No-op: invalidate should NOT fire when nothing actually changed.
+    // No-op: 何も変更されなかった場合 invalidate は呼ばれてはならない。
     expect(invalidate).not.toHaveBeenCalled()
   })
 

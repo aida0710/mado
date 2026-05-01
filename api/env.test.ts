@@ -15,7 +15,7 @@ describe('loadEnv', () => {
     expect(env.PORT).toBe(3000)
     expect(env.WRITE_TOKEN).toBe(VALID_KEY)
     expect(env.ENCRYPTION_KEY).toBe(VALID_KEY)
-    expect(env.PREVIEW_TEXT_LIMIT).toBe(65536) // default
+    expect(env.PREVIEW_TEXT_LIMIT).toBe(65536) // デフォルト値
     expect(env.PREVIEW_TAR_ENTRY_LIMIT).toBe(200)
   })
 

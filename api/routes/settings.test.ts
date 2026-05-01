@@ -12,7 +12,7 @@ const app = new Hono()
 mountSettingsRoutes(app, { pools })
 
 beforeEach(async () => {
-  // Reset flags to defaults from migration seed.
+  // フラグをマイグレーションシードのデフォルト値にリセットする。
   await pools.rw.query(`UPDATE feature_flags SET enabled = TRUE`)
 })
 afterAll(() => closePools(pools))

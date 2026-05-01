@@ -92,8 +92,8 @@ describe('POST /sql/write', () => {
   })
 })
 
-// Body-size limit (1MB) is enforced by hono/body-limit middleware. The
-// behaviour is exercised by routes/metrics.test.ts:413 if body exceeds 1MB —
-// the same middleware factory and limit constant pattern is used here, so
-// duplicating the test under JSON content-type is not worth the harness
-// quirk where Hono's app.request() can skip Content-Length pre-checks.
+// ボディサイズ制限 (1MB) は hono/body-limit ミドルウェアで強制される。
+// この動作は routes/metrics.test.ts:413 で検証済み (ボディが 1MB を超える場合) —
+// 同じミドルウェアファクトリと制限定数パターンを使用しているため、
+// Hono の app.request() が Content-Length 事前チェックをスキップするという
+// ハーネスの癖があるので JSON content-type でテストを重複させる価値はない。

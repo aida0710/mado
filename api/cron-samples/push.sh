@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
-# Push the stdout of a command to the web-dashboard.
+# コマンドの stdout を web-dashboard にプッシュする。
 #
-# Usage:
+# 使い方:
 #   DASHBOARD_URL=http://dashboard.lan:3000 \
 #   WRITE_TOKEN=xxx \
 #     ./push.sh <host-label> <command-label> -- <command...>
 #
-# Example:
+# 例:
 #   ./push.sh example uptime -- uptime
 #
-# Use this from cron on each metric source host.
+# 各メトリクスソースホストの cron から呼び出す。
 set -euo pipefail
 
 HOST=${1:?host label required (e.g. example)}; shift

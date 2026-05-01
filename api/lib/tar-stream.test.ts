@@ -55,12 +55,12 @@ describe('listTarEntries', () => {
     )
     expect(r.entries).toHaveLength(2)
     expect(r.hasMore).toBe(true)
-    // entryLimit hit is not "truncated" — pagination can recover.
+    // entryLimit に達しても "truncated" ではない — ページネーションで回復できる。
     expect(r.truncated).toBe(false)
   })
 
   it('paginates with offset', async () => {
-    // sample.tar.gz has 4 entries: d/, d/a.txt, d/b.txt, d/c.txt
+    // sample.tar.gz には 4 エントリある: d/, d/a.txt, d/b.txt, d/c.txt
     const page1 = await listTarEntries(
       createReadStream(fix('sample.tar.gz')),
       'gz',
@@ -92,8 +92,8 @@ describe('listTarEntries', () => {
   })
 
   it('stops at byteLimit and marks truncated', async () => {
-    // The decompressed sample.tar.xz exceeds 50 bytes; the byte counter sits
-    // after the decompressor so this is enforced on the inflated stream.
+    // 展開後の sample.tar.xz は 50 バイトを超える。バイトカウンタは
+    // デコンプレッサの後に位置するため、展開後のストリームで強制される。
     const r = await listTarEntries(
       createReadStream(fix('sample.tar.xz')),
       'xz',
@@ -110,6 +110,6 @@ describe('listTarEntries', () => {
       { entryLimit: 10, byteLimit: big },
     )
     const a = r.entries.find(e => e.name === 'd/a.txt')
-    expect(a?.size).toBe(6) // 'alpha\n'
+    expect(a?.size).toBe(6) // 'alpha\n' の長さ
   })
 })

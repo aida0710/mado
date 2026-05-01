@@ -29,7 +29,7 @@ async function getJson<T extends z.ZodTypeAny>(
       const body = (await res.json()) as { error?: string }
       if (body.error) msg = body.error
     } catch {
-      /* non-JSON error body — keep statusText */
+      /* JSON でないエラーボディ — statusText をそのまま使う */
     }
     throw new Error(msg)
   }
@@ -61,7 +61,7 @@ async function mutateJson<T extends z.ZodTypeAny>(
     try {
       const body = (await res.json()) as { error?: string }
       if (body.error) msg = body.error
-    } catch { /* keep statusText */ }
+    } catch { /* statusText をそのまま使う */ }
     throw new Error(msg)
   }
   if (schema === null) return undefined as never
@@ -90,7 +90,7 @@ export const api = {
       try {
         const e = (await res.json()) as { error?: string }
         if (e.error) msg = e.error
-      } catch { /* keep statusText */ }
+      } catch { /* statusText をそのまま使う */ }
       throw new Error(msg)
     }
     return PutNoteOk.parse(await res.json())
@@ -147,7 +147,7 @@ export const api = {
         const errBody = (await res.json()) as { error?: string }
         if (errBody.error) msg = errBody.error
       } catch {
-        /* keep statusText */
+        /* statusText をそのまま使う */
       }
       throw new Error(msg)
     }
@@ -155,14 +155,14 @@ export const api = {
     return PutReadmeOk.parse(json)
   },
 
-  // Streams NDJSON. Lines are one of:
+  // NDJSON をストリーミングする。各行は以下のいずれか:
   //   {"mode":"range"|"stream"}
   //   {"entry":{name,size,type}}
   //   {"progress":{bytes,requests?}}
   //   {"done":{truncated,hasMore,offset,limit}}
   //   {"error":"..."}
-  // Calls back per kind so the UI can show "X 件 / Y MB / mode" while the
-  // stream is in flight, then resolves with the assembled TarPreview.
+  // 種別ごとにコールバックするため、ストリーム中に UI が「X 件 / Y MB / mode」を
+  // 表示でき、最終的に組み立てた TarPreview で解決する。
   tarPreview: async (
     connId: string,
     bucket: string,
@@ -187,7 +187,7 @@ export const api = {
         const errBody = (await res.json()) as { error?: string }
         if (errBody.error) msg = errBody.error
       } catch {
-        /* keep statusText */
+        /* statusText をそのまま使う */
       }
       throw new Error(msg)
     }
@@ -243,11 +243,11 @@ export const api = {
   audioUrl: (connId: string, bucket: string, key: string): string =>
     buildUrl(`${API_BASE}/storage/${encodeURIComponent(connId)}/preview/audio`, { bucket, key }),
 
-  // URL form for `<img src>` / `<audio src>` to a single tar entry's body.
+  // `<img src>` / `<audio src>` 用の tar エントリ本体への URL 形式。
   tarEntryUrl: (connId: string, bucket: string, key: string, entry: string): string =>
     buildUrl(`${API_BASE}/storage/${encodeURIComponent(connId)}/preview/tar-entry`, { bucket, key, entry }),
 
-  // Fetch the entry body as text. Throws on 4xx/5xx (entry not found, etc.).
+  // エントリ本体をテキストとしてフェッチする。4xx/5xx (エントリが見つからない等) で例外を投げる。
   tarEntryText: async (
     connId: string, bucket: string, key: string, entry: string,
   ): Promise<string> => {
@@ -257,7 +257,7 @@ export const api = {
       try {
         const j = (await res.json()) as { error?: string }
         if (j.error) msg = j.error
-      } catch { /* keep statusText */ }
+      } catch { /* statusText をそのまま使う */ }
       throw new Error(msg)
     }
     return res.text()

@@ -8,9 +8,9 @@ import { z } from 'zod'
 import type { Pools } from '../db.js'
 import { resolveStorageOrFail, type GetStorage } from './_connId.js'
 
-// Both GET and PUT are intentionally unauthenticated. `editor` is self-reported
-// (honor system). Defense lives at the LAN boundary, not in this handler. Do
-// not add a Bearer middleware without reviewing the threat model.
+// GET/PUT はどちらも意図的に認証なし。`editor` は自己申告制 (オナーシステム)。
+// 防御は LAN 境界に委ねる (このハンドラではない)。
+// 脅威モデルを確認せずに Bearer ミドルウェアを追加しないこと。
 
 export interface StorageReadmeDeps {
   getStorage: GetStorage
@@ -19,7 +19,7 @@ export interface StorageReadmeDeps {
 
 const PutBody = z.object({
   bucket: z.string().min(1),
-  prefix: z.string(),       // '' (root) or ends with '/'
+  prefix: z.string(),       // '' (ルート) または '/' で終わる
   body: z.string(),
   editor: z.string().min(1),
 })
@@ -93,11 +93,10 @@ export function mountStorageReadmeRoutes(app: Hono, deps: StorageReadmeDeps): vo
       return c.json({ error: (e as Error).message }, 500)
     }
 
-    // Storage PUT succeeded. If the meta UPSERT now fails, the README body is
-    // already on the object store — we still return 200 so the user knows their
-    // save was persisted, but flag `meta_stale: true` so the front-end can show
-    // a soft warning. The console.error gives the operator a breadcrumb to
-    // investigate divergence between object store and DB.
+    // Storage PUT 成功。この後 meta の UPSERT が失敗した場合でも、README 本体は
+    // すでにオブジェクトストアにある — ユーザーに保存が永続化されたことを伝えるため
+    // 200 を返すが、フロントエンドが軽い警告を出せるよう `meta_stale: true` を付与する。
+    // console.error でオペレーターがオブジェクトストアと DB の乖離を調査できるよう記録する。
     try {
       await deps.pools.rw.query(
         `INSERT INTO storage_readme_meta(connection_id, bucket, prefix, last_editor, last_edited_at, size_bytes)

@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
-// Both secrets are required to be 64 hex chars (32 bytes of entropy).
-// Generate either with `openssl rand -hex 32`.
+// どちらのシークレットも 64 桁の16進数 (32 バイトのエントロピー) が必須。
+// `openssl rand -hex 32` で生成できる。
 const hex32 = (name: string) =>
   z.string().regex(/^[0-9a-fA-F]{64}$/, `${name} must be 64 hex chars (32 bytes)`)
 

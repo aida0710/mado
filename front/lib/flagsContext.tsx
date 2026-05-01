@@ -4,7 +4,7 @@ import { api } from './api/client'
 import type { FeatureFlags } from './api/types'
 
 interface FlagsContextValue {
-  flags: FeatureFlags | null   // null while loading
+  flags: FeatureFlags | null   // ローディング中は null
   refresh: () => void
 }
 
@@ -35,8 +35,8 @@ export function useFlags(): FlagsContextValue {
   return useContext(FlagsContext)
 }
 
-/** Treats unknown flags and unloaded state as enabled (fail-open).
- *  Returns false only when the flag is explicitly false. */
+/** 未知フラグおよびロード前の状態は有効として扱う (フェイルオープン)。
+ *  フラグが明示的に false の場合のみ false を返す。 */
 export function isEnabled(flags: FeatureFlags | null, name: string): boolean {
   if (!flags) return true
   return flags[name] !== false

@@ -45,7 +45,7 @@ export default function MetricsPage() {
     )
   }
 
-  // Group by category, preserving the server's category-first ordering.
+  // サーバーのカテゴリ優先順位を維持しながらカテゴリ別にグループ化する。
   const grouped = useMemo(() => {
     const map = new Map<string, Metric[]>()
     for (const m of metrics) {

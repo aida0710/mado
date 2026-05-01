@@ -16,7 +16,7 @@ export function ConnectionSwitcher() {
   const [list, setList] = useState<Connection[] | null>(null)
   const ref = useRef<HTMLDivElement | null>(null)
 
-  // Lazy fetch the list on first open.
+  // 初回オープン時にリストを遅延フェッチする。
   useEffect(() => {
     if (open && list === null) {
       api.listConnections()
@@ -25,7 +25,7 @@ export function ConnectionSwitcher() {
     }
   }, [open, list])
 
-  // Close on outside click / Escape.
+  // 外部クリック / Escape でドロップダウンを閉じる。
   useEffect(() => {
     if (!open) return
     const onClick = (e: MouseEvent) => {

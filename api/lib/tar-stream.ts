@@ -16,21 +16,21 @@ export interface TarEntry {
 export interface TarOptions {
   entryLimit: number
   byteLimit: number
-  /** Skip this many entries before starting to collect — pagination cursor. */
+  /** 収集を開始する前にスキップするエントリ数 — ページネーションカーソル。 */
   offset?: number
 }
 
 export interface TarListing {
   entries: TarEntry[]
-  /** byte budget (or entry budget mid-archive) hit; result is incomplete. */
+  /** バイト上限 (またはアーカイブ途中のエントリ上限) に到達した場合 true; 結果は不完全。 */
   truncated: boolean
-  /** at least one more entry exists past the returned page. */
+  /** 返されたページの後にさらに少なくとも1エントリ存在する。 */
   hasMore: boolean
 }
 
 function makeXzDecompressor(): NodeJS.ReadWriteStream {
-  // Prefer lzma-native for streaming xz support. Fall back to xz-decompress
-  // if the native binding fails to load on the current Node version.
+  // ストリーミング xz サポートのために lzma-native を優先して使用する。
+  // 現在の Node バージョンでネイティブバインディングのロードに失敗した場合は xz-decompress にフォールバック。
   try {
     const lzma = require('lzma-native') as {
       createDecompressor: () => NodeJS.ReadWriteStream
@@ -45,9 +45,9 @@ function makeXzDecompressor(): NodeJS.ReadWriteStream {
   }
 }
 
-// Pull a single named entry's body out of a tar stream and resolve to its
-// bytes. Used by the tar-entry preview route. `byteLimit` caps the body so
-// a malicious archive entry can't exhaust memory.
+// tar ストリームから特定の名前のエントリ本体を取り出してバイト列として解決する。
+// tar-entry プレビュールートで使用。`byteLimit` で本体サイズを制限し、
+// 悪意あるアーカイブエントリによるメモリ枯渇を防ぐ。
 export function extractTarEntry(
   source: NodeJS.ReadableStream,
   kind: ArchiveKind,
@@ -61,7 +61,7 @@ export function extractTarEntry(
 
     ext.on('entry', (header, stream, next) => {
       if (header.name !== entryName || found) {
-        // Drain non-matching entries to advance the parser.
+        // パーサーを進めるために一致しないエントリをドレインする。
         stream.on('end', next)
         stream.resume()
         return
@@ -80,13 +80,13 @@ export function extractTarEntry(
         total += piece.byteLength
       })
       stream.on('end', () => {
-        // Tear down the rest of the pipeline so we stop downloading.
+        // パイプラインの残りを破棄してダウンロードを停止する。
         ;(source as NodeJS.ReadableStream & { destroy?: () => void }).destroy?.()
         ext.destroy()
         resolveP(Buffer.concat(chunks))
       })
       stream.resume()
-      void truncated // silence unused-variable warning; reserved for caller use later
+      void truncated // 未使用変数の警告を抑制; 将来の呼び出し元用に予約
     })
 
     const decompressor: NodeJS.ReadWriteStream =
@@ -95,9 +95,9 @@ export function extractTarEntry(
       : makeXzDecompressor()
 
     pipeline(source, decompressor, ext, err => {
-      if (found) return // already resolved with body
+      if (found) return // 本体を取得して既に解決済み
       if (err) rejectP(err)
-      else resolveP(null) // natural EOF without finding the entry
+      else resolveP(null) // エントリを見つけずに自然な EOF に達した
     })
   })
 }
@@ -123,23 +123,22 @@ export function listTarEntries(
       stopped = true
       truncated = reason === 'byte'
       if (reason === 'entry') hasMore = true
-      // Destroying the head of the pipeline propagates through node:stream's
-      // pipeline() helper and closes upstream (e.g., the upstream socket) instead
-      // of leaving us reading bytes we have already decided to discard.
+      // パイプラインの先頭を破棄すると node:stream の pipeline() ヘルパーを通じて
+      // 上流 (例: 上流ソケット) も閉じられる。既に破棄と決めたバイトを読み続けずに済む。
       ;(source as NodeJS.ReadableStream & { destroy?: () => void }).destroy?.()
       ext.destroy()
       resolveP({ entries: out, truncated, hasMore })
     }
 
     ext.on('entry', (header, stream, next) => {
-      // Skip past the cursor first.
+      // まずカーソル分をスキップする。
       if (skipped < offset) {
         skipped++
         stream.on('end', next)
         stream.resume()
         return
       }
-      // Got a full page already; the existence of this entry means hasMore.
+      // 既に1ページ分取得済み; このエントリの存在が hasMore を意味する。
       if (out.length >= opts.entryLimit) {
         stream.resume()
         stop('entry')
@@ -173,9 +172,9 @@ export function listTarEntries(
       : kind === 'gz' ? createGunzip()
       : makeXzDecompressor()
 
-    // node:stream's pipeline() forwards errors and cleans up all stages on
-    // any failure or destruction. The completion callback is the single
-    // place that resolves on natural EOF or rejects on error.
+    // node:stream の pipeline() はエラーを転送し、失敗や破棄時にすべての
+    // ステージをクリーンアップする。完了コールバックが自然な EOF での解決か
+    // エラーでの拒否を行う唯一の場所となる。
     pipeline(source, decompressor, counter, ext, err => {
       if (stopped) return
       if (err) rejectP(err)

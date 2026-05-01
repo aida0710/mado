@@ -4,8 +4,8 @@ import type { Context } from 'hono'
 export type GetStorage = (connId: string) => Promise<S3Client>
 
 /**
- * Resolves the storage client for the `:connId` path param, or returns a Response
- * (400 / 404) ready to be sent back. Caller pattern:
+ * `:connId` パスパラメータに対応するストレージクライアントを解決する。
+ * 失敗した場合はそのまま返せる Response (400 / 404) を返す。呼び出し元パターン:
  *
  *   const r = await resolveStorageOrFail(c, deps.getStorage)
  *   if (r instanceof Response) return r

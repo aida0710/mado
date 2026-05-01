@@ -1,9 +1,8 @@
 import { z } from 'zod'
 
-// `exit_code` exists on the DB row but is intentionally excluded from this
-// public contract: the spec's response example (and the front-end's card
-// rendering) only consume the four fields below. Surface it when there is
-// a UI need.
+// `exit_code` は DB 行に存在するが、パブリック契約からは意図的に除外している:
+// spec のレスポンス例 (およびフロントエンドのカード描画) は以下の4フィールドのみを
+// 使用する。UI で必要になったときに公開する。
 export const MetricSchema = z.object({
   host: z.string(),
   command: z.string(),

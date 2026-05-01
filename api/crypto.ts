@@ -1,9 +1,9 @@
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto'
 
 export interface CryptoModule {
-  encrypt(plaintext: string): string   // "v1:iv_b64:tag_b64:ct_b64"
-  decrypt(packed: string): string      // throws on bad version/tag/ciphertext
-  mask(plaintext: string): string      // e.g. "AKIA…XYZ4"; for short strings (≤8) returns "*" repeated
+  encrypt(plaintext: string): string   // "v1:iv_b64:tag_b64:ct_b64" 形式で返す
+  decrypt(packed: string): string      // バージョン/タグ/暗号文が不正な場合は例外を投げる
+  mask(plaintext: string): string      // 例: "AKIA…XYZ4"; 8文字以下は "*" を繰り返して返す
 }
 
 const HEX_KEY_RE = /^[0-9a-fA-F]{64}$/
@@ -16,7 +16,7 @@ export function createCrypto(rawKey: string): CryptoModule {
   }
   const key = Buffer.from(rawKey, 'hex')
   if (key.length !== 32) {
-    // Defense-in-depth — regex above already enforces this.
+    // 多重防御 — 上のregexでも検証済みだが念のため。
     throw new Error(
       `ENCRYPTION_KEY must be 64 hex chars (32 bytes); got ${rawKey.length} chars`,
     )

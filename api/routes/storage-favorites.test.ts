@@ -25,7 +25,7 @@ async function seedConnection(p: Pools, id: string): Promise<void> {
 }
 
 beforeEach(async () => {
-  // CASCADE wipes storage_favorite_buckets too.
+  // CASCADE で storage_favorite_buckets も削除される。
   await pools.rw.query('TRUNCATE storage_connections CASCADE')
   await seedConnection(pools, TEST_CONN_ID)
   await seedConnection(pools, OTHER_CONN_ID)

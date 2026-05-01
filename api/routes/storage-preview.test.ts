@@ -313,10 +313,9 @@ describe('GET /storage/:connId/preview/tar', () => {
     const res = await app.request(
       `/storage/${TEST_CONN_ID}/preview/tar?bucket=b&key=foo.tar.gz`,
     )
-    // The stream has already opened a 200 response by the time we discover
-    // the missing key, so the error surfaces as an NDJSON `{error: ...}`
-    // line rather than an HTTP status. Front-end treats it as a thrown
-    // error during stream consumption.
+    // キーが見つからないと判明した時点でストリームはすでに 200 レスポンスを開いているため、
+    // エラーは HTTP ステータスではなく NDJSON の `{error: ...}` 行として
+    // 表面化する。フロントエンドはストリーム消費中のスロー済みエラーとして扱う。
     expect(res.status).toBe(200)
     const lines = await readNdjson(res)
     const errLine = lines.find((l): l is { error: string } => 'error' in l)

@@ -36,7 +36,7 @@ mountStorageReadmeRoutes(app, { getStorage, pools })
 
 beforeEach(async () => {
   storageMock.reset()
-  // CASCADE clears storage_readme_meta along with the connection seed.
+  // CASCADE で接続シードと一緒に storage_readme_meta もクリアされる。
   await pools.rw.query('TRUNCATE storage_connections CASCADE')
   await seedConnection(pools, TEST_CONN_ID)
 })
@@ -108,7 +108,7 @@ describe('PUT /storage/:connId/readme', () => {
     expect(body.ok).toBe(true)
     expect(body.size_bytes).toBe(Buffer.byteLength('new body', 'utf-8'))
 
-    // Storage PUT was called with the right key + content-type
+    // Storage PUT が正しいキーと content-type で呼ばれたか確認する
     const calls = storageMock.commandCalls(PutObjectCommand)
     expect(calls).toHaveLength(1)
     expect(calls[0].args[0].input).toMatchObject({
@@ -117,7 +117,7 @@ describe('PUT /storage/:connId/readme', () => {
       ContentType: 'text/markdown',
     })
 
-    // DB row was inserted (with the connection_id).
+    // DB 行が挿入されたか確認する (connection_id 付き)。
     const r = await pools.rw.query(
       'SELECT connection_id, bucket, prefix, last_editor, size_bytes FROM storage_readme_meta'
     )
@@ -175,12 +175,10 @@ describe('PUT /storage/:connId/readme', () => {
 
   it('returns ok+meta_stale when DB write fails after storage PUT succeeds', async () => {
     storageMock.on(PutObjectCommand).resolves({})
-    // Force the DB write to fail by referencing a non-existent prefix path
-    // through a constraint violation. The simplest reliable way: poison the
-    // pool with a query that errors. Use a sentinel `editor` value that we
-    // pre-fail by wrapping `pools.rw.query` once; but since this test stays
-    // black-box, force failure by passing prefix > permissible by an
-    // ad-hoc CHECK we add via a one-shot SQL preface.
+    // 制約違反でDB書き込みを失敗させる。最も信頼性の高い方法: プールをエラーを起こす
+    // クエリで毒見させる。sentinel `editor` 値を用いて `pools.rw.query` を一度
+    // ラップして事前失敗させる方法もあるが、このテストはブラックボックスのまま維持するため、
+    // アドホックな CHECK 制約を一時的に追加してプレフィックスを拒否させる。
     await pools.rw.query(
       `ALTER TABLE storage_readme_meta ADD CONSTRAINT temp_no_z
          CHECK (last_editor <> 'POISON')`
@@ -200,9 +198,9 @@ describe('PUT /storage/:connId/readme', () => {
       expect(body.ok).toBe(true)
       expect(body.meta_stale).toBe(true)
       expect(body.size_bytes).toBe(1)
-      // Storage PUT did happen
+      // Storage PUT は実行されたはず
       expect(storageMock.commandCalls(PutObjectCommand)).toHaveLength(1)
-      // DB row stayed empty
+      // DB 行は空のまま
       const r = await pools.rw.query('SELECT count(*) FROM storage_readme_meta')
       expect(r.rows[0].count).toBe('0')
     } finally {
@@ -215,8 +213,8 @@ describe('PUT /storage/:connId/readme', () => {
 
 describe('connection-not-found behaviour', () => {
   it('GET returns 404 when connId does not exist via factory', async () => {
-    // Bypass the test's local fake getStorage by mounting a fresh app whose
-    // factory throws ConnectionNotFoundError.
+    // テストのローカルフェイク getStorage をバイパスするため、
+    // ConnectionNotFoundError を投げるファクトリを持つ新しいアプリをマウントする。
     const { ConnectionNotFoundError } = await import('../storage.js')
     const localApp = new Hono()
     mountStorageReadmeRoutes(localApp, {

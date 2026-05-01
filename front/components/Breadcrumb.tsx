@@ -1,10 +1,10 @@
 import { Link } from 'react-router-dom'
 import { useConnection } from '../lib/connectionContext'
 
-// "Up one level" from the current bucket+prefix:
+// 現在の bucket+prefix から「1階層上」へ移動する:
 //   /storage/<conn>/b/voice/jp/  → /storage/<conn>/b/voice/
 //   /storage/<conn>/b/voice/     → /storage/<conn>/b/
-//   /storage/<conn>/b/           → /storage/<conn>/        (bucket index)
+//   /storage/<conn>/b/           → /storage/<conn>/        (バケット一覧)
 function parentPath(connId: string, bucket: string, prefix: string): string {
   const segs = prefix.split('/').filter(Boolean)
   if (segs.length === 0) return `/storage/${connId}/`

@@ -79,7 +79,7 @@ describe('decrypt failure modes', () => {
     const packed = crypto.encrypt('hello world')
     const [v, iv, tag, ct] = packed.split(':')
     const ctBuf = Buffer.from(ct, 'base64')
-    // Flip one bit of the first byte
+    // 最初のバイトの1ビットを反転する
     ctBuf[0] = ctBuf[0] ^ 0x01
     const tampered = `${v}:${iv}:${tag}:${ctBuf.toString('base64')}`
     expect(() => crypto.decrypt(tampered)).toThrow()

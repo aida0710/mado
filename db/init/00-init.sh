@@ -1,12 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Runs once on first container creation. Re-running requires deleting the
-# named volume `db_data`.
+# コンテナ初回作成時に一度だけ実行される。再実行するには名前付きボリューム `db_data` を削除する必要がある。
 
 PASSWORD="${DASHBOARD_PASSWORD:?DASHBOARD_PASSWORD must be set in compose.dev.yaml or compose.prod.yaml}"
 
-# Roles + the test DB. The default `dashboard` DB was created from POSTGRES_DB.
+# ロールとテスト DB を作成する。デフォルトの `dashboard` DB は POSTGRES_DB から作成済み。
 psql -v ON_ERROR_STOP=1 --username "postgres" <<-EOSQL
   CREATE ROLE dashboard_rw LOGIN PASSWORD '${PASSWORD}';
   CREATE ROLE dashboard_ro LOGIN PASSWORD '${PASSWORD}';
@@ -19,17 +18,17 @@ psql -v ON_ERROR_STOP=1 --username "postgres" <<-EOSQL
   GRANT CONNECT ON DATABASE dashboard_test TO dashboard_ro;
 EOSQL
 
-# Apply the schema to both DBs. The canonical schema lives at
-# db/migrations/001_init.sql; compose mounts it at /migrations/.
+# スキーマを両方の DB に適用する。正規のスキーマは db/migrations/001_init.sql にあり、
+# compose が /migrations/ にマウントする。
 for db in dashboard dashboard_test; do
   psql -v ON_ERROR_STOP=1 --username "postgres" --dbname "$db" \
     -f /migrations/001_init.sql
 
-  # Transfer ownership of the schema objects to dashboard_rw so it can
-  # TRUNCATE / ALTER / DROP them as needed (GRANT alone is not enough for
-  # operations like TRUNCATE ... RESTART IDENTITY).
-  # rw also gets CREATE on schema public so /sql/write can create new tables.
-  # ro keeps SELECT-only access via explicit GRANT.
+  # スキーマオブジェクトの所有権を dashboard_rw に移譲する。これにより
+  # TRUNCATE / ALTER / DROP が可能になる (GRANT だけでは TRUNCATE ... RESTART IDENTITY
+  # などの操作が不十分)。
+  # rw は /sql/write が新しいテーブルを作成できるよう schema public に CREATE 権限も取得する。
+  # ro は明示的な GRANT により SELECT のみのアクセスを維持する。
   psql -v ON_ERROR_STOP=1 --username "postgres" --dbname "$db" <<-EOSQL
     ALTER TABLE    metrics                              OWNER TO dashboard_rw;
     ALTER SEQUENCE metrics_id_seq                       OWNER TO dashboard_rw;

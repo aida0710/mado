@@ -42,7 +42,7 @@ describe('listTarHeadersByRange', () => {
       { entryLimit: 10 },
     )
     const a = r.entries.find(e => e.name === 'd/a.txt')
-    expect(a?.size).toBe(6) // 'alpha\n'
+    expect(a?.size).toBe(6) // 'alpha\n' の長さ
   })
 
   it('respects entryLimit and reports hasMore', async () => {
@@ -71,8 +71,8 @@ describe('listTarHeadersByRange', () => {
       return tarBuf.subarray(start, start + length)
     }
     await listTarHeadersByRange(counting, { entryLimit: 10 })
-    // The whole archive fits in a single 256 KB chunk, so the cache should
-    // serve every header from one read (proves we're not draining bodies).
+    // アーカイブ全体が 256 KB のチャンクに収まるため、キャッシュは
+    // 1回の読み込みからすべてのヘッダーを提供するはず (本体をドレインしていないことの証明)。
     expect(reads).toBeLessThanOrEqual(2)
   })
 })

@@ -31,11 +31,11 @@ export function mountSqlRoutes(app: Hono, deps: SqlDeps): void {
       } catch (e) {
         return c.json({ error: (e as Error).message }, 400)
       }
-      // Audit trail: log full SQL + params BEFORE running, so failing
-      // statements (PG syntax errors, permission errors) are also captured.
-      // Multi-statement queries (`a; b`) make pg.query return an array, which
-      // we don't unpack — the caller will get an unhelpful error and that's
-      // documented behavior for an internal escape-hatch endpoint.
+      // 監査ログ: 実行前に SQL + パラメータをフルで記録することで、失敗した
+      // ステートメント (PG 構文エラー、権限エラー) もキャプチャできる。
+      // 複数ステートメントのクエリ (`a; b`) では pg.query が配列を返すが、
+      // ここでは展開しない。呼び出し元は不親切なエラーを受け取るが、
+      // それは内部の脱出口エンドポイントとして文書化された動作である。
       console.log(JSON.stringify({
         ev: 'sql.write',
         sql: parsed.sql,

@@ -1,4 +1,4 @@
-// Shared display formatters used by multiple components.
+// 複数コンポーネントで共有する表示フォーマッター。
 
 export function fmtSize(n: number): string {
   if (n < 1024) return `${n} B`
