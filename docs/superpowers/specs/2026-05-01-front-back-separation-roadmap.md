@@ -156,3 +156,13 @@ P2 完了後を想定（FastAPI の構造で複数 app を切り出すのは Pyt
 5. 同様に P2 → P3 と進む
 
 各フェーズが終わったら、本ドキュメントの該当セクションに `status: shipped (commit hash)` のような追記をして履歴を残すのがおすすめ。
+
+---
+
+## 2026-05-02 方針変更
+
+本 roadmap の実施途中で以下を決定:
+
+- **P2 (FastAPI 移行) は中止**。Hono (TypeScript) のまま続行する方針に。
+- **P1 と P3 を統合し、`docs/superpowers/specs/2026-05-02-p1-p3-merge-design.md` を新たな統合 spec として起こした**。本 roadmap の P1 / P3 セクションは歴史的記述として残す (上書きはしない)。
+- 「次セッションへの引き継ぎ」のフェーズ進行は無効。今後の作業は統合 spec とその plan (`docs/superpowers/plans/2026-05-02-p1-p3-merge.md`) に従う。
