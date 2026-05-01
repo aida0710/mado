@@ -124,7 +124,7 @@ export function listTarEntries(
       truncated = reason === 'byte'
       if (reason === 'entry') hasMore = true
       // Destroying the head of the pipeline propagates through node:stream's
-      // pipeline() helper and closes upstream (e.g., the S3 socket) instead
+      // pipeline() helper and closes upstream (e.g., the upstream socket) instead
       // of leaving us reading bytes we have already decided to discard.
       ;(source as NodeJS.ReadableStream & { destroy?: () => void }).destroy?.()
       ext.destroy()

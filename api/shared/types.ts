@@ -4,14 +4,14 @@ import { z } from 'zod'
 // public contract: the spec's response example (and the front-end's card
 // rendering) only consume the four fields below. Surface it when there is
 // a UI need.
-export const HpcMetricSchema = z.object({
+export const MetricSchema = z.object({
   host: z.string(),
   command: z.string(),
   category: z.string(),
   output: z.string(),
   collected_at: z.string().datetime(),
 })
-export type HpcMetric = z.infer<typeof HpcMetricSchema>
+export type Metric = z.infer<typeof MetricSchema>
 
-export const HpcResponseSchema = z.array(HpcMetricSchema)
-export type HpcResponse = z.infer<typeof HpcResponseSchema>
+export const MetricsResponseSchema = z.array(MetricSchema)
+export type MetricsResponse = z.infer<typeof MetricsResponseSchema>

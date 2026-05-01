@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
-"""Collect miyabi (東大) queue state via qstat and push to the dashboard.
+"""Example metric collector: push `uptime` output to the dashboard.
 
-Run from cron on a miyabi login node:
+Run from cron on any target host:
 
     */5 * * * * DASHBOARD_URL=http://dashboard.lan:3000 \
-        WRITE_TOKEN=xxxxxxxx /home/me/web-dashboard/metrics/miyabi.py
+        WRITE_TOKEN=xxxxxxxx /home/me/web-dashboard/metrics/example.py
+
+Copy and adapt this file (HOST / COMMAND / CATEGORY / ARGV) to add another
+collector — e.g. `df.py` for `df -h /`, or `vmstat.py` for `vmstat 1 5`.
 """
 from __future__ import annotations
 
@@ -12,14 +15,14 @@ import subprocess
 import sys
 from pathlib import Path
 
-# Allow running this file directly without `python -m metrics.miyabi`.
+# Allow running this file directly without `python -m metrics.example`.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from db import push  # noqa: E402
 
-HOST = "miyabi"
-COMMAND = "qstat"
-CATEGORY = "ジョブ一覧"
-ARGV = ["qstat", "-a"]
+HOST = "example"
+COMMAND = "uptime"
+CATEGORY = "load"
+ARGV = ["uptime"]
 
 
 def main() -> int:

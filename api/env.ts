@@ -1,15 +1,17 @@
 import { z } from 'zod'
 
+// Both secrets are required to be 64 hex chars (32 bytes of entropy).
+// Generate either with `openssl rand -hex 32`.
+const hex32 = (name: string) =>
+  z.string().regex(/^[0-9a-fA-F]{64}$/, `${name} must be 64 hex chars (32 bytes)`)
+
 const schema = z.object({
   PORT: z.coerce.number().default(3000),
   DATABASE_URL_RW: z.string().min(1),
   DATABASE_URL_RO: z.string().min(1),
   DATABASE_URL_RW_TEST: z.string().optional(),
-  WRITE_TOKEN: z.string().min(8),
-  S3_ENDPOINT: z.string().url(),
-  S3_REGION: z.string().default('auto'),
-  S3_ACCESS_KEY_ID: z.string().min(1),
-  S3_SECRET_ACCESS_KEY: z.string().min(1),
+  WRITE_TOKEN: hex32('WRITE_TOKEN'),
+  ENCRYPTION_KEY: hex32('ENCRYPTION_KEY'),
   PREVIEW_TEXT_LIMIT: z.coerce.number().default(65536),
   PREVIEW_TAR_ENTRY_LIMIT: z.coerce.number().default(200),
   PREVIEW_TARXZ_BYTE_LIMIT: z.coerce.number().default(268435456),

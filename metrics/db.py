@@ -1,12 +1,12 @@
-"""Shared push client for HPC-side metric collectors.
+"""Shared push client for metric collectors.
 
 `push(host, command, output, category=...)` POSTs raw stdout to the
-dashboard's `/api/hpc/push` endpoint. Reads `DASHBOARD_URL` and
+dashboard's `/api/metrics/push` endpoint. Reads `DASHBOARD_URL` and
 `WRITE_TOKEN` from the environment (typically set per-cron-line on the
-HPC login node).
+source host).
 
-Standard library only — HPCs often have no `pip install`-able envs and
-the standard image's Python may be 3.8.
+Standard library only — many target hosts have no `pip install`-able envs
+and the standard image's Python may be 3.8.
 """
 from __future__ import annotations
 
@@ -25,10 +25,10 @@ def push(
     category: str = "general",
     timeout: int = 30,
 ) -> None:
-    """POST `output` to /api/hpc/push as text/plain.
+    """POST `output` to /api/metrics/push as text/plain.
 
     `category` is a free-text bucket used by the front-end to group cards
-    into sections — e.g. "ジョブ一覧", "node使用率", "トークン数".
+    into sections — e.g. "load", "ジョブ一覧", "node使用率".
 
     Exits the process with a non-zero status on configuration error or HTTP
     failure so cron's `MAILTO` surfaces the problem.
@@ -39,7 +39,7 @@ def push(
         sys.exit("DASHBOARD_URL and WRITE_TOKEN must be set in the environment")
 
     qs = urlencode({"host": host, "command": command, "category": category})
-    url = f"{base.rstrip('/')}/api/hpc/push?{qs}"
+    url = f"{base.rstrip('/')}/api/metrics/push?{qs}"
     body = output.encode("utf-8")
     req = Request(
         url,

@@ -1,17 +1,17 @@
 import { useState } from 'react'
-import { api } from '../api/client'
+import MDEditor from '@uiw/react-md-editor'
 
 interface Props {
-  bucket: string
-  prefix: string
+  title: string
   initialBody: string
   initialEditor: string
-  onClose: () => void
+  onSave: (body: string, editor: string) => Promise<void>
   onSaved: () => void
+  onClose: () => void
 }
 
-export function ReadmeEditor({
-  bucket, prefix, initialBody, initialEditor, onClose, onSaved,
+export function MarkdownEditor({
+  title, initialBody, initialEditor, onSave, onSaved, onClose,
 }: Props) {
   const [body, setBody] = useState(initialBody)
   const [editor, setEditor] = useState(
@@ -24,7 +24,7 @@ export function ReadmeEditor({
     setSaving(true)
     setError(null)
     try {
-      await api.putReadme(bucket, prefix, body, editor)
+      await onSave(body, editor)
       localStorage.setItem('dashboard.lastEditor', editor)
       onSaved()
     } catch (e) {
@@ -35,28 +35,27 @@ export function ReadmeEditor({
   }
 
   return (
-    <div
-      className="modal-backdrop"
-      onClick={onClose}
-    >
+    <div className="modal-backdrop">
       <div
-        className="modal"
-        onClick={e => e.stopPropagation()}
+        className="modal modal--editor wmde-markdown-var"
         role="dialog"
         aria-modal="true"
-        aria-labelledby="readme-editor-title"
+        aria-labelledby="md-editor-title"
+        data-color-mode="light"
       >
-        <h3 id="readme-editor-title">Edit README — {prefix || '(root)'}</h3>
-        <label>
-          <span className="label">README</span>
-          <textarea
-            aria-label="README"
-            rows={16}
+        <h3 id="md-editor-title">{title}</h3>
+        <div className="md-shell">
+          <MDEditor
             value={body}
-            onChange={e => setBody(e.target.value)}
-            spellCheck={false}
+            onChange={v => setBody(v ?? '')}
+            height={420}
+            preview="edit"
+            textareaProps={{
+              'aria-label': 'Markdown body',
+              spellCheck: false,
+            }}
           />
-        </label>
+        </div>
         <label>
           <span className="label">Your name (last editor)</span>
           <input
@@ -73,7 +72,7 @@ export function ReadmeEditor({
           <button onClick={onClose} disabled={saving}>Cancel</button>
           <button
             onClick={save}
-            disabled={saving || !editor || !body}
+            disabled={saving || !editor}
           >
             {saving ? 'Saving…' : 'Save'}
           </button>

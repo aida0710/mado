@@ -7,13 +7,13 @@
 #     ./push.sh <host-label> <command-label> -- <command...>
 #
 # Example:
-#   ./push.sh miyabi qstat -- qstat -a
+#   ./push.sh example uptime -- uptime
 #
-# Use this from cron on each HPC login node.
+# Use this from cron on each metric source host.
 set -euo pipefail
 
-HOST=${1:?host label required (e.g. miyabi)}; shift
-COMMAND=${1:?command label required (e.g. qstat)}; shift
+HOST=${1:?host label required (e.g. example)}; shift
+COMMAND=${1:?command label required (e.g. uptime)}; shift
 [[ "${1:-}" == "--" ]] && shift
 
 : "${DASHBOARD_URL:?set DASHBOARD_URL=http://dashboard.lan:3000}"
@@ -23,4 +23,4 @@ COMMAND=${1:?command label required (e.g. qstat)}; shift
   -H "Authorization: Bearer $WRITE_TOKEN" \
   -H "Content-Type: text/plain" \
   --data-binary @- \
-  "$DASHBOARD_URL/api/hpc/push?host=$HOST&command=$COMMAND"
+  "$DASHBOARD_URL/api/metrics/push?host=$HOST&command=$COMMAND"

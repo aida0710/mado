@@ -2,7 +2,7 @@
 
 The dashboard uses Postgres with two distinct roles:
 
-- `dashboard_rw` — owns and writes to the schema. Used by `/sql/write` and `/api/hpc/push`.
+- `dashboard_rw` — owns and writes to the schema. Used by `/sql/write` and `/api/metrics/push`.
 - `dashboard_ro` — read-only. Used by `/api/*` read paths so a buggy front-end can never DROP TABLE.
 
 ## Local development (Docker — recommended)
@@ -47,10 +47,10 @@ SQL
 for db in dashboard dashboard_test; do
   psql -U postgres -d "$db" -f db/migrations/001_init.sql
   psql -U postgres -d "$db" <<'SQL'
-ALTER TABLE    hpc_metrics        OWNER TO dashboard_rw;
-ALTER SEQUENCE hpc_metrics_id_seq OWNER TO dashboard_rw;
-ALTER VIEW     hpc_metrics_latest OWNER TO dashboard_rw;
-ALTER TABLE    s3_readme_meta     OWNER TO dashboard_rw;
+ALTER TABLE    metrics             OWNER TO dashboard_rw;
+ALTER SEQUENCE metrics_id_seq      OWNER TO dashboard_rw;
+ALTER VIEW     metrics_latest      OWNER TO dashboard_rw;
+ALTER TABLE    storage_readme_meta OWNER TO dashboard_rw;
 
 GRANT CREATE ON SCHEMA public                  TO dashboard_rw;
 GRANT USAGE  ON SCHEMA public                  TO dashboard_ro;

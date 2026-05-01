@@ -1,10 +1,10 @@
 import { api } from '../api/client'
 
-export function PreviewAudio({ bucket, k }: { bucket: string; k: string }) {
+export function PreviewAudio({ connId, bucket, k }: { connId: string; bucket: string; k: string }) {
   return (
     <audio
       className="prev-audio"
-      src={api.audioUrl(bucket, k)}
+      src={api.audioUrl(connId, bucket, k)}
       controls
       preload="metadata"
     />

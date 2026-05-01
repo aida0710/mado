@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../api/client'
+import { ConnectionSwitcher } from '../components/ConnectionSwitcher'
 
 interface BucketRow { name: string; creationDate: string | null }
 
-export default function S3Index() {
+interface Props { connId: string }
+
+export default function StorageIndex({ connId }: Props) {
   const [buckets, setBuckets] = useState<BucketRow[]>([])
   const [favorites, setFavorites] = useState<Set<string>>(new Set())
   const [error, setError] = useState<string | null>(null)
@@ -13,14 +16,14 @@ export default function S3Index() {
   const refresh = useCallback(() => {
     setLoading(true)
     setError(null)
-    Promise.all([api.buckets(), api.favorites()])
+    Promise.all([api.buckets(connId), api.favorites(connId)])
       .then(([bucketsRes, favs]) => {
         setBuckets(bucketsRes.buckets)
         setFavorites(new Set(favs))
       })
       .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false))
-  }, [])
+  }, [connId])
 
   useEffect(() => { refresh() }, [refresh])
 
@@ -32,8 +35,8 @@ export default function S3Index() {
     else next.add(name)
     setFavorites(next)
     try {
-      if (isFav) await api.removeFavorite(name)
-      else await api.addFavorite(name)
+      if (isFav) await api.removeFavorite(connId, name)
+      else await api.addFavorite(connId, name)
     } catch (e) {
       // Roll back on failure.
       setFavorites(favorites)
@@ -47,7 +50,9 @@ export default function S3Index() {
   return (
     <section>
       <header className="page-head">
-        <h2>mdx S3 / バケット</h2>
+        <h2>バケット</h2>
+        <span style={{ marginLeft: 'auto' }} />
+        <ConnectionSwitcher />
       </header>
       {error && <p className="error">{error}</p>}
       {loading && buckets.length === 0 && <p className="muted">loading…</p>}
@@ -62,6 +67,7 @@ export default function S3Index() {
             {favoriteRows.map(b => (
               <BucketLi
                 key={b.name}
+                connId={connId}
                 bucket={b}
                 inUse
                 onToggle={() => toggleFavorite(b.name)}
@@ -78,6 +84,7 @@ export default function S3Index() {
             {otherRows.map(b => (
               <BucketLi
                 key={b.name}
+                connId={connId}
                 bucket={b}
                 inUse={false}
                 onToggle={() => toggleFavorite(b.name)}
@@ -91,9 +98,9 @@ export default function S3Index() {
 }
 
 function BucketLi({
-  bucket, inUse, onToggle,
+  connId, bucket, inUse, onToggle,
 }: {
-  bucket: BucketRow; inUse: boolean; onToggle: () => void
+  connId: string; bucket: BucketRow; inUse: boolean; onToggle: () => void
 }) {
   const checkboxId = `use-${bucket.name}`
   return (
@@ -111,7 +118,7 @@ function BucketLi({
           aria-label={`${bucket.name} を現在使っているバケットに${inUse ? '外す' : '追加'}`}
         />
       </label>
-      <Link to={`/s3/${encodeURIComponent(bucket.name)}/`}>{bucket.name}</Link>
+      <Link to={`/storage/${connId}/${encodeURIComponent(bucket.name)}/`}>{bucket.name}</Link>
       {bucket.creationDate && (
         <span className="muted"> · {bucket.creationDate.slice(0, 10)}</span>
       )}

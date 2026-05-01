@@ -36,13 +36,13 @@ const CHUNK_SIZE = 256 * 1024
 
 export type RangeReader = (start: number, length: number) => Promise<Buffer>
 
-export function makeS3RangeReader(
-  s3: S3Client,
+export function makeStorageRangeReader(
+  storage: S3Client,
   bucket: string,
   key: string,
 ): RangeReader {
   return async (start, length) => {
-    const r = await s3.send(new GetObjectCommand({
+    const r = await storage.send(new GetObjectCommand({
       Bucket: bucket,
       Key: key,
       Range: `bytes=${start}-${start + length - 1}`,

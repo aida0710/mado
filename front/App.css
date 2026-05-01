@@ -150,27 +150,27 @@ body {
 .ghost:disabled { opacity: 0.45; cursor: default; }
 
 /* ---------------------------------------------------------------------- */
-/*  HPC page                                                              */
+/*  Metrics page                                                          */
 /* ---------------------------------------------------------------------- */
 
 pre { font-family: var(--font-mono); font-size: 12px; }
 
-.hpc-grid {
+.metric-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
   gap: var(--space-3);
 }
 
-.hpc-card {
+.metric-card {
   border: 1px solid var(--ink-2);
   border-radius: var(--radius-3);
   background: var(--paper);
   overflow: hidden;
   transition: border-color var(--transition-fast);
 }
-.hpc-card:hover { border-color: var(--ink-3); }
+.metric-card:hover { border-color: var(--ink-3); }
 
-.hpc-card__head {
+.metric-card__head {
   display: flex;
   gap: var(--space-2);
   align-items: baseline;
@@ -178,26 +178,26 @@ pre { font-family: var(--font-mono); font-size: 12px; }
   border-bottom: 1px solid var(--ink-2);
   min-width: 0;
 }
-.hpc-card__host {
+.metric-card__host {
   font-weight: 600;
   letter-spacing: -0.01em;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.hpc-card__cmd {
+.metric-card__cmd {
   color: var(--ink-7);
   font-family: var(--font-mono);
   font-size: 12px;
 }
-.hpc-card__time {
+.metric-card__time {
   margin-left: auto;
   color: var(--ink-7);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
-.hpc-card__body {
+.metric-card__body {
   margin: 0;
   padding: var(--space-2) var(--space-3);
   background: var(--ink-0);
@@ -207,8 +207,8 @@ pre { font-family: var(--font-mono); font-size: 12px; }
   font-variant-numeric: tabular-nums;
 }
 
-.hpc-category { margin: var(--space-5) 0 0; }
-.hpc-category__title {
+.metric-category { margin: var(--space-5) 0 0; }
+.metric-category__title {
   margin: 0 0 var(--space-2);
   font-size: 12px;
   font-weight: 600;
@@ -218,7 +218,7 @@ pre { font-family: var(--font-mono); font-size: 12px; }
 }
 
 /* ---------------------------------------------------------------------- */
-/*  S3 — bucket index                                                     */
+/*  Storage — bucket index                                                */
 /* ---------------------------------------------------------------------- */
 
 .bucket-section {
@@ -295,7 +295,7 @@ pre { font-family: var(--font-mono); font-size: 12px; }
 }
 
 /* ---------------------------------------------------------------------- */
-/*  S3 — bucket / prefix browser                                          */
+/*  Storage — bucket / prefix browser                                     */
 /* ---------------------------------------------------------------------- */
 
 .breadcrumb {
@@ -338,12 +338,12 @@ pre { font-family: var(--font-mono); font-size: 12px; }
   text-decoration: none;
 }
 
-.s3-list {
+.storage-list {
   width: 100%;
   border-collapse: collapse;
   font-size: 13px;
 }
-.s3-list thead th {
+.storage-list thead th {
   text-align: left;
   padding: var(--space-2) var(--space-2);
   border-bottom: 1px solid var(--ink-2);
@@ -353,22 +353,22 @@ pre { font-family: var(--font-mono); font-size: 12px; }
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
-.s3-list td {
+.storage-list td {
   padding: var(--space-2);
   border-bottom: 1px solid var(--ink-1);
 }
-.s3-list .col-size,
-.s3-list .col-modified {
+.storage-list .col-size,
+.storage-list .col-modified {
   font-variant-numeric: tabular-nums;
   color: var(--ink-7);
   white-space: nowrap;
   width: 1%;
 }
-.s3-row { cursor: pointer; transition: background var(--transition-fast); }
-.s3-row:hover { background: var(--ink-0); }
-.s3-row:focus-visible { background: var(--ink-1); }
-.s3-row.dir td:first-child { font-weight: 600; }
-.s3-list td:first-child {
+.storage-row { cursor: pointer; transition: background var(--transition-fast); }
+.storage-row:hover { background: var(--ink-0); }
+.storage-row:focus-visible { background: var(--ink-1); }
+.storage-row.dir td:first-child { font-weight: 600; }
+.storage-list td:first-child {
   max-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -407,15 +407,7 @@ pre { font-family: var(--font-mono); font-size: 12px; }
 .readme__head { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
 .readme__head h3 { margin: 0; font-size: 14px; font-weight: 600; }
 .readme__body {
-  background: var(--ink-0);
-  border: 1px solid var(--ink-2);
-  padding: var(--space-3);
-  border-radius: var(--radius-2);
-  white-space: pre-wrap;
-  font-family: var(--font-mono);
-  font-size: 12px;
   margin: var(--space-2) 0 0;
-  line-height: 1.6;
 }
 
 /* ---------------------------------------------------------------------- */
@@ -514,14 +506,14 @@ pre { font-family: var(--font-mono); font-size: 12px; }
 /*  Bucket page (browser + drawer)                                        */
 /* ---------------------------------------------------------------------- */
 
-.s3-bucket {
+.storage-bucket {
   display: grid;
   grid-template-columns: 1fr;
   gap: var(--space-4);
   align-items: start;
 }
 @media (min-width: 1100px) {
-  .s3-bucket:has(.drawer) { grid-template-columns: 1fr 380px; }
+  .storage-bucket:has(.drawer) { grid-template-columns: 1fr 380px; }
 }
 
 .drawer {
@@ -675,3 +667,397 @@ pre { font-family: var(--font-mono); font-size: 12px; }
 }
 .entry-unknown { display: flex; flex-direction: column; gap: var(--space-3); align-items: flex-start; }
 .entry-unknown a { text-decoration: none; }
+
+/* ---------------------------------------------------------------------- */
+/*  Connection management (settings page, switcher, empty states)         */
+/* ---------------------------------------------------------------------- */
+
+/* List of connections shown on the settings page and the storage landing */
+/* page. Each row is a card with a 1px border that nudges darker on hover  */
+/* to mirror the .metric-card visual language.                             */
+.connections-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.conn-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-3);
+  border: 1px solid var(--ink-2);
+  border-radius: var(--radius-3);
+  background: var(--paper);
+  transition: border-color var(--transition-fast);
+}
+.conn-row:hover { border-color: var(--ink-3); }
+.conn-row__meta {
+  font-size: 12px;
+  color: var(--ink-7);
+  font-family: var(--font-mono);
+  margin-top: var(--space-1);
+}
+.conn-row__actions {
+  display: flex;
+  gap: var(--space-2);
+}
+/* Modifier for .ghost. Subtle red tint on the border, fully red on hover. */
+.conn-row__danger {
+  border-color: color-mix(in srgb, var(--danger) 35%, var(--ink-3));
+}
+.conn-row__danger:hover:not(:disabled) {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+/* Header dropdown that displays the current connection name and lets the */
+/* user jump to another connection or to the settings page.               */
+.conn-switcher {
+  position: relative;
+  display: inline-flex;
+}
+.conn-switcher__menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  min-width: 220px;
+  background: var(--paper);
+  border: 1px solid var(--ink-3);
+  border-radius: var(--radius-3);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.10);
+  padding: var(--space-1) 0;
+  z-index: 30;
+}
+.conn-switcher__item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: var(--space-2) var(--space-3);
+  background: transparent;
+  border: none;
+  color: var(--ink-11);
+  cursor: pointer;
+  font: inherit;
+  text-decoration: none;
+  transition: background var(--transition-fast);
+}
+.conn-switcher__item:hover { background: var(--ink-1); }
+.conn-switcher__item.muted { color: var(--ink-7); cursor: default; }
+.conn-switcher__item.muted:hover { background: transparent; }
+.conn-switcher__divider {
+  height: 1px;
+  margin: var(--space-1) 0;
+  background: var(--ink-2);
+}
+
+/* Header row inside the bucket page: breadcrumb on the left, switcher    */
+/* pushed to the right edge.                                              */
+.storage-bucket__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+/* Centered call-to-action shown when there are zero connections (or      */
+/* when the user lands on a missing/invalid one).                         */
+.empty-state {
+  padding: var(--space-6) var(--space-4);
+  text-align: center;
+  max-width: 480px;
+  margin: var(--space-6) auto;
+}
+.empty-state h2,
+.empty-state h3 {
+  margin: 0 0 var(--space-2);
+  letter-spacing: -0.01em;
+}
+.empty-state__cta {
+  display: inline-block;
+  padding: var(--space-2) var(--space-5);
+  margin-top: var(--space-3);
+  background: var(--ink-12);
+  color: var(--paper);
+  border-radius: var(--radius-2);
+  border: none;
+  text-decoration: none;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 500;
+  transition: background var(--transition-fast);
+}
+.empty-state__cta:hover { background: var(--ink-11); }
+
+/* Narrower dialog used for short prompts (write-token, delete confirm). */
+.modal--narrow {
+  width: min(420px, 100%);
+  max-width: 420px;
+}
+
+/* Input + trailing affix button (e.g. "show password" toggle). The       */
+/* affix button uses .ghost; this wrapper just lays them out side-by-side */
+/* and lets the input flex to fill remaining space.                       */
+.input-with-affix {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  gap: var(--space-1);
+}
+.input-with-affix input { flex: 1; }
+
+/* ---------------------------------------------------------------------- */
+/*  Markdown rendering (Home note + future doc pages)                     */
+/* ---------------------------------------------------------------------- */
+
+.page-head__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-left: auto;
+}
+
+.markdown {
+  line-height: 1.7;
+  color: var(--ink-11);
+  max-width: 760px;
+}
+.markdown h1,
+.markdown h2,
+.markdown h3,
+.markdown h4 {
+  margin: var(--space-5) 0 var(--space-2);
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+}
+.markdown h1:first-child,
+.markdown h2:first-child,
+.markdown h3:first-child { margin-top: 0; }
+.markdown h1 { font-size: 26px; }
+.markdown h2 { font-size: 21px; }
+.markdown h3 { font-size: 17px; }
+.markdown h4 { font-size: 15px; color: var(--ink-9); }
+.markdown p  { margin: var(--space-3) 0; }
+.markdown a  {
+  color: var(--ink-12);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: var(--ink-5);
+  transition: text-decoration-color var(--transition-fast);
+}
+.markdown a:hover { text-decoration-color: var(--ink-12); }
+.markdown ul,
+.markdown ol { padding-left: var(--space-5); margin: var(--space-3) 0; }
+.markdown li { margin: var(--space-1) 0; }
+.markdown li > p { margin: var(--space-1) 0; }
+.markdown code {
+  font-family: var(--font-mono);
+  font-size: 0.88em;
+  padding: 2px 6px;
+  border-radius: var(--radius-1);
+  background: var(--ink-1);
+  border: 1px solid var(--ink-2);
+}
+.markdown pre {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.55;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-3);
+  background: var(--ink-1);
+  border: 1px solid var(--ink-2);
+  overflow-x: auto;
+  margin: var(--space-3) 0;
+}
+.markdown pre code {
+  background: transparent;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  font-size: inherit;
+}
+.markdown blockquote {
+  margin: var(--space-3) 0;
+  padding: 0 var(--space-4);
+  border-left: 3px solid var(--ink-3);
+  color: var(--ink-7);
+}
+.markdown table {
+  border-collapse: collapse;
+  margin: var(--space-3) 0;
+  font-size: 14px;
+}
+.markdown th,
+.markdown td {
+  border: 1px solid var(--ink-2);
+  padding: var(--space-1) var(--space-3);
+  text-align: left;
+}
+.markdown th { background: var(--ink-1); font-weight: 600; }
+.markdown hr {
+  border: 0;
+  border-top: 1px solid var(--ink-2);
+  margin: var(--space-5) 0;
+}
+.markdown img { max-width: 100%; height: auto; }
+
+/* Settings page sections (feature flags + connections list). */
+.settings-section { margin: var(--space-5) 0; }
+.settings-section:first-of-type { margin-top: var(--space-2); }
+.settings-section__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin: 0 0 var(--space-2);
+}
+.settings-section__title {
+  margin: 0 0 var(--space-2);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--ink-7);
+}
+.flag-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  cursor: pointer;
+  font-size: 13px;
+  user-select: none;
+}
+.flag-toggle input[type="checkbox"] { cursor: pointer; }
+
+
+/* ---------------------------------------------------------------------- */
+/*  Home note — minimal editorial layout in the dashboard's monochrome    */
+/* ---------------------------------------------------------------------- */
+
+.home-note__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin: 0 0 var(--space-3);
+}
+
+.home-note__eyebrow {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--ink-7);
+}
+
+.home-note__title {
+  margin: 0;
+  font-size: clamp(48px, 9vw, 80px);
+  line-height: 0.96;
+  font-weight: 600;
+  letter-spacing: -0.04em;
+  color: var(--ink-12);
+}
+
+.home-note__rule {
+  border: 0;
+  height: 1px;
+  width: 56px;
+  background: var(--ink-5);
+  margin: var(--space-4) 0 var(--space-5);
+}
+
+.home-note__byline {
+  margin-top: var(--space-6);
+  text-align: center;
+  font-size: 12px;
+  color: var(--ink-7);
+}
+.home-note__byline::before,
+.home-note__byline::after {
+  content: '';
+  display: inline-block;
+  width: 24px;
+  height: 1px;
+  background: var(--ink-3);
+  vertical-align: middle;
+  margin: 0 12px;
+}
+
+/* Wider modal variant for the markdown editor (toolbar + preview need space). */
+.modal--editor {
+  width: min(880px, 100%);
+  max-width: 880px;
+}
+.md-shell {
+  margin: var(--space-3) 0;
+}
+.md-shell .w-md-editor {
+  border: 1px solid var(--ink-3);
+  border-radius: var(--radius-2);
+  box-shadow: none;
+}
+.md-shell .w-md-editor-toolbar {
+  border-radius: var(--radius-2) var(--radius-2) 0 0;
+}
+/* Force the textarea + syntax-highlight <pre> to fill their wrapper at
+   every level, so the wrapper background never bleeds out as a "big box
+   behind the input" — even when the user drags the resize bar. Browser-
+   default textarea resize is off (the library provides its own dragbar).
+   `background-color: transparent` is required (not just the library's
+   `background: none`) because Chrome's UA stylesheet pins a white
+   background on <textarea>, which `background: none` does not override.
+   Without this, the textarea covers the syntax-highlighted <pre> below
+   it and the user sees a white box with invisible (transparent) text. */
+.md-shell .w-md-editor-text {
+  position: relative;
+  height: 100%;
+}
+.md-shell .w-md-editor-text-input,
+.md-shell .w-md-editor-text-pre,
+.md-shell .w-md-editor textarea {
+  width: 100% !important;
+  height: 100% !important;
+  resize: none !important;
+  background-color: transparent !important;
+}
+/* The generic `.modal textarea` rule leaks into the editor's textarea and
+   sets line-height: 1.55 and padding: 8px 12px, which decouples the
+   textarea's caret position from the syntax-highlighted <pre> beneath.
+   Restore the library's intended `inherit` values so the two layers stay
+   pixel-aligned. */
+.md-shell .w-md-editor-text-input {
+  line-height: inherit !important;
+  padding: inherit !important;
+}
+
+/* Form toggle: checkbox + label inline, with a small hint paragraph below.
+   Selectors here are bumped above `.modal label { display: block }` so the
+   row stays horizontal inside our modals. */
+.modal .form-toggle { margin: var(--space-3) 0; }
+.modal .form-toggle__row {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  cursor: pointer;
+  margin: 0;
+}
+.modal .form-toggle__row input[type="checkbox"] {
+  margin: 0;
+  cursor: pointer;
+}
+.modal .form-toggle__label {
+  font-weight: 500;
+  color: var(--ink-11);
+  user-select: none;
+}
+.modal .form-toggle__hint {
+  margin: var(--space-1) 0 0 calc(13px + var(--space-2));
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ink-7);
+}

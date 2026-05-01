@@ -1,0 +1,91 @@
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import MDEditor from '@uiw/react-md-editor'
+import type { z } from 'zod'
+import { api } from '../api/client'
+import { Note } from '../api/types'
+import { MarkdownEditor } from '../components/MarkdownEditor'
+
+type NoteData = z.infer<typeof Note>
+
+function formatByline(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  return d.toLocaleString('ja-JP', {
+    month: 'long',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  })
+}
+
+export default function HomePage() {
+  const [data, setData] = useState<NoteData | null>(null)
+  const [editing, setEditing] = useState(false)
+
+  const refresh = useCallback(() => {
+    api.note('home').then(setData).catch(() => setData({ exists: false }))
+  }, [])
+
+  useEffect(() => { refresh() }, [refresh])
+
+  const byline = useMemo(() => {
+    if (!data?.exists) return null
+    const parts: string[] = []
+    if (data.last_editor) parts.push(data.last_editor)
+    if (data.last_edited_at) parts.push(formatByline(data.last_edited_at))
+    return parts.length ? parts.join(' · ') : null
+  }, [data])
+
+  if (!data) return null
+
+  const isPresent = data.exists && data.body.trim().length > 0
+
+  return (
+    <>
+      <div className="page home-note" data-color-mode="light">
+        <header className="home-note__head">
+          <span className="home-note__eyebrow">Team notes</span>
+          <button className="ghost" onClick={() => setEditing(true)}>
+            {data.exists ? '✎ edit' : '✎ create'}
+          </button>
+        </header>
+
+        <h1 className="home-note__title">Home</h1>
+        <hr className="home-note__rule" />
+
+        {isPresent ? (
+          <article className="home-note__body">
+            <MDEditor.Markdown source={data.body} />
+          </article>
+        ) : (
+          <div className="empty-state home-note__body">
+            <p className="muted">まだホームノートがありません。</p>
+            <button className="empty-state__cta" onClick={() => setEditing(true)}>
+              最初のノートを書く
+            </button>
+          </div>
+        )}
+
+        {byline && (
+          <footer className="home-note__byline">
+            <span>{byline}</span>
+          </footer>
+        )}
+      </div>
+
+      {editing && (
+        <MarkdownEditor
+          title="Edit Home"
+          initialBody={data.exists ? data.body : ''}
+          initialEditor={data.exists ? (data.last_editor ?? '') : ''}
+          onSave={(body, editor) =>
+            api.putNote('home', body, editor).then(() => undefined)
+          }
+          onSaved={() => { setEditing(false); refresh() }}
+          onClose={() => setEditing(false)}
+        />
+      )}
+    </>
+  )
+}

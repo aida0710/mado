@@ -1,13 +1,20 @@
 import { z } from 'zod'
 import {
+  Connection,
+  ConnectionList,
   FavoriteBuckets,
-  HpcMetrics,
+  FeatureFlags,
+  Metrics,
   ListBuckets,
+  Note,
+  PutNoteOk,
   PutReadmeOk,
   Readme,
-  S3List,
+  SetFlagOk,
+  StorageList,
   TarPreview,
 } from './types'
+import type { ConnectionCreateInput, ConnectionUpdateInput } from './types'
 
 async function getJson<T extends z.ZodTypeAny>(
   url: string,
@@ -37,28 +44,97 @@ function buildUrl(path: string, params: Record<string, string | undefined>): str
   return qs ? `${path}?${qs}` : path
 }
 
+async function mutateJson<T extends z.ZodTypeAny>(
+  url: string,
+  init: { method: 'POST' | 'PUT' | 'DELETE'; body?: unknown },
+  schema: T | null,
+): Promise<T extends z.ZodTypeAny ? z.infer<T> : void> {
+  const res = await fetch(url, {
+    method: init.method,
+    headers: { 'Content-Type': 'application/json' },
+    body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
+  })
+  if (!res.ok) {
+    let msg = res.statusText
+    try {
+      const body = (await res.json()) as { error?: string }
+      if (body.error) msg = body.error
+    } catch { /* keep statusText */ }
+    throw new Error(msg)
+  }
+  if (schema === null) return undefined as never
+  const json: unknown = await res.json()
+  return schema.parse(json) as never
+}
+
 export const api = {
-  hpc: () => getJson('/api/hpc', HpcMetrics),
+  metrics: () => getJson('/api/metrics', Metrics),
 
-  buckets: () => getJson('/api/s3/buckets', ListBuckets),
+  note: (slug: string) =>
+    getJson(`/api/notes/${encodeURIComponent(slug)}`, Note),
 
-  list: (bucket: string, prefix: string, continuation?: string | null) =>
-    getJson(buildUrl('/api/s3/list', {
+  putNote: async (
+    slug: string,
+    body: string,
+    editor: string,
+  ): Promise<z.infer<typeof PutNoteOk>> => {
+    const res = await fetch(`/api/notes/${encodeURIComponent(slug)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ body, editor }),
+    })
+    if (!res.ok) {
+      let msg = res.statusText
+      try {
+        const e = (await res.json()) as { error?: string }
+        if (e.error) msg = e.error
+      } catch { /* keep statusText */ }
+      throw new Error(msg)
+    }
+    return PutNoteOk.parse(await res.json())
+  },
+
+  flags: () => getJson('/api/settings/flags', FeatureFlags),
+
+  setFlag: (name: string, enabled: boolean) =>
+    mutateJson(
+      `/api/settings/flags/${encodeURIComponent(name)}`,
+      { method: 'PUT', body: { enabled } },
+      SetFlagOk,
+    ),
+
+  listConnections: () => getJson('/api/connections', ConnectionList),
+
+  createConnection: (input: ConnectionCreateInput) =>
+    mutateJson('/api/connections', { method: 'POST', body: input }, Connection),
+
+  updateConnection: (id: string, input: ConnectionUpdateInput) =>
+    mutateJson(`/api/connections/${encodeURIComponent(id)}`, { method: 'PUT', body: input }, Connection),
+
+  deleteConnection: (id: string) =>
+    mutateJson(`/api/connections/${encodeURIComponent(id)}`, { method: 'DELETE' }, null),
+
+  buckets: (connId: string) =>
+    getJson(`/api/storage/${encodeURIComponent(connId)}/buckets`, ListBuckets),
+
+  list: (connId: string, bucket: string, prefix: string, continuation?: string | null) =>
+    getJson(buildUrl(`/api/storage/${encodeURIComponent(connId)}/list`, {
       bucket,
       prefix,
       continuation: continuation ?? undefined,
-    }), S3List),
+    }), StorageList),
 
-  readme: (bucket: string, prefix: string) =>
-    getJson(buildUrl('/api/s3/readme', { bucket, prefix }), Readme),
+  readme: (connId: string, bucket: string, prefix: string) =>
+    getJson(buildUrl(`/api/storage/${encodeURIComponent(connId)}/readme`, { bucket, prefix }), Readme),
 
   putReadme: async (
+    connId: string,
     bucket: string,
     prefix: string,
     body: string,
     editor: string,
   ): Promise<z.infer<typeof PutReadmeOk>> => {
-    const res = await fetch('/api/s3/readme', {
+    const res = await fetch(`/api/storage/${encodeURIComponent(connId)}/readme`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ bucket, prefix, body, editor }),
@@ -86,6 +162,7 @@ export const api = {
   // Calls back per kind so the UI can show "X 件 / Y MB / mode" while the
   // stream is in flight, then resolves with the assembled TarPreview.
   tarPreview: async (
+    connId: string,
     bucket: string,
     key: string,
     opts: { limit?: number; offset?: number } = {},
@@ -95,7 +172,7 @@ export const api = {
       onProgress?: (p: { bytes: number; requests?: number }) => void
     } = {},
   ): Promise<z.infer<typeof TarPreview>> => {
-    const url = buildUrl('/api/s3/preview/tar', {
+    const url = buildUrl(`/api/storage/${encodeURIComponent(connId)}/preview/tar`, {
       bucket,
       key,
       limit:  opts.limit  != null ? String(opts.limit)  : undefined,
@@ -155,24 +232,24 @@ export const api = {
     return TarPreview.parse({ entries, ...done })
   },
 
-  textPreviewUrl: (bucket: string, key: string): string =>
-    buildUrl('/api/s3/preview/text', { bucket, key }),
+  textPreviewUrl: (connId: string, bucket: string, key: string): string =>
+    buildUrl(`/api/storage/${encodeURIComponent(connId)}/preview/text`, { bucket, key }),
 
-  imageUrl: (bucket: string, key: string): string =>
-    buildUrl('/api/s3/preview/image', { bucket, key }),
+  imageUrl: (connId: string, bucket: string, key: string): string =>
+    buildUrl(`/api/storage/${encodeURIComponent(connId)}/preview/image`, { bucket, key }),
 
-  audioUrl: (bucket: string, key: string): string =>
-    buildUrl('/api/s3/preview/audio', { bucket, key }),
+  audioUrl: (connId: string, bucket: string, key: string): string =>
+    buildUrl(`/api/storage/${encodeURIComponent(connId)}/preview/audio`, { bucket, key }),
 
   // URL form for `<img src>` / `<audio src>` to a single tar entry's body.
-  tarEntryUrl: (bucket: string, key: string, entry: string): string =>
-    buildUrl('/api/s3/preview/tar-entry', { bucket, key, entry }),
+  tarEntryUrl: (connId: string, bucket: string, key: string, entry: string): string =>
+    buildUrl(`/api/storage/${encodeURIComponent(connId)}/preview/tar-entry`, { bucket, key, entry }),
 
   // Fetch the entry body as text. Throws on 4xx/5xx (entry not found, etc.).
   tarEntryText: async (
-    bucket: string, key: string, entry: string,
+    connId: string, bucket: string, key: string, entry: string,
   ): Promise<string> => {
-    const res = await fetch(api.tarEntryUrl(bucket, key, entry))
+    const res = await fetch(api.tarEntryUrl(connId, bucket, key, entry))
     if (!res.ok) {
       let msg = res.statusText
       try {
@@ -184,19 +261,20 @@ export const api = {
     return res.text()
   },
 
-  favorites: () => getJson('/api/s3/favorites', FavoriteBuckets),
+  favorites: (connId: string) =>
+    getJson(`/api/storage/${encodeURIComponent(connId)}/favorites`, FavoriteBuckets),
 
-  addFavorite: async (bucket: string): Promise<void> => {
+  addFavorite: async (connId: string, bucket: string): Promise<void> => {
     const res = await fetch(
-      `/api/s3/favorites/${encodeURIComponent(bucket)}`,
+      `/api/storage/${encodeURIComponent(connId)}/favorites/${encodeURIComponent(bucket)}`,
       { method: 'PUT' },
     )
     if (!res.ok) throw new Error(res.statusText)
   },
 
-  removeFavorite: async (bucket: string): Promise<void> => {
+  removeFavorite: async (connId: string, bucket: string): Promise<void> => {
     const res = await fetch(
-      `/api/s3/favorites/${encodeURIComponent(bucket)}`,
+      `/api/storage/${encodeURIComponent(connId)}/favorites/${encodeURIComponent(bucket)}`,
       { method: 'DELETE' },
     )
     if (!res.ok) throw new Error(res.statusText)

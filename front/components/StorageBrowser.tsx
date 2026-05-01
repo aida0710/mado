@@ -2,18 +2,19 @@ import { useEffect, useState, type KeyboardEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { z } from 'zod'
 import { api } from '../api/client'
-import { S3List } from '../api/types'
+import { StorageList } from '../api/types'
 import { fmtSize } from '../lib/format'
 
 interface Props {
+  connId: string
   bucket: string
   prefix: string
   onSelectFile?: (key: string) => void
 }
 
-type ListResp = z.infer<typeof S3List>
+type ListResp = z.infer<typeof StorageList>
 
-export function S3Browser({ bucket, prefix, onSelectFile }: Props) {
+export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) {
   const navigate = useNavigate()
   const [page, setPage] = useState<ListResp | null>(null)
   // history of continuation tokens. history[0] is always null (= page 1).
@@ -25,19 +26,19 @@ export function S3Browser({ bucket, prefix, onSelectFile }: Props) {
   const load = (token: string | null) => {
     setLoading(true)
     setError(null)
-    api.list(bucket, prefix, token)
+    api.list(connId, bucket, prefix, token)
       .then(setPage)
       .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false))
   }
 
-  // When bucket/prefix changes, reset paging back to the first page.
+  // When connection/bucket/prefix changes, reset paging back to the first page.
   useEffect(() => {
     setHistory([null])
     setPageIdx(0)
     load(null)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bucket, prefix])
+  }, [connId, bucket, prefix])
 
   const next = () => {
     if (!page?.nextContinuation) return
@@ -65,7 +66,7 @@ export function S3Browser({ bucket, prefix, onSelectFile }: Props) {
 
   return (
     <div>
-      <table className="s3-list">
+      <table className="storage-list">
         <thead>
           <tr>
             <th>Name</th>
@@ -76,11 +77,11 @@ export function S3Browser({ bucket, prefix, onSelectFile }: Props) {
         <tbody>
           {page.directories.map(d => {
             const tail = d.startsWith(prefix) ? d.slice(prefix.length) : d
-            const go = () => navigate(`/s3/${encodeURIComponent(bucket)}/${d}`)
+            const go = () => navigate(`/storage/${connId}/${encodeURIComponent(bucket)}/${d}`)
             return (
               <tr
                 key={d}
-                className="s3-row dir"
+                className="storage-row dir"
                 role="link"
                 tabIndex={0}
                 onClick={go}
@@ -98,7 +99,7 @@ export function S3Browser({ bucket, prefix, onSelectFile }: Props) {
             return (
               <tr
                 key={f.key}
-                className="s3-row file"
+                className="storage-row file"
                 role="button"
                 tabIndex={0}
                 onClick={select}

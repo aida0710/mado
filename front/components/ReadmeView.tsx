@@ -1,29 +1,31 @@
 import { useCallback, useEffect, useState } from 'react'
+import MDEditor from '@uiw/react-md-editor'
 import { api } from '../api/client'
 import type { z } from 'zod'
 import { Readme } from '../api/types'
-import { ReadmeEditor } from './ReadmeEditor'
+import { MarkdownEditor } from './MarkdownEditor'
 
 type ReadmeData = z.infer<typeof Readme>
 
 interface Props {
+  connId: string
   bucket: string
   prefix: string
 }
 
-export function ReadmeView({ bucket, prefix }: Props) {
+export function ReadmeView({ connId, bucket, prefix }: Props) {
   const [data, setData] = useState<ReadmeData | null>(null)
   const [editing, setEditing] = useState(false)
 
   const refresh = useCallback(() => {
-    api.readme(bucket, prefix).then(setData).catch(() => setData({ exists: false }))
-  }, [bucket, prefix])
+    api.readme(connId, bucket, prefix).then(setData).catch(() => setData({ exists: false }))
+  }, [connId, bucket, prefix])
 
   useEffect(() => { refresh() }, [refresh])
 
   if (!data) return null
   return (
-    <section className="readme">
+    <section className="readme" data-color-mode="light">
       <header className="readme__head">
         <h3>README</h3>
         <button className="ghost" onClick={() => setEditing(true)}>
@@ -34,16 +36,18 @@ export function ReadmeView({ bucket, prefix }: Props) {
         )}
       </header>
       {data.exists
-        ? <pre className="readme__body">{data.body}</pre>
+        ? <div className="readme__body"><MDEditor.Markdown source={data.body} /></div>
         : <p className="muted">README なし</p>}
       {editing && (
-        <ReadmeEditor
-          bucket={bucket}
-          prefix={prefix}
+        <MarkdownEditor
+          title={`Edit README — ${prefix || '(root)'}`}
           initialBody={data.exists ? data.body : ''}
           initialEditor={data.exists ? (data.last_editor ?? '') : ''}
-          onClose={() => setEditing(false)}
+          onSave={(body, editor) =>
+            api.putReadme(connId, bucket, prefix, body, editor).then(() => undefined)
+          }
           onSaved={() => { setEditing(false); refresh() }}
+          onClose={() => setEditing(false)}
         />
       )}
     </section>

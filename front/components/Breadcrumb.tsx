@@ -1,36 +1,42 @@
 import { Link } from 'react-router-dom'
+import { useConnection } from '../lib/connectionContext'
 
 // "Up one level" from the current bucket+prefix:
-//   /s3/b/voice/jp/  → /s3/b/voice/
-//   /s3/b/voice/     → /s3/b/
-//   /s3/b/           → /s3/        (bucket index)
-function parentPath(bucket: string, prefix: string): string {
+//   /storage/<conn>/b/voice/jp/  → /storage/<conn>/b/voice/
+//   /storage/<conn>/b/voice/     → /storage/<conn>/b/
+//   /storage/<conn>/b/           → /storage/<conn>/        (bucket index)
+function parentPath(connId: string, bucket: string, prefix: string): string {
   const segs = prefix.split('/').filter(Boolean)
-  if (segs.length === 0) return '/s3/'
+  if (segs.length === 0) return `/storage/${connId}/`
   const trimmed = segs.slice(0, -1)
   const parentPrefix = trimmed.length === 0 ? '' : trimmed.join('/') + '/'
-  return `/s3/${encodeURIComponent(bucket)}/${parentPrefix}`
+  return `/storage/${connId}/${encodeURIComponent(bucket)}/${parentPrefix}`
 }
 
-export function Breadcrumb({ bucket, prefix }: { bucket: string; prefix: string }) {
+export function Breadcrumb({
+  connId, bucket, prefix,
+}: { connId: string; bucket: string; prefix: string }) {
+  const connection = useConnection()
   const segments = prefix.split('/').filter(Boolean)
   return (
     <nav className="breadcrumb">
       <Link
         className="breadcrumb__back"
-        to={parentPath(bucket, prefix)}
+        to={parentPath(connId, bucket, prefix)}
         aria-label="親階層へ"
         title="親階層へ"
       >
         ←
       </Link>
-      <Link to={`/s3/${encodeURIComponent(bucket)}/`}>{bucket}</Link>
+      <Link to={`/storage/${connId}/`}>{connection.name}</Link>
+      <span className="breadcrumb__sep">/</span>
+      <Link to={`/storage/${connId}/${encodeURIComponent(bucket)}/`}>{bucket}</Link>
       {segments.map((seg, i) => {
         const subPrefix = segments.slice(0, i + 1).join('/') + '/'
         return (
           <span key={subPrefix}>
             <span className="breadcrumb__sep">/</span>
-            <Link to={`/s3/${encodeURIComponent(bucket)}/${subPrefix}`}>
+            <Link to={`/storage/${connId}/${encodeURIComponent(bucket)}/${subPrefix}`}>
               {seg}
             </Link>
           </span>

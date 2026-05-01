@@ -31,11 +31,15 @@ for db in dashboard dashboard_test; do
   # rw also gets CREATE on schema public so /sql/write can create new tables.
   # ro keeps SELECT-only access via explicit GRANT.
   psql -v ON_ERROR_STOP=1 --username "postgres" --dbname "$db" <<-EOSQL
-    ALTER TABLE    hpc_metrics          OWNER TO dashboard_rw;
-    ALTER SEQUENCE hpc_metrics_id_seq   OWNER TO dashboard_rw;
-    ALTER VIEW     hpc_metrics_latest   OWNER TO dashboard_rw;
-    ALTER TABLE    s3_readme_meta       OWNER TO dashboard_rw;
-    ALTER TABLE    s3_favorite_buckets  OWNER TO dashboard_rw;
+    ALTER TABLE    metrics                              OWNER TO dashboard_rw;
+    ALTER SEQUENCE metrics_id_seq                       OWNER TO dashboard_rw;
+    ALTER VIEW     metrics_latest                       OWNER TO dashboard_rw;
+    ALTER TABLE    storage_connections                  OWNER TO dashboard_rw;
+    ALTER FUNCTION storage_connections_touch_updated_at() OWNER TO dashboard_rw;
+    ALTER TABLE    storage_readme_meta                  OWNER TO dashboard_rw;
+    ALTER TABLE    storage_favorite_buckets             OWNER TO dashboard_rw;
+    ALTER TABLE    notes                                OWNER TO dashboard_rw;
+    ALTER TABLE    feature_flags                        OWNER TO dashboard_rw;
 
     GRANT CREATE ON SCHEMA public                  TO dashboard_rw;
     GRANT USAGE  ON SCHEMA public                  TO dashboard_ro;

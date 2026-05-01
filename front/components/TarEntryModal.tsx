@@ -4,15 +4,16 @@ import { classifyEntry } from '../api/mime'
 import { fmtSize } from '../lib/format'
 
 interface Props {
+  connId: string
   bucket: string
   archiveKey: string
   entry: { name: string; size: number; type: string }
   onClose: () => void
 }
 
-export function TarEntryModal({ bucket, archiveKey, entry, onClose }: Props) {
+export function TarEntryModal({ connId, bucket, archiveKey, entry, onClose }: Props) {
   const kind = classifyEntry(entry.name)
-  const url = api.tarEntryUrl(bucket, archiveKey, entry.name)
+  const url = api.tarEntryUrl(connId, bucket, archiveKey, entry.name)
 
   // Close on Escape.
   useEffect(() => {
@@ -54,7 +55,7 @@ export function TarEntryModal({ bucket, archiveKey, entry, onClose }: Props) {
         <div className="modal__body">
           {kind === 'image'   && <ImageBody url={url} alt={entry.name} />}
           {kind === 'audio'   && <AudioBody url={url} />}
-          {kind === 'text'    && <TextBody bucket={bucket} archiveKey={archiveKey} entry={entry.name} />}
+          {kind === 'text'    && <TextBody connId={connId} bucket={bucket} archiveKey={archiveKey} entry={entry.name} />}
           {kind === 'unknown' && <UnknownBody url={url} name={entry.name} />}
         </div>
       </div>
@@ -71,17 +72,17 @@ function AudioBody({ url }: { url: string }) {
 }
 
 function TextBody({
-  bucket, archiveKey, entry,
-}: { bucket: string; archiveKey: string; entry: string }) {
+  connId, bucket, archiveKey, entry,
+}: { connId: string; bucket: string; archiveKey: string; entry: string }) {
   const [text, setText] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   useEffect(() => {
     let cancelled = false
-    api.tarEntryText(bucket, archiveKey, entry)
+    api.tarEntryText(connId, bucket, archiveKey, entry)
       .then(t => { if (!cancelled) setText(t) })
       .catch((e: Error) => { if (!cancelled) setError(e.message) })
     return () => { cancelled = true }
-  }, [bucket, archiveKey, entry])
+  }, [connId, bucket, archiveKey, entry])
 
   if (error) return <p className="error">{error}</p>
   if (text === null) return <p className="muted">loading…</p>

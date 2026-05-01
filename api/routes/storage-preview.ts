@@ -1,7 +1,6 @@
 import {
   GetObjectCommand,
   NoSuchKey,
-  type S3Client,
 } from '@aws-sdk/client-s3'
 import type { Hono, Context } from 'hono'
 import { Readable } from 'node:stream'
@@ -10,7 +9,8 @@ import {
   listTarEntries,
   type ArchiveKind,
 } from '../lib/tar-stream.js'
-import { listTarHeadersByRange, makeS3RangeReader } from '../lib/tar-range.js'
+import { listTarHeadersByRange, makeStorageRangeReader } from '../lib/tar-range.js'
+import { resolveStorageOrFail, type GetStorage } from './_connId.js'
 
 export interface PreviewEnv {
   PREVIEW_TEXT_LIMIT: number
@@ -18,8 +18,8 @@ export interface PreviewEnv {
   PREVIEW_TARXZ_BYTE_LIMIT: number
 }
 
-export interface S3PreviewDeps {
-  s3: S3Client
+export interface StoragePreviewDeps {
+  getStorage: GetStorage
   env: PreviewEnv
 }
 
@@ -63,7 +63,7 @@ const TEXT_EXT = new Set([
   'csv', 'tsv', 'log',
 ])
 
-// MIME type for a tar entry name (used by /api/s3/preview/tar-entry).
+// MIME type for a tar entry name (used by /api/storage/:connId/preview/tar-entry).
 function entryContentType(name: string): string {
   const e = ext(name)
   if (IMAGE_MIME[e]) return IMAGE_MIME[e]
@@ -88,15 +88,18 @@ async function readN(
   return Buffer.concat(chunks).subarray(0, n)
 }
 
-function s3Error(c: Context, e: unknown): Response {
+function storageError(c: Context, e: unknown): Response {
   if (e instanceof NoSuchKey) {
     return c.json({ error: 'not found' }, 404)
   }
   return c.json({ error: (e as Error).message }, 500)
 }
 
-export function mountS3PreviewRoutes(app: Hono, deps: S3PreviewDeps): void {
-  app.get('/api/s3/preview/text', async c => {
+export function mountStoragePreviewRoutes(app: Hono, deps: StoragePreviewDeps): void {
+  app.get('/api/storage/:connId/preview/text', async c => {
+    const r0 = await resolveStorageOrFail(c, deps.getStorage)
+    if (r0 instanceof Response) return r0
+    const storage = r0
     const bucket = c.req.query('bucket')
     const key = c.req.query('key')
     if (!bucket || !key) {
@@ -104,7 +107,7 @@ export function mountS3PreviewRoutes(app: Hono, deps: S3PreviewDeps): void {
     }
     let buf: Buffer
     try {
-      const r = await deps.s3.send(
+      const r = await storage.send(
         new GetObjectCommand({ Bucket: bucket, Key: key }),
       )
       buf = await readN(
@@ -112,7 +115,7 @@ export function mountS3PreviewRoutes(app: Hono, deps: S3PreviewDeps): void {
         deps.env.PREVIEW_TEXT_LIMIT,
       )
     } catch (e) {
-      return s3Error(c, e)
+      return storageError(c, e)
     }
     // Copy into a fresh ArrayBuffer-backed Uint8Array so it satisfies
     // BodyInit (ArrayBufferView<ArrayBuffer>) under TS strict typings.
@@ -123,7 +126,10 @@ export function mountS3PreviewRoutes(app: Hono, deps: S3PreviewDeps): void {
     })
   })
 
-  app.get('/api/s3/preview/image', async c => {
+  app.get('/api/storage/:connId/preview/image', async c => {
+    const r0 = await resolveStorageOrFail(c, deps.getStorage)
+    if (r0 instanceof Response) return r0
+    const storage = r0
     const bucket = c.req.query('bucket')
     const key = c.req.query('key')
     if (!bucket || !key) {
@@ -132,13 +138,13 @@ export function mountS3PreviewRoutes(app: Hono, deps: S3PreviewDeps): void {
     let stream: Readable
     let contentLength: number | undefined
     try {
-      const r = await deps.s3.send(
+      const r = await storage.send(
         new GetObjectCommand({ Bucket: bucket, Key: key }),
       )
       stream = r.Body as unknown as Readable
       contentLength = r.ContentLength
     } catch (e) {
-      return s3Error(c, e)
+      return storageError(c, e)
     }
     const mime = IMAGE_MIME[ext(key)] ?? 'application/octet-stream'
     const headers: Record<string, string> = { 'Content-Type': mime }
@@ -149,7 +155,10 @@ export function mountS3PreviewRoutes(app: Hono, deps: S3PreviewDeps): void {
     )
   })
 
-  app.get('/api/s3/preview/audio', async c => {
+  app.get('/api/storage/:connId/preview/audio', async c => {
+    const r0 = await resolveStorageOrFail(c, deps.getStorage)
+    if (r0 instanceof Response) return r0
+    const storage = r0
     const bucket = c.req.query('bucket')
     const key = c.req.query('key')
     if (!bucket || !key) {
@@ -160,14 +169,14 @@ export function mountS3PreviewRoutes(app: Hono, deps: S3PreviewDeps): void {
     let contentLength: number | undefined
     let contentRange: string | undefined
     try {
-      const r = await deps.s3.send(new GetObjectCommand({
+      const r = await storage.send(new GetObjectCommand({
         Bucket: bucket, Key: key, Range: range,
       }))
       stream = r.Body as unknown as Readable
       contentLength = r.ContentLength
       contentRange = r.ContentRange
     } catch (e) {
-      return s3Error(c, e)
+      return storageError(c, e)
     }
     const mime = AUDIO_MIME[ext(key)] ?? 'application/octet-stream'
     const headers: Record<string, string> = {
@@ -183,7 +192,10 @@ export function mountS3PreviewRoutes(app: Hono, deps: S3PreviewDeps): void {
     )
   })
 
-  app.get('/api/s3/preview/tar', async c => {
+  app.get('/api/storage/:connId/preview/tar', async c => {
+    const r0 = await resolveStorageOrFail(c, deps.getStorage)
+    if (r0 instanceof Response) return r0
+    const storage = r0
     const bucket = c.req.query('bucket')
     const key = c.req.query('key')
     if (!bucket || !key) {
@@ -228,7 +240,7 @@ export function mountS3PreviewRoutes(app: Hono, deps: S3PreviewDeps): void {
             // WebDataset shard with mostly-body bytes, 100 entries cost
             // tens of KB of network instead of hundreds of MB.
             write({ mode: 'range' })
-            const baseReader = makeS3RangeReader(deps.s3, bucket, key)
+            const baseReader = makeStorageRangeReader(storage, bucket, key)
             let bytes = 0
             let requests = 0
             const reader: typeof baseReader = async (start, length) => {
@@ -254,14 +266,14 @@ export function mountS3PreviewRoutes(app: Hono, deps: S3PreviewDeps): void {
           } else {
             write({ mode: 'stream' })
             // Compressed: must read every byte sequentially, so pipe the
-            // S3 body through gunzip / lzma → tar-stream and emit entries
+            // object body through gunzip / lzma -> tar-stream and emit entries
             // as they're parsed. Periodically emit byte progress.
-            let s3stream: NodeJS.ReadableStream
+            let objStream: NodeJS.ReadableStream
             try {
-              const r = await deps.s3.send(
+              const r = await storage.send(
                 new GetObjectCommand({ Bucket: bucket, Key: key }),
               )
-              s3stream = r.Body as unknown as NodeJS.ReadableStream
+              objStream = r.Body as unknown as NodeJS.ReadableStream
             } catch (e) {
               if (e instanceof NoSuchKey) {
                 write({ error: 'not found' })
@@ -275,7 +287,7 @@ export function mountS3PreviewRoutes(app: Hono, deps: S3PreviewDeps): void {
             let bytes = 0
             let lastReported = 0
             const PROGRESS_STEP = 4 * 1024 * 1024 // every 4 MB
-            ;(s3stream as NodeJS.ReadableStream).on('data', (chunk: Buffer) => {
+            ;(objStream as NodeJS.ReadableStream).on('data', (chunk: Buffer) => {
               bytes += chunk.byteLength
               if (bytes - lastReported >= PROGRESS_STEP) {
                 lastReported = bytes
@@ -284,7 +296,7 @@ export function mountS3PreviewRoutes(app: Hono, deps: S3PreviewDeps): void {
             })
 
             const result = await listTarEntries(
-              s3stream,
+              objStream,
               kind,
               { entryLimit: limit, byteLimit, offset },
               entry => write({ entry }),
@@ -314,7 +326,10 @@ export function mountS3PreviewRoutes(app: Hono, deps: S3PreviewDeps): void {
   // Pull a single entry out of a tar archive and return its body. The
   // front-end uses this to play a `.wav` or render a `.json` from inside a
   // WebDataset shard without downloading the full tar.
-  app.get('/api/s3/preview/tar-entry', async c => {
+  app.get('/api/storage/:connId/preview/tar-entry', async c => {
+    const r0 = await resolveStorageOrFail(c, deps.getStorage)
+    if (r0 instanceof Response) return r0
+    const storage = r0
     const bucket = c.req.query('bucket')
     const key = c.req.query('key')
     const entry = c.req.query('entry')
@@ -328,12 +343,12 @@ export function mountS3PreviewRoutes(app: Hono, deps: S3PreviewDeps): void {
 
     let stream: NodeJS.ReadableStream
     try {
-      const r = await deps.s3.send(
+      const r = await storage.send(
         new GetObjectCommand({ Bucket: bucket, Key: key }),
       )
       stream = r.Body as unknown as NodeJS.ReadableStream
     } catch (e) {
-      return s3Error(c, e)
+      return storageError(c, e)
     }
 
     let buf: Buffer | null

@@ -11,7 +11,7 @@ type Entry = Resp['entries'][number]
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const
 const DEFAULT_PAGE_SIZE = 10
 
-export function PreviewArchive({ bucket, k }: { bucket: string; k: string }) {
+export function PreviewArchive({ connId, bucket, k }: { connId: string; bucket: string; k: string }) {
   const [openedEntry, setOpenedEntry] = useState<Entry | null>(null)
   const [data, setData] = useState<Resp | null>(null)
   const [offset, setOffset] = useState(0)
@@ -28,7 +28,7 @@ export function PreviewArchive({ bucket, k }: { bucket: string; k: string }) {
   })
 
   // Reset to page 1 whenever the file or page size changes.
-  useEffect(() => { setOffset(0) }, [bucket, k, pageSize])
+  useEffect(() => { setOffset(0) }, [connId, bucket, k, pageSize])
 
   useEffect(() => {
     let cancelled = false
@@ -38,14 +38,14 @@ export function PreviewArchive({ bucket, k }: { bucket: string; k: string }) {
     setData(null)
     setProgress({ entries: 0, bytes: 0, requests: 0, mode: '', startedAt, elapsed: 0 })
 
-    api.tarPreview(bucket, k, { limit: pageSize, offset }, {
-      onMode: mode => {
+    api.tarPreview(connId, bucket, k, { limit: pageSize, offset }, {
+      onMode: (mode: 'range' | 'stream') => {
         if (!cancelled) setProgress(p => ({ ...p, mode }))
       },
       onEntry: () => {
         if (!cancelled) setProgress(p => ({ ...p, entries: p.entries + 1 }))
       },
-      onProgress: ({ bytes, requests }) => {
+      onProgress: ({ bytes, requests }: { bytes: number; requests?: number }) => {
         if (!cancelled) {
           setProgress(p => ({
             ...p,
@@ -59,7 +59,7 @@ export function PreviewArchive({ bucket, k }: { bucket: string; k: string }) {
       .catch((e: Error) => { if (!cancelled) setError(e.message) })
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
-  }, [bucket, k, offset, pageSize])
+  }, [connId, bucket, k, offset, pageSize])
 
   // Tick the elapsed counter while loading.
   useEffect(() => {
@@ -168,6 +168,7 @@ export function PreviewArchive({ bucket, k }: { bucket: string; k: string }) {
       </div>
       {openedEntry && (
         <TarEntryModal
+          connId={connId}
           bucket={bucket}
           archiveKey={k}
           entry={openedEntry}
