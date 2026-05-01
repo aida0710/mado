@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { Connection, ConnectionCreateInput, ConnectionUpdateInput } from '../api/types'
+import type { Connection, ConnectionCreateInput, ConnectionUpdateInput } from '../lib/api/types'
 
 type Mode =
   | { kind: 'create'; onSubmit: (input: ConnectionCreateInput) => Promise<void> }

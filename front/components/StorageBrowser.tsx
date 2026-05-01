@@ -1,8 +1,8 @@
 import { useEffect, useState, type KeyboardEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { z } from 'zod'
-import { api } from '../api/client'
-import { StorageList } from '../api/types'
+import { api } from '../lib/api/client'
+import { StorageList } from '../lib/api/types'
 import { fmtSize } from '../lib/format'
 
 interface Props {

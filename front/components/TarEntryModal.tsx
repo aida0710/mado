@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { api } from '../api/client'
-import { classifyEntry } from '../api/mime'
+import { api } from '../lib/api/client'
+import { classifyEntry } from '../lib/api/mime'
 import { fmtSize } from '../lib/format'
 
 interface Props {

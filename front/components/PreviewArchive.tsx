@@ -1,7 +1,7 @@
 import { useEffect, useState, type KeyboardEvent } from 'react'
-import { api } from '../api/client'
+import { api } from '../lib/api/client'
 import type { z } from 'zod'
-import { TarPreview } from '../api/types'
+import { TarPreview } from '../lib/api/types'
 import { fmtSize } from '../lib/format'
 import { TarEntryModal } from './TarEntryModal'
 

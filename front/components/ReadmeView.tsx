@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import MDEditor from '@uiw/react-md-editor'
-import { api } from '../api/client'
+import { api } from '../lib/api/client'
 import type { z } from 'zod'
-import { Readme } from '../api/types'
+import { Readme } from '../lib/api/types'
 import { MarkdownEditor } from './MarkdownEditor'
 
 type ReadmeData = z.infer<typeof Readme>

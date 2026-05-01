@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
-import { api } from '../api/client'
-import type { FeatureFlags } from '../api/types'
+import { api } from './api/client'
+import type { FeatureFlags } from './api/types'
 
 interface FlagsContextValue {
   flags: FeatureFlags | null   // null while loading

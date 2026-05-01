@@ -6,10 +6,6 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     globals: true,
-    include: ['front/**/*.test.{ts,tsx}', 'api/**/*.test.ts'],
-    // Test files share a single Postgres `dashboard_test` DB
-    // (see db/README.md), so they cannot truly run
-    // in parallel — beforeEach TRUNCATEs would race.
-    fileParallelism: false,
+    include: ['**/*.test.{ts,tsx}'],
   },
 })

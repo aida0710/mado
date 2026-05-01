@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { api } from '../api/client'
+import { api } from '../lib/api/client'
 
 export function PreviewText({ connId, bucket, k }: { connId: string; bucket: string; k: string }) {
   const [text, setText] = useState<string>('loading…')

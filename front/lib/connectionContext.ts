@@ -1,5 +1,5 @@
 import { createContext, useContext } from 'react'
-import type { Connection } from '../api/types'
+import type { Connection } from './api/types'
 
 export const ConnectionContext = createContext<Connection | null>(null)
 

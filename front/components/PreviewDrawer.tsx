@@ -1,4 +1,4 @@
-import { classify } from '../api/mime'
+import { classify } from '../lib/api/mime'
 import { PreviewText } from './PreviewText'
 import { PreviewImage } from './PreviewImage'
 import { PreviewAudio } from './PreviewAudio'

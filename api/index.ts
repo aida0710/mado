@@ -3,7 +3,8 @@ import { serveStatic } from '@hono/node-server/serve-static'
 import { Hono } from 'hono'
 import { logger } from 'hono/logger'
 import { existsSync, readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { loadEnv } from './env.js'
 import { createPools, closePools } from './db.js'
 import { createCrypto } from './crypto.js'
@@ -40,10 +41,17 @@ mountStorageFavoritesRoutes(app, { pools })
 mountNotesRoutes(app, { pools })
 mountSettingsRoutes(app, { pools })
 
-const distDir = resolve(process.cwd(), 'dist')
+// Frontend static dist lives at <repo>/front/dist (workspace layout).
+// Resolve relative to this file so dev (tsx, /api/index.ts) and prod
+// (node, /api/dist/index.js) both find it.
+const here = dirname(fileURLToPath(import.meta.url))
+const isCompiled = here.endsWith(`${'/'}dist`)
+const distDir = isCompiled
+  ? resolve(here, '..', '..', 'front', 'dist')
+  : resolve(here, '..', 'front', 'dist')
 const distIndex = resolve(distDir, 'index.html')
 if (existsSync(distIndex)) {
-  app.use('/*', serveStatic({ root: './dist' }))
+  app.use('/*', serveStatic({ root: distDir }))
   // SPA fallback: any unmatched GET returns index.html so client-side
   // routes (e.g. /storage/<bucket>/<prefix>) work on direct load and reload.
   // API routes were registered earlier; Hono dispatches in registration

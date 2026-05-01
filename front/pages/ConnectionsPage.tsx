@@ -1,14 +1,14 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { api } from '../api/client'
-import type { Connection, ConnectionCreateInput, ConnectionUpdateInput } from '../api/types'
+import { api } from '../lib/api/client'
+import type { Connection, ConnectionCreateInput, ConnectionUpdateInput } from '../lib/api/types'
 import { ConnectionForm } from '../components/ConnectionForm'
 import { ConnectionDeleteConfirm } from '../components/ConnectionDeleteConfirm'
 import { useFlags } from '../lib/flagsContext'
 
 const FLAG_LABELS: Record<string, { label: string; description?: string }> = {
   metrics: {
-    label: 'メトリクス',
+    label: 'Metrics',
     description: '無効にすると Metrics タブと API が使えなくなります。',
   },
 }

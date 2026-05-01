@@ -1,4 +1,4 @@
-import type { Metric } from '../api/types'
+import type { Metric } from '../lib/api/types'
 import { fmtAgo } from '../lib/format'
 
 export function MetricCard({ m }: { m: Metric }) {

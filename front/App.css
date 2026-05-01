@@ -426,3 +426,15 @@ pre { font-family: var(--font-mono); font-size: 12px; }
   line-height: inherit !important;
   padding: inherit !important;
 }
+
+/* Tailwind v4's preflight resets `ul, ol { list-style: none; padding: 0 }`
+   in @layer base. The @uiw markdown CSS is unlayered but its specificity
+   (`.wmde-markdown ul` = 0,1,1) doesn't always win the cascade. Restore
+   browser defaults for markdown lists explicitly. */
+.wmde-markdown ul,
+.wmde-markdown ol {
+  list-style: revert;
+  padding: revert;
+  margin: revert;
+}
+.wmde-markdown li { display: list-item; }

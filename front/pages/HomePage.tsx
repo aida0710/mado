@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import MDEditor from '@uiw/react-md-editor'
 import type { z } from 'zod'
-import { api } from '../api/client'
-import { Note } from '../api/types'
+import { api } from '../lib/api/client'
+import { Note } from '../lib/api/types'
 import { MarkdownEditor } from '../components/MarkdownEditor'
 
 type NoteData = z.infer<typeof Note>
@@ -44,19 +44,12 @@ export default function HomePage() {
   return (
     <>
       <div data-color-mode="light">
-        <header className="mb-3 flex items-center justify-between gap-4">
-          <span className="text-[11px] font-semibold uppercase tracking-[0.22em] text-ink-7">
-            Team notes
-          </span>
+        <header className="page-head">
+          <h2>Team notes</h2>
           <button className="ghost" onClick={() => setEditing(true)}>
             {data.exists ? '✎ edit' : '✎ create'}
           </button>
         </header>
-
-        <h1 className="m-0 text-[clamp(48px,9vw,80px)] font-semibold leading-[0.96] tracking-[-0.04em] text-ink-12">
-          Home
-        </h1>
-        <hr className="mb-6 mt-4 h-px w-14 border-0 bg-ink-5" />
 
         {isPresent ? (
           <article>

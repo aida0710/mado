@@ -1,4 +1,4 @@
-import { api } from '../api/client'
+import { api } from '../lib/api/client'
 
 export function PreviewAudio({ connId, bucket, k }: { connId: string; bucket: string; k: string }) {
   return (

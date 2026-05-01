@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { api } from '../api/client'
+import { api } from '../lib/api/client'
 import { ConnectionSwitcher } from '../components/ConnectionSwitcher'
 
 interface BucketRow { name: string; creationDate: string | null }
@@ -57,7 +57,7 @@ export default function StorageIndex({ connId }: Props) {
   return (
     <section>
       <header className="page-head">
-        <h2>バケット</h2>
+        <h2>Bucket</h2>
         <span className="ml-auto" />
         <ConnectionSwitcher />
       </header>

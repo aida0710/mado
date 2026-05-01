@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { api } from '../api/client'
-import type { Connection } from '../api/types'
+import { api } from '../lib/api/client'
+import type { Connection } from '../lib/api/types'
 
 export default function StorageLanding() {
   const [connections, setConnections] = useState<Connection[] | null>(null)
