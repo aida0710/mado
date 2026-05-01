@@ -30,7 +30,7 @@ export function MetricsHelpModal({ onClose }: Props) {
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div
-        className="modal"
+        className="modal modal--editor"
         onClick={e => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
