@@ -34,50 +34,50 @@ afterAll(() => closePools(pools))
 
 describe('storage favorite buckets', () => {
   it('GET returns sorted list (empty by default)', async () => {
-    const res = await app.request(`/api/storage/${TEST_CONN_ID}/favorites`)
+    const res = await app.request(`/storage/${TEST_CONN_ID}/favorites`)
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual([])
   })
 
   it('PUT adds and DELETE removes', async () => {
-    let res = await app.request(`/api/storage/${TEST_CONN_ID}/favorites/dataset`, { method: 'PUT' })
+    let res = await app.request(`/storage/${TEST_CONN_ID}/favorites/dataset`, { method: 'PUT' })
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ ok: true })
 
-    res = await app.request(`/api/storage/${TEST_CONN_ID}/favorites/example-bucket`, { method: 'PUT' })
+    res = await app.request(`/storage/${TEST_CONN_ID}/favorites/example-bucket`, { method: 'PUT' })
     expect(res.status).toBe(200)
 
-    res = await app.request(`/api/storage/${TEST_CONN_ID}/favorites`)
+    res = await app.request(`/storage/${TEST_CONN_ID}/favorites`)
     expect(await res.json()).toEqual(['dataset', 'example-bucket'])
 
-    res = await app.request(`/api/storage/${TEST_CONN_ID}/favorites/dataset`, { method: 'DELETE' })
+    res = await app.request(`/storage/${TEST_CONN_ID}/favorites/dataset`, { method: 'DELETE' })
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ ok: true })
 
-    res = await app.request(`/api/storage/${TEST_CONN_ID}/favorites`)
+    res = await app.request(`/storage/${TEST_CONN_ID}/favorites`)
     expect(await res.json()).toEqual(['example-bucket'])
   })
 
   it('PUT is idempotent (no error on duplicate)', async () => {
-    await app.request(`/api/storage/${TEST_CONN_ID}/favorites/x`, { method: 'PUT' })
-    const res = await app.request(`/api/storage/${TEST_CONN_ID}/favorites/x`, { method: 'PUT' })
+    await app.request(`/storage/${TEST_CONN_ID}/favorites/x`, { method: 'PUT' })
+    const res = await app.request(`/storage/${TEST_CONN_ID}/favorites/x`, { method: 'PUT' })
     expect(res.status).toBe(200)
-    const list = (await (await app.request(`/api/storage/${TEST_CONN_ID}/favorites`)).json()) as string[]
+    const list = (await (await app.request(`/storage/${TEST_CONN_ID}/favorites`)).json()) as string[]
     expect(list).toEqual(['x'])
   })
 
   it('DELETE on missing row is idempotent', async () => {
-    const res = await app.request(`/api/storage/${TEST_CONN_ID}/favorites/missing`, { method: 'DELETE' })
+    const res = await app.request(`/storage/${TEST_CONN_ID}/favorites/missing`, { method: 'DELETE' })
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ ok: true })
   })
 
   it('favorites are scoped per-connection (different conn -> different list)', async () => {
-    await app.request(`/api/storage/${TEST_CONN_ID}/favorites/only-for-test`, { method: 'PUT' })
-    await app.request(`/api/storage/${OTHER_CONN_ID}/favorites/only-for-other`, { method: 'PUT' })
+    await app.request(`/storage/${TEST_CONN_ID}/favorites/only-for-test`, { method: 'PUT' })
+    await app.request(`/storage/${OTHER_CONN_ID}/favorites/only-for-other`, { method: 'PUT' })
 
-    const a = (await (await app.request(`/api/storage/${TEST_CONN_ID}/favorites`)).json()) as string[]
-    const b = (await (await app.request(`/api/storage/${OTHER_CONN_ID}/favorites`)).json()) as string[]
+    const a = (await (await app.request(`/storage/${TEST_CONN_ID}/favorites`)).json()) as string[]
+    const b = (await (await app.request(`/storage/${OTHER_CONN_ID}/favorites`)).json()) as string[]
     expect(a).toEqual(['only-for-test'])
     expect(b).toEqual(['only-for-other'])
   })

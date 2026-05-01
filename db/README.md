@@ -2,13 +2,13 @@
 
 The dashboard uses Postgres with two distinct roles:
 
-- `dashboard_rw` — owns and writes to the schema. Used by `/sql/write` and `/api/metrics/push`.
-- `dashboard_ro` — read-only. Used by `/api/*` read paths so a buggy front-end can never DROP TABLE.
+- `dashboard_rw` — owns and writes to the schema. Used by `/api/internal/sql/write` and `/api/external/metrics/push`.
+- `dashboard_ro` — read-only. Used by `/api/internal/*` read paths so a buggy front-end can never DROP TABLE.
 
 ## Local development (Docker — recommended)
 
 ```sh
-docker compose up -d
+docker compose -f compose.dev.yaml up -d
 ```
 
 This brings up Postgres 16 on `127.0.0.1:5432`. On first launch the init pipeline runs automatically:
@@ -20,13 +20,13 @@ This brings up Postgres 16 on `127.0.0.1:5432`. On first launch the init pipelin
 To re-bootstrap from scratch:
 
 ```sh
-docker compose down -v   # WARNING: deletes db_data volume
-docker compose up -d
+docker compose -f compose.dev.yaml down -v   # WARNING: deletes db_data volume
+docker compose -f compose.dev.yaml up -d
 ```
 
 ## Schema source of truth
 
-`db/migrations/001_init.sql` is the only schema file. The Docker init script reads it via the `./db/migrations:/migrations:ro` bind mount in `compose.yml`, so there is nothing to keep in sync.
+`db/migrations/001_init.sql` is the only schema file. The Docker init script reads it via the `./db/migrations:/migrations:ro` bind mount in `compose.dev.yaml` / `compose.prod.yaml`, so there is nothing to keep in sync.
 
 ## Manual setup (non-Docker)
 

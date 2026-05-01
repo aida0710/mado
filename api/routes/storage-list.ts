@@ -10,7 +10,7 @@ export interface StorageListDeps {
 }
 
 export function mountStorageListRoutes(app: Hono, deps: StorageListDeps): void {
-  app.get('/api/storage/:connId/buckets', async c => {
+  app.get('/storage/:connId/buckets', async c => {
     const r = await resolveStorageOrFail(c, deps.getStorage)
     if (r instanceof Response) return r
     const storage = r
@@ -23,7 +23,7 @@ export function mountStorageListRoutes(app: Hono, deps: StorageListDeps): void {
     })
   })
 
-  app.get('/api/storage/:connId/list', async c => {
+  app.get('/storage/:connId/list', async c => {
     const r = await resolveStorageOrFail(c, deps.getStorage)
     if (r instanceof Response) return r
     const storage = r

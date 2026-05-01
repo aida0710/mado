@@ -33,7 +33,7 @@ async function streamToString(stream: NodeJS.ReadableStream): Promise<string> {
 }
 
 export function mountStorageReadmeRoutes(app: Hono, deps: StorageReadmeDeps): void {
-  app.get('/api/storage/:connId/readme', async c => {
+  app.get('/storage/:connId/readme', async c => {
     const r = await resolveStorageOrFail(c, deps.getStorage)
     if (r instanceof Response) return r
     const storage = r
@@ -72,7 +72,7 @@ export function mountStorageReadmeRoutes(app: Hono, deps: StorageReadmeDeps): vo
     })
   })
 
-  app.put('/api/storage/:connId/readme', async c => {
+  app.put('/storage/:connId/readme', async c => {
     const r = await resolveStorageOrFail(c, deps.getStorage)
     if (r instanceof Response) return r
     const storage = r

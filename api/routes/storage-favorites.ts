@@ -10,7 +10,7 @@ export interface StorageFavoritesDeps {
 }
 
 export function mountStorageFavoritesRoutes(app: Hono, deps: StorageFavoritesDeps): void {
-  app.get('/api/storage/:connId/favorites', async c => {
+  app.get('/storage/:connId/favorites', async c => {
     const connId = c.req.param('connId')
     const r = await deps.pools.ro.query(
       `SELECT bucket FROM storage_favorite_buckets
@@ -21,7 +21,7 @@ export function mountStorageFavoritesRoutes(app: Hono, deps: StorageFavoritesDep
     return c.json(r.rows.map(row => row.bucket as string))
   })
 
-  app.put('/api/storage/:connId/favorites/:bucket', async c => {
+  app.put('/storage/:connId/favorites/:bucket', async c => {
     const connId = c.req.param('connId')
     const bucket = c.req.param('bucket')
     if (!bucket) return c.json({ error: 'bucket required' }, 400)
@@ -33,7 +33,7 @@ export function mountStorageFavoritesRoutes(app: Hono, deps: StorageFavoritesDep
     return c.json({ ok: true })
   })
 
-  app.delete('/api/storage/:connId/favorites/:bucket', async c => {
+  app.delete('/storage/:connId/favorites/:bucket', async c => {
     const connId = c.req.param('connId')
     const bucket = c.req.param('bucket')
     if (!bucket) return c.json({ error: 'bucket required' }, 400)

@@ -1,7 +1,7 @@
 """Shared push client for metric collectors.
 
 `push(host, command, output, category=...)` POSTs raw stdout to the
-dashboard's `/api/metrics/push` endpoint. Reads `DASHBOARD_URL` and
+dashboard's `/api/external/metrics/push` endpoint. Reads `DASHBOARD_URL` and
 `WRITE_TOKEN` from the environment (typically set per-cron-line on the
 source host).
 
@@ -25,7 +25,7 @@ def push(
     category: str = "general",
     timeout: int = 30,
 ) -> None:
-    """POST `output` to /api/metrics/push as text/plain.
+    """POST `output` to /api/external/metrics/push as text/plain.
 
     `category` is a free-text bucket used by the front-end to group cards
     into sections — e.g. "load", "ジョブ一覧", "node使用率".
@@ -39,7 +39,7 @@ def push(
         sys.exit("DASHBOARD_URL and WRITE_TOKEN must be set in the environment")
 
     qs = urlencode({"host": host, "command": command, "category": category})
-    url = f"{base.rstrip('/')}/api/metrics/push?{qs}"
+    url = f"{base.rstrip('/')}/api/external/metrics/push?{qs}"
     body = output.encode("utf-8")
     req = Request(
         url,

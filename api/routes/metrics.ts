@@ -17,16 +17,11 @@ const MetricRowFromDb = z.object({
 // Only show metrics from the last hour — older rows mean the cron stopped.
 const FRESHNESS_INTERVAL = '1 hour'
 
-export interface MetricsDeps {
-  pools: Pools
-  writeToken: string
-}
-
 const PUSH_BODY_LIMIT = 1_000_000
 
-export function mountMetricsRoutes(app: Hono, deps: MetricsDeps): void {
-  const requireMetricsEnabled: MiddlewareHandler = async (c, next) => {
-    if (!(await isFlagEnabled(deps.pools, 'metrics'))) {
+function metricsEnabledMiddleware(pools: Pools): MiddlewareHandler {
+  return async (c, next) => {
+    if (!(await isFlagEnabled(pools, 'metrics'))) {
       return c.json(
         { error: 'metrics is disabled. Please enable it in settings.' },
         503,
@@ -34,9 +29,38 @@ export function mountMetricsRoutes(app: Hono, deps: MetricsDeps): void {
     }
     await next()
   }
+}
 
+export interface MetricsReadDeps {
+  pools: Pools
+}
+
+export function mountMetricsReadRoutes(app: Hono, deps: MetricsReadDeps): void {
+  const requireMetricsEnabled = metricsEnabledMiddleware(deps.pools)
+  app.get('/metrics', requireMetricsEnabled, async c => {
+    const r = await deps.pools.ro.query(
+      `SELECT host, command, category, output, collected_at
+         FROM metrics_latest
+         WHERE collected_at >= now() - interval '${FRESHNESS_INTERVAL}'
+         ORDER BY category, host, command`
+    )
+    const rows = r.rows.map(raw => {
+      const row = MetricRowFromDb.parse(raw)
+      return { ...row, collected_at: row.collected_at.toISOString() }
+    })
+    return c.json(MetricsResponseSchema.parse(rows))
+  })
+}
+
+export interface MetricsPushDeps {
+  pools: Pools
+  writeToken: string
+}
+
+export function mountMetricsPushRoutes(app: Hono, deps: MetricsPushDeps): void {
+  const requireMetricsEnabled = metricsEnabledMiddleware(deps.pools)
   app.post(
-    '/api/metrics/push',
+    '/metrics/push',
     requireMetricsEnabled,
     requireWriteToken(deps.writeToken),
     bodyLimit({
@@ -59,18 +83,4 @@ export function mountMetricsRoutes(app: Hono, deps: MetricsDeps): void {
       return c.json({ ok: true })
     },
   )
-
-  app.get('/api/metrics', requireMetricsEnabled, async c => {
-    const r = await deps.pools.ro.query(
-      `SELECT host, command, category, output, collected_at
-         FROM metrics_latest
-         WHERE collected_at >= now() - interval '${FRESHNESS_INTERVAL}'
-         ORDER BY category, host, command`
-    )
-    const rows = r.rows.map(raw => {
-      const row = MetricRowFromDb.parse(raw)
-      return { ...row, collected_at: row.collected_at.toISOString() }
-    })
-    return c.json(MetricsResponseSchema.parse(rows))
-  })
 }

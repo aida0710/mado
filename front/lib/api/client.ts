@@ -16,6 +16,8 @@ import {
 } from './types'
 import type { ConnectionCreateInput, ConnectionUpdateInput } from './types'
 
+const API_BASE = '/api/internal'
+
 async function getJson<T extends z.ZodTypeAny>(
   url: string,
   schema: T,
@@ -68,17 +70,17 @@ async function mutateJson<T extends z.ZodTypeAny>(
 }
 
 export const api = {
-  metrics: () => getJson('/api/metrics', Metrics),
+  metrics: () => getJson(`${API_BASE}/metrics`, Metrics),
 
   note: (slug: string) =>
-    getJson(`/api/notes/${encodeURIComponent(slug)}`, Note),
+    getJson(`${API_BASE}/notes/${encodeURIComponent(slug)}`, Note),
 
   putNote: async (
     slug: string,
     body: string,
     editor: string,
   ): Promise<z.infer<typeof PutNoteOk>> => {
-    const res = await fetch(`/api/notes/${encodeURIComponent(slug)}`, {
+    const res = await fetch(`${API_BASE}/notes/${encodeURIComponent(slug)}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ body, editor }),
@@ -94,38 +96,38 @@ export const api = {
     return PutNoteOk.parse(await res.json())
   },
 
-  flags: () => getJson('/api/settings/flags', FeatureFlags),
+  flags: () => getJson(`${API_BASE}/settings/flags`, FeatureFlags),
 
   setFlag: (name: string, enabled: boolean) =>
     mutateJson(
-      `/api/settings/flags/${encodeURIComponent(name)}`,
+      `${API_BASE}/settings/flags/${encodeURIComponent(name)}`,
       { method: 'PUT', body: { enabled } },
       SetFlagOk,
     ),
 
-  listConnections: () => getJson('/api/connections', ConnectionList),
+  listConnections: () => getJson(`${API_BASE}/connections`, ConnectionList),
 
   createConnection: (input: ConnectionCreateInput) =>
-    mutateJson('/api/connections', { method: 'POST', body: input }, Connection),
+    mutateJson(`${API_BASE}/connections`, { method: 'POST', body: input }, Connection),
 
   updateConnection: (id: string, input: ConnectionUpdateInput) =>
-    mutateJson(`/api/connections/${encodeURIComponent(id)}`, { method: 'PUT', body: input }, Connection),
+    mutateJson(`${API_BASE}/connections/${encodeURIComponent(id)}`, { method: 'PUT', body: input }, Connection),
 
   deleteConnection: (id: string) =>
-    mutateJson(`/api/connections/${encodeURIComponent(id)}`, { method: 'DELETE' }, null),
+    mutateJson(`${API_BASE}/connections/${encodeURIComponent(id)}`, { method: 'DELETE' }, null),
 
   buckets: (connId: string) =>
-    getJson(`/api/storage/${encodeURIComponent(connId)}/buckets`, ListBuckets),
+    getJson(`${API_BASE}/storage/${encodeURIComponent(connId)}/buckets`, ListBuckets),
 
   list: (connId: string, bucket: string, prefix: string, continuation?: string | null) =>
-    getJson(buildUrl(`/api/storage/${encodeURIComponent(connId)}/list`, {
+    getJson(buildUrl(`${API_BASE}/storage/${encodeURIComponent(connId)}/list`, {
       bucket,
       prefix,
       continuation: continuation ?? undefined,
     }), StorageList),
 
   readme: (connId: string, bucket: string, prefix: string) =>
-    getJson(buildUrl(`/api/storage/${encodeURIComponent(connId)}/readme`, { bucket, prefix }), Readme),
+    getJson(buildUrl(`${API_BASE}/storage/${encodeURIComponent(connId)}/readme`, { bucket, prefix }), Readme),
 
   putReadme: async (
     connId: string,
@@ -134,7 +136,7 @@ export const api = {
     body: string,
     editor: string,
   ): Promise<z.infer<typeof PutReadmeOk>> => {
-    const res = await fetch(`/api/storage/${encodeURIComponent(connId)}/readme`, {
+    const res = await fetch(`${API_BASE}/storage/${encodeURIComponent(connId)}/readme`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ bucket, prefix, body, editor }),
@@ -172,7 +174,7 @@ export const api = {
       onProgress?: (p: { bytes: number; requests?: number }) => void
     } = {},
   ): Promise<z.infer<typeof TarPreview>> => {
-    const url = buildUrl(`/api/storage/${encodeURIComponent(connId)}/preview/tar`, {
+    const url = buildUrl(`${API_BASE}/storage/${encodeURIComponent(connId)}/preview/tar`, {
       bucket,
       key,
       limit:  opts.limit  != null ? String(opts.limit)  : undefined,
@@ -233,17 +235,17 @@ export const api = {
   },
 
   textPreviewUrl: (connId: string, bucket: string, key: string): string =>
-    buildUrl(`/api/storage/${encodeURIComponent(connId)}/preview/text`, { bucket, key }),
+    buildUrl(`${API_BASE}/storage/${encodeURIComponent(connId)}/preview/text`, { bucket, key }),
 
   imageUrl: (connId: string, bucket: string, key: string): string =>
-    buildUrl(`/api/storage/${encodeURIComponent(connId)}/preview/image`, { bucket, key }),
+    buildUrl(`${API_BASE}/storage/${encodeURIComponent(connId)}/preview/image`, { bucket, key }),
 
   audioUrl: (connId: string, bucket: string, key: string): string =>
-    buildUrl(`/api/storage/${encodeURIComponent(connId)}/preview/audio`, { bucket, key }),
+    buildUrl(`${API_BASE}/storage/${encodeURIComponent(connId)}/preview/audio`, { bucket, key }),
 
   // URL form for `<img src>` / `<audio src>` to a single tar entry's body.
   tarEntryUrl: (connId: string, bucket: string, key: string, entry: string): string =>
-    buildUrl(`/api/storage/${encodeURIComponent(connId)}/preview/tar-entry`, { bucket, key, entry }),
+    buildUrl(`${API_BASE}/storage/${encodeURIComponent(connId)}/preview/tar-entry`, { bucket, key, entry }),
 
   // Fetch the entry body as text. Throws on 4xx/5xx (entry not found, etc.).
   tarEntryText: async (
@@ -262,11 +264,11 @@ export const api = {
   },
 
   favorites: (connId: string) =>
-    getJson(`/api/storage/${encodeURIComponent(connId)}/favorites`, FavoriteBuckets),
+    getJson(`${API_BASE}/storage/${encodeURIComponent(connId)}/favorites`, FavoriteBuckets),
 
   addFavorite: async (connId: string, bucket: string): Promise<void> => {
     const res = await fetch(
-      `/api/storage/${encodeURIComponent(connId)}/favorites/${encodeURIComponent(bucket)}`,
+      `${API_BASE}/storage/${encodeURIComponent(connId)}/favorites/${encodeURIComponent(bucket)}`,
       { method: 'PUT' },
     )
     if (!res.ok) throw new Error(res.statusText)
@@ -274,7 +276,7 @@ export const api = {
 
   removeFavorite: async (connId: string, bucket: string): Promise<void> => {
     const res = await fetch(
-      `/api/storage/${encodeURIComponent(connId)}/favorites/${encodeURIComponent(bucket)}`,
+      `${API_BASE}/storage/${encodeURIComponent(connId)}/favorites/${encodeURIComponent(bucket)}`,
       { method: 'DELETE' },
     )
     if (!res.ok) throw new Error(res.statusText)

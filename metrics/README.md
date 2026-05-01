@@ -2,7 +2,7 @@
 
 Per-host Python scripts that run on a target machine (via cron), capture
 the relevant command output, and push it to the dashboard's
-`/api/metrics/push` endpoint.
+`/api/external/metrics/push` endpoint.
 
 ```
 metrics/
@@ -24,7 +24,9 @@ scp -r metrics you@example.host:~/web-dashboard/metrics/
 ## Run once
 
 ```sh
-DASHBOARD_URL=http://dashboard.lan:3000 \
+# prod: nginx が port 80 で公開 (デフォルト)
+# dev:  vite dev server が port 5173 (http://dashboard.lan:5173)
+DASHBOARD_URL=http://dashboard.lan \
 WRITE_TOKEN=xxxxxxxx \
   python3 ~/web-dashboard/metrics/example.py
 ```
@@ -37,7 +39,7 @@ stderr (cron's `MAILTO` will pick it up).
 In the target host's crontab:
 
 ```cron
-*/5 * * * * DASHBOARD_URL=http://dashboard.lan:3000 WRITE_TOKEN=xxx /home/me/web-dashboard/metrics/example.py
+*/5 * * * * DASHBOARD_URL=http://dashboard.lan WRITE_TOKEN=xxx /home/me/web-dashboard/metrics/example.py
 ```
 
 ## Categories

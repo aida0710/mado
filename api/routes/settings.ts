@@ -19,7 +19,7 @@ interface FlagRow {
 }
 
 export function mountSettingsRoutes(app: Hono, deps: SettingsDeps): void {
-  app.get('/api/settings/flags', async c => {
+  app.get('/settings/flags', async c => {
     const r = await deps.pools.ro.query<FlagRow>(
       `SELECT name, enabled FROM feature_flags ORDER BY name`,
     )
@@ -28,7 +28,7 @@ export function mountSettingsRoutes(app: Hono, deps: SettingsDeps): void {
     return c.json(map)
   })
 
-  app.put('/api/settings/flags/:name', async c => {
+  app.put('/settings/flags/:name', async c => {
     const name = c.req.param('name')
     const parsed = PutBody.safeParse(await c.req.json().catch(() => null))
     if (!parsed.success) return c.json({ error: parsed.error.message }, 400)
