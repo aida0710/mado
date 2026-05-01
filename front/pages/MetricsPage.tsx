@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { api } from '../api/client'
-import type { Metric } from '../api/types'
+import { api } from '../lib/api/client'
+import type { Metric } from '../lib/api/types'
 import { MetricCard } from '../components/MetricCard'
+import { MetricsHelpModal } from '../components/MetricsHelpModal'
 import { isEnabled, useFlags } from '../lib/flagsContext'
 
 function formatTime(d: Date): string {
@@ -16,6 +17,7 @@ export default function MetricsPage() {
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [fetchedAt, setFetchedAt] = useState<Date | null>(null)
+  const [helpOpen, setHelpOpen] = useState(false)
 
   const refresh = useCallback(() => {
     setLoading(true)
@@ -36,7 +38,7 @@ export default function MetricsPage() {
   if (flags && !enabled) {
     return (
       <div className="empty-state">
-        <h2>メトリクスは無効になっています</h2>
+        <h2>Metrics is disabled</h2>
         <p className="text-ink-7">設定ページから有効化できます。</p>
         <Link className="empty-state__cta" to="/connections">設定を開く</Link>
       </div>
@@ -57,7 +59,7 @@ export default function MetricsPage() {
   return (
     <section>
       <header className="page-head">
-        <h2>メトリクス</h2>
+        <h2>Metrics</h2>
         <button className="ghost" onClick={refresh} disabled={loading}>
           {loading ? '...' : 'refresh'}
         </button>
@@ -65,6 +67,14 @@ export default function MetricsPage() {
         {fetchedAt && (
           <span className="text-ink-7">最終更新 {formatTime(fetchedAt)}</span>
         )}
+        <button
+          type="button"
+          className="ghost ml-auto"
+          onClick={() => setHelpOpen(true)}
+          aria-label="ヘルプを開く"
+        >
+          ?
+        </button>
       </header>
       {error && <p className="error">{error}</p>}
       {!loading && !error && metrics.length === 0 && (
@@ -84,6 +94,7 @@ export default function MetricsPage() {
           </div>
         </section>
       ))}
+      {helpOpen && <MetricsHelpModal onClose={() => setHelpOpen(false)} />}
     </section>
   )
 }
