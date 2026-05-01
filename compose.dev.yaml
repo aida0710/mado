@@ -1,0 +1,67 @@
+# compose.dev.yaml
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: web-dashboard-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: dashboard
+      DASHBOARD_PASSWORD: CHANGEME
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+      - ./db/migrations:/migrations:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d dashboard"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api-internal:
+    build: ./api
+    container_name: web-dashboard-api-internal
+    command: ["npx", "tsx", "watch", "internal.ts"]
+    env_file:
+      - .env
+    environment:
+      PORT: 3000
+    volumes:
+      - ./api:/app
+      - /app/node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api-external:
+    build: ./api
+    container_name: web-dashboard-api-external
+    command: ["npx", "tsx", "watch", "external.ts"]
+    env_file:
+      - .env
+    environment:
+      PORT: 3001
+    volumes:
+      - ./api:/app
+      - /app/node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  front:
+    build: ./front
+    container_name: web-dashboard-front
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./front:/app
+      - /app/node_modules
+    depends_on:
+      - api-internal
+      - api-external
+
+volumes:
+  db_data:
