@@ -133,7 +133,6 @@ web-dashboard/
 - **マウント**: 全 routes を `/api/internal/*` 配下に
   - `/api/internal/metrics` (read)
   - `/api/internal/sql/write` (要 `WRITE_TOKEN`)
-  - `/api/internal/sql/read`
   - `/api/internal/storage/list/...`
   - `/api/internal/storage/readme`
   - `/api/internal/storage/preview/...`
@@ -212,6 +211,16 @@ server: {
 
 ### Hono の mount 方法
 
+**ルートハンドラの内部パスを相対化する** (mount 関数側の変更):
+
+- 現状: `api/routes/metrics.ts` で `app.post('/api/metrics/push', ...)` のように **絶対パス** をハードコード
+- 新: ルートハンドラは prefix を付けない相対パス (`/metrics/push`, `/metrics`, `/sql/write`, `/storage/list/...`, etc.) で `app.post(...)` を呼ぶ
+- 最終 prefix は entry 側で `app.route('/api/internal', subapp)` / `app.route('/api/external', subapp)` を呼ぶことで一括で付ける
+
+これにより:
+- テストは sub-app を `/` に mount したまま prefix なしの相対パス (`/metrics` etc.) を直叩きできる
+- Hono のルート文字列が外部 URL 仕様と切り離される (URL prefix の方針変更が起きてもルートハンドラ側は無修正で済む)
+
 ```typescript
 // api/internal.ts (概形)
 const env = loadEnv()
@@ -263,7 +272,6 @@ serve({ fetch: app.fetch, port: 3001 }, ...)
 | `GET /api/metrics` | `GET /api/internal/metrics` |
 | `POST /api/metrics/push` | **`POST /api/external/metrics/push`** |
 | `POST /sql/write` | `POST /api/internal/sql/write` |
-| `POST /sql/read` | `POST /api/internal/sql/read` |
 | `GET /api/storage/list/...` | `GET /api/internal/storage/list/...` |
 | `GET /api/storage/readme` | `GET /api/internal/storage/readme` |
 | `PUT /api/storage/readme` | `PUT /api/internal/storage/readme` |
@@ -303,6 +311,7 @@ serve({ fetch: app.fetch, port: 3001 }, ...)
 
 ### 修正
 
+- **`api/routes/*.ts` 全部** — ハードコードされた絶対パス (`/api/metrics`, `/sql/write`, etc.) を **相対パス** (`/metrics`, `/sql/write`, etc.) に書き換え。entry 側の `app.route(prefix, subapp)` で prefix を付ける方式へ統一
 - **`api/routes/metrics.ts`** — `mountMetricsRoutes` を **`mountMetricsReadRoutes`** (internal) と **`mountMetricsPushRoutes`** (external) に分割
 - **`api/package.json`** — scripts を `dev:internal` / `dev:external` / `start:internal` / `start:external` / `build` / `test` / `test:watch` に
 - **`front/vite.config.ts`** — proxy ターゲットを `http://api-internal:3000` / `http://api-external:3001` に
@@ -377,11 +386,8 @@ P1+P3 完了時に**コードベース外で必要になる作業**:
 
 ## 次セッション
 
-本 spec が承認され次第、`superpowers:writing-plans` で実装プランを作成する。プラン作成時の追加検討事項:
+本 spec が承認され次第、`superpowers:writing-plans` で実装プランを作成する。プラン作成時の追加検討事項 (本 spec で決定済みの方針に枝葉として乗る、実装段階の選択):
 
-- `lzma-native` の Dockerfile 内ビルド (Alpine では build-essential が必要、Debian slim ベースに切り替えるかどうか)
-- compose の `env_file` 経路 (`.env` をプロジェクトルートに置き、両 api サービスが共有する)
-- IDE (PhpStorm) からの補完用に host 側で `npm install` を別途回すルール
-- `vite.config.ts` の proxy ターゲットを env 変数化するか (現状は compose ネットワーク内の hostname を hard-code する想定)
-- nginx image の build 戦略 (front を nginx image に焼く vs バインドマウントで dist を渡す)
-- front / api 各サブディレクトリでの eslint 設定の最小構成
+- `lzma-native` の Dockerfile 内ビルドのための base image 選択 (Alpine + build deps か、Debian slim か)
+- compose の `env_file` 経路 (プロジェクトルートの `.env` を api-internal と api-external で共有)
+- front / api 各サブディレクトリでの最小限の eslint 設定構成
