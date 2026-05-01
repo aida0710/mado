@@ -4,7 +4,7 @@ set -euo pipefail
 # Runs once on first container creation. Re-running requires deleting the
 # named volume `db_data`.
 
-PASSWORD="${DASHBOARD_PASSWORD:?DASHBOARD_PASSWORD must be set in compose.yml}"
+PASSWORD="${DASHBOARD_PASSWORD:?DASHBOARD_PASSWORD must be set in compose.dev.yaml or compose.prod.yaml}"
 
 # Roles + the test DB. The default `dashboard` DB was created from POSTGRES_DB.
 psql -v ON_ERROR_STOP=1 --username "postgres" <<-EOSQL
