@@ -26,7 +26,7 @@ export function PreviewDrawer({ connId, bucket, k, onClose }: Props) {
         {kind === 'audio' && <PreviewAudio connId={connId} bucket={bucket} k={k} />}
         {kind === 'archive' && <PreviewArchive connId={connId} bucket={bucket} k={k} />}
         {kind === 'unknown' && (
-          <p className="muted">
+          <p className="text-ink-7">
             プレビュー非対応のファイル種別です。
           </p>
         )}

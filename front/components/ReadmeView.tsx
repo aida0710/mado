@@ -25,19 +25,22 @@ export function ReadmeView({ connId, bucket, prefix }: Props) {
 
   if (!data) return null
   return (
-    <section className="readme" data-color-mode="light">
-      <header className="readme__head">
-        <h3>README</h3>
+    <section
+      className="mb-6 border-b border-ink-2 pb-4"
+      data-color-mode="light"
+    >
+      <header className="flex flex-wrap items-center gap-3">
+        <h3 className="m-0 text-sm font-semibold">README</h3>
         <button className="ghost" onClick={() => setEditing(true)}>
           {data.exists ? '✎ edit' : '✎ create'}
         </button>
         {data.exists && data.last_editor && (
-          <span className="muted">last by {data.last_editor}</span>
+          <span className="text-ink-7">last by {data.last_editor}</span>
         )}
       </header>
       {data.exists
-        ? <div className="readme__body"><MDEditor.Markdown source={data.body} /></div>
-        : <p className="muted">README なし</p>}
+        ? <div className="mt-2"><MDEditor.Markdown source={data.body} /></div>
+        : <p className="text-ink-7">README なし</p>}
       {editing && (
         <MarkdownEditor
           title={`Edit README — ${prefix || '(root)'}`}

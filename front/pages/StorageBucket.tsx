@@ -16,7 +16,7 @@ export default function StorageBucket({ connId }: Props) {
   return (
     <section className="storage-bucket">
       <div className="storage-main">
-        <div className="storage-bucket__head">
+        <div className="flex items-center justify-between gap-3">
           <Breadcrumb connId={connId} bucket={bucket} prefix={prefix} />
           <ConnectionSwitcher />
         </div>

@@ -11,6 +11,12 @@ type Entry = Resp['entries'][number]
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const
 const DEFAULT_PAGE_SIZE = 10
 
+const tableCellClass = 'px-2 py-1 border-b border-ink-1'
+const rowClass = 'cursor-pointer transition-colors hover:bg-ink-0 focus-visible:bg-ink-1'
+const pagerBtnClass =
+  'cursor-pointer rounded-2 border border-ink-3 bg-paper px-3 py-1 transition-colors ' +
+  'hover:bg-ink-1 hover:border-ink-5 disabled:cursor-default disabled:opacity-40'
+
 export function PreviewArchive({ connId, bucket, k }: { connId: string; bucket: string; k: string }) {
   const [openedEntry, setOpenedEntry] = useState<Entry | null>(null)
   const [data, setData] = useState<Resp | null>(null)
@@ -71,9 +77,10 @@ export function PreviewArchive({ connId, bucket, k }: { connId: string; bucket: 
   }, [data, error])
 
   const sizeSelect = (
-    <label className="archive-pagesize">
-      <span className="muted--small">表示件数</span>
+    <label className="flex items-center gap-2">
+      <span className="text-xs text-ink-7">表示件数</span>
       <select
+        className="cursor-pointer rounded-2 border border-ink-3 bg-paper px-2 py-1 disabled:cursor-default disabled:opacity-50"
         value={pageSize}
         onChange={e => setPageSize(Number(e.target.value))}
         disabled={loading}
@@ -93,21 +100,21 @@ export function PreviewArchive({ connId, bucket, k }: { connId: string; bucket: 
       : 'connecting'
     return (
       <div>
-        <div className="archive-toolbar">{sizeSelect}</div>
-        <p className="muted">
+        <div className="mb-2 flex items-center justify-between">{sizeSelect}</div>
+        <p className="text-ink-7">
           <span>{modeLabel}…</span>{' '}
-          <span className="tabular">{progress.entries}</span>
+          <span className="tabular-nums">{progress.entries}</span>
           {' 件 · '}
-          <span className="tabular">{fmtSize(progress.bytes)}</span>
+          <span className="tabular-nums">{fmtSize(progress.bytes)}</span>
           {progress.requests > 0 && (
             <>
               {' · '}
-              <span className="tabular">{progress.requests}</span>
+              <span className="tabular-nums">{progress.requests}</span>
               {' req'}
             </>
           )}
           {' · '}
-          <span className="tabular">{progress.elapsed.toFixed(1)}</span>
+          <span className="tabular-nums">{progress.elapsed.toFixed(1)}</span>
           {'s'}
         </p>
       </div>
@@ -120,19 +127,24 @@ export function PreviewArchive({ connId, bucket, k }: { connId: string; bucket: 
 
   return (
     <div>
-      <div className="archive-toolbar">{sizeSelect}</div>
+      <div className="mb-2 flex items-center justify-between">{sizeSelect}</div>
       {data.truncated && (
-        <p className="muted">
+        <p className="text-ink-7">
           バイト上限に到達しました。これ以降は読み込めません。
         </p>
       )}
-      <table className="archive-list">
-        <thead><tr><th>Name</th><th>Size</th></tr></thead>
+      <table className="w-full border-collapse text-[13px]">
+        <thead>
+          <tr>
+            <th className="border-b border-ink-2 px-2 py-2 text-left text-[11px] font-medium uppercase tracking-[0.06em] text-ink-7">Name</th>
+            <th className="w-px whitespace-nowrap border-b border-ink-2 px-2 py-2 text-right text-[11px] font-medium uppercase tracking-[0.06em] text-ink-7">Size</th>
+          </tr>
+        </thead>
         <tbody>
           {data.entries.map(e => (
             <tr
               key={e.name}
-              className="archive-row"
+              className={rowClass}
               role="button"
               tabIndex={0}
               onClick={() => setOpenedEntry(e)}
@@ -143,14 +155,17 @@ export function PreviewArchive({ connId, bucket, k }: { connId: string; bucket: 
                 }
               }}
             >
-              <td>{e.name}</td>
-              <td>{fmtSize(e.size)}</td>
+              <td className={tableCellClass}>{e.name}</td>
+              <td className={`${tableCellClass} w-px whitespace-nowrap text-right text-ink-7 tabular-nums`}>
+                {fmtSize(e.size)}
+              </td>
             </tr>
           ))}
         </tbody>
       </table>
-      <div className="pager">
+      <div className="flex items-center justify-center gap-3 py-3 tabular-nums">
         <button
+          className={pagerBtnClass}
           onClick={() => setOffset(Math.max(0, offset - pageSize))}
           disabled={offset === 0 || loading}
         >← Prev</button>
@@ -162,6 +177,7 @@ export function PreviewArchive({ connId, bucket, k }: { connId: string; bucket: 
           {data.hasMore || data.truncated ? '+' : ''}
         </span>
         <button
+          className={pagerBtnClass}
           onClick={() => setOffset(offset + pageSize)}
           disabled={data.truncated || loading || data.entries.length === 0}
         >Next →</button>

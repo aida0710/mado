@@ -13,36 +13,50 @@ function parentPath(connId: string, bucket: string, prefix: string): string {
   return `/storage/${connId}/${encodeURIComponent(bucket)}/${parentPrefix}`
 }
 
+const linkClass =
+  'text-ink-11 no-underline px-1 py-[2px] rounded-1 hover:bg-ink-1'
+const sepClass = 'text-ink-3 px-[2px]'
+
 export function Breadcrumb({
   connId, bucket, prefix,
 }: { connId: string; bucket: string; prefix: string }) {
   const connection = useConnection()
   const segments = prefix.split('/').filter(Boolean)
   return (
-    <nav className="breadcrumb">
+    <nav className="flex flex-wrap items-center gap-1 my-2 text-sm">
       <Link
-        className="breadcrumb__back"
+        className="inline-flex h-7 w-7 items-center justify-center rounded-2 border border-ink-3 bg-paper text-ink-9 no-underline hover:bg-ink-1 hover:border-ink-5 transition-colors"
         to={parentPath(connId, bucket, prefix)}
         aria-label="親階層へ"
         title="親階層へ"
       >
         ←
       </Link>
-      <Link to={`/storage/${connId}/`}>{connection.name}</Link>
-      <span className="breadcrumb__sep">/</span>
-      <Link to={`/storage/${connId}/${encodeURIComponent(bucket)}/`}>{bucket}</Link>
+      <Link className={linkClass} to={`/storage/${connId}/`}>
+        {connection.name}
+      </Link>
+      <span className={sepClass}>/</span>
+      <Link
+        className={linkClass}
+        to={`/storage/${connId}/${encodeURIComponent(bucket)}/`}
+      >
+        {bucket}
+      </Link>
       {segments.map((seg, i) => {
         const subPrefix = segments.slice(0, i + 1).join('/') + '/'
         return (
-          <span key={subPrefix}>
-            <span className="breadcrumb__sep">/</span>
-            <Link to={`/storage/${connId}/${encodeURIComponent(bucket)}/${subPrefix}`}>
+          <span key={subPrefix} className="contents">
+            <span className={sepClass}>/</span>
+            <Link
+              className={linkClass}
+              to={`/storage/${connId}/${encodeURIComponent(bucket)}/${subPrefix}`}
+            >
               {seg}
             </Link>
           </span>
         )
       })}
-      {prefix && <span className="breadcrumb__sep">/</span>}
+      {prefix && <span className={sepClass}>/</span>}
     </nav>
   )
 }

@@ -1,32 +1,26 @@
+@import "tailwindcss";
+@plugin "@tailwindcss/typography";
+
 /* ---------------------------------------------------------------------- */
-/*  Design tokens                                                         */
+/*  Design tokens — Tailwind v4 @theme generates utilities (bg-ink-12,    */
+/*  rounded-3, font-mono, ...) from these names. Spacing follows          */
+/*  Tailwind's default 4px base, so p-3 = 12px.                           */
 /* ---------------------------------------------------------------------- */
 
-:root {
-  color-scheme: light;
-
+@theme {
   /* Monochrome ink scale. Higher = darker. */
-  --ink-12: #0a0a0a;
-  --ink-11: #1a1a1a;
-  --ink-9:  #444;
-  --ink-7:  #6b6b6b;
-  --ink-5:  #9a9a9a;
-  --ink-3:  #cfcfcf;
-  --ink-2:  #e6e6e6;
-  --ink-1:  #f1f1f1;
-  --ink-0:  #fafafa;
-  --paper:  #fff;
-
-  --accent: var(--ink-12);            /* black-on-white */
-  --danger: #b00020;
-  --ring:   color-mix(in srgb, var(--ink-12) 35%, transparent);
-
-  --space-1: 4px;
-  --space-2: 8px;
-  --space-3: 12px;
-  --space-4: 16px;
-  --space-5: 24px;
-  --space-6: 32px;
+  --color-ink-0:  #fafafa;
+  --color-ink-1:  #f1f1f1;
+  --color-ink-2:  #e6e6e6;
+  --color-ink-3:  #cfcfcf;
+  --color-ink-5:  #9a9a9a;
+  --color-ink-7:  #6b6b6b;
+  --color-ink-9:  #444;
+  --color-ink-11: #1a1a1a;
+  --color-ink-12: #0a0a0a;
+  --color-paper:  #fff;
+  --color-accent: #0a0a0a;
+  --color-danger: #b00020;
 
   --radius-1: 4px;
   --radius-2: 6px;
@@ -40,9 +34,40 @@
   --font-mono:
     ui-monospace, SFMono-Regular, "SF Mono", Menlo,
     Consolas, "Liberation Mono", monospace;
+}
+
+/* Legacy aliases — let the remaining named-class CSS (modals, drawer, ...)
+   keep referencing --ink-*, --space-*, etc. without rewriting them. */
+:root {
+  color-scheme: light;
+
+  --ink-0:  var(--color-ink-0);
+  --ink-1:  var(--color-ink-1);
+  --ink-2:  var(--color-ink-2);
+  --ink-3:  var(--color-ink-3);
+  --ink-5:  var(--color-ink-5);
+  --ink-7:  var(--color-ink-7);
+  --ink-9:  var(--color-ink-9);
+  --ink-11: var(--color-ink-11);
+  --ink-12: var(--color-ink-12);
+  --paper:  var(--color-paper);
+  --accent: var(--color-accent);
+  --danger: var(--color-danger);
+  --ring:   color-mix(in srgb, var(--color-ink-12) 35%, transparent);
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
 
   --transition-fast: 120ms ease;
 }
+
+/* ---------------------------------------------------------------------- */
+/*  Global resets                                                         */
+/* ---------------------------------------------------------------------- */
 
 * { box-sizing: border-box; }
 html, body, #root { margin: 0; height: 100%; }
@@ -63,54 +88,20 @@ body {
   border-radius: var(--radius-2);
 }
 
-/* Numeric columns/comparisons should not jitter. */
-.tabular { font-variant-numeric: tabular-nums; }
-
 @media (prefers-reduced-motion: reduce) {
   * { transition-duration: 0.001ms !important; animation-duration: 0.001ms !important; }
 }
 
-/* ---------------------------------------------------------------------- */
-/*  Layout                                                                */
-/* ---------------------------------------------------------------------- */
-
-.app {
-  max-width: 1100px;
-  margin: 0 auto;
-  padding: 0 var(--space-4);
-}
-
-.topbar {
-  display: flex;
-  align-items: baseline;
-  gap: var(--space-4);
-  padding: var(--space-4) 0;
-  border-bottom: 1px solid var(--ink-2);
-}
-.brand { margin: 0; font-size: 18px; font-weight: 600; letter-spacing: -0.01em; }
-
-.tabs { display: flex; gap: var(--space-1); align-items: stretch; }
-.tab {
-  display: inline-flex;
-  align-items: center;
-  height: 32px;
-  padding: 0 var(--space-3);
-  border-radius: var(--radius-2);
-  text-decoration: none;
-  color: var(--ink-9);
-  font-weight: 500;
-  line-height: 1;
-  transition: background var(--transition-fast), color var(--transition-fast);
-}
-.tab:hover { background: var(--ink-1); color: var(--ink-11); }
-.tab.active { background: var(--ink-12); color: var(--paper); }
-
-.main { padding: var(--space-4) 0 var(--space-6); }
+pre { font-family: var(--font-mono); font-size: 12px; }
 
 /* ---------------------------------------------------------------------- */
-/*  Page heading row                                                      */
+/*  Typography helpers used as named classes (small surface, kept verbatim
+/*  to avoid the noise of sprinkling utility chains everywhere).
 /* ---------------------------------------------------------------------- */
 
+.error { color: var(--danger); margin: var(--space-2) 0; }
+
+/* Page heading row used by every top-level page. */
 .page-head {
   display: flex;
   align-items: baseline;
@@ -126,12 +117,8 @@ body {
   text-wrap: balance;
 }
 
-.error { color: var(--danger); margin: var(--space-2) 0; }
-.muted { color: var(--ink-7); }
-.muted--small { color: var(--ink-7); font-size: 12px; }
-
 /* ---------------------------------------------------------------------- */
-/*  Buttons                                                               */
+/*  Buttons — .ghost is the everywhere monochrome outline button.
 /* ---------------------------------------------------------------------- */
 
 .ghost {
@@ -149,113 +136,20 @@ body {
 .ghost:active:not(:disabled) { background: var(--ink-2); }
 .ghost:disabled { opacity: 0.45; cursor: default; }
 
-/* ---------------------------------------------------------------------- */
-/*  Metrics page                                                          */
-/* ---------------------------------------------------------------------- */
-
-pre { font-family: var(--font-mono); font-size: 12px; }
-
-.metric-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
-  gap: var(--space-3);
+/* Subtle "danger" variant of .ghost — used for the Delete button on a
+   connection row. Border tints red, hover deepens the tint. */
+.conn-row__danger {
+  border-color: color-mix(in srgb, var(--danger) 35%, var(--ink-3));
 }
-
-.metric-card {
-  border: 1px solid var(--ink-2);
-  border-radius: var(--radius-3);
-  background: var(--paper);
-  overflow: hidden;
-  transition: border-color var(--transition-fast);
-}
-.metric-card:hover { border-color: var(--ink-3); }
-
-.metric-card__head {
-  display: flex;
-  gap: var(--space-2);
-  align-items: baseline;
-  padding: var(--space-2) var(--space-3);
-  border-bottom: 1px solid var(--ink-2);
-  min-width: 0;
-}
-.metric-card__host {
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.metric-card__cmd {
-  color: var(--ink-7);
-  font-family: var(--font-mono);
-  font-size: 12px;
-}
-.metric-card__time {
-  margin-left: auto;
-  color: var(--ink-7);
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-.metric-card__body {
-  margin: 0;
-  padding: var(--space-2) var(--space-3);
-  background: var(--ink-0);
-  max-height: 240px;
-  overflow: auto;
-  white-space: pre;
-  font-variant-numeric: tabular-nums;
-}
-
-.metric-category { margin: var(--space-5) 0 0; }
-.metric-category__title {
-  margin: 0 0 var(--space-2);
-  font-size: 12px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--ink-7);
+.conn-row__danger:hover:not(:disabled) {
+  color: var(--danger);
+  border-color: var(--danger);
 }
 
 /* ---------------------------------------------------------------------- */
-/*  Storage — bucket index                                                */
+/*  Storage bucket index — custom checkbox (drawn as monochrome square).
 /* ---------------------------------------------------------------------- */
 
-.bucket-section {
-  margin: var(--space-5) 0 var(--space-2);
-  font-size: 12px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--ink-7);
-}
-.bucket-section:first-of-type { margin-top: 0; }
-
-.bucket-list { list-style: none; padding: 0; margin: 0; }
-.bucket-list li {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2) 0;
-  border-bottom: 1px solid var(--ink-1);
-  min-width: 0;
-}
-.bucket-list a {
-  color: var(--ink-11);
-  text-decoration: none;
-  font-weight: 500;
-  letter-spacing: -0.005em;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  flex: 1;
-  min-width: 0;
-}
-.bucket-list a:hover { text-decoration: underline; }
-
-/* In-use checkbox on each bucket row. Native checkbox styled to match
-   the monochrome scale; large hit target so the user doesn't have to
-   aim. */
 .use-toggle {
   display: inline-flex;
   align-items: center;
@@ -282,7 +176,6 @@ pre { font-family: var(--font-mono); font-size: 12px; }
   background: var(--ink-12);
   border-color: var(--ink-12);
 }
-/* Tick mark — drawn with a clipped CSS background to avoid inline SVG. */
 .use-toggle input[type="checkbox"]:checked::after {
   content: "";
   display: block;
@@ -295,165 +188,81 @@ pre { font-family: var(--font-mono); font-size: 12px; }
 }
 
 /* ---------------------------------------------------------------------- */
-/*  Storage — bucket / prefix browser                                     */
+/*  Bucket page grid — main + optional preview drawer (right side).
 /* ---------------------------------------------------------------------- */
 
-.breadcrumb {
-  padding: var(--space-2) 0 var(--space-3);
-  font-size: 14px;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-1);
+.storage-bucket {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-4);
 }
-.breadcrumb a {
-  color: var(--ink-11);
-  text-decoration: none;
-  padding: 2px 4px;
-  border-radius: var(--radius-1);
+@media (min-width: 980px) {
+  .storage-bucket:has(.drawer) { grid-template-columns: 1fr 380px; }
 }
-.breadcrumb a:hover { background: var(--ink-1); }
-.breadcrumb__sep { color: var(--ink-3); padding: 0 2px; }
-.breadcrumb__back {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  margin-right: var(--space-1);
-  border: 1px solid var(--ink-3);
-  border-radius: var(--radius-2);
+
+.drawer {
+  border: 1px solid var(--ink-2);
+  border-radius: var(--radius-3);
   background: var(--paper);
-  color: var(--ink-11);
-  cursor: pointer;
-  text-decoration: none;
-  font: inherit;
-  font-size: 14px;
-  line-height: 1;
-  transition: background var(--transition-fast), border-color var(--transition-fast);
+  padding: var(--space-3);
+  position: sticky;
+  top: var(--space-3);
+  align-self: start;
+  max-height: calc(100vh - var(--space-6));
+  overflow: auto;
 }
-.breadcrumb__back:hover {
-  background: var(--ink-1);
-  border-color: var(--ink-5);
-  text-decoration: none;
-}
-
-.storage-list {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
-}
-.storage-list thead th {
-  text-align: left;
-  padding: var(--space-2) var(--space-2);
-  border-bottom: 1px solid var(--ink-2);
-  color: var(--ink-7);
-  font-weight: 500;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
-.storage-list td {
-  padding: var(--space-2);
-  border-bottom: 1px solid var(--ink-1);
-}
-.storage-list .col-size,
-.storage-list .col-modified {
-  font-variant-numeric: tabular-nums;
-  color: var(--ink-7);
-  white-space: nowrap;
-  width: 1%;
-}
-.storage-row { cursor: pointer; transition: background var(--transition-fast); }
-.storage-row:hover { background: var(--ink-0); }
-.storage-row:focus-visible { background: var(--ink-1); }
-.storage-row.dir td:first-child { font-weight: 600; }
-.storage-list td:first-child {
-  max-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.pager {
+.drawer__head {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-3) 0;
-  justify-content: center;
-  font-variant-numeric: tabular-nums;
-}
-.pager button {
-  padding: 4px 12px;
-  border: 1px solid var(--ink-3);
-  border-radius: var(--radius-2);
-  background: var(--paper);
-  cursor: pointer;
-  font: inherit;
-  transition: background var(--transition-fast), border-color var(--transition-fast);
-}
-.pager button:hover:not(:disabled) { background: var(--ink-1); border-color: var(--ink-5); }
-.pager button:disabled { opacity: 0.4; cursor: default; }
-
-/* ---------------------------------------------------------------------- */
-/*  README                                                                */
-/* ---------------------------------------------------------------------- */
-
-.readme {
-  margin-bottom: var(--space-5);
-  padding-bottom: var(--space-4);
+  gap: var(--space-2);
+  padding-bottom: var(--space-2);
   border-bottom: 1px solid var(--ink-2);
 }
-.readme__head { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
-.readme__head h3 { margin: 0; font-size: 14px; font-weight: 600; }
-.readme__body {
-  margin: var(--space-2) 0 0;
+.drawer__title {
+  flex: 1;
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  word-break: break-all;
 }
+.drawer__body { padding-top: var(--space-2); }
 
 /* ---------------------------------------------------------------------- */
-/*  Modal                                                                 */
+/*  Modal — the dialog/overlay system shared by every form modal.
+/*  Kept as named component classes (vs scattered utilities) because the
+/*  parts are tightly coordinated and used together everywhere.
 /* ---------------------------------------------------------------------- */
 
 .modal-backdrop {
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.45);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display: grid;
+  place-items: center;
   z-index: 50;
-  padding: var(--space-4);
-  animation: fade-in var(--transition-fast);
+  padding: var(--space-3);
 }
 .modal {
+  width: min(560px, 100%);
+  max-width: 560px;
   background: var(--paper);
+  border-radius: var(--radius-3);
   padding: var(--space-4) var(--space-5);
-  border-radius: var(--radius-4);
-  width: min(720px, 100%);
-  max-height: 90vh;
+  border: 1px solid var(--ink-3);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
+  max-height: calc(100vh - var(--space-6));
   overflow: auto;
-  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.18);
-  overscroll-behavior: contain;
-  animation: pop-in var(--transition-fast);
 }
-@keyframes fade-in { from { opacity: 0 } to { opacity: 1 } }
-@keyframes pop-in {
-  from { opacity: 0; transform: translateY(4px) scale(0.99) }
-  to   { opacity: 1; transform: translateY(0) scale(1) }
-}
-.modal h3 {
-  margin: 0 0 var(--space-3);
-  font-size: 16px;
-  font-weight: 600;
-  text-wrap: balance;
-}
+.modal h3 { margin: 0 0 var(--space-3); font-size: 16px; font-weight: 600; }
 .modal label { display: block; margin: var(--space-3) 0; }
 .modal label .label {
   display: block;
+  margin-bottom: 6px;
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--ink-9);
-  padding-bottom: var(--space-1);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
 }
 .modal textarea,
 .modal input {
@@ -464,7 +273,6 @@ pre { font-family: var(--font-mono); font-size: 12px; }
   font: inherit;
   background: var(--paper);
   color: var(--ink-11);
-  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 .modal textarea:focus,
 .modal input:focus {
@@ -481,13 +289,11 @@ pre { font-family: var(--font-mono); font-size: 12px; }
 }
 .modal-actions button {
   padding: var(--space-2) var(--space-4);
-  border-radius: var(--radius-2);
   border: 1px solid var(--ink-3);
+  border-radius: var(--radius-2);
   background: var(--paper);
-  color: var(--ink-11);
   cursor: pointer;
   font: inherit;
-  font-weight: 500;
   transition: background var(--transition-fast), border-color var(--transition-fast);
 }
 .modal-actions button:hover:not(:disabled) { background: var(--ink-1); border-color: var(--ink-5); }
@@ -502,270 +308,21 @@ pre { font-family: var(--font-mono); font-size: 12px; }
 }
 .modal-actions button:disabled { opacity: 0.45; cursor: default; }
 
-/* ---------------------------------------------------------------------- */
-/*  Bucket page (browser + drawer)                                        */
-/* ---------------------------------------------------------------------- */
-
-.storage-bucket {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: var(--space-4);
-  align-items: start;
+/* Modifiers */
+.modal--narrow {
+  width: min(420px, 100%);
+  max-width: 420px;
 }
-@media (min-width: 1100px) {
-  .storage-bucket:has(.drawer) { grid-template-columns: 1fr 380px; }
+.modal--editor {
+  width: min(880px, 100%);
+  max-width: 880px;
 }
-
-.drawer {
-  border: 1px solid var(--ink-2);
-  border-radius: var(--radius-3);
-  padding: var(--space-3);
-  background: var(--paper);
-  max-height: 80vh;
-  overflow: auto;
-  position: sticky;
-  top: var(--space-4);
-  overscroll-behavior: contain;
-}
-.drawer__head {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding-bottom: var(--space-2);
-  border-bottom: 1px solid var(--ink-2);
-}
-.drawer__title {
-  margin: 0;
-  font-size: 13px;
-  font-weight: 500;
-  word-break: break-all;
-  flex: 1;
-  min-width: 0;
-}
-.drawer__body { padding-top: var(--space-2); }
-
-.prev-text {
-  margin: 0;
-  white-space: pre-wrap;
-  font-size: 12px;
-  max-height: 60vh;
-  overflow: auto;
-  background: var(--ink-0);
-  padding: var(--space-2);
-  border-radius: var(--radius-2);
-  line-height: 1.55;
-}
-.prev-img { max-width: 100%; height: auto; display: block; border-radius: var(--radius-2); }
-.prev-audio { width: 100%; }
-
-.archive-toolbar {
-  display: flex;
-  justify-content: flex-end;
-  padding: 0 0 var(--space-2);
-}
-.archive-pagesize {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  font-size: 12px;
-}
-.archive-pagesize select {
-  font: inherit;
-  padding: 2px 6px;
-  border: 1px solid var(--ink-3);
-  border-radius: var(--radius-1);
-  background: var(--paper);
-  color: var(--ink-11);
-  cursor: pointer;
-}
-.archive-pagesize select:disabled { opacity: 0.5; cursor: default; }
-
-.archive-list {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-}
-.archive-list thead th {
-  padding: var(--space-1) var(--space-2);
-  border-bottom: 1px solid var(--ink-2);
-  text-align: left;
-  color: var(--ink-7);
-  font-weight: 500;
-  text-transform: uppercase;
-  font-size: 10px;
-  letter-spacing: 0.06em;
-}
-.archive-list td {
-  padding: var(--space-1) var(--space-2);
-  border-bottom: 1px solid var(--ink-1);
-  text-align: left;
-}
-.archive-list td:last-child { width: 1%; white-space: nowrap; color: var(--ink-7); }
-.archive-row { cursor: pointer; transition: background var(--transition-fast); }
-.archive-row:hover { background: var(--ink-0); }
-.archive-row:focus-visible { background: var(--ink-1); }
 
 /* ---------------------------------------------------------------------- */
-/*  Layer 3: tar entry modal                                              */
-/*                                                                        */
-/*  Sits on top of the right-side preview drawer (which is layer 2). The  */
-/*  backdrop here is a touch darker and the surface is wider/elevated to  */
-/*  visually communicate that we drilled one level deeper.                */
+/*  Empty state — used as a centered call-to-action block on every page
+/*  that can be empty (no connections, metrics disabled, no notes, etc.).
 /* ---------------------------------------------------------------------- */
 
-.modal-backdrop--entry {
-  background: rgba(0, 0, 0, 0.6);
-  z-index: 80;
-}
-.modal--entry {
-  width: min(960px, 100%);
-  max-width: min(960px, calc(100vw - 32px));
-  padding: 0;
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.32);
-  border: 1px solid var(--ink-3);
-  display: flex;
-  flex-direction: column;
-}
-.modal--entry .modal__head {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-3) var(--space-4);
-  border-bottom: 1px solid var(--ink-2);
-  background: var(--ink-0);
-  border-radius: var(--radius-4) var(--radius-4) 0 0;
-}
-.modal__breadcrumb {
-  margin: 0;
-  flex: 1;
-  min-width: 0;
-  font-size: 13px;
-  word-break: break-all;
-}
-.modal--entry .modal__body {
-  padding: var(--space-4);
-  overflow: auto;
-  max-height: calc(90vh - 64px);
-}
-
-.entry-img { max-width: 100%; height: auto; display: block; margin: 0 auto; border-radius: var(--radius-2); }
-.entry-audio { width: 100%; }
-.entry-text-wrap { display: flex; flex-direction: column; gap: var(--space-2); }
-.entry-text-meta { margin: 0; }
-.entry-text {
-  margin: 0;
-  white-space: pre-wrap;
-  font-size: 12px;
-  line-height: 1.55;
-  background: var(--ink-0);
-  border: 1px solid var(--ink-2);
-  padding: var(--space-3);
-  border-radius: var(--radius-2);
-  max-height: 70vh;
-  overflow: auto;
-}
-.entry-unknown { display: flex; flex-direction: column; gap: var(--space-3); align-items: flex-start; }
-.entry-unknown a { text-decoration: none; }
-
-/* ---------------------------------------------------------------------- */
-/*  Connection management (settings page, switcher, empty states)         */
-/* ---------------------------------------------------------------------- */
-
-/* List of connections shown on the settings page and the storage landing */
-/* page. Each row is a card with a 1px border that nudges darker on hover  */
-/* to mirror the .metric-card visual language.                             */
-.connections-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-.conn-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-4);
-  padding: var(--space-3);
-  border: 1px solid var(--ink-2);
-  border-radius: var(--radius-3);
-  background: var(--paper);
-  transition: border-color var(--transition-fast);
-}
-.conn-row:hover { border-color: var(--ink-3); }
-.conn-row__meta {
-  font-size: 12px;
-  color: var(--ink-7);
-  font-family: var(--font-mono);
-  margin-top: var(--space-1);
-}
-.conn-row__actions {
-  display: flex;
-  gap: var(--space-2);
-}
-/* Modifier for .ghost. Subtle red tint on the border, fully red on hover. */
-.conn-row__danger {
-  border-color: color-mix(in srgb, var(--danger) 35%, var(--ink-3));
-}
-.conn-row__danger:hover:not(:disabled) {
-  color: var(--danger);
-  border-color: var(--danger);
-}
-
-/* Header dropdown that displays the current connection name and lets the */
-/* user jump to another connection or to the settings page.               */
-.conn-switcher {
-  position: relative;
-  display: inline-flex;
-}
-.conn-switcher__menu {
-  position: absolute;
-  top: calc(100% + 4px);
-  right: 0;
-  min-width: 220px;
-  background: var(--paper);
-  border: 1px solid var(--ink-3);
-  border-radius: var(--radius-3);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.10);
-  padding: var(--space-1) 0;
-  z-index: 30;
-}
-.conn-switcher__item {
-  display: block;
-  width: 100%;
-  text-align: left;
-  padding: var(--space-2) var(--space-3);
-  background: transparent;
-  border: none;
-  color: var(--ink-11);
-  cursor: pointer;
-  font: inherit;
-  text-decoration: none;
-  transition: background var(--transition-fast);
-}
-.conn-switcher__item:hover { background: var(--ink-1); }
-.conn-switcher__item.muted { color: var(--ink-7); cursor: default; }
-.conn-switcher__item.muted:hover { background: transparent; }
-.conn-switcher__divider {
-  height: 1px;
-  margin: var(--space-1) 0;
-  background: var(--ink-2);
-}
-
-/* Header row inside the bucket page: breadcrumb on the left, switcher    */
-/* pushed to the right edge.                                              */
-.storage-bucket__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  flex-wrap: wrap;
-}
-
-/* Centered call-to-action shown when there are zero connections (or      */
-/* when the user lands on a missing/invalid one).                         */
 .empty-state {
   padding: var(--space-6) var(--space-4);
   text-align: center;
@@ -773,10 +330,7 @@ pre { font-family: var(--font-mono); font-size: 12px; }
   margin: var(--space-6) auto;
 }
 .empty-state h2,
-.empty-state h3 {
-  margin: 0 0 var(--space-2);
-  letter-spacing: -0.01em;
-}
+.empty-state h3 { margin: 0 0 var(--space-2); }
 .empty-state__cta {
   display: inline-block;
   padding: var(--space-2) var(--space-5);
@@ -793,209 +347,50 @@ pre { font-family: var(--font-mono); font-size: 12px; }
 }
 .empty-state__cta:hover { background: var(--ink-11); }
 
-/* Narrower dialog used for short prompts (write-token, delete confirm). */
-.modal--narrow {
-  width: min(420px, 100%);
-  max-width: 420px;
-}
-
-/* Input + trailing affix button (e.g. "show password" toggle). The       */
-/* affix button uses .ghost; this wrapper just lays them out side-by-side */
-/* and lets the input flex to fill remaining space.                       */
-.input-with-affix {
-  position: relative;
-  display: flex;
-  align-items: stretch;
-  gap: var(--space-1);
-}
-.input-with-affix input { flex: 1; }
-
 /* ---------------------------------------------------------------------- */
-/*  Markdown rendering (Home note + future doc pages)                     */
+/*  Tar-entry modal (layer 3) — sits ON TOP of the right-side preview
+/*  drawer (layer 2). Its modal bubble is wider and taller than .modal
+/*  defaults, and spawns its own backdrop with a higher z-index.
 /* ---------------------------------------------------------------------- */
 
-.page-head__actions {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  margin-left: auto;
-}
-
-.markdown {
-  line-height: 1.7;
-  color: var(--ink-11);
-  max-width: 760px;
-}
-.markdown h1,
-.markdown h2,
-.markdown h3,
-.markdown h4 {
-  margin: var(--space-5) 0 var(--space-2);
-  line-height: 1.3;
-  letter-spacing: -0.01em;
-}
-.markdown h1:first-child,
-.markdown h2:first-child,
-.markdown h3:first-child { margin-top: 0; }
-.markdown h1 { font-size: 26px; }
-.markdown h2 { font-size: 21px; }
-.markdown h3 { font-size: 17px; }
-.markdown h4 { font-size: 15px; color: var(--ink-9); }
-.markdown p  { margin: var(--space-3) 0; }
-.markdown a  {
-  color: var(--ink-12);
-  text-decoration: underline;
-  text-underline-offset: 3px;
-  text-decoration-color: var(--ink-5);
-  transition: text-decoration-color var(--transition-fast);
-}
-.markdown a:hover { text-decoration-color: var(--ink-12); }
-.markdown ul,
-.markdown ol { padding-left: var(--space-5); margin: var(--space-3) 0; }
-.markdown li { margin: var(--space-1) 0; }
-.markdown li > p { margin: var(--space-1) 0; }
-.markdown code {
-  font-family: var(--font-mono);
-  font-size: 0.88em;
-  padding: 2px 6px;
-  border-radius: var(--radius-1);
-  background: var(--ink-1);
-  border: 1px solid var(--ink-2);
-}
-.markdown pre {
-  font-family: var(--font-mono);
-  font-size: 13px;
-  line-height: 1.55;
-  padding: var(--space-3) var(--space-4);
-  border-radius: var(--radius-3);
-  background: var(--ink-1);
-  border: 1px solid var(--ink-2);
-  overflow-x: auto;
-  margin: var(--space-3) 0;
-}
-.markdown pre code {
-  background: transparent;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  font-size: inherit;
-}
-.markdown blockquote {
-  margin: var(--space-3) 0;
-  padding: 0 var(--space-4);
-  border-left: 3px solid var(--ink-3);
-  color: var(--ink-7);
-}
-.markdown table {
-  border-collapse: collapse;
-  margin: var(--space-3) 0;
-  font-size: 14px;
-}
-.markdown th,
-.markdown td {
-  border: 1px solid var(--ink-2);
-  padding: var(--space-1) var(--space-3);
-  text-align: left;
-}
-.markdown th { background: var(--ink-1); font-weight: 600; }
-.markdown hr {
-  border: 0;
-  border-top: 1px solid var(--ink-2);
-  margin: var(--space-5) 0;
-}
-.markdown img { max-width: 100%; height: auto; }
-
-/* Settings page sections (feature flags + connections list). */
-.settings-section { margin: var(--space-5) 0; }
-.settings-section:first-of-type { margin-top: var(--space-2); }
-.settings-section__head {
+.modal-backdrop--entry { z-index: 60; padding: var(--space-4); }
+.modal--entry {
+  width: min(960px, 100%);
+  max-width: 960px;
+  max-height: calc(100vh - var(--space-6));
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
+  flex-direction: column;
+}
+.modal--entry .modal__head {
+  display: flex;
+  flex-wrap: wrap;
   gap: var(--space-3);
-  margin: 0 0 var(--space-2);
-}
-.settings-section__title {
-  margin: 0 0 var(--space-2);
-  font-size: 14px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-  color: var(--ink-7);
-}
-.flag-toggle {
-  display: inline-flex;
   align-items: center;
-  gap: var(--space-2);
-  cursor: pointer;
-  font-size: 13px;
-  user-select: none;
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--ink-2);
 }
-.flag-toggle input[type="checkbox"] { cursor: pointer; }
-
-
-/* ---------------------------------------------------------------------- */
-/*  Home note — minimal editorial layout in the dashboard's monochrome    */
-/* ---------------------------------------------------------------------- */
-
-.home-note__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-4);
-  margin: 0 0 var(--space-3);
-}
-
-.home-note__eyebrow {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
-  color: var(--ink-7);
-}
-
-.home-note__title {
+.modal__breadcrumb {
   margin: 0;
-  font-size: clamp(48px, 9vw, 80px);
-  line-height: 0.96;
-  font-weight: 600;
-  letter-spacing: -0.04em;
-  color: var(--ink-12);
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  align-items: center;
+}
+.modal--entry .modal__body {
+  padding-top: var(--space-3);
+  overflow: auto;
+  min-height: 0;
 }
 
-.home-note__rule {
-  border: 0;
-  height: 1px;
-  width: 56px;
-  background: var(--ink-5);
-  margin: var(--space-4) 0 var(--space-5);
-}
+/* ---------------------------------------------------------------------- */
+/*  @uiw markdown editor library — surgical CSS overrides that can't be
+/*  expressed with utility classes (UA stylesheet conflict + library
+/*  layout coupling).
+/* ---------------------------------------------------------------------- */
 
-.home-note__byline {
-  margin-top: var(--space-6);
-  text-align: center;
-  font-size: 12px;
-  color: var(--ink-7);
-}
-.home-note__byline::before,
-.home-note__byline::after {
-  content: '';
-  display: inline-block;
-  width: 24px;
-  height: 1px;
-  background: var(--ink-3);
-  vertical-align: middle;
-  margin: 0 12px;
-}
-
-/* Wider modal variant for the markdown editor (toolbar + preview need space). */
-.modal--editor {
-  width: min(880px, 100%);
-  max-width: 880px;
-}
-.md-shell {
-  margin: var(--space-3) 0;
-}
+.md-shell { margin: var(--space-3) 0; }
 .md-shell .w-md-editor {
   border: 1px solid var(--ink-3);
   border-radius: var(--radius-2);
@@ -1005,14 +400,12 @@ pre { font-family: var(--font-mono); font-size: 12px; }
   border-radius: var(--radius-2) var(--radius-2) 0 0;
 }
 /* Force the textarea + syntax-highlight <pre> to fill their wrapper at
-   every level, so the wrapper background never bleeds out as a "big box
-   behind the input" — even when the user drags the resize bar. Browser-
-   default textarea resize is off (the library provides its own dragbar).
-   `background-color: transparent` is required (not just the library's
-   `background: none`) because Chrome's UA stylesheet pins a white
-   background on <textarea>, which `background: none` does not override.
-   Without this, the textarea covers the syntax-highlighted <pre> below
-   it and the user sees a white box with invisible (transparent) text. */
+   every level. Browser-default textarea resize is off (the library
+   provides its own dragbar). `background-color: transparent` is required
+   because Chrome's UA stylesheet pins a white background on <textarea>,
+   which `background: none` does not override — without it the textarea
+   covers the syntax-highlighted <pre> below it and the user sees a white
+   box with invisible (transparent) text. */
 .md-shell .w-md-editor-text {
   position: relative;
   height: 100%;
@@ -1025,39 +418,11 @@ pre { font-family: var(--font-mono); font-size: 12px; }
   resize: none !important;
   background-color: transparent !important;
 }
-/* The generic `.modal textarea` rule leaks into the editor's textarea and
-   sets line-height: 1.55 and padding: 8px 12px, which decouples the
-   textarea's caret position from the syntax-highlighted <pre> beneath.
-   Restore the library's intended `inherit` values so the two layers stay
-   pixel-aligned. */
+/* Restore inherited line-height/padding so the textarea caret stays
+   pixel-aligned with the <pre> beneath. The generic `.modal textarea`
+   rule above sets line-height: 1.55 and padding: 8px 12px which would
+   otherwise win on specificity. */
 .md-shell .w-md-editor-text-input {
   line-height: inherit !important;
   padding: inherit !important;
-}
-
-/* Form toggle: checkbox + label inline, with a small hint paragraph below.
-   Selectors here are bumped above `.modal label { display: block }` so the
-   row stays horizontal inside our modals. */
-.modal .form-toggle { margin: var(--space-3) 0; }
-.modal .form-toggle__row {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  cursor: pointer;
-  margin: 0;
-}
-.modal .form-toggle__row input[type="checkbox"] {
-  margin: 0;
-  cursor: pointer;
-}
-.modal .form-toggle__label {
-  font-weight: 500;
-  color: var(--ink-11);
-  user-select: none;
-}
-.modal .form-toggle__hint {
-  margin: var(--space-1) 0 0 calc(13px + var(--space-2));
-  font-size: 12px;
-  line-height: 1.5;
-  color: var(--ink-7);
 }

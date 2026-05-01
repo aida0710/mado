@@ -37,7 +37,7 @@ export default function MetricsPage() {
     return (
       <div className="empty-state">
         <h2>メトリクスは無効になっています</h2>
-        <p className="muted">設定ページから有効化できます。</p>
+        <p className="text-ink-7">設定ページから有効化できます。</p>
         <Link className="empty-state__cta" to="/connections">設定を開く</Link>
       </div>
     )
@@ -61,21 +61,23 @@ export default function MetricsPage() {
         <button className="ghost" onClick={refresh} disabled={loading}>
           {loading ? '...' : 'refresh'}
         </button>
-        <span className="muted">直近 1 時間のデータ</span>
+        <span className="text-ink-7">直近 1 時間のデータ</span>
         {fetchedAt && (
-          <span className="muted">最終更新 {formatTime(fetchedAt)}</span>
+          <span className="text-ink-7">最終更新 {formatTime(fetchedAt)}</span>
         )}
       </header>
       {error && <p className="error">{error}</p>}
       {!loading && !error && metrics.length === 0 && (
-        <p className="muted">
+        <p className="text-ink-7">
           直近 1 時間に push されたメトリクスがありません。送信側 cron の動作を確認してください。
         </p>
       )}
       {grouped.map(([category, ms]) => (
-        <section key={category} className="metric-category">
-          <h3 className="metric-category__title">{category}</h3>
-          <div className="metric-grid">
+        <section key={category} className="mt-6">
+          <h3 className="mb-2 text-xs font-semibold uppercase tracking-[0.06em] text-ink-7">
+            {category}
+          </h3>
+          <div className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(380px,1fr))]">
             {ms.map(m => (
               <MetricCard key={`${m.host}/${m.command}`} m={m} />
             ))}

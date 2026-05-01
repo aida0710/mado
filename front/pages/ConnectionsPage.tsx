@@ -13,6 +13,14 @@ const FLAG_LABELS: Record<string, { label: string; description?: string }> = {
   },
 }
 
+const sectionTitleClass =
+  'mb-2 mt-0 text-sm font-semibold uppercase tracking-[0.02em] text-ink-7'
+const rowClass =
+  'flex items-center justify-between gap-4 rounded-3 border border-ink-2 ' +
+  'bg-paper p-3 transition-colors hover:border-ink-3'
+const rowMetaClass = 'mt-1 font-mono text-xs text-ink-7'
+const rowActionsClass = 'flex gap-2'
+
 function FeatureFlagsSection() {
   const { flags, refresh } = useFlags()
   const [busy, setBusy] = useState<string | null>(null)
@@ -31,27 +39,28 @@ function FeatureFlagsSection() {
     }
   }
 
-  if (!flags) return <p className="muted">機能フラグを読み込み中…</p>
+  if (!flags) return <p className="text-ink-7">機能フラグを読み込み中…</p>
 
   const entries = Object.entries(flags)
   if (entries.length === 0) return null
 
   return (
-    <ul className="connections-list">
+    <ul className="m-0 flex list-none flex-col gap-2 p-0">
       {entries.map(([name, enabled]) => {
         const meta = FLAG_LABELS[name] ?? { label: name }
         return (
-          <li key={name} className="conn-row">
+          <li key={name} className={rowClass}>
             <div>
               <strong>{meta.label}</strong>
               {meta.description && (
-                <div className="conn-row__meta">{meta.description}</div>
+                <div className={rowMetaClass}>{meta.description}</div>
               )}
             </div>
-            <div className="conn-row__actions">
-              <label className="flag-toggle">
+            <div className={rowActionsClass}>
+              <label className="inline-flex cursor-pointer select-none items-center gap-2 text-[13px]">
                 <input
                   type="checkbox"
+                  className="cursor-pointer"
                   checked={enabled}
                   disabled={busy === name}
                   onChange={e => toggle(name, e.target.checked)}
@@ -102,44 +111,44 @@ export default function ConnectionsPage() {
   }
 
   return (
-    <div className="page">
+    <div>
       <div className="page-head">
         <h2>設定</h2>
       </div>
 
-      <section className="settings-section">
-        <h3 className="settings-section__title">機能フラグ</h3>
+      <section className="my-6 first-of-type:mt-2">
+        <h3 className={sectionTitleClass}>機能フラグ</h3>
         <FeatureFlagsSection />
       </section>
 
-      <section className="settings-section">
-        <div className="settings-section__head">
-          <h3 className="settings-section__title">オブジェクトストレージ接続</h3>
+      <section className="my-6">
+        <div className="mb-2 flex items-baseline justify-between gap-3">
+          <h3 className={sectionTitleClass}>オブジェクトストレージ接続</h3>
           <button className="ghost" onClick={() => setAdding(true)}>+ 追加</button>
         </div>
-        {loading && <p className="muted">読み込み中…</p>}
+        {loading && <p className="text-ink-7">読み込み中…</p>}
         {error && <p className="error">{error}</p>}
         {!loading && connections.length === 0 && (
           <div className="empty-state">
             <h3>まだ接続がありません</h3>
-            <p className="muted">追加した接続は <code>/storage/&lt;id&gt;/</code> でアクセスできます。</p>
+            <p className="text-ink-7">追加した接続は <code>/storage/&lt;id&gt;/</code> でアクセスできます。</p>
             <button className="empty-state__cta" onClick={() => setAdding(true)}>
               最初の接続を追加
             </button>
           </div>
         )}
         {connections.length > 0 && (
-          <ul className="connections-list">
+          <ul className="m-0 flex list-none flex-col gap-2 p-0">
             {connections.map(conn => (
-              <li key={conn.id} className="conn-row">
+              <li key={conn.id} className={rowClass}>
                 <div>
                   <strong>{conn.name}</strong>
-                  <div className="conn-row__meta">
+                  <div className={rowMetaClass}>
                     {conn.endpoint} · {conn.region} · {conn.accessKeyIdMasked}
                     {conn.forcePathStyle && ' · path-style'}
                   </div>
                 </div>
-                <div className="conn-row__actions">
+                <div className={rowActionsClass}>
                   <Link className="ghost" to={`/storage/${conn.id}/`}>開く</Link>
                   <button className="ghost" onClick={() => setEditing(conn)}>編集</button>
                   <button

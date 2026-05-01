@@ -25,10 +25,7 @@ export function TarEntryModal({ connId, bucket, archiveKey, entry, onClose }: Pr
   }, [onClose])
 
   return (
-    <div
-      className="modal-backdrop modal-backdrop--entry"
-      onClick={onClose}
-    >
+    <div className="modal-backdrop modal-backdrop--entry" onClick={onClose}>
       <div
         className="modal modal--entry"
         onClick={e => e.stopPropagation()}
@@ -36,13 +33,16 @@ export function TarEntryModal({ connId, bucket, archiveKey, entry, onClose }: Pr
         aria-modal="true"
         aria-labelledby="tar-entry-title"
       >
-        <header className="modal__head">
-          <p className="modal__breadcrumb" id="tar-entry-title">
-            <span className="muted">{archiveKey}</span>
-            <span className="muted breadcrumb__sep">/</span>
+        <header className="flex flex-wrap items-center gap-3 pb-3">
+          <p
+            id="tar-entry-title"
+            className="m-0 flex min-w-0 flex-1 flex-wrap items-center gap-1"
+          >
+            <span className="text-ink-7 truncate">{archiveKey}</span>
+            <span className="text-ink-3 px-[2px]">/</span>
             <span>{entry.name}</span>
           </p>
-          <span className="muted--small tabular">{fmtSize(entry.size)}</span>
+          <span className="text-xs text-ink-7 tabular-nums">{fmtSize(entry.size)}</span>
           <button
             type="button"
             className="ghost"
@@ -52,7 +52,7 @@ export function TarEntryModal({ connId, bucket, archiveKey, entry, onClose }: Pr
             ✕
           </button>
         </header>
-        <div className="modal__body">
+        <div className="overflow-auto">
           {kind === 'image'   && <ImageBody url={url} alt={entry.name} />}
           {kind === 'audio'   && <AudioBody url={url} />}
           {kind === 'text'    && <TextBody connId={connId} bucket={bucket} archiveKey={archiveKey} entry={entry.name} />}
@@ -64,11 +64,11 @@ export function TarEntryModal({ connId, bucket, archiveKey, entry, onClose }: Pr
 }
 
 function ImageBody({ url, alt }: { url: string; alt: string }) {
-  return <img className="entry-img" src={url} alt={alt} />
+  return <img className="mx-auto block h-auto max-w-full rounded-2" src={url} alt={alt} />
 }
 
 function AudioBody({ url }: { url: string }) {
-  return <audio className="entry-audio" src={url} controls preload="metadata" />
+  return <audio className="w-full" src={url} controls preload="metadata" />
 }
 
 function TextBody({
@@ -85,7 +85,7 @@ function TextBody({
   }, [connId, bucket, archiveKey, entry])
 
   if (error) return <p className="error">{error}</p>
-  if (text === null) return <p className="muted">loading…</p>
+  if (text === null) return <p className="text-ink-7">loading…</p>
 
   // .json (single document) gets pretty-printed; .jsonl / .ndjson are
   // newline-separated JSON values per line, so leave raw.
@@ -104,20 +104,26 @@ function TextBody({
   const lines = trimmed.length === 0 ? 0 : trimmed.split('\n').length
 
   return (
-    <div className="entry-text-wrap">
-      <p className="muted--small tabular entry-text-meta">
+    <div className="flex flex-col gap-2">
+      <p className="m-0 text-xs text-ink-7 tabular-nums">
         <span>{lines} 行</span>
       </p>
-      <pre className="entry-text">{display}</pre>
+      <pre className="m-0 max-h-[70vh] overflow-auto whitespace-pre rounded-2 border border-ink-2 bg-ink-0 p-2 text-xs leading-snug">
+        {display}
+      </pre>
     </div>
   )
 }
 
 function UnknownBody({ url, name }: { url: string; name: string }) {
   return (
-    <div className="entry-unknown">
-      <p className="muted">プレビュー非対応のファイル種別です。</p>
-      <a className="ghost" href={url} download={name.split('/').pop()}>
+    <div className="flex flex-col items-start gap-3">
+      <p className="text-ink-7">プレビュー非対応のファイル種別です。</p>
+      <a
+        className="ghost no-underline"
+        href={url}
+        download={name.split('/').pop()}
+      >
         ダウンロード
       </a>
     </div>

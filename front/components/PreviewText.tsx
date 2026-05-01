@@ -11,5 +11,9 @@ export function PreviewText({ connId, bucket, k }: { connId: string; bucket: str
       .catch((e: Error) => { if (!cancelled) setText(`error: ${e.message}`) })
     return () => { cancelled = true }
   }, [connId, bucket, k])
-  return <pre className="prev-text">{text}</pre>
+  return (
+    <pre className="m-0 max-h-[70vh] overflow-auto whitespace-pre rounded-2 border border-ink-2 bg-ink-0 p-2 text-xs leading-snug">
+      {text}
+    </pre>
+  )
 }

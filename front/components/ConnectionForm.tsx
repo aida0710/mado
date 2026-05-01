@@ -132,8 +132,9 @@ export function ConnectionForm({ mode, onClose }: Props) {
         </label>
         <label>
           <span className="label">シークレットアクセスキー</span>
-          <div className="input-with-affix">
+          <div className="relative flex items-stretch gap-1">
             <input
+              className="flex-1"
               type={showSecret ? 'text' : 'password'}
               value={secretAccessKey}
               onChange={e => setSecretAccessKey(e.target.value)}
@@ -150,16 +151,19 @@ export function ConnectionForm({ mode, onClose }: Props) {
             </button>
           </div>
         </label>
-        <div className="form-toggle">
-          <label className="form-toggle__row">
+        <div className="my-3">
+          <label className="!m-0 inline-flex cursor-pointer items-center gap-2">
             <input
               type="checkbox"
+              className="cursor-pointer"
               checked={forcePathStyle}
               onChange={e => setForcePathStyle(e.target.checked)}
             />
-            <span className="form-toggle__label">Path-style URL を使用する</span>
+            <span className="select-none font-medium text-ink-11">
+              Path-style URL を使用する
+            </span>
           </label>
-          <p className="form-toggle__hint">
+          <p className="ml-[calc(13px+0.5rem)] mt-1 text-xs leading-relaxed text-ink-7">
             MinIO や自前の S3互換サーバはこれを ON にしないと動かないことが多いです。
             AWS S3 / Cloudflare R2 などはどちらでも OK。迷ったら ON のままで大丈夫。
           </p>

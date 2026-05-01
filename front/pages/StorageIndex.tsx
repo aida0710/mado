@@ -7,6 +7,15 @@ interface BucketRow { name: string; creationDate: string | null }
 
 interface Props { connId: string }
 
+const sectionTitleClass =
+  'mt-6 mb-2 text-xs font-semibold uppercase tracking-[0.06em] text-ink-7 first-of-type:mt-0'
+const listClass = 'm-0 list-none p-0'
+const liClass =
+  'flex min-w-0 items-center gap-2 border-b border-ink-1 py-2'
+const linkClass =
+  'min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap font-medium ' +
+  'tracking-[-0.005em] text-ink-11 no-underline hover:underline'
+
 export default function StorageIndex({ connId }: Props) {
   const [buckets, setBuckets] = useState<BucketRow[]>([])
   const [favorites, setFavorites] = useState<Set<string>>(new Set())
@@ -29,7 +38,6 @@ export default function StorageIndex({ connId }: Props) {
 
   const toggleFavorite = async (name: string) => {
     const isFav = favorites.has(name)
-    // Optimistic update
     const next = new Set(favorites)
     if (isFav) next.delete(name)
     else next.add(name)
@@ -38,7 +46,6 @@ export default function StorageIndex({ connId }: Props) {
       if (isFav) await api.removeFavorite(connId, name)
       else await api.addFavorite(connId, name)
     } catch (e) {
-      // Roll back on failure.
       setFavorites(favorites)
       setError((e as Error).message)
     }
@@ -51,19 +58,19 @@ export default function StorageIndex({ connId }: Props) {
     <section>
       <header className="page-head">
         <h2>バケット</h2>
-        <span style={{ marginLeft: 'auto' }} />
+        <span className="ml-auto" />
         <ConnectionSwitcher />
       </header>
       {error && <p className="error">{error}</p>}
-      {loading && buckets.length === 0 && <p className="muted">loading…</p>}
+      {loading && buckets.length === 0 && <p className="text-ink-7">loading…</p>}
       {!loading && !error && buckets.length === 0 && (
-        <p className="muted">バケットが見つかりません。</p>
+        <p className="text-ink-7">バケットが見つかりません。</p>
       )}
 
       {favoriteRows.length > 0 && (
         <>
-          <h3 className="bucket-section">現在使っているバケット</h3>
-          <ul className="bucket-list">
+          <h3 className={sectionTitleClass}>現在使っているバケット</h3>
+          <ul className={listClass}>
             {favoriteRows.map(b => (
               <BucketLi
                 key={b.name}
@@ -79,8 +86,8 @@ export default function StorageIndex({ connId }: Props) {
 
       {otherRows.length > 0 && (
         <>
-          <h3 className="bucket-section">その他のバケット</h3>
-          <ul className="bucket-list">
+          <h3 className={sectionTitleClass}>その他のバケット</h3>
+          <ul className={listClass}>
             {otherRows.map(b => (
               <BucketLi
                 key={b.name}
@@ -104,7 +111,7 @@ function BucketLi({
 }) {
   const checkboxId = `use-${bucket.name}`
   return (
-    <li>
+    <li className={liClass}>
       <label
         className="use-toggle"
         htmlFor={checkboxId}
@@ -118,9 +125,14 @@ function BucketLi({
           aria-label={`${bucket.name} を現在使っているバケットに${inUse ? '外す' : '追加'}`}
         />
       </label>
-      <Link to={`/storage/${connId}/${encodeURIComponent(bucket.name)}/`}>{bucket.name}</Link>
+      <Link
+        className={linkClass}
+        to={`/storage/${connId}/${encodeURIComponent(bucket.name)}/`}
+      >
+        {bucket.name}
+      </Link>
       {bucket.creationDate && (
-        <span className="muted"> · {bucket.creationDate.slice(0, 10)}</span>
+        <span className="text-ink-7"> · {bucket.creationDate.slice(0, 10)}</span>
       )}
     </li>
   )

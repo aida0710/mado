@@ -43,24 +43,28 @@ export default function HomePage() {
 
   return (
     <>
-      <div className="page home-note" data-color-mode="light">
-        <header className="home-note__head">
-          <span className="home-note__eyebrow">Team notes</span>
+      <div data-color-mode="light">
+        <header className="mb-3 flex items-center justify-between gap-4">
+          <span className="text-[11px] font-semibold uppercase tracking-[0.22em] text-ink-7">
+            Team notes
+          </span>
           <button className="ghost" onClick={() => setEditing(true)}>
             {data.exists ? '✎ edit' : '✎ create'}
           </button>
         </header>
 
-        <h1 className="home-note__title">Home</h1>
-        <hr className="home-note__rule" />
+        <h1 className="m-0 text-[clamp(48px,9vw,80px)] font-semibold leading-[0.96] tracking-[-0.04em] text-ink-12">
+          Home
+        </h1>
+        <hr className="mb-6 mt-4 h-px w-14 border-0 bg-ink-5" />
 
         {isPresent ? (
-          <article className="home-note__body">
+          <article>
             <MDEditor.Markdown source={data.body} />
           </article>
         ) : (
-          <div className="empty-state home-note__body">
-            <p className="muted">まだホームノートがありません。</p>
+          <div className="empty-state">
+            <p className="text-ink-7">まだホームノートがありません。</p>
             <button className="empty-state__cta" onClick={() => setEditing(true)}>
               最初のノートを書く
             </button>
@@ -68,7 +72,13 @@ export default function HomePage() {
         )}
 
         {byline && (
-          <footer className="home-note__byline">
+          <footer
+            className={
+              "mt-8 text-center text-xs text-ink-7 " +
+              "before:mx-3 before:inline-block before:h-px before:w-6 before:bg-ink-3 before:align-middle " +
+              "after:mx-3 after:inline-block after:h-px after:w-6 after:bg-ink-3 after:align-middle"
+            }
+          >
             <span>{byline}</span>
           </footer>
         )}

@@ -11,7 +11,16 @@ function Tab({ to, label }: { to: string; label: string }) {
   const { pathname } = useLocation()
   const active = to === '/' ? pathname === '/' : pathname.startsWith(to)
   return (
-    <Link className={`tab ${active ? 'active' : ''}`} to={to}>
+    <Link
+      className={
+        'inline-flex h-8 items-center rounded-2 px-3 font-medium leading-none ' +
+        'no-underline transition-colors duration-[120ms] ' +
+        (active
+          ? 'bg-ink-12 text-paper'
+          : 'text-ink-9 hover:bg-ink-1 hover:text-ink-11')
+      }
+      to={to}
+    >
       {label}
     </Link>
   )
@@ -26,7 +35,7 @@ function StoragePageWithKey() {
 function Tabs() {
   const { flags } = useFlags()
   return (
-    <nav className="tabs">
+    <nav className="flex items-stretch gap-1">
       <Tab to="/"            label="Home" />
       <Tab to="/storage"     label="Storage" />
       {isEnabled(flags, 'metrics') && (
@@ -40,12 +49,12 @@ function Tabs() {
 export default function App() {
   return (
     <FlagsProvider>
-      <div className="app">
-        <header className="topbar">
-          <h1 className="brand">web-dashboard</h1>
+      <div className="mx-auto max-w-[1100px] px-4">
+        <header className="flex items-baseline gap-4 border-b border-ink-2 py-4">
+          <h1 className="m-0 text-lg font-semibold tracking-tight">web-dashboard</h1>
           <Tabs />
         </header>
-        <main className="main">
+        <main className="pb-8 pt-4">
           <Routes>
             <Route path="/"                  element={<HomePage />} />
             <Route path="/metrics"           element={<MetricsPage />} />
