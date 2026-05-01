@@ -111,6 +111,6 @@ function buildSnippet(origin: string): string {
     '  -H "Authorization: Bearer <あなたの WRITE_TOKEN>" \\',
     '  -H "Content-Type: text/plain" \\',
     '  --data-binary @- \\',
-    `  "${origin}/api/metrics/push?host=myhost&command=uptime&category=load"`,
+    `  "${origin}/api/external/metrics/push?host=myhost&command=uptime&category=load"`,
   ].join('\n')
 }

@@ -23,4 +23,4 @@ COMMAND=${1:?command label required (e.g. uptime)}; shift
   -H "Authorization: Bearer $WRITE_TOKEN" \
   -H "Content-Type: text/plain" \
   --data-binary @- \
-  "$DASHBOARD_URL/api/metrics/push?host=$HOST&command=$COMMAND"
+  "$DASHBOARD_URL/api/external/metrics/push?host=$HOST&command=$COMMAND"

@@ -2,7 +2,7 @@
 
 Per-host Python scripts that run on a target machine (via cron), capture
 the relevant command output, and push it to the dashboard's
-`/api/metrics/push` endpoint.
+`/api/external/metrics/push` endpoint.
 
 ```
 metrics/
