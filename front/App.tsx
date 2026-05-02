@@ -26,26 +26,6 @@ function Tab({ to, label }: { to: string; label: string }) {
   )
 }
 
-// 「窓」のロゴマーク。外枠を太め、内分割線 (mullion) を細めにして
-// ただの 4 分割グリッドより窓らしいバランスにする。currentColor 継承で
-// 親のテキスト色に追従。
-function MadoMark() {
-  return (
-    <svg
-      width="22"
-      height="22"
-      viewBox="0 0 24 24"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      aria-hidden="true"
-    >
-      <rect x="3" y="3" width="18" height="18" rx="1.5" stroke="currentColor" strokeWidth="2" />
-      <line x1="12" y1="4" x2="12" y2="20" stroke="currentColor" strokeWidth="1.25" />
-      <line x1="4" y1="12" x2="20" y2="12" stroke="currentColor" strokeWidth="1.25" />
-    </svg>
-  )
-}
-
 // connId が変わったときに StoragePage を再マウントしてインメモリ状態をすべてリセットする。
 function StoragePageWithKey() {
   const { connId } = useParams<{ connId: string }>()
@@ -76,7 +56,7 @@ export default function App() {
             className="flex items-center gap-2 self-center text-ink-11 no-underline hover:text-ink-12"
             aria-label="mado ホームへ"
           >
-            <MadoMark />
+            <img src="/mado-icon.png" alt="" width={22} height={22} />
             <h1 className="m-0 text-lg font-semibold tracking-tight">mado</h1>
           </Link>
           <Tabs />

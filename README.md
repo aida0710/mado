@@ -194,3 +194,7 @@ openssl rand -hex 32
 - [実装プラン](docs/superpowers/plans/2026-05-02-p1-p3-merge.md)
 - [`db/README.md`](db/README.md) — DB ロールとマイグレーション
 - [`metrics/README.md`](metrics/README.md) — HPC 側 cron スクリプトの導入方法
+
+## クレジット
+
+- ロゴ (`front/public/mado-icon.png`): "Window" icon by [Inmotus Design](https://icons8.com/icon/set/window/external-others-inmotus-design) on [Icons8](https://icons8.com/)。Icons8 の無料利用規約により attribution を明記。
