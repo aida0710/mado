@@ -33,20 +33,23 @@ export default function StorageBucket({ connId }: Props) {
 
   return (
     <section className="storage-bucket">
-      <div className="storage-main">
-        <div className="flex items-center justify-between gap-3">
-          <Breadcrumb connId={connId} bucket={bucket} prefix={prefix} />
-          <ConnectionSwitcher />
-        </div>
-        <ReadmeView connId={connId} bucket={bucket} prefix={prefix} />
-        <StorageBrowser connId={connId} bucket={bucket} prefix={prefix} onSelectFile={setSelected} />
+      <div className="flex items-center justify-between gap-3">
+        <Breadcrumb connId={connId} bucket={bucket} prefix={prefix} />
+        <ConnectionSwitcher />
       </div>
-      <PreviewDrawer
-        connId={connId}
-        bucket={bucket}
-        k={selected}
-        onClose={() => setSelected(null)}
-      />
+      {/* README はリスト幅に依存させない (常に full width) */}
+      <ReadmeView connId={connId} bucket={bucket} prefix={prefix} />
+      {/* リスト + preview drawer を横並び。preview を開くとリストだけが
+          狭くなり、README には影響しない。 */}
+      <div className="storage-list">
+        <StorageBrowser connId={connId} bucket={bucket} prefix={prefix} onSelectFile={setSelected} />
+        <PreviewDrawer
+          connId={connId}
+          bucket={bucket}
+          k={selected}
+          onClose={() => setSelected(null)}
+        />
+      </div>
     </section>
   )
 }

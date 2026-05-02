@@ -188,16 +188,25 @@ pre { font-family: var(--font-mono); font-size: 12px; }
 }
 
 /* ---------------------------------------------------------------------- */
-/*  Bucket page grid — main + optional preview drawer (right side).
+/*  Bucket page layout.
+/*  ヘッダ + README は full width で縦に並べる。
+/*  リスト (StorageBrowser) と preview drawer は .storage-list の中で
+/*  並列、preview を開いたときだけ 2 列になる (README には影響しない)。
 /* ---------------------------------------------------------------------- */
 
 .storage-bucket {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.storage-list {
   display: grid;
   grid-template-columns: 1fr;
   gap: var(--space-4);
 }
 @media (min-width: 980px) {
-  .storage-bucket:has(.drawer) { grid-template-columns: 1fr 380px; }
+  .storage-list:has(.drawer) { grid-template-columns: 1fr 380px; }
 }
 
 .drawer {
