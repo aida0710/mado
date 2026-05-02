@@ -79,7 +79,15 @@ export default function MetricsPage() {
       {error && <p className="error">{error}</p>}
       {!loading && !error && metrics.length === 0 && (
         <p className="text-ink-7">
-          直近 1 時間に push されたメトリクスがありません。送信側 cron の動作を確認してください。
+          直近 1 時間に push されたメトリクスがありません。送り方は{' '}
+          <button
+            type="button"
+            className="cursor-pointer border-0 bg-transparent p-0 text-inherit underline"
+            onClick={() => setHelpOpen(true)}
+          >
+            こちら
+          </button>
+          を参照してください。
         </p>
       )}
       {grouped.map(([category, ms]) => (
