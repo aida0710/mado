@@ -79,7 +79,7 @@ export default function MetricsPage() {
       {error && <p className="error">{error}</p>}
       {!loading && !error && metrics.length === 0 && (
         <p className="text-ink-7">
-          直近 1 時間に push されたメトリクスがありません。送り方は{' '}
+          メトリクスがありません。古いデータは非表示になります。送り方は{' '}
           <button
             type="button"
             className="cursor-pointer border-0 bg-transparent p-0 text-inherit underline hover:text-ink-11"
