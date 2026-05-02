@@ -43,6 +43,15 @@ export function TarEntryModal({ connId, bucket, archiveKey, entry, onClose }: Pr
             <span>{entry.name}</span>
           </p>
           <span className="text-xs text-ink-7 tabular-nums">{fmtSize(entry.size)}</span>
+          <a
+            className="ghost no-underline"
+            href={url}
+            download={entry.name.split('/').pop()}
+            aria-label={`${entry.name} をダウンロード`}
+            title="ダウンロード"
+          >
+            ⬇ DL
+          </a>
           <button
             type="button"
             className="ghost"
@@ -115,17 +124,11 @@ function TextBody({
   )
 }
 
-function UnknownBody({ url, name }: { url: string; name: string }) {
+function UnknownBody({ url: _url, name: _name }: { url: string; name: string }) {
+  // ダウンロードはヘッダの DL ボタンに集約済。
   return (
-    <div className="flex flex-col items-start gap-3">
-      <p className="text-ink-7">プレビュー非対応のファイル種別です。</p>
-      <a
-        className="ghost no-underline"
-        href={url}
-        download={name.split('/').pop()}
-      >
-        ダウンロード
-      </a>
-    </div>
+    <p className="text-ink-7">
+      プレビュー非対応のファイル種別です。上の DL ボタンからダウンロードできます。
+    </p>
   )
 }

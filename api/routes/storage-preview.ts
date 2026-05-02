@@ -126,6 +126,47 @@ export function mountStoragePreviewRoutes(app: Hono, deps: StoragePreviewDeps): 
     })
   })
 
+  // 任意のキーをそのままダウンロードする (UI のダウンロードボタン用)。
+  // image/audio プレビューと同じく Range ヘッダは透過しない (S3 GetObject の
+  // 範囲リクエストはここで扱わず、ストリームを 1 度に流す)。Content-Type は
+  // application/octet-stream に固定し、Content-Disposition: attachment で
+  // ブラウザにファイル保存ダイアログを促す。
+  app.get('/storage/:connId/preview/raw', async c => {
+    const r0 = await resolveStorageOrFail(c, deps.getStorage)
+    if (r0 instanceof Response) return r0
+    const storage = r0
+    const bucket = c.req.query('bucket')
+    const key = c.req.query('key')
+    if (!bucket || !key) {
+      return c.json({ error: 'bucket and key required' }, 400)
+    }
+    let stream: Readable
+    let contentLength: number | undefined
+    try {
+      const r = await storage.send(
+        new GetObjectCommand({ Bucket: bucket, Key: key }),
+      )
+      stream = r.Body as unknown as Readable
+      contentLength = r.ContentLength
+    } catch (e) {
+      return storageError(c, e)
+    }
+    const filename = key.split('/').pop() ?? 'file'
+    // RFC 5987: ASCII fallback + UTF-8 真値で日本語ファイル名にも対応。
+    const asciiName = filename.replace(/[^\x20-\x7e]/g, '_').replace(/"/g, '\\"')
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/octet-stream',
+      'Content-Disposition':
+        `attachment; filename="${asciiName}"; ` +
+        `filename*=UTF-8''${encodeURIComponent(filename)}`,
+    }
+    if (contentLength != null) headers['Content-Length'] = String(contentLength)
+    return new Response(
+      Readable.toWeb(stream) as unknown as ReadableStream<Uint8Array>,
+      { headers },
+    )
+  })
+
   app.get('/storage/:connId/preview/image', async c => {
     const r0 = await resolveStorageOrFail(c, deps.getStorage)
     if (r0 instanceof Response) return r0

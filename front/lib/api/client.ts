@@ -243,6 +243,11 @@ export const api = {
   audioUrl: (connId: string, bucket: string, key: string): string =>
     buildUrl(`${API_BASE}/storage/${encodeURIComponent(connId)}/preview/audio`, { bucket, key }),
 
+  // 任意のキーをそのままダウンロードする URL。バックエンドが
+  // Content-Disposition: attachment を付けるためブラウザはファイル保存を促す。
+  downloadUrl: (connId: string, bucket: string, key: string): string =>
+    buildUrl(`${API_BASE}/storage/${encodeURIComponent(connId)}/preview/raw`, { bucket, key }),
+
   // `<img src>` / `<audio src>` 用の tar エントリ本体への URL 形式。
   tarEntryUrl: (connId: string, bucket: string, key: string, entry: string): string =>
     buildUrl(`${API_BASE}/storage/${encodeURIComponent(connId)}/preview/tar-entry`, { bucket, key, entry }),

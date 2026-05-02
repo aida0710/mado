@@ -57,6 +57,55 @@ describe('GET /storage/:connId/preview/text', () => {
   })
 })
 
+describe('GET /storage/:connId/preview/raw', () => {
+  it('streams bytes as application/octet-stream with attachment Content-Disposition', async () => {
+    storageMock.on(GetObjectCommand).resolves({
+      Body: Readable.from(Buffer.from('binary-bytes')) as never,
+      ContentLength: 12,
+    })
+    const res = await app.request(
+      `/storage/${TEST_CONN_ID}/preview/raw?bucket=b&key=path/to/file.bin`,
+    )
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-type')).toBe('application/octet-stream')
+    expect(res.headers.get('content-length')).toBe('12')
+    const cd = res.headers.get('content-disposition') ?? ''
+    expect(cd).toContain('attachment')
+    expect(cd).toContain('filename="file.bin"')
+    expect(cd).toContain("filename*=UTF-8''file.bin")
+    expect(await res.text()).toBe('binary-bytes')
+  })
+
+  it('日本語ファイル名を RFC5987 で encode する', async () => {
+    storageMock.on(GetObjectCommand).resolves({
+      Body: Readable.from(Buffer.from('x')) as never,
+      ContentLength: 1,
+    })
+    const res = await app.request(
+      `/storage/${TEST_CONN_ID}/preview/raw?bucket=b&key=${encodeURIComponent('音声/サンプル.wav')}`,
+    )
+    expect(res.status).toBe(200)
+    const cd = res.headers.get('content-disposition') ?? ''
+    // ASCII fallback は非 ASCII を _ に
+    expect(cd).toMatch(/filename="[_.\w]+"/)
+    // UTF-8 真値で日本語 (% encode) を含む
+    expect(cd).toContain(encodeURIComponent('サンプル.wav'))
+  })
+
+  it('400 if bucket or key missing', async () => {
+    const res = await app.request(`/storage/${TEST_CONN_ID}/preview/raw?key=a`)
+    expect(res.status).toBe(400)
+  })
+
+  it('404 when storage returns NoSuchKey', async () => {
+    storageMock.on(GetObjectCommand).rejects(
+      new NoSuchKey({ message: 'no', $metadata: {} }),
+    )
+    const res = await app.request(`/storage/${TEST_CONN_ID}/preview/raw?bucket=b&key=x`)
+    expect(res.status).toBe(404)
+  })
+})
+
 describe('GET /storage/:connId/preview/image', () => {
   it('proxies image bytes with content-type guessed from key', async () => {
     storageMock.on(GetObjectCommand).resolves({
