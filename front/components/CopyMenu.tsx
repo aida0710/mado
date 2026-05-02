@@ -1,17 +1,22 @@
 import { useEffect, useRef, useState } from 'react'
+import { copyToClipboard } from '../lib/clipboard'
+
+export type MenuItem =
+  | { kind: 'copy'; label: string; value: string }
+  | { kind: 'download'; label: string; href: string; filename: string }
 
 interface Props {
-  // 表示する候補。label と取得関数のペア。
-  items: Array<{ label: string; value: string }>
-  // ボタン上に表示するラベル (default: "コピー")
+  items: MenuItem[]
+  // 初期表示のトリガー (default: "⋯")
   trigger?: string
+  ariaLabel?: string
 }
 
-// クリックでドロップダウンを開き、項目を選ぶと clipboard にコピーする小さい
-// メニュー。クリック外 / Escape で閉じる。Tailwind utility だけで作る。
-export function CopyMenu({ items, trigger = 'コピー' }: Props) {
+// ファイル行のアクションメニュー。クリックで開き、項目を選んで実行。
+// クリック外 / Escape で閉じる。Tailwind utility だけ。
+export function CopyMenu({ items, trigger = '⋯', ariaLabel = 'アクション' }: Props) {
   const [open, setOpen] = useState(false)
-  const [copied, setCopied] = useState<string | null>(null)
+  const [feedback, setFeedback] = useState<string | null>(null)
   const root = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -30,14 +35,10 @@ export function CopyMenu({ items, trigger = 'コピー' }: Props) {
     }
   }, [open])
 
-  const onPick = async (label: string, value: string) => {
-    try {
-      await navigator.clipboard.writeText(value)
-      setCopied(label)
-      setTimeout(() => setCopied(null), 1500)
-    } catch (err) {
-      console.error('clipboard write failed', err)
-    }
+  const onCopy = async (label: string, value: string) => {
+    const ok = await copyToClipboard(value)
+    setFeedback(ok ? `${label} ✓` : 'コピー失敗')
+    setTimeout(() => setFeedback(null), 1500)
     setOpen(false)
   }
 
@@ -45,31 +46,50 @@ export function CopyMenu({ items, trigger = 'コピー' }: Props) {
     <div ref={root} className="relative inline-flex" onClick={e => e.stopPropagation()}>
       <button
         type="button"
-        className="ghost text-xs"
+        className="ghost text-base leading-none"
         aria-haspopup="menu"
         aria-expanded={open}
+        aria-label={ariaLabel}
         onClick={() => setOpen(o => !o)}
+        title={ariaLabel}
       >
-        {copied ? `${copied} ✓` : `${trigger} ▾`}
+        {feedback ?? trigger}
       </button>
       {open && (
         <div
           role="menu"
-          className="absolute right-0 z-30 min-w-[200px] rounded-3 border border-ink-3 bg-paper py-1 shadow-[0_8px_24px_rgba(0,0,0,0.10)]"
+          className="absolute right-0 z-30 min-w-[280px] max-w-[480px] rounded-3 border border-ink-3 bg-paper py-1 shadow-[0_8px_24px_rgba(0,0,0,0.10)]"
           style={{ top: 'calc(100% + 4px)' }}
         >
-          {items.map(it => (
-            <button
-              key={it.label}
-              role="menuitem"
-              type="button"
-              className="block w-full cursor-pointer border-0 bg-transparent px-3 py-2 text-left text-ink-11 transition-colors hover:bg-ink-1"
-              onClick={() => onPick(it.label, it.value)}
-              title={it.value}
-            >
-              {it.label}
-            </button>
-          ))}
+          {items.map(it => {
+            if (it.kind === 'download') {
+              return (
+                <a
+                  key={it.label}
+                  role="menuitem"
+                  href={it.href}
+                  download={it.filename}
+                  className="block w-full cursor-pointer border-0 bg-transparent px-3 py-2 text-left text-ink-11 no-underline transition-colors hover:bg-ink-1"
+                  onClick={() => setOpen(false)}
+                >
+                  {it.label}
+                </a>
+              )
+            }
+            return (
+              <button
+                key={it.label}
+                role="menuitem"
+                type="button"
+                className="block w-full cursor-pointer border-0 bg-transparent px-3 py-2 text-left text-ink-11 transition-colors hover:bg-ink-1"
+                onClick={() => onCopy(it.label, it.value)}
+                title={it.value}
+              >
+                <div>{it.label}</div>
+                <div className="mt-0.5 truncate font-mono text-[11px] text-ink-7">{it.value}</div>
+              </button>
+            )
+          })}
         </div>
       )}
     </div>

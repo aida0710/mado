@@ -6,6 +6,7 @@ import { StorageList } from '../lib/api/types'
 import { fmtSize } from '../lib/format'
 import { encPath } from '../lib/route'
 import { CopyMenu } from './CopyMenu'
+import type { MenuItem } from './CopyMenu'
 
 interface Props {
   connId: string
@@ -111,11 +112,18 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
             const select = () => onSelectFile?.(f.key)
             const s3Url = `s3://${bucket}/${f.key}`
             // Web URL は dashboard origin + 現在ナビゲーション + ?preview=<key>
-            // - 別ユーザに送るときに「直リンクで preview drawer が開く」ようにする
+            // 別ユーザに送るときに「直リンクで preview drawer が開く」。
             const webUrl =
               `${window.location.origin}` +
               `/storage/${encodeURIComponent(connId)}/${encodeURIComponent(bucket)}/${encPath(prefix)}` +
               `?preview=${encodeURIComponent(f.key)}`
+            const downloadUrl = api.downloadUrl(connId, bucket, f.key)
+            const filename = f.key.split('/').pop() ?? 'file'
+            const items: MenuItem[] = [
+              { kind: 'download', label: 'このファイルをダウンロード', href: downloadUrl, filename },
+              { kind: 'copy',     label: 'Web URL をコピー',           value: webUrl },
+              { kind: 'copy',     label: 'S3 URL をコピー',            value: s3Url },
+            ]
             return (
               <tr
                 key={f.key}
@@ -129,12 +137,7 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
                 <td className={tdNumClass}>{fmtSize(f.size)}</td>
                 <td className={tdNumClass}>{f.lastModified?.slice(0, 10) ?? ''}</td>
                 <td className={tdNumClass}>
-                  <CopyMenu
-                    items={[
-                      { label: 'S3 URL をコピー',  value: s3Url },
-                      { label: 'Web URL をコピー', value: webUrl },
-                    ]}
-                  />
+                  <CopyMenu items={items} />
                 </td>
               </tr>
             )
