@@ -5,6 +5,7 @@ import { api } from '../lib/api/client'
 import { StorageList } from '../lib/api/types'
 import { fmtSize } from '../lib/format'
 import { encPath } from '../lib/route'
+import { CopyMenu } from './CopyMenu'
 
 interface Props {
   connId: string
@@ -82,6 +83,7 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
             <th className={headThClass}>Name</th>
             <th className={`${headThClass} text-right`}>Size</th>
             <th className={`${headThClass} text-right`}>Modified</th>
+            <th className={headThClass}></th>
           </tr>
         </thead>
         <tbody>
@@ -100,12 +102,20 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
                 <td className={`${tdNameClass} font-semibold`}>📁 {tail}</td>
                 <td className={tdNumClass}>—</td>
                 <td className={tdNumClass}>—</td>
+                <td className={tdNumClass}></td>
               </tr>
             )
           })}
           {page.files.map(f => {
             const tail = f.key.startsWith(prefix) ? f.key.slice(prefix.length) : f.key
             const select = () => onSelectFile?.(f.key)
+            const s3Url = `s3://${bucket}/${f.key}`
+            // Web URL は dashboard origin + 現在ナビゲーション + ?preview=<key>
+            // - 別ユーザに送るときに「直リンクで preview drawer が開く」ようにする
+            const webUrl =
+              `${window.location.origin}` +
+              `/storage/${encodeURIComponent(connId)}/${encodeURIComponent(bucket)}/${encPath(prefix)}` +
+              `?preview=${encodeURIComponent(f.key)}`
             return (
               <tr
                 key={f.key}
@@ -118,6 +128,14 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
                 <td className={tdNameClass}>📄 {tail}</td>
                 <td className={tdNumClass}>{fmtSize(f.size)}</td>
                 <td className={tdNumClass}>{f.lastModified?.slice(0, 10) ?? ''}</td>
+                <td className={tdNumClass}>
+                  <CopyMenu
+                    items={[
+                      { label: 'S3 URL をコピー',  value: s3Url },
+                      { label: 'Web URL をコピー', value: webUrl },
+                    ]}
+                  />
+                </td>
               </tr>
             )
           })}

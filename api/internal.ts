@@ -7,6 +7,7 @@ import { createPools, closePools } from './db.js'
 import { createCrypto } from './crypto.js'
 import { createStorageFactory } from './storage.js'
 import { requireSafeOrigin } from './lib/originCheck.js'
+import { explainStorageError } from './lib/storageError.js'
 import { mountMetricsReadRoutes } from './routes/metrics.js'
 import { mountStorageListRoutes } from './routes/storage-list.js'
 import { mountStorageReadmeRoutes } from './routes/storage-readme.js'
@@ -41,6 +42,18 @@ mountNotesRoutes(api, { pools })
 mountSettingsRoutes(api, { pools })
 
 app.route('/api/internal', api)
+
+// 未 catch のエラーをユーザフレンドリーに翻訳する。S3 系は 502 + 短い説明、
+// それ以外は内部 error をログに出して 500 + "internal error" だけ返す
+// (raw error.message を漏らさない)。
+app.onError((err, c) => {
+  const explained = explainStorageError(err)
+  if (explained) {
+    return c.json({ error: explained.message }, explained.status)
+  }
+  console.error('unhandled error', err)
+  return c.json({ error: 'internal error' }, 500)
+})
 
 const server = serve({ fetch: app.fetch, port: env.PORT }, info => {
   console.log(
