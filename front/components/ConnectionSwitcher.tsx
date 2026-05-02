@@ -3,7 +3,6 @@ import { Link, useNavigate } from 'react-router-dom'
 import { api } from '../lib/api/client'
 import type { Connection } from '../lib/api/types'
 import { useConnection } from '../lib/connectionContext'
-import { encSegment } from '../lib/route'
 
 const itemClass =
   'block w-full px-3 py-2 text-left bg-transparent border-0 text-ink-11 ' +
@@ -72,7 +71,7 @@ export function ConnectionSwitcher() {
               key={c.id}
               role="menuitem"
               className={itemClass}
-              onClick={() => { setOpen(false); navigate(`/storage/${encSegment(c.id)}/`) }}
+              onClick={() => { setOpen(false); navigate(`/storage/${encodeURIComponent(c.id)}/`) }}
             >
               {c.name}
             </button>

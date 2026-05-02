@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import { useConnection } from '../lib/connectionContext'
-import { encPath, encSegment } from '../lib/route'
+import { encPath } from '../lib/route'
 
 // 現在の bucket+prefix から「1階層上」へ移動する:
 //   /storage/<conn>/b/voice/jp/  → /storage/<conn>/b/voice/
@@ -8,10 +8,10 @@ import { encPath, encSegment } from '../lib/route'
 //   /storage/<conn>/b/           → /storage/<conn>/        (バケット一覧)
 function parentPath(connId: string, bucket: string, prefix: string): string {
   const segs = prefix.split('/').filter(Boolean)
-  if (segs.length === 0) return `/storage/${encSegment(connId)}/`
+  if (segs.length === 0) return `/storage/${encodeURIComponent(connId)}/`
   const trimmed = segs.slice(0, -1)
   const parentPrefix = trimmed.length === 0 ? '' : trimmed.join('/') + '/'
-  return `/storage/${encSegment(connId)}/${encSegment(bucket)}/${encPath(parentPrefix)}`
+  return `/storage/${encodeURIComponent(connId)}/${encodeURIComponent(bucket)}/${encPath(parentPrefix)}`
 }
 
 const linkClass =
@@ -33,13 +33,13 @@ export function Breadcrumb({
       >
         ←
       </Link>
-      <Link className={linkClass} to={`/storage/${encSegment(connId)}/`}>
+      <Link className={linkClass} to={`/storage/${encodeURIComponent(connId)}/`}>
         {connection.name}
       </Link>
       <span className={sepClass}>/</span>
       <Link
         className={linkClass}
-        to={`/storage/${encSegment(connId)}/${encSegment(bucket)}/`}
+        to={`/storage/${encodeURIComponent(connId)}/${encodeURIComponent(bucket)}/`}
       >
         {bucket}
       </Link>
@@ -50,7 +50,7 @@ export function Breadcrumb({
             <span className={sepClass}>/</span>
             <Link
               className={linkClass}
-              to={`/storage/${encSegment(connId)}/${encSegment(bucket)}/${encPath(subPrefix)}`}
+              to={`/storage/${encodeURIComponent(connId)}/${encodeURIComponent(bucket)}/${encPath(subPrefix)}`}
             >
               {seg}
             </Link>

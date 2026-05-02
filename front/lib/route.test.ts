@@ -1,22 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { encPath, encSegment } from './route'
-
-describe('encSegment', () => {
-  it('特殊文字を encode する', () => {
-    expect(encSegment('foo bar')).toBe('foo%20bar')
-    expect(encSegment('a?b')).toBe('a%3Fb')
-    expect(encSegment('a#b')).toBe('a%23b')
-    expect(encSegment('a%b')).toBe('a%25b')
-  })
-
-  it('空文字は空文字のまま', () => {
-    expect(encSegment('')).toBe('')
-  })
-
-  it('スラッシュも encode する (= 単一セグメント扱い)', () => {
-    expect(encSegment('a/b')).toBe('a%2Fb')
-  })
-})
+import { encPath } from './route'
 
 describe('encPath', () => {
   it('スラッシュ構造を保ったままセグメント単位で encode する', () => {

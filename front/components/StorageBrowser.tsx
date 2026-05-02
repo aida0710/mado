@@ -4,7 +4,7 @@ import type { z } from 'zod'
 import { api } from '../lib/api/client'
 import { StorageList } from '../lib/api/types'
 import { fmtSize } from '../lib/format'
-import { encPath, encSegment } from '../lib/route'
+import { encPath } from '../lib/route'
 
 interface Props {
   connId: string
@@ -87,7 +87,7 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
         <tbody>
           {page.directories.map(d => {
             const tail = d.startsWith(prefix) ? d.slice(prefix.length) : d
-            const go = () => navigate(`/storage/${encSegment(connId)}/${encSegment(bucket)}/${encPath(d)}`)
+            const go = () => navigate(`/storage/${encodeURIComponent(connId)}/${encodeURIComponent(bucket)}/${encPath(d)}`)
             return (
               <tr
                 key={d}

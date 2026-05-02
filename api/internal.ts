@@ -43,7 +43,10 @@ mountSettingsRoutes(api, { pools })
 app.route('/api/internal', api)
 
 const server = serve({ fetch: app.fetch, port: env.PORT }, info => {
-  console.log(`internal listening on http://localhost:${info.port}`)
+  console.log(
+    `internal listening on http://localhost:${info.port}; ` +
+    `allowed origins: ${env.ALLOWED_ORIGINS.join(', ')}`,
+  )
 })
 
 let shuttingDown = false

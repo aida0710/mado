@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { api } from '../lib/api/client'
 import type { Connection } from '../lib/api/types'
-import { encSegment } from '../lib/route'
 
 export default function StorageLanding() {
   const [connections, setConnections] = useState<Connection[] | null>(null)
@@ -13,7 +12,7 @@ export default function StorageLanding() {
     api.listConnections()
       .then(list => {
         setConnections(list)
-        if (list.length === 1) navigate(`/storage/${encSegment(list[0].id)}/`, { replace: true })
+        if (list.length === 1) navigate(`/storage/${encodeURIComponent(list[0].id)}/`, { replace: true })
       })
       .catch(e => setError((e as Error).message))
   }, [navigate])
@@ -42,7 +41,7 @@ export default function StorageLanding() {
             className="flex items-center justify-between gap-4 rounded-3 border border-ink-2 bg-paper p-3 transition-colors hover:border-ink-3"
           >
             <Link
-              to={`/storage/${encSegment(c.id)}/`}
+              to={`/storage/${encodeURIComponent(c.id)}/`}
               className="flex-1 text-inherit no-underline"
             >
               <strong>{c.name}</strong>
