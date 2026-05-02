@@ -5,6 +5,7 @@ import type { Connection, ConnectionCreateInput, ConnectionUpdateInput } from '.
 import { ConnectionForm } from '../components/ConnectionForm'
 import { ConnectionDeleteConfirm } from '../components/ConnectionDeleteConfirm'
 import { useFlags } from '../lib/flagsContext'
+import { encSegment } from '../lib/route'
 
 const FLAG_LABELS: Record<string, { label: string; description?: string }> = {
   metrics: {
@@ -149,7 +150,7 @@ export default function ConnectionsPage() {
                   </div>
                 </div>
                 <div className={rowActionsClass}>
-                  <Link className="ghost" to={`/storage/${conn.id}/`}>開く</Link>
+                  <Link className="ghost" to={`/storage/${encSegment(conn.id)}/`}>開く</Link>
                   <button className="ghost" onClick={() => setEditing(conn)}>編集</button>
                   <button
                     className="ghost conn-row__danger"

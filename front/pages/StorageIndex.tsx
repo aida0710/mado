@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../lib/api/client'
 import { ConnectionSwitcher } from '../components/ConnectionSwitcher'
+import { encSegment } from '../lib/route'
 
 interface BucketRow { name: string; creationDate: string | null }
 
@@ -127,7 +128,7 @@ function BucketLi({
       </label>
       <Link
         className={linkClass}
-        to={`/storage/${connId}/${encodeURIComponent(bucket.name)}/`}
+        to={`/storage/${encSegment(connId)}/${encSegment(bucket.name)}/`}
       >
         {bucket.name}
       </Link>
