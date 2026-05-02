@@ -36,8 +36,16 @@ export function useFlags(): FlagsContextValue {
 }
 
 /** 未知フラグおよびロード前の状態は有効として扱う (フェイルオープン)。
- *  フラグが明示的に false の場合のみ false を返す。 */
+ *  フラグが明示的に false の場合のみ false を返す。
+ *  metrics タブのような UX 制御で「ロード中のチラつきを避ける」目的で意図的に
+ *  この設計にしている。セキュリティ目的で UI を隠したい場合は isEnabledStrict を使う。 */
 export function isEnabled(flags: FeatureFlags | null, name: string): boolean {
   if (!flags) return true
   return flags[name] !== false
+}
+
+/** ロード前 (null) ・未定義フラグ・false すべて「無効」として扱う (フェイルクローズ)。
+ *  将来のセキュリティ系フラグ (例: 管理者専用 UI を隠す) で使う想定。 */
+export function isEnabledStrict(flags: FeatureFlags | null, name: string): boolean {
+  return flags?.[name] === true
 }
