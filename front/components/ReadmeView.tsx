@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import MDEditor from '@uiw/react-md-editor'
+import rehypeSanitize from 'rehype-sanitize'
 import { api } from '../lib/api/client'
 import type { z } from 'zod'
 import { Readme } from '../lib/api/types'
@@ -39,7 +40,7 @@ export function ReadmeView({ connId, bucket, prefix }: Props) {
         )}
       </header>
       {data.exists
-        ? <div className="mt-2"><MDEditor.Markdown source={data.body} /></div>
+        ? <div className="mt-2"><MDEditor.Markdown source={data.body} rehypePlugins={[[rehypeSanitize]]} /></div>
         : <p className="text-ink-7">README なし</p>}
       {editing && (
         <MarkdownEditor

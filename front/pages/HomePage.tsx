@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import MDEditor from '@uiw/react-md-editor'
+import rehypeSanitize from 'rehype-sanitize'
 import type { z } from 'zod'
 import { api } from '../lib/api/client'
 import { Note } from '../lib/api/types'
@@ -53,7 +54,7 @@ export default function HomePage() {
 
         {isPresent ? (
           <article>
-            <MDEditor.Markdown source={data.body} />
+            <MDEditor.Markdown source={data.body} rehypePlugins={[[rehypeSanitize]]} />
           </article>
         ) : (
           <div className="empty-state">
