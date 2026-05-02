@@ -6,6 +6,7 @@ import { loadEnv } from './env.js'
 import { createPools, closePools } from './db.js'
 import { createCrypto } from './crypto.js'
 import { createStorageFactory } from './storage.js'
+import { requireSafeOrigin } from './lib/originCheck.js'
 import { mountMetricsReadRoutes } from './routes/metrics.js'
 import { mountStorageListRoutes } from './routes/storage-list.js'
 import { mountStorageReadmeRoutes } from './routes/storage-readme.js'
@@ -25,6 +26,7 @@ app.use('*', logger())
 app.get('/healthz', c => c.text('ok'))
 
 const api = new Hono()
+api.use('*', requireSafeOrigin(env.ALLOWED_ORIGINS))
 mountMetricsReadRoutes(api, { pools })
 mountConnectionsRoutes(api, {
   pools,

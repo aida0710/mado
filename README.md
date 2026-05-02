@@ -142,6 +142,7 @@ dev との差分:
 | `DATABASE_URL_RW_TEST` | no | テスト用。host から接続するので `localhost`。未設定なら同じ default を fallback |
 | `WRITE_TOKEN` | yes | `/api/external/metrics/push` の Bearer トークン (32 byte hex 必須) |
 | `ENCRYPTION_KEY` | yes | `storage_connections` テーブルに保存する S3 認証情報を AES-256-GCM で暗号化するキー (32 byte hex 必須) |
+| `ALLOWED_ORIGINS` | yes | CSRF 防御。`/api/internal/*` の write 系で許容する Origin (カンマ区切り)。dev: `http://localhost:5173` / prod: ダッシュボードを開く URL |
 | `PREVIEW_TEXT_LIMIT` | no | テキストプレビュー最大バイト (default 65536) |
 | `PREVIEW_TAR_ENTRY_LIMIT` | no | tar 内 1 ページのエントリ最大数 (default 200) |
 | `PREVIEW_TARXZ_BYTE_LIMIT` | no | tar.xz の解凍バイト上限 (default 256MiB) |
@@ -158,6 +159,7 @@ openssl rand -hex 32
 - **インターネットには出さない**。LAN 内にいる限り、ブラウザ向け API (`/api/internal/*`) は **誰でも到達できる**。書き込み系 (connections / notes / settings / favorites / readme) もすべて認証なし (オナーシステム)。
 - **`WRITE_TOKEN` は `/api/external/metrics/push` 専用**。HPC ホストの cron が外部から叩く唯一の経路を保護する。
 - **`ENCRYPTION_KEY`** で `storage_connections` の S3 認証情報を保存時暗号化 (AES-256-GCM)。DB ダンプだけ漏れても解読不能。
+- **CSRF 防御**: `/api/internal/*` の write 系 (POST/PUT/DELETE) は `ALLOWED_ORIGINS` と Origin/Referer を照合し、不一致なら 403。LAN 内に紛れた悪意あるページから write を撃たれる事故を防ぐ。
 - **PG ロール分離**: アプリは `dashboard_rw` / `dashboard_ro` の 2 ロールを使い分け、ブラウザ由来の経路では Postgres レベルで `DROP TABLE` 等を防ぐ。`dashboard_rw` は `GRANT CREATE ON SCHEMA public` を持たない (新規テーブル作成不可)。
 
 → **このモデルが崩れる外部公開する場合は、最低限 `/api/internal/*` への認証層と `connections.endpoint` の SSRF 対策強化が必要**。詳細は [docs/superpowers/specs/2026-05-02-p1-p3-merge-design.md](docs/superpowers/specs/2026-05-02-p1-p3-merge-design.md) のスコープ外項目を参照。

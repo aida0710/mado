@@ -12,6 +12,12 @@ const schema = z.object({
   DATABASE_URL_RW_TEST: z.string().optional(),
   WRITE_TOKEN: hex32('WRITE_TOKEN'),
   ENCRYPTION_KEY: hex32('ENCRYPTION_KEY'),
+  // CSRF 防御: /api/internal/* の write 系で許容する Origin (カンマ区切り)。
+  // 例: dev = "http://localhost:5173"、prod = "http://lab-server"。
+  // 設定漏れを早期検知するため必須化 (default なし)。
+  ALLOWED_ORIGINS: z.string().min(1).transform(s =>
+    s.split(',').map(o => o.trim()).filter(Boolean)
+  ),
   PREVIEW_TEXT_LIMIT: z.coerce.number().default(65536),
   PREVIEW_TAR_ENTRY_LIMIT: z.coerce.number().default(200),
   PREVIEW_TARXZ_BYTE_LIMIT: z.coerce.number().default(268435456),
