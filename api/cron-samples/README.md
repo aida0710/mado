@@ -6,25 +6,25 @@
 ## 1. インストール
 
 ```sh
-scp push.sh you@example.host:~/dashboard-push.sh
-ssh you@example.host chmod +x ~/dashboard-push.sh
+scp push.sh you@example.host:~/mado-push.sh
+ssh you@example.host chmod +x ~/mado-push.sh
 ```
 
 ## 2. 環境変数
 
 ```sh
 # prod: nginx が port 80 で公開 (デフォルト)
-# dev:  vite dev server が port 5173 (http://dashboard.lan:5173)
-DASHBOARD_URL=http://dashboard.lan        # ダッシュボードのオリジン (prod)
+# dev:  vite dev server が port 5173 (http://mado.lan:5173)
+DASHBOARD_URL=http://mado.lan        # ダッシュボードのオリジン (prod)
 WRITE_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxxxxxx  # `.env` の WRITE_TOKEN
 ```
 
 ## 3. 単発実行
 
 ```sh
-DASHBOARD_URL=http://dashboard.lan \
+DASHBOARD_URL=http://mado.lan \
 WRITE_TOKEN=xxx \
-  ./dashboard-push.sh example uptime -- uptime
+  ./mado-push.sh example uptime -- uptime
 ```
 
 成功すると `{"ok":true}` が返ります。
@@ -34,8 +34,8 @@ WRITE_TOKEN=xxx \
 5 分おきに `uptime`、1 時間おきに `df`:
 
 ```cron
-*/5 * * * * DASHBOARD_URL=http://dashboard.lan WRITE_TOKEN=xxx /home/me/dashboard-push.sh example uptime -- uptime
-0   * * * * DASHBOARD_URL=http://dashboard.lan WRITE_TOKEN=xxx /home/me/dashboard-push.sh example df     -- df -h /
+*/5 * * * * DASHBOARD_URL=http://mado.lan WRITE_TOKEN=xxx /home/me/mado-push.sh example uptime -- uptime
+0   * * * * DASHBOARD_URL=http://mado.lan WRITE_TOKEN=xxx /home/me/mado-push.sh example df     -- df -h /
 ```
 
 複数のホストで動かす場合は HOST ラベルを変えて同じ要領で増やしてください。

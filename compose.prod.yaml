@@ -61,4 +61,11 @@ services:
     restart: unless-stopped
 
 volumes:
+  # 旧プロジェクト名 web-dashboard 時代の volume を引き継ぐため、絶対名を pin する。
+  # name: mado を有効にした副作用で本来は mado_db_data_prod になるが、それでは既存
+  # prod の Postgres データ (storage_connections の暗号化 S3 認証情報、notes、
+  # settings、favorites、メトリクス履歴) が orphan になり、再デプロイ時に空 DB が
+  # 起動してしまう。ここで旧名に固定して継続使用する。
+  # 完全新規構築なら任意の名前で OK。
   db_data_prod:
+    name: web-dashboard_db_data_prod
