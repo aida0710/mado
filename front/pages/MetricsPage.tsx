@@ -82,8 +82,9 @@ export default function MetricsPage() {
           直近 1 時間に push されたメトリクスがありません。送り方は{' '}
           <button
             type="button"
-            className="cursor-pointer border-0 bg-transparent p-0 text-inherit underline"
+            className="cursor-pointer border-0 bg-transparent p-0 text-inherit underline hover:text-ink-11"
             onClick={() => setHelpOpen(true)}
+            aria-label="メトリクス送信方法のヘルプを開く"
           >
             こちら
           </button>
