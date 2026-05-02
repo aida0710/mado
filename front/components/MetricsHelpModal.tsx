@@ -78,9 +78,9 @@ export function MetricsHelpModal({ onClose }: Props) {
             </p>
           </Section>
 
-          <Section title="古いデータは消えます">
+          <Section title="古いデータは非表示になります">
             <p className="m-0 text-sm">
-              直近 <strong>1 時間</strong>に push したものだけが画面に出る（DB には残る）。
+              直近 <strong>1 時間</strong>に push したものだけが画面に出る (DB には残る)。
             </p>
           </Section>
 
