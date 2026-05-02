@@ -51,7 +51,7 @@ export default function App() {
     <FlagsProvider>
       <div className="mx-auto max-w-[1100px] px-4">
         <header className="flex items-baseline gap-4 border-b border-ink-2 py-4">
-          <h1 className="m-0 text-lg font-semibold tracking-tight">web-dashboard</h1>
+          <h1 className="m-0 text-lg font-semibold tracking-tight">mado</h1>
           <Tabs />
         </header>
         <main className="pb-8 pt-4">

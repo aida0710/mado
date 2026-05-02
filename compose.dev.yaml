@@ -1,8 +1,9 @@
 # compose.dev.yaml
+name: mado
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: web-dashboard-postgres
+    container_name: mado-postgres
     restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
@@ -23,7 +24,7 @@ services:
 
   api-internal:
     build: ./api
-    container_name: web-dashboard-api-internal
+    container_name: mado-api-internal
     command: ["npx", "tsx", "watch", "internal.ts"]
     env_file:
       - .env
@@ -38,7 +39,7 @@ services:
 
   api-external:
     build: ./api
-    container_name: web-dashboard-api-external
+    container_name: mado-api-external
     command: ["npx", "tsx", "watch", "external.ts"]
     env_file:
       - .env
@@ -53,7 +54,7 @@ services:
 
   front:
     build: ./front
-    container_name: web-dashboard-front
+    container_name: mado-front
     ports:
       - "5173:5173"
     volumes:

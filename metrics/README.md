@@ -16,7 +16,7 @@ metrics/
 Copy the directory to the target host's user account:
 
 ```sh
-scp -r metrics you@example.host:~/web-dashboard/metrics/
+scp -r metrics you@example.host:~/mado/metrics/
 ```
 
 `db.py` has no dependencies beyond Python 3.8+ stdlib.
@@ -25,10 +25,10 @@ scp -r metrics you@example.host:~/web-dashboard/metrics/
 
 ```sh
 # prod: nginx が port 80 で公開 (デフォルト)
-# dev:  vite dev server が port 5173 (http://dashboard.lan:5173)
-DASHBOARD_URL=http://dashboard.lan \
+# dev:  vite dev server が port 5173 (http://mado.lan:5173)
+DASHBOARD_URL=http://mado.lan \
 WRITE_TOKEN=xxxxxxxx \
-  python3 ~/web-dashboard/metrics/example.py
+  python3 ~/mado/metrics/example.py
 ```
 
 A successful push exits 0; failure exits non-zero with a message on
@@ -39,7 +39,7 @@ stderr (cron's `MAILTO` will pick it up).
 In the target host's crontab:
 
 ```cron
-*/5 * * * * DASHBOARD_URL=http://dashboard.lan WRITE_TOKEN=xxx /home/me/web-dashboard/metrics/example.py
+*/5 * * * * DASHBOARD_URL=http://mado.lan WRITE_TOKEN=xxx /home/me/mado/metrics/example.py
 ```
 
 ## Categories

@@ -1,6 +1,6 @@
-# Web Dashboard
+# mado
 
-研究室 LAN 内で使う 2 ページの内部ツール。
+研究室 LAN 内で使う 2 ページの内部ツール。**「窓」**の意。
 
 - **メトリクス**: HPC ホスト (miyabi / 阪大 / その他) で動く `qstat` 等の出力を、ホスト × コマンドごとにカード一覧。各 HPC 側 cron が `POST /api/external/metrics/push` で送ってくる。
 - **ストレージ**: S3 互換ストレージのバケットをブラウズ、各ディレクトリに README を読み書き、テキスト/画像/音声/tar(.gz / .xz) の中身を S3 クライアント無しでプレビュー。
@@ -125,7 +125,7 @@ dev との差分:
 各 HPC ノードに `metrics/` 以下を配置して cron 登録:
 
 ```cron
-*/5 * * * * DASHBOARD_URL=http://dashboard.lan WRITE_TOKEN=xxxxx /home/me/web-dashboard/metrics/example.py
+*/5 * * * * DASHBOARD_URL=http://mado.lan WRITE_TOKEN=xxxxx /home/me/mado/metrics/example.py
 ```
 
 - `metrics/db.py` が `urllib` で `${DASHBOARD_URL}/api/external/metrics/push?host=...&command=...&category=...` に POST

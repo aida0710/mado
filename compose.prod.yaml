@@ -1,8 +1,9 @@
 # compose.prod.yaml
+name: mado
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: web-dashboard-postgres-prod
+    container_name: mado-postgres-prod
     restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
@@ -21,7 +22,7 @@ services:
 
   api-internal:
     build: ./api
-    container_name: web-dashboard-api-internal-prod
+    container_name: mado-api-internal-prod
     command: ["sh", "-c", "npm run build && node dist/internal.js"]
     env_file:
       - .env
@@ -34,7 +35,7 @@ services:
 
   api-external:
     build: ./api
-    container_name: web-dashboard-api-external-prod
+    container_name: mado-api-external-prod
     command: ["sh", "-c", "npm run build && node dist/external.js"]
     env_file:
       - .env
@@ -49,7 +50,7 @@ services:
     build:
       context: .
       dockerfile: nginx/Dockerfile
-    container_name: web-dashboard-nginx-prod
+    container_name: mado-nginx-prod
     # nginx は非 root user (uid 101) で動くため container 内では :8080 を listen する。
     # host 側のみ 80 を晒す。
     ports:

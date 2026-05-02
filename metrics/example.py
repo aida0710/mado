@@ -3,8 +3,8 @@
 
 任意のターゲットホスト上で cron から実行する:
 
-    */5 * * * * DASHBOARD_URL=http://dashboard.lan:3000 \
-        WRITE_TOKEN=xxxxxxxx /home/me/web-dashboard/metrics/example.py
+    */5 * * * * DASHBOARD_URL=http://mado.lan \
+        WRITE_TOKEN=xxxxxxxx /home/me/mado/metrics/example.py
 
 別のコレクターを追加するにはこのファイルをコピーして
 (HOST / COMMAND / CATEGORY / ARGV) を変更する —
