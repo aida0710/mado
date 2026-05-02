@@ -45,6 +45,16 @@ describe('loadEnv', () => {
     })).toThrow(/ALLOWED_ORIGINS/)
   })
 
+  it('throws on ALLOWED_ORIGINS with only commas/whitespace (transform → empty)', () => {
+    expect(() => loadEnv({
+      DATABASE_URL_RW: 'postgres://rw@localhost/dashboard',
+      DATABASE_URL_RO: 'postgres://ro@localhost/dashboard',
+      WRITE_TOKEN: VALID_KEY,
+      ENCRYPTION_KEY: VALID_KEY,
+      ALLOWED_ORIGINS: ' , , ,',
+    })).toThrow(/ALLOWED_ORIGINS/)
+  })
+
   it('throws on missing required var', () => {
     expect(() => loadEnv({ PORT: '3000' })).toThrow(/DATABASE_URL_RW/)
   })

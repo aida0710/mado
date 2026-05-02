@@ -15,9 +15,12 @@ const schema = z.object({
   // CSRF 防御: /api/internal/* の write 系で許容する Origin (カンマ区切り)。
   // 例: dev = "http://localhost:5173"、prod = "http://lab-server"。
   // 設定漏れを早期検知するため必須化 (default なし)。
+  // refine で「,, , 」のように空要素しか含まない値も拒否する (transform 後に長さチェック)。
   ALLOWED_ORIGINS: z.string().min(1).transform(s =>
     s.split(',').map(o => o.trim()).filter(Boolean)
-  ),
+  ).refine(arr => arr.length > 0, {
+    message: 'ALLOWED_ORIGINS must contain at least one non-empty origin',
+  }),
   PREVIEW_TEXT_LIMIT: z.coerce.number().default(65536),
   PREVIEW_TAR_ENTRY_LIMIT: z.coerce.number().default(200),
   PREVIEW_TARXZ_BYTE_LIMIT: z.coerce.number().default(268435456),
