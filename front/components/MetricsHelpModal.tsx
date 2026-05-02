@@ -80,7 +80,7 @@ export function MetricsHelpModal({ onClose }: Props) {
 
           <Section title="古いデータは非表示になります">
             <p className="m-0 text-sm">
-              直近 <strong>1 時間</strong>に push したものだけが画面に出る (DB には残る)。
+              直近 <strong>1 時間</strong>に push したものだけが画面に表示されます。。
             </p>
           </Section>
 
