@@ -49,9 +49,8 @@ export default function HomePage() {
       <div data-color-mode="light">
         <header className="page-head">
           <h2>Team note</h2>
-          <span className="text-xs text-ink-7">研究室全体で 1 つの共有メモ</span>
           <button className="ghost" onClick={() => setEditing(true)}>
-            {data.exists ? '✎ edit' : '✎ create'}
+            {data.exists ? '✎ 編集' : '✎ 作成'}
           </button>
           <button
             className="ghost"
@@ -60,6 +59,7 @@ export default function HomePage() {
           >
             ⏱ 履歴
           </button>
+          <span className="text-xs text-ink-7">Mado 全体で 1 つの共有メモ</span>
         </header>
 
         {isPresent ? (
