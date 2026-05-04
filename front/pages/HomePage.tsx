@@ -59,7 +59,7 @@ export default function HomePage() {
           >
             ⏱ 履歴
           </button>
-          <span className="text-xs text-ink-7">Mado 全体で 1 つの共有メモ</span>
+          <span className="basis-full text-xs text-ink-7">Mado 全体で 1 つの共有メモ</span>
         </header>
 
         {isPresent ? (
