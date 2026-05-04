@@ -21,8 +21,10 @@ EOSQL
 # スキーマを両方の DB に適用する。正規のスキーマは db/migrations/001_init.sql にあり、
 # compose が /migrations/ にマウントする。
 for db in dashboard dashboard_test; do
-  psql -v ON_ERROR_STOP=1 --username "postgres" --dbname "$db" \
-    -f /migrations/001_init.sql
+  # /migrations/*.sql を辞書順 (001_init → 002_... → ...) に適用する。
+  for sql in /migrations/*.sql; do
+    psql -v ON_ERROR_STOP=1 --username "postgres" --dbname "$db" -f "$sql"
+  done
 
   # スキーマオブジェクトの所有権を dashboard_rw に移譲する。これにより
   # TRUNCATE / ALTER / DROP が可能になる (GRANT だけでは TRUNCATE ... RESTART IDENTITY

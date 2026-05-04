@@ -45,6 +45,40 @@ export const PutReadmeOk = z.object({
   size_bytes: z.number(),
 })
 
+// README 編集履歴 (一覧) - body は重いので含めない、選択時だけ取りに行く。
+export const ReadmeHistoryListItem = z.object({
+  id: z.number(),
+  editor: z.string(),
+  edited_at: z.string(),
+  size_bytes: z.number(),
+})
+export const ReadmeHistoryList = z.object({
+  versions: z.array(ReadmeHistoryListItem),
+})
+
+// 1 件の履歴 (body 含む)
+export const ReadmeHistoryVersion = z.object({
+  id: z.number(),
+  bucket: z.string(),
+  prefix: z.string(),
+  body: z.string(),
+  editor: z.string(),
+  edited_at: z.string(),
+  size_bytes: z.number(),
+})
+
+// 接続内 README 全文検索
+export const ReadmeSearchHit = z.object({
+  bucket: z.string(),
+  prefix: z.string(),
+  editor: z.string(),
+  edited_at: z.string(),
+  size_bytes: z.number(),
+})
+export const ReadmeSearchResult = z.object({
+  hits: z.array(ReadmeSearchHit),
+})
+
 export const TarPreview = z.object({
   entries: z.array(z.object({
     name: z.string(),

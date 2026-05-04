@@ -10,6 +10,9 @@ import {
   PutNoteOk,
   PutReadmeOk,
   Readme,
+  ReadmeHistoryList,
+  ReadmeHistoryVersion,
+  ReadmeSearchResult,
   SetFlagOk,
   StorageList,
   TarPreview,
@@ -247,6 +250,27 @@ export const api = {
   // Content-Disposition: attachment を付けるためブラウザはファイル保存を促す。
   downloadUrl: (connId: string, bucket: string, key: string): string =>
     buildUrl(`${API_BASE}/storage/${encodeURIComponent(connId)}/preview/raw`, { bucket, key }),
+
+  // README 編集履歴の一覧 (新しい順)。
+  readmeHistory: (connId: string, bucket: string, prefix: string, limit?: number) =>
+    getJson(buildUrl(
+      `${API_BASE}/storage/${encodeURIComponent(connId)}/readme/history`,
+      { bucket, prefix, limit: limit != null ? String(limit) : undefined },
+    ), ReadmeHistoryList),
+
+  // 特定版の README 本文。
+  readmeHistoryVersion: (connId: string, id: number) =>
+    getJson(
+      `${API_BASE}/storage/${encodeURIComponent(connId)}/readme/history/${id}`,
+      ReadmeHistoryVersion,
+    ),
+
+  // 接続内の README 全文検索 (現在版のみ対象)。
+  readmesSearch: (connId: string, q: string, limit?: number) =>
+    getJson(buildUrl(
+      `${API_BASE}/storage/${encodeURIComponent(connId)}/readmes/search`,
+      { q, limit: limit != null ? String(limit) : undefined },
+    ), ReadmeSearchResult),
 
   // `<img src>` / `<audio src>` 用の tar エントリ本体への URL 形式。
   tarEntryUrl: (connId: string, bucket: string, key: string, entry: string): string =>

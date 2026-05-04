@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../lib/api/client'
 import { ConnectionSwitcher } from '../components/ConnectionSwitcher'
+import { ReadmeSearchPanel } from '../components/ReadmeSearchPanel'
 
 interface BucketRow { name: string; creationDate: string | null }
 
@@ -61,6 +62,7 @@ export default function StorageIndex({ connId }: Props) {
         <span className="ml-auto" />
         <ConnectionSwitcher />
       </header>
+      <ReadmeSearchPanel connId={connId} />
       {error && <p className="error">{error}</p>}
       {loading && buckets.length === 0 && <p className="text-ink-7">loading…</p>}
       {!loading && !error && buckets.length === 0 && (

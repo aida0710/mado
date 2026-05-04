@@ -5,6 +5,7 @@ import { api } from '../lib/api/client'
 import type { z } from 'zod'
 import { Readme } from '../lib/api/types'
 import { MarkdownEditor } from './MarkdownEditor'
+import { ReadmeHistoryModal } from './ReadmeHistoryModal'
 
 type ReadmeData = z.infer<typeof Readme>
 
@@ -17,6 +18,7 @@ interface Props {
 export function ReadmeView({ connId, bucket, prefix }: Props) {
   const [data, setData] = useState<ReadmeData | null>(null)
   const [editing, setEditing] = useState(false)
+  const [historyOpen, setHistoryOpen] = useState(false)
 
   const refresh = useCallback(() => {
     api.readme(connId, bucket, prefix).then(setData).catch(() => setData({ exists: false }))
@@ -35,6 +37,13 @@ export function ReadmeView({ connId, bucket, prefix }: Props) {
         <button className="ghost" onClick={() => setEditing(true)}>
           {data.exists ? '✎ edit' : '✎ create'}
         </button>
+        <button
+          className="ghost"
+          onClick={() => setHistoryOpen(true)}
+          title="編集履歴を表示"
+        >
+          ⏱ 履歴
+        </button>
         {data.exists && data.last_editor && (
           <span className="text-ink-7">last by {data.last_editor}</span>
         )}
@@ -52,6 +61,15 @@ export function ReadmeView({ connId, bucket, prefix }: Props) {
           }
           onSaved={() => { setEditing(false); refresh() }}
           onClose={() => setEditing(false)}
+        />
+      )}
+      {historyOpen && (
+        <ReadmeHistoryModal
+          connId={connId}
+          bucket={bucket}
+          prefix={prefix}
+          currentBody={data.exists ? data.body : null}
+          onClose={() => setHistoryOpen(false)}
         />
       )}
     </section>
