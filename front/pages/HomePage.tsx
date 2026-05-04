@@ -5,6 +5,7 @@ import type { z } from 'zod'
 import { api } from '../lib/api/client'
 import { Note } from '../lib/api/types'
 import { MarkdownEditor } from '../components/MarkdownEditor'
+import { NoteHistoryModal } from '../components/NoteHistoryModal'
 
 type NoteData = z.infer<typeof Note>
 
@@ -23,6 +24,7 @@ function formatByline(iso: string): string {
 export default function HomePage() {
   const [data, setData] = useState<NoteData | null>(null)
   const [editing, setEditing] = useState(false)
+  const [historyOpen, setHistoryOpen] = useState(false)
 
   const refresh = useCallback(() => {
     api.note('home').then(setData).catch(() => setData({ exists: false }))
@@ -46,9 +48,17 @@ export default function HomePage() {
     <>
       <div data-color-mode="light">
         <header className="page-head">
-          <h2>Team notes</h2>
+          <h2>Team note</h2>
+          <span className="text-xs text-ink-7">研究室全体で 1 つの共有メモ</span>
           <button className="ghost" onClick={() => setEditing(true)}>
             {data.exists ? '✎ edit' : '✎ create'}
+          </button>
+          <button
+            className="ghost"
+            onClick={() => setHistoryOpen(true)}
+            title="編集履歴を表示"
+          >
+            ⏱ 履歴
           </button>
         </header>
 
@@ -88,6 +98,13 @@ export default function HomePage() {
           }
           onSaved={() => { setEditing(false); refresh() }}
           onClose={() => setEditing(false)}
+        />
+      )}
+      {historyOpen && (
+        <NoteHistoryModal
+          slug="home"
+          currentBody={data.exists ? data.body : null}
+          onClose={() => setHistoryOpen(false)}
         />
       )}
     </>

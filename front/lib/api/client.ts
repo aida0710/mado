@@ -7,6 +7,8 @@ import {
   Metrics,
   ListBuckets,
   Note,
+  NoteHistoryList,
+  NoteHistoryVersion,
   PutNoteOk,
   PutReadmeOk,
   Readme,
@@ -271,6 +273,19 @@ export const api = {
       `${API_BASE}/storage/${encodeURIComponent(connId)}/readmes/search`,
       { q, limit: limit != null ? String(limit) : undefined },
     ), ReadmeSearchResult),
+
+  // Team note (postgres) の編集履歴。
+  noteHistory: (slug: string, limit?: number) =>
+    getJson(buildUrl(
+      `${API_BASE}/notes/${encodeURIComponent(slug)}/history`,
+      { limit: limit != null ? String(limit) : undefined },
+    ), NoteHistoryList),
+
+  noteHistoryVersion: (slug: string, id: number) =>
+    getJson(
+      `${API_BASE}/notes/${encodeURIComponent(slug)}/history/${id}`,
+      NoteHistoryVersion,
+    ),
 
   // `<img src>` / `<audio src>` 用の tar エントリ本体への URL 形式。
   tarEntryUrl: (connId: string, bucket: string, key: string, entry: string): string =>

@@ -5,11 +5,8 @@ import { api } from '../lib/api/client'
 import { fmtSize } from '../lib/format'
 
 interface Props {
-  connId: string
-  bucket: string
-  prefix: string
-  // README が現在も S3 に存在するなら現在の本文を渡す。履歴と並べて diff 風に
-  // 比較するヒントとして使う (今は単純に "現在" マーカーとして表示)。
+  slug: string
+  // 現在の本文 (一致版を強調表示)。null = 現在 note なし。
   currentBody: string | null
   onClose: () => void
 }
@@ -30,31 +27,31 @@ function fmtTime(iso: string): string {
   })
 }
 
-export function ReadmeHistoryModal({ connId, bucket, prefix, currentBody, onClose }: Props) {
+// Team note (postgres notes テーブル) の編集履歴モーダル。S3 README 用の
+// ReadmeHistoryModal と同じ UX。識別タイトルで「Team note」を明示する。
+export function NoteHistoryModal({ slug, currentBody, onClose }: Props) {
   const [versions, setVersions] = useState<Version[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [bodyOf, setBodyOf] = useState<{ id: number; body: string } | null>(null)
 
   useEffect(() => {
-    api.readmeHistory(connId, bucket, prefix)
+    api.noteHistory(slug)
       .then(r => {
         setVersions(r.versions)
-        // 最新版を初期選択
         if (r.versions.length > 0) setSelectedId(r.versions[0].id)
       })
       .catch((e: Error) => setError(e.message))
-  }, [connId, bucket, prefix])
+  }, [slug])
 
   useEffect(() => {
     if (selectedId == null) return
     setBodyOf(null)
-    api.readmeHistoryVersion(connId, selectedId)
+    api.noteHistoryVersion(slug, selectedId)
       .then(r => setBodyOf({ id: r.id, body: r.body }))
       .catch((e: Error) => setError(e.message))
-  }, [connId, selectedId])
+  }, [slug, selectedId])
 
-  // Escape で閉じる。
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose()
@@ -70,12 +67,12 @@ export function ReadmeHistoryModal({ connId, bucket, prefix, currentBody, onClos
         onClick={e => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
-        aria-labelledby="readme-history-title"
+        aria-labelledby="note-history-title"
         data-color-mode="light"
       >
         <header className="flex items-center gap-3 pb-3">
-          <h3 id="readme-history-title" className="m-0 flex-1">
-            S3 README 履歴 — {prefix || '(root)'}
+          <h3 id="note-history-title" className="m-0 flex-1">
+            Team note 履歴 — {slug}
           </h3>
           <button
             type="button"

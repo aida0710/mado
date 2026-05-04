@@ -79,6 +79,25 @@ export const ReadmeSearchResult = z.object({
   hits: z.array(ReadmeSearchHit),
 })
 
+// Team notes (postgres notes テーブル) の編集履歴 — slug 単位、S3 README 履歴と並列。
+export const NoteHistoryListItem = z.object({
+  id: z.number(),
+  editor: z.string(),
+  edited_at: z.string(),
+  size_bytes: z.number(),
+})
+export const NoteHistoryList = z.object({
+  versions: z.array(NoteHistoryListItem),
+})
+export const NoteHistoryVersion = z.object({
+  id: z.number(),
+  slug: z.string(),
+  body: z.string(),
+  editor: z.string(),
+  edited_at: z.string(),
+  size_bytes: z.number(),
+})
+
 export const TarPreview = z.object({
   entries: z.array(z.object({
     name: z.string(),
