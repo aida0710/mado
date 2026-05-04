@@ -36,7 +36,7 @@ export function ReadmeView({ connId, bucket, prefix }: Props) {
         <h3 className="m-0 text-sm font-semibold">S3 README</h3>
         <span className="text-[11px] text-ink-7">この prefix の README.md を編集</span>
         <button className="ghost" onClick={() => setEditing(true)}>
-          {data.exists ? '✎ edit' : '✎ create'}
+          {data.exists ? '✎ 編集' : '✎ 作成'}
         </button>
         <button
           className="ghost"
