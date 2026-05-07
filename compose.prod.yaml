@@ -4,9 +4,8 @@
 # project name prefix される)。dev → prod のうっかり乗り換えで残留コンテナと
 # 衝突する事故を防ぐため。
 #
-# 注意: db_data_prod 自体の `name:` は web-dashboard_db_data_prod のまま据え置く。
-# project name 変更で「volume が作り直される (= 既存データ消失)」を避けるため、
-# 明示名で固定して以前から運用しているデータをそのまま参照させる。
+# volume は明示名を付けず Docker の `${project}_${name}` 自動命名に任せる
+# (= mado-prod_db_data)。dev も mado-dev_db_data なので並ぶ。
 name: mado-prod
 services:
   postgres:
@@ -19,7 +18,7 @@ services:
       POSTGRES_DB: dashboard
       DASHBOARD_PASSWORD: CHANGEME
     volumes:
-      - db_data_prod:/var/lib/postgresql/data
+      - db_data:/var/lib/postgresql/data
       - ./db/init:/docker-entrypoint-initdb.d:ro
       - ./db/migrations:/migrations:ro
     healthcheck:
@@ -69,5 +68,4 @@ services:
     restart: unless-stopped
 
 volumes:
-  db_data_prod:
-    name: web-dashboard_db_data_prod
+  db_data:
