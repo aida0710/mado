@@ -36,6 +36,23 @@ export function PreviewArchive({ connId, bucket, k }: { connId: string; bucket: 
   // ファイルまたはページサイズが変わったときにページ1にリセットする。
   useEffect(() => { setOffset(0) }, [connId, bucket, k, pageSize])
 
+  // 当該アーカイブのキャッシュを丸ごと破棄して同じページを再取得。
+  const forceRefresh = (): void => {
+    api.invalidateTarPreview(connId, bucket, k)
+    // 再 fetch を効かせるため state を一度クリアする。useEffect の依存
+    // (connId/bucket/k/offset/pageSize) は変わらないので、
+    // setData(null) で「loading 状態」に落とせば次のレンダで fetch が走る。
+    setData(null)
+    setError(null)
+    setLoading(true)
+    const startedAt = Date.now()
+    setProgress({ entries: 0, bytes: 0, requests: 0, mode: '', startedAt, elapsed: 0 })
+    api.tarPreview(connId, bucket, k, { limit: pageSize, offset })
+      .then(r => setData(r))
+      .catch((e: Error) => setError(e.message))
+      .finally(() => setLoading(false))
+  }
+
   useEffect(() => {
     let cancelled = false
     const startedAt = Date.now()
@@ -77,19 +94,29 @@ export function PreviewArchive({ connId, bucket, k }: { connId: string; bucket: 
   }, [data, error])
 
   const sizeSelect = (
-    <label className="flex items-center gap-2">
-      <span className="text-xs text-ink-7">表示件数</span>
-      <select
-        className="cursor-pointer rounded-2 border border-ink-3 bg-paper px-2 py-1 disabled:cursor-default disabled:opacity-50"
-        value={pageSize}
-        onChange={e => setPageSize(Number(e.target.value))}
+    <div className="flex items-center gap-2">
+      <label className="flex items-center gap-2">
+        <span className="text-xs text-ink-7">表示件数</span>
+        <select
+          className="cursor-pointer rounded-2 border border-ink-3 bg-paper px-2 py-1 disabled:cursor-default disabled:opacity-50"
+          value={pageSize}
+          onChange={e => setPageSize(Number(e.target.value))}
+          disabled={loading}
+        >
+          {PAGE_SIZE_OPTIONS.map(n => (
+            <option key={n} value={n}>{n}</option>
+          ))}
+        </select>
+      </label>
+      <button
+        className={pagerBtnClass}
+        onClick={forceRefresh}
         disabled={loading}
+        title="キャッシュを破棄して再読み込み"
       >
-        {PAGE_SIZE_OPTIONS.map(n => (
-          <option key={n} value={n}>{n}</option>
-        ))}
-      </select>
-    </label>
+        🔄
+      </button>
+    </div>
   )
 
   if (error) return <p className="error">{error}</p>

@@ -20,9 +20,17 @@ export function ReadmeView({ connId, bucket, prefix }: Props) {
   const [editing, setEditing] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
 
+  // refresh: 通常のリロード。キャッシュが効いていれば即時に解決する。
+  // forceRefresh: 🔄 ボタンから呼ぶ。キャッシュを破棄してから fetch する
+  // (例: 他人がダッシュボード経由で編集した、aws cli で直接書き換えた、等)。
   const refresh = useCallback(() => {
     api.readme(connId, bucket, prefix).then(setData).catch(() => setData({ exists: false }))
   }, [connId, bucket, prefix])
+
+  const forceRefresh = useCallback(() => {
+    api.invalidateReadme(connId, bucket, prefix)
+    refresh()
+  }, [connId, bucket, prefix, refresh])
 
   useEffect(() => { refresh() }, [refresh])
 
@@ -44,6 +52,13 @@ export function ReadmeView({ connId, bucket, prefix }: Props) {
           title="編集履歴を表示"
         >
           ⏱ 履歴
+        </button>
+        <button
+          className="ghost"
+          onClick={forceRefresh}
+          title="キャッシュを破棄して再読み込み"
+        >
+          🔄 更新
         </button>
         {data.exists && data.last_editor && (
           <span className="text-ink-7">last by {data.last_editor}</span>
