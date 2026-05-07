@@ -1,9 +1,13 @@
 # compose.dev.yaml
-name: mado
+# project name と container_name を mado-dev-* で揃える。compose.prod.yaml は
+# mado-prod-* なので、両者は完全に独立した名前空間で走る (network/volume も自動で
+# project name prefix される)。dev → prod のうっかり乗り換えで残留コンテナと
+# 衝突する事故を防ぐため。
+name: mado-dev
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: mado-postgres
+    container_name: mado-dev-postgres
     restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
@@ -24,7 +28,7 @@ services:
 
   api-internal:
     build: ./api
-    container_name: mado-api-internal
+    container_name: mado-dev-api-internal
     command: ["npx", "tsx", "watch", "internal.ts"]
     env_file:
       - .env
@@ -39,7 +43,7 @@ services:
 
   api-external:
     build: ./api
-    container_name: mado-api-external
+    container_name: mado-dev-api-external
     command: ["npx", "tsx", "watch", "external.ts"]
     env_file:
       - .env
@@ -54,7 +58,7 @@ services:
 
   front:
     build: ./front
-    container_name: mado-front
+    container_name: mado-dev-front
     ports:
       - "5173:5173"
     volumes:
