@@ -65,6 +65,14 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
     setPageIdx(newIdx)
     load(history[newIdx])
   }
+  // 現 prefix のリストキャッシュを丸ごと破棄して 1 ページ目から再 fetch。
+  // 別ユーザがアップロード / 削除した直後に押す想定。
+  const forceRefresh = () => {
+    api.invalidateList(connId, bucket, prefix)
+    setHistory([null])
+    setPageIdx(0)
+    load(null)
+  }
 
   const activate = (fn: () => void) => (e: KeyboardEvent<HTMLTableRowElement>) => {
     if (e.key === 'Enter' || e.key === ' ') {
@@ -159,6 +167,14 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
           disabled={!page.nextContinuation || loading}
         >
           Next →
+        </button>
+        <button
+          className="cursor-pointer rounded-2 border border-ink-3 bg-paper px-3 py-1 transition-colors hover:bg-ink-1 hover:border-ink-5 disabled:cursor-default disabled:opacity-40"
+          onClick={forceRefresh}
+          disabled={loading}
+          title="キャッシュを破棄して再読み込み"
+        >
+          🔄
         </button>
       </div>
     </div>

@@ -43,26 +43,30 @@ export function mountStorageReadmeRoutes(app: Hono, deps: StorageReadmeDeps): vo
     const prefix = c.req.query('prefix') ?? ''
     const Key = prefix + 'README.md'
 
-    let body: string
-    try {
-      const out = await storage.send(new GetObjectCommand({ Bucket: bucket, Key }))
-      body = await streamToString(
-        out.Body as unknown as NodeJS.ReadableStream,
-      )
-    } catch (e) {
-      if (e instanceof NoSuchKey) return c.json({ exists: false })
-      throw e
+    // S3 GetObject と meta SELECT を並列に実行する (元は S3 → 成功時のみ DB の
+    // sequential)。README が存在する prefix で 1 ラウンドトリップ分のレイテンシを
+    // 削れるのと、ストレージが MinIO 等でローカル DB と同程度の RTT のときに効く。
+    type MetaRow = {
+      last_editor: string; last_edited_at: Date; size_bytes: number | null
     }
-
-    const meta = await deps.pools.ro.query(
+    const metaQuery = deps.pools.ro.query<MetaRow>(
       `SELECT last_editor, last_edited_at, size_bytes
          FROM storage_readme_meta
          WHERE connection_id=$1 AND bucket=$2 AND prefix=$3`,
       [connId, bucket, prefix]
     )
-    const m = meta.rows[0] as
-      | { last_editor: string; last_edited_at: Date; size_bytes: number | null }
-      | undefined
+    const s3Promise = storage
+      .send(new GetObjectCommand({ Bucket: bucket, Key }))
+      .then(out => streamToString(out.Body as unknown as NodeJS.ReadableStream))
+      .then(body => ({ kind: 'ok' as const, body }))
+      .catch((e: unknown) => {
+        if (e instanceof NoSuchKey) return { kind: 'absent' as const }
+        throw e
+      })
+    const [s3Result, metaResult] = await Promise.all([s3Promise, metaQuery])
+    if (s3Result.kind === 'absent') return c.json({ exists: false })
+    const body = s3Result.body
+    const m = metaResult.rows[0]
     return c.json({
       exists: true,
       body,

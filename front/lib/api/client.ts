@@ -20,8 +20,25 @@ import {
   TarPreview,
 } from './types'
 import type { ConnectionCreateInput, ConnectionUpdateInput } from './types'
+import { TTLCache } from './cache'
 
 const API_BASE = '/api/internal'
+
+// セッション内 (タブを開いている間) のレスポンスキャッシュ。
+// S3 ディレクトリの行き来や preview の開閉でで毎回 fetch が走るのを抑える。
+//
+// TTL は 5 分: 「同じファイルをすぐ見直す」ユースケースを吸収しつつ、
+// 他人がアップロードした変更も次の 5 分で見える。明示的に最新化したいときは
+// UI の 🔄 refresh ボタンが invalidate を呼ぶ。
+const CACHE_TTL_MS = 5 * 60 * 1000
+
+const listCache    = new TTLCache<z.infer<typeof StorageList>>(CACHE_TTL_MS)
+const readmeCache  = new TTLCache<z.infer<typeof Readme>>(CACHE_TTL_MS)
+const tarCache     = new TTLCache<z.infer<typeof TarPreview>>(CACHE_TTL_MS)
+
+// キャッシュキー作成。'|' は S3 のキー / prefix では出現しないため衝突しない。
+const k = (...parts: Array<string | number | null | undefined>): string =>
+  parts.map(p => p ?? '').join('|')
 
 async function getJson<T extends z.ZodTypeAny>(
   url: string,
@@ -125,14 +142,27 @@ export const api = {
     getJson(`${API_BASE}/storage/${encodeURIComponent(connId)}/buckets`, ListBuckets),
 
   list: (connId: string, bucket: string, prefix: string, continuation?: string | null) =>
-    getJson(buildUrl(`${API_BASE}/storage/${encodeURIComponent(connId)}/list`, {
-      bucket,
-      prefix,
-      continuation: continuation ?? undefined,
-    }), StorageList),
+    listCache.get(k('list', connId, bucket, prefix, continuation), () =>
+      getJson(buildUrl(`${API_BASE}/storage/${encodeURIComponent(connId)}/list`, {
+        bucket,
+        prefix,
+        continuation: continuation ?? undefined,
+      }), StorageList),
+    ),
+
+  // 1 prefix のリスト全ページを破棄 (アップロード/削除や手動 refresh 後に呼ぶ)。
+  invalidateList: (connId: string, bucket: string, prefix: string): void => {
+    listCache.invalidatePrefix(k('list', connId, bucket, prefix))
+  },
 
   readme: (connId: string, bucket: string, prefix: string) =>
-    getJson(buildUrl(`${API_BASE}/storage/${encodeURIComponent(connId)}/readme`, { bucket, prefix }), Readme),
+    readmeCache.get(k('readme', connId, bucket, prefix), () =>
+      getJson(buildUrl(`${API_BASE}/storage/${encodeURIComponent(connId)}/readme`, { bucket, prefix }), Readme),
+    ),
+
+  invalidateReadme: (connId: string, bucket: string, prefix: string): void => {
+    readmeCache.invalidate(k('readme', connId, bucket, prefix))
+  },
 
   putReadme: async (
     connId: string,
@@ -157,7 +187,14 @@ export const api = {
       throw new Error(msg)
     }
     const json: unknown = await res.json()
+    // 編集後は当該 README のキャッシュを破棄。次回 readme() で最新を fetch。
+    readmeCache.invalidate(k('readme', connId, bucket, prefix))
     return PutReadmeOk.parse(json)
+  },
+
+  // 1 アーカイブの全ページを破棄 (手動 refresh などから呼ぶ)。
+  invalidateTarPreview: (connId: string, bucket: string, key: string): void => {
+    tarCache.invalidatePrefix(k('tar', connId, bucket, key))
   },
 
   // NDJSON をストリーミングする。各行は以下のいずれか:
@@ -179,6 +216,12 @@ export const api = {
       onProgress?: (p: { bytes: number; requests?: number }) => void
     } = {},
   ): Promise<z.infer<typeof TarPreview>> => {
+    // (offset, limit) 単位でキャッシュ。同じページを再表示しても再 download しない。
+    // tar.gz / tar.xz は 1 ページめくるたびにアーカイブ全体を再 download/decode
+    // しているので効果が大きい。コールバック (onMode/onEntry/onProgress) は
+    // キャッシュヒット時には呼ばれない (= 進捗 UI が出ないが、瞬時に終わる)。
+    const cacheKey = k('tar', connId, bucket, key, opts.offset ?? 0, opts.limit ?? 0)
+    return tarCache.get(cacheKey, async () => {
     const url = buildUrl(`${API_BASE}/storage/${encodeURIComponent(connId)}/preview/tar`, {
       bucket,
       key,
@@ -237,6 +280,7 @@ export const api = {
     }
     if (!done) throw new Error('tar stream ended without done marker')
     return TarPreview.parse({ entries, ...done })
+    })
   },
 
   textPreviewUrl: (connId: string, bucket: string, key: string): string =>
