@@ -1,9 +1,17 @@
 # compose.prod.yaml
-name: mado
+# project name と container_name を mado-prod-* で揃える。compose.dev.yaml は
+# mado-dev-* なので、両者は完全に独立した名前空間で走る (network/volume も自動で
+# project name prefix される)。dev → prod のうっかり乗り換えで残留コンテナと
+# 衝突する事故を防ぐため。
+#
+# 注意: db_data_prod 自体の `name:` は web-dashboard_db_data_prod のまま据え置く。
+# project name 変更で「volume が作り直される (= 既存データ消失)」を避けるため、
+# 明示名で固定して以前から運用しているデータをそのまま参照させる。
+name: mado-prod
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: mado-postgres-prod
+    container_name: mado-prod-postgres
     restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
@@ -22,7 +30,7 @@ services:
 
   api-internal:
     build: ./api
-    container_name: mado-api-internal-prod
+    container_name: mado-prod-api-internal
     command: ["sh", "-c", "npm run build && node dist/internal.js"]
     env_file:
       - .env
@@ -35,7 +43,7 @@ services:
 
   api-external:
     build: ./api
-    container_name: mado-api-external-prod
+    container_name: mado-prod-api-external
     command: ["sh", "-c", "npm run build && node dist/external.js"]
     env_file:
       - .env
@@ -50,7 +58,7 @@ services:
     build:
       context: .
       dockerfile: nginx/Dockerfile
-    container_name: mado-nginx-prod
+    container_name: mado-prod-nginx
     # nginx は非 root user (uid 101) で動くため container 内では :8080 を listen する。
     # host 側のみ 80 を晒す。
     ports:
