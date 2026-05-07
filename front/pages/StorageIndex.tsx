@@ -35,6 +35,12 @@ export default function StorageIndex({ connId }: Props) {
       .finally(() => setLoading(false))
   }, [connId])
 
+  const forceRefresh = useCallback(() => {
+    api.invalidateBuckets(connId)
+    api.invalidateFavorites(connId)
+    refresh()
+  }, [connId, refresh])
+
   useEffect(() => { refresh() }, [refresh])
 
   const toggleFavorite = async (name: string) => {
@@ -60,6 +66,14 @@ export default function StorageIndex({ connId }: Props) {
       <header className="page-head">
         <h2>Bucket</h2>
         <span className="ml-auto" />
+        <button
+          className="ghost"
+          onClick={forceRefresh}
+          disabled={loading}
+          title="キャッシュを破棄して再読み込み"
+        >
+          🔄
+        </button>
         <ConnectionSwitcher />
       </header>
       <ReadmeSearchPanel connId={connId} />

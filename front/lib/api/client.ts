@@ -32,9 +32,11 @@ const API_BASE = '/api/internal'
 // UI の 🔄 refresh ボタンが invalidate を呼ぶ。
 const CACHE_TTL_MS = 5 * 60 * 1000
 
-const listCache    = new TTLCache<z.infer<typeof StorageList>>(CACHE_TTL_MS)
-const readmeCache  = new TTLCache<z.infer<typeof Readme>>(CACHE_TTL_MS)
-const tarCache     = new TTLCache<z.infer<typeof TarPreview>>(CACHE_TTL_MS)
+const listCache      = new TTLCache<z.infer<typeof StorageList>>(CACHE_TTL_MS)
+const readmeCache    = new TTLCache<z.infer<typeof Readme>>(CACHE_TTL_MS)
+const tarCache       = new TTLCache<z.infer<typeof TarPreview>>(CACHE_TTL_MS)
+const bucketsCache   = new TTLCache<z.infer<typeof ListBuckets>>(CACHE_TTL_MS)
+const favoritesCache = new TTLCache<z.infer<typeof FavoriteBuckets>>(CACHE_TTL_MS)
 
 // キャッシュキー作成。'|' は S3 のキー / prefix では出現しないため衝突しない。
 const k = (...parts: Array<string | number | null | undefined>): string =>
@@ -139,7 +141,13 @@ export const api = {
     mutateJson(`${API_BASE}/connections/${encodeURIComponent(id)}`, { method: 'DELETE' }, null),
 
   buckets: (connId: string) =>
-    getJson(`${API_BASE}/storage/${encodeURIComponent(connId)}/buckets`, ListBuckets),
+    bucketsCache.get(k('buckets', connId), () =>
+      getJson(`${API_BASE}/storage/${encodeURIComponent(connId)}/buckets`, ListBuckets),
+    ),
+
+  invalidateBuckets: (connId: string): void => {
+    bucketsCache.invalidate(k('buckets', connId))
+  },
 
   list: (connId: string, bucket: string, prefix: string, continuation?: string | null) =>
     listCache.get(k('list', connId, bucket, prefix, continuation), () =>
@@ -352,7 +360,13 @@ export const api = {
   },
 
   favorites: (connId: string) =>
-    getJson(`${API_BASE}/storage/${encodeURIComponent(connId)}/favorites`, FavoriteBuckets),
+    favoritesCache.get(k('favorites', connId), () =>
+      getJson(`${API_BASE}/storage/${encodeURIComponent(connId)}/favorites`, FavoriteBuckets),
+    ),
+
+  invalidateFavorites: (connId: string): void => {
+    favoritesCache.invalidate(k('favorites', connId))
+  },
 
   addFavorite: async (connId: string, bucket: string): Promise<void> => {
     const res = await fetch(
@@ -360,6 +374,7 @@ export const api = {
       { method: 'PUT' },
     )
     if (!res.ok) throw new Error(res.statusText)
+    favoritesCache.invalidate(k('favorites', connId))
   },
 
   removeFavorite: async (connId: string, bucket: string): Promise<void> => {
@@ -368,5 +383,6 @@ export const api = {
       { method: 'DELETE' },
     )
     if (!res.ok) throw new Error(res.statusText)
+    favoritesCache.invalidate(k('favorites', connId))
   },
 }

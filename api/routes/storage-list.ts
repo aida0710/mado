@@ -11,10 +11,24 @@ export interface StorageListDeps {
 
 export function mountStorageListRoutes(app: Hono, deps: StorageListDeps): void {
   app.get('/storage/:connId/buckets', async c => {
+    // フェーズごとに所要時間を JSON ログに出して、
+    // 「buckets が遅い」ときに getStorage / S3 の ListBuckets / 全体の
+    // どこに時間がかかっているか切り分けられるようにする。
+    const t0 = Date.now()
     const r = await resolveStorageOrFail(c, deps.getStorage)
+    const t1 = Date.now()
     if (r instanceof Response) return r
     const storage = r
     const out = await storage.send(new ListBucketsCommand({}))
+    const t2 = Date.now()
+    console.log(JSON.stringify({
+      ev: 'storage.buckets.timing',
+      connId: c.req.param('connId'),
+      getStorage_ms: t1 - t0,
+      listBuckets_ms: t2 - t1,
+      total_ms: t2 - t0,
+      bucketCount: out.Buckets?.length ?? 0,
+    }))
     return c.json({
       buckets: (out.Buckets ?? []).map(b => ({
         name: b.Name!,

@@ -1,6 +1,15 @@
 import { S3Client } from '@aws-sdk/client-s3'
+import { NodeHttpHandler } from '@smithy/node-http-handler'
+import { Agent as HttpAgent } from 'node:http'
+import { Agent as HttpsAgent } from 'node:https'
 import type { Pools } from './db.js'
 import type { CryptoModule } from './crypto.js'
+
+// すべての S3Client で共有する keep-alive 付き agent。
+// AWS SDK v3 はバージョンによってデフォルトの keep-alive 挙動が違うため、
+// 明示的に設定して LAN MinIO / mdx s3 の TLS ハンドシェイク往復を抑える。
+const httpAgent  = new HttpAgent({  keepAlive: true, maxSockets: 50 })
+const httpsAgent = new HttpsAgent({ keepAlive: true, maxSockets: 50 })
 
 export interface StorageFactory {
   /** 指定した connectionId のキャッシュ済み S3Client を返す。
@@ -55,6 +64,16 @@ export function createStorageFactory(deps: StorageFactoryDeps): StorageFactory {
         secretAccessKey: deps.crypto.decrypt(row.secret_access_key_enc),
       },
       forcePathStyle: row.force_path_style,
+      // 明示的に keep-alive を効かせる。さらに maxAttempts=2 にして「成功するまでの
+      // 隠れたリトライ」を短く切る (mdx s3 等で初回 200 が遅延する時に SDK 内で
+      // 数秒の指数バックオフ + 再試行を踏むケースを回避)。
+      maxAttempts: 2,
+      requestHandler: new NodeHttpHandler({
+        httpAgent,
+        httpsAgent,
+        connectionTimeout: 5_000,
+        socketTimeout:    30_000,
+      }),
     })
     cache.set(connId, client)
     return client
