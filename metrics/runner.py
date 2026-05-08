@@ -11,6 +11,7 @@ import math
 import subprocess
 import sys
 import time
+import traceback
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -213,8 +214,16 @@ def run_loop(config: Config) -> int:
                     print(f"[{_ts()}] {cmd.command} → push ok ({elapsed_ms}ms)",
                           flush=True)
                 except SystemExit as e:
+                    # db.push の正常な失敗パス (HTTP error, missing env など)。
                     print(f"[{_ts()}] {cmd.command} → push FAILED: {e}",
                           flush=True, file=sys.stderr)
+                except Exception as e:
+                    # 想定外の例外 (db.py のバグ、URL parse error など)。
+                    # daemon を殺さずトレースバックだけ出して継続。
+                    print(f"[{_ts()}] {cmd.command} → push CRASHED: "
+                          f"{type(e).__name__}: {e}",
+                          flush=True, file=sys.stderr)
+                    traceback.print_exc(file=sys.stderr)
                 next_run_at[i] = time.monotonic() + cmd.interval_seconds
 
         sleep_for = max(1.0, min(next_run_at) - time.monotonic())

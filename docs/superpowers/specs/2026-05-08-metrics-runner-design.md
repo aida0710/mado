@@ -188,6 +188,7 @@ def run_one(cmd: Command) -> None:
 - **`FileNotFoundError` (argv の実行ファイルが存在しない) も catch。** config のタイポやコマンド未インストール時の早期可視化。
 - **`db.push` は失敗時 `sys.exit()` する** (現実装) → daemon ではプロセスごと死ぬのを避ける必要がある。`SystemExit` を catch してログだけ出してループ継続する。
   - 単発モード (`--once`) では catch せず、push 失敗を非ゼロ exit で伝える (cron の `MAILTO` で気付ける)。
+  - daemon ではさらに、`db.push` から SystemExit 以外の例外が漏れた場合 (URL parse error など想定外のバグ) も `Exception` で catch して traceback を stderr に出すだけにし、`SystemExit` と同様にループ継続する (cron MAILTO で気付ける `--once` と違い、daemon は止まると気付かれにくいため)。
 - **環境変数 (`DASHBOARD_URL` / `WRITE_TOKEN`) は `db.push` 内でチェックされる。** runner.py 側で重複検査はしない (DRY)。
 
 ### ロギング (stdout)
