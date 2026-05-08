@@ -31,9 +31,9 @@ ssh you@example.host 'cd ~/mado/metrics && uv sync'
 
 | 接続元 | URL | 経路 |
 |---|---|---|
-| LAN 内 (10.15.0.0/16) | `http://mado.lan` | nginx :80 (UI / API すべて) |
+| LAN 内 (10.15.0.0/16) | `http://mado.example` | nginx :80 (UI / API すべて) |
 | LAN 外 (Miyabi 等の HPC ノード) | `http://<server>:81` | nginx :81 (`/api/external/` 専用) |
-| dev (vite) | `http://mado.lan:5173` | vite dev server |
+| dev (vite) | `http://mado.example:5173` | vite dev server |
 
 `:80` は LAN 限定 firewall 想定なので、LAN 外からは `:81` を使う (`/api/external/metrics/push` のみ受ける別 server ブロック、Bearer token で防御)。
 
@@ -54,7 +54,7 @@ uv run runner.py config/miyabi.json --once
 シェルで直接渡したい場合 (cron 等) はそちらが優先される:
 
 ```sh
-DASHBOARD_URL=http://mado.lan WRITE_TOKEN=xxx python3 example.py
+DASHBOARD_URL=http://mado.example WRITE_TOKEN=xxx python3 example.py
 ```
 
 ## Run once
@@ -68,7 +68,7 @@ cd ~/mado/metrics && uv run example.py
 シェルで直接渡すなら (`.env` を使わない場合):
 
 ```sh
-DASHBOARD_URL=http://mado.lan WRITE_TOKEN=xxxxxxxx \
+DASHBOARD_URL=http://mado.example WRITE_TOKEN=xxxxxxxx \
   uv run --directory ~/mado/metrics example.py
 ```
 

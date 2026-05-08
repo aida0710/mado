@@ -128,7 +128,7 @@ dev との差分:
 各 HPC ノードに `metrics/` 以下を配置して cron 登録:
 
 ```cron
-# LAN 内 (10.15.*.*) なら http://mado.lan、LAN 外なら http://<server>:81
+# LAN 内 (10.15.*.*) なら http://mado.example、LAN 外なら http://<server>:81
 */5 * * * * cd /home/me/mado/metrics && uv run example.py
 ```
 

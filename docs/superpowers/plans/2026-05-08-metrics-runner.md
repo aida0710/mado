@@ -980,7 +980,7 @@ cron で 5 分間隔のような粒度で済むならこれが一番シンプル
 
 ```sh
 # 本番 (常駐ループ — デフォルト)
-DASHBOARD_URL=http://mado.lan WRITE_TOKEN=xxx \
+DASHBOARD_URL=http://mado.example WRITE_TOKEN=xxx \
   python3 ~/mado/metrics/runner.py ~/mado/metrics/config/miyabi.json
 
 # 単発実行 (cron / 手動テスト用)
