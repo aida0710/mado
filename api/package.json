@@ -4,11 +4,9 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev:internal": "tsx watch --env-file=../.env internal.ts",
-    "dev:external": "tsx watch --env-file=../.env external.ts",
+    "dev": "tsx watch --env-file=../.env internal.ts",
     "build": "tsc -p tsconfig.json",
-    "start:internal": "node dist/internal.js",
-    "start:external": "node dist/external.js",
+    "start": "node dist/internal.js",
     "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest"

@@ -1,15 +1,5 @@
 import { z } from 'zod'
 
-export const Metric = z.object({
-  host: z.string(),
-  command: z.string(),
-  category: z.string(),
-  output: z.string(),
-  collected_at: z.string().datetime(),
-})
-export type Metric = z.infer<typeof Metric>
-export const Metrics = z.array(Metric)
-
 export const Bucket = z.object({
   name: z.string(),
   creationDate: z.string().nullable(),
@@ -162,12 +152,3 @@ export const NotePresent = z.object({
 export const Note = z.union([NoteAbsent, NotePresent])
 
 export const PutNoteOk = z.object({ ok: z.literal(true) })
-
-export const FeatureFlags = z.record(z.string(), z.boolean())
-export type FeatureFlags = z.infer<typeof FeatureFlags>
-
-export const SetFlagOk = z.object({
-  ok: z.literal(true),
-  name: z.string(),
-  enabled: z.boolean(),
-})

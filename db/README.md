@@ -2,7 +2,7 @@
 
 The dashboard uses Postgres with two distinct roles:
 
-- `dashboard_rw` — owns and writes to the schema. Used by `/api/external/metrics/push` and the internal write paths (connections, notes, settings, readme, favorites).
+- `dashboard_rw` — owns and writes to the schema. Used by `/api/internal/*` write paths (connections, notes, readme, favorites).
 - `dashboard_ro` — read-only. Used by `/api/internal/*` read paths so a buggy front-end can never DROP TABLE.
 
 ## Local development (Docker — recommended)
@@ -45,12 +45,15 @@ GRANT CONNECT ON DATABASE dashboard_test TO dashboard_ro;
 SQL
 
 for db in dashboard dashboard_test; do
-  psql -U postgres -d "$db" -f db/migrations/001_init.sql
+  for sql in db/migrations/*.sql; do
+    psql -U postgres -d "$db" -f "$sql"
+  done
   psql -U postgres -d "$db" <<'SQL'
-ALTER TABLE    metrics             OWNER TO dashboard_rw;
-ALTER SEQUENCE metrics_id_seq      OWNER TO dashboard_rw;
-ALTER VIEW     metrics_latest      OWNER TO dashboard_rw;
-ALTER TABLE    storage_readme_meta OWNER TO dashboard_rw;
+ALTER TABLE    storage_connections     OWNER TO dashboard_rw;
+ALTER FUNCTION storage_connections_touch_updated_at() OWNER TO dashboard_rw;
+ALTER TABLE    storage_readme_meta     OWNER TO dashboard_rw;
+ALTER TABLE    storage_favorite_buckets OWNER TO dashboard_rw;
+ALTER TABLE    notes                   OWNER TO dashboard_rw;
 
 GRANT USAGE  ON SCHEMA public                  TO dashboard_ro;
 GRANT SELECT ON ALL TABLES IN SCHEMA public    TO dashboard_ro;

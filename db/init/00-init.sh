@@ -31,15 +31,11 @@ for db in dashboard dashboard_test; do
   # などの操作が不十分)。
   # ro は明示的な GRANT により SELECT のみのアクセスを維持する。
   psql -v ON_ERROR_STOP=1 --username "postgres" --dbname "$db" <<-EOSQL
-    ALTER TABLE    metrics                              OWNER TO dashboard_rw;
-    ALTER SEQUENCE metrics_id_seq                       OWNER TO dashboard_rw;
-    ALTER VIEW     metrics_latest                       OWNER TO dashboard_rw;
     ALTER TABLE    storage_connections                  OWNER TO dashboard_rw;
     ALTER FUNCTION storage_connections_touch_updated_at() OWNER TO dashboard_rw;
     ALTER TABLE    storage_readme_meta                  OWNER TO dashboard_rw;
     ALTER TABLE    storage_favorite_buckets             OWNER TO dashboard_rw;
     ALTER TABLE    notes                                OWNER TO dashboard_rw;
-    ALTER TABLE    feature_flags                        OWNER TO dashboard_rw;
 
     GRANT USAGE  ON SCHEMA public                  TO dashboard_ro;
     GRANT SELECT ON ALL TABLES IN SCHEMA public    TO dashboard_ro;

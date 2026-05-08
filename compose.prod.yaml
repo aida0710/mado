@@ -40,33 +40,17 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
-  api-external:
-    build: ./api
-    container_name: mado-prod-api-external
-    command: ["sh", "-c", "npm run build && node dist/external.js"]
-    env_file:
-      - .env
-    environment:
-      PORT: 3001
-    depends_on:
-      postgres:
-        condition: service_healthy
-    restart: unless-stopped
-
   nginx:
     build:
       context: .
       dockerfile: nginx/Dockerfile
     container_name: mado-prod-nginx
-    # nginx は非 root user (uid 101) で動くため container 内では :8080 (LAN 用)
-    # と :8081 (LAN 外からの /api/external/ 用) を listen する。
-    # host 側は 80 / 81 で晒す。詳細は nginx/default.conf 冒頭コメント参照。
+    # nginx は非 root user (uid 101) で動くため container 内では :8080 を listen する。
+    # host 側のみ 80 を晒す。
     ports:
       - "80:8080"
-      - "81:8081"
     depends_on:
       - api-internal
-      - api-external
     restart: unless-stopped
 
 volumes:

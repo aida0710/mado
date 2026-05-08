@@ -1,22 +1,3 @@
-CREATE TABLE IF NOT EXISTS metrics (
-  id           BIGSERIAL   PRIMARY KEY,
-  host         TEXT        NOT NULL,
-  command      TEXT        NOT NULL,
-  -- Free-text bucket: "node使用率" / "実行ジョブ数" / "トークン数" / ...
-  category     TEXT        NOT NULL DEFAULT 'general',
-  output       TEXT        NOT NULL,
-  exit_code    INTEGER,
-  collected_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-CREATE INDEX IF NOT EXISTS metrics_host_command_collected
-  ON metrics(host, command, collected_at DESC);
-
-CREATE OR REPLACE VIEW metrics_latest AS
-SELECT DISTINCT ON (host, command, category) *
-FROM   metrics
-ORDER  BY host, command, category, collected_at DESC;
-
 CREATE TABLE IF NOT EXISTS storage_connections (
   id                    TEXT        PRIMARY KEY,             -- nanoid(10)
   name                  TEXT        NOT NULL UNIQUE,
@@ -71,15 +52,3 @@ CREATE TABLE IF NOT EXISTS notes (
   last_edited_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   CHECK (length(slug) BETWEEN 1 AND 64)
 );
-
--- Runtime feature flags. Seeded with all known flags = enabled. The Settings
--- page surfaces them as toggles. New flags are added by INSERT below.
-CREATE TABLE IF NOT EXISTS feature_flags (
-  name       TEXT        PRIMARY KEY,
-  enabled    BOOLEAN     NOT NULL DEFAULT TRUE,
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-INSERT INTO feature_flags (name, enabled) VALUES
-  ('metrics', TRUE)
-ON CONFLICT (name) DO NOTHING;

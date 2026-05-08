@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-// どちらのシークレットも 64 桁の16進数 (32 バイトのエントロピー) が必須。
+// `ENCRYPTION_KEY` は 64 桁の16進数 (32 バイトのエントロピー) が必須。
 // `openssl rand -hex 32` で生成できる。
 const hex32 = (name: string) =>
   z.string().regex(/^[0-9a-fA-F]{64}$/, `${name} must be 64 hex chars (32 bytes)`)
@@ -10,7 +10,6 @@ const schema = z.object({
   DATABASE_URL_RW: z.string().min(1),
   DATABASE_URL_RO: z.string().min(1),
   DATABASE_URL_RW_TEST: z.string().optional(),
-  WRITE_TOKEN: hex32('WRITE_TOKEN'),
   ENCRYPTION_KEY: hex32('ENCRYPTION_KEY'),
   // CSRF 防御: /api/internal/* の write 系で許容する Origin (カンマ区切り)。
   // 例: dev = "http://localhost:5173"、prod = "http://lab-server"。

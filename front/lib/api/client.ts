@@ -3,8 +3,6 @@ import {
   Connection,
   ConnectionList,
   FavoriteBuckets,
-  FeatureFlags,
-  Metrics,
   ListBuckets,
   Note,
   NoteHistoryList,
@@ -15,7 +13,6 @@ import {
   ReadmeHistoryList,
   ReadmeHistoryVersion,
   ReadmeSearchResult,
-  SetFlagOk,
   StorageList,
   TarPreview,
 } from './types'
@@ -94,8 +91,6 @@ async function mutateJson<T extends z.ZodTypeAny>(
 }
 
 export const api = {
-  metrics: () => getJson(`${API_BASE}/metrics`, Metrics),
-
   note: (slug: string) =>
     getJson(`${API_BASE}/notes/${encodeURIComponent(slug)}`, Note),
 
@@ -119,15 +114,6 @@ export const api = {
     }
     return PutNoteOk.parse(await res.json())
   },
-
-  flags: () => getJson(`${API_BASE}/settings/flags`, FeatureFlags),
-
-  setFlag: (name: string, enabled: boolean) =>
-    mutateJson(
-      `${API_BASE}/settings/flags/${encodeURIComponent(name)}`,
-      { method: 'PUT', body: { enabled } },
-      SetFlagOk,
-    ),
 
   listConnections: () => getJson(`${API_BASE}/connections`, ConnectionList),
 
