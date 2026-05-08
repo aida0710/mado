@@ -31,6 +31,18 @@ class Config:
     commands: List[Command]
 
 
+def _to_positive_float(value: object, where: str, path: Path) -> float:
+    try:
+        result = float(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError) as e:
+        raise ValueError(
+            f"{path}: {where} must be a number, got {value!r}"
+        ) from e
+    if result <= 0:
+        raise ValueError(f"{path}: {where} must be > 0, got {result}")
+    return result
+
+
 def load_config(path: Path) -> Config:
     """JSON config を読み Config / Command にする。
 
@@ -44,8 +56,16 @@ def load_config(path: Path) -> Config:
     if not isinstance(host, str) or not host:
         raise ValueError(f"{path}: 'host' must be a non-empty string")
 
-    default_interval = float(raw.get("default_interval_seconds", 180))
-    default_timeout = float(raw.get("default_timeout_seconds", 30))
+    default_interval = _to_positive_float(
+        raw.get("default_interval_seconds", 180),
+        "default_interval_seconds",
+        path,
+    )
+    default_timeout = _to_positive_float(
+        raw.get("default_timeout_seconds", 30),
+        "default_timeout_seconds",
+        path,
+    )
 
     commands_raw = raw.get("commands")
     if not isinstance(commands_raw, list) or not commands_raw:
@@ -58,16 +78,34 @@ def load_config(path: Path) -> Config:
         for key in ("category", "command", "argv"):
             if key not in c:
                 raise ValueError(f"{path}: commands[{i}] missing '{key}'")
+        for key in ("category", "command"):
+            val = c[key]
+            if not isinstance(val, str) or not val:
+                raise ValueError(
+                    f"{path}: commands[{i}].{key} must be a non-empty string"
+                )
         if not isinstance(c["argv"], list) or not c["argv"]:
             raise ValueError(
                 f"{path}: commands[{i}].argv must be a non-empty array"
             )
+        if not all(isinstance(x, str) for x in c["argv"]):
+            raise ValueError(
+                f"{path}: commands[{i}].argv items must all be strings"
+            )
         commands.append(Command(
-            category=str(c["category"]),
-            command=str(c["command"]),
-            argv=[str(x) for x in c["argv"]],
-            interval_seconds=float(c.get("interval_seconds", default_interval)),
-            timeout_seconds=float(c.get("timeout_seconds", default_timeout)),
+            category=c["category"],
+            command=c["command"],
+            argv=list(c["argv"]),
+            interval_seconds=_to_positive_float(
+                c.get("interval_seconds", default_interval),
+                f"commands[{i}].interval_seconds",
+                path,
+            ),
+            timeout_seconds=_to_positive_float(
+                c.get("timeout_seconds", default_timeout),
+                f"commands[{i}].timeout_seconds",
+                path,
+            ),
         ))
 
     return Config(host=host, commands=commands)
