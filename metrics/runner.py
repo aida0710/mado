@@ -135,7 +135,11 @@ def _run_subprocess(cmd: Command) -> str:
             )
         return output
     except subprocess.TimeoutExpired as e:
-        partial = e.stdout or ""
+        raw = e.stdout
+        if isinstance(raw, bytes):
+            partial = raw.decode("utf-8", errors="replace")
+        else:
+            partial = raw or ""
         return (
             f"{partial}\n--- timeout ---\n"
             f"command timed out after {cmd.timeout_seconds}s\n"

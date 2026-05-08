@@ -164,8 +164,13 @@ def run_one(cmd: Command) -> None:
                 f"(exit {proc.returncode})\n"
             )
     except subprocess.TimeoutExpired as e:
+        raw = e.stdout
+        partial = (
+            raw.decode("utf-8", errors="replace")
+            if isinstance(raw, bytes) else (raw or "")
+        )
         output = (
-            f"{e.stdout or ''}\n--- timeout ---\n"
+            f"{partial}\n--- timeout ---\n"
             f"command timed out after {cmd.timeout_seconds}s\n"
         )
     except FileNotFoundError:
