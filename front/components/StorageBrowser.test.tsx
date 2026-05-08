@@ -87,6 +87,55 @@ describe('StorageBrowser - directory row', () => {
     )
   })
 
+  it('issues api.list with prefix + query when user searches in current directory', async () => {
+    const listMock = api.list as ReturnType<typeof vi.fn>
+    // 1 回目 (初回 mount): prefix='voice/', q=''
+    listMock.mockResolvedValueOnce({
+      directories: ['voice/jp/'],
+      files: [],
+      nextContinuation: null,
+      nextStartAfter: null,
+    })
+    // 2 回目 (検索後): prefix='voice/' + 'j' で再 fetch
+    listMock.mockResolvedValueOnce({
+      directories: ['voice/jp/'],
+      files: [],
+      nextContinuation: null,
+      nextStartAfter: null,
+    })
+
+    const user = userEvent.setup()
+    renderBrowser('voice/')
+    await screen.findByRole('link', { name: /jp\// })
+    expect(listMock).toHaveBeenCalledTimes(1)
+    // 初回呼び出しの prefix は 'voice/'
+    expect(listMock.mock.calls[0]).toEqual(['c1', 'b1', 'voice/', {}])
+
+    // 検索 input に 'j' を入力 → debounce 後に 2 回目の list が走る
+    await user.type(screen.getByLabelText('ディレクトリ内検索'), 'j')
+    await waitFor(() => expect(listMock).toHaveBeenCalledTimes(2), { timeout: 1000 })
+    // 2 回目の prefix は 'voice/' + 'j' = 'voice/j'
+    expect(listMock.mock.calls[1]).toEqual(['c1', 'b1', 'voice/j', {}])
+  })
+
+  it('renders the lazy-load sentinel when the response carries a next cursor', async () => {
+    const listMock = api.list as ReturnType<typeof vi.fn>
+    listMock.mockResolvedValueOnce({
+      directories: [],
+      files: [{ key: 'voice/a.mp3', size: 1, lastModified: null }],
+      nextContinuation: 'tok1',
+      nextStartAfter: null,
+    })
+
+    renderBrowser('voice/')
+    await screen.findByText(/a\.mp3/)
+
+    // hasMore=true なら sentinel 行 ("↓ さらに読み込む") が DOM に出る。
+    // 実際の交差判定は jsdom 上で再現できないため、ここでは sentinel が
+    // 描画されているところまでを検証する。
+    expect(screen.getByText(/さらに読み込む/)).toBeInTheDocument()
+  })
+
   it('shows a copy menu on directory row with Web URL and S3 URL items', async () => {
     ;(api.list as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
       directories: ['voice/jp/'],

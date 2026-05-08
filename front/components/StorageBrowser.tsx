@@ -1,4 +1,4 @@
-import { useEffect, useState, type KeyboardEvent } from 'react'
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { Link } from 'react-router-dom'
 import type { z } from 'zod'
 import { api } from '../lib/api/client'
@@ -16,6 +16,7 @@ interface Props {
 }
 
 type ListResp = z.infer<typeof StorageList>
+type FileEntry = ListResp['files'][number]
 
 const headThClass =
   'border-b border-ink-2 px-2 py-2 text-left text-[11px] font-medium uppercase tracking-[0.06em] text-ink-7'
@@ -39,56 +40,141 @@ const nextCursor = (p: ListResp): Cursor | null =>
     ? { startAfter: p.nextStartAfter }
     : null
 
+// 検索 input の debounce 時間。ReadmeSearchPanel と揃える。
+const SEARCH_DEBOUNCE_MS = 250
+
+// IntersectionObserver の rootMargin。ユーザがスクロール末尾に着く
+// 少し手前で先読みして「途切れず流れる」体感にする。
+const SENTINEL_ROOT_MARGIN = '200px'
+
 export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) {
-  const [page, setPage] = useState<ListResp | null>(null)
-  // ページごとの cursor 履歴。history[0] は常に {} (= 1 ページ目、cursor 無し)。
-  // continuation (公式 S3) と startAfter (DDN 互換フォールバック) の
-  // どちらが入るかはサーバ応答次第なので両方持てる shape にする。
-  const [history, setHistory] = useState<Cursor[]>([{}])
-  const [pageIdx, setPageIdx] = useState(0)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  // 検索クエリ — 現ディレクトリ "直下" の前方一致 (= S3 ListObjectsV2 の Prefix を
+  // `prefix + q` にして Delimiter='/' のまま投げる)。サブディレクトリ配下は
+  // 含めない仕様 (再帰検索したくなったら別エンドポイントに切る)。
+  const [q, setQ] = useState('')
+  const [submittedQ, setSubmittedQ] = useState('')
 
-  const load = (cursor: Cursor) => {
-    setLoading(true)
-    setError(null)
-    api.list(connId, bucket, prefix, cursor)
-      .then(setPage)
-      .catch((e: Error) => setError(e.message))
-      .finally(() => setLoading(false))
-  }
-
-  // 接続/バケット/プレフィックスが変わったときにページングを先頭ページにリセットする。
+  // q を debounce して submittedQ に反映。これが effective prefix を駆動する。
   useEffect(() => {
-    setHistory([{}])
-    setPageIdx(0)
-    load({})
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const t = setTimeout(() => setSubmittedQ(q), SEARCH_DEBOUNCE_MS)
+    return () => clearTimeout(t)
+  }, [q])
+
+  // 別ディレクトリへ移動したら検索ボックスもクリアする。さもないと
+  // /etc/ で "config" 検索中に /var/ に移ると /var/config* を検索する形になり
+  // ユーザの意図と乖離する。
+  useEffect(() => {
+    setQ('')
+    setSubmittedQ('')
   }, [connId, bucket, prefix])
 
-  const next = () => {
-    if (!page) return
-    const cursor = nextCursor(page)
-    if (!cursor) return
-    setHistory(h => [...h, cursor])
-    setPageIdx(i => i + 1)
-    load(cursor)
+  const effectivePrefix = prefix + submittedQ
+
+  // ページネーション撤廃 → 全 chunk を順に append していく単一リスト。
+  const [dirs, setDirs] = useState<string[]>([])
+  const [files, setFiles] = useState<FileEntry[]>([])
+  const [cursor, setCursor] = useState<Cursor | null>(null)
+  const [hasMore, setHasMore] = useState(false)
+  const [loading, setLoading] = useState(false)        // 1 chunk 目 (リセット時)
+  const [loadingMore, setLoadingMore] = useState(false) // 2 chunk 目以降
+  const [error, setError] = useState<string | null>(null)
+
+  // 並行 fetch (素早い prefix 切替 / 検索キー入力) で stale chunk が
+  // append されないように「セッション ID」で gate する。
+  // sessionRef を bump → それ以前の Promise の result は捨てる。
+  const sessionRef = useRef(0)
+
+  // 1 chunk 目: 既存の dirs/files は表示したまま、新しい chunk が届いたら置換。
+  // → stale-while-revalidate により prefix 切替時に画面が空にならない
+  // (既存テストが「古い内容が dim で残る」ことを確認しているのでこの挙動は維持)。
+  const startNew = (): void => {
+    const sid = ++sessionRef.current
+    setError(null)
+    setLoading(true)
+    api.list(connId, bucket, effectivePrefix, {})
+      .then(r => {
+        if (sessionRef.current !== sid) return
+        setDirs(r.directories)
+        setFiles(r.files)
+        const nc = nextCursor(r)
+        setCursor(nc)
+        setHasMore(!!nc)
+      })
+      .catch((e: Error) => {
+        if (sessionRef.current !== sid) return
+        setError(e.message)
+      })
+      .finally(() => {
+        if (sessionRef.current !== sid) return
+        setLoading(false)
+      })
   }
-  const prev = () => {
-    if (pageIdx === 0) return
-    const newIdx = pageIdx - 1
-    setPageIdx(newIdx)
-    load(history[newIdx])
+
+  // 接続/バケット/prefix/検索クエリのいずれかが変わったら新規セッション。
+  useEffect(() => {
+    startNew()
+    // startNew は state setter 群を閉じ込んだクロージャ。依存に入れると毎レンダで
+    // 再生成され無限ループするので明示列挙。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connId, bucket, prefix, submittedQ])
+
+  // sentinel が画面に入ったら次 chunk を append。
+  // - cursor が null (= 最終 chunk まで取得済み) → 何もしない
+  // - 既に in-flight → 何もしない (= IO 連発を吸収)
+  const loadMore = (): void => {
+    if (loadingMore || loading || !cursor) return
+    const sid = sessionRef.current
+    setLoadingMore(true)
+    api.list(connId, bucket, effectivePrefix, cursor)
+      .then(r => {
+        if (sessionRef.current !== sid) return
+        // 重複防止: API は通常 cursor 境界で重複しないが、DDN 互換 S3 で
+        // StartAfter フォールバック時に最終キーが再出することがあるため
+        // key/path で de-dup する。
+        setDirs(d => {
+          const seen = new Set(d)
+          return [...d, ...r.directories.filter(x => !seen.has(x))]
+        })
+        setFiles(f => {
+          const seen = new Set(f.map(x => x.key))
+          return [...f, ...r.files.filter(x => !seen.has(x.key))]
+        })
+        const nc = nextCursor(r)
+        setCursor(nc)
+        setHasMore(!!nc)
+      })
+      .catch((e: Error) => {
+        if (sessionRef.current !== sid) return
+        setError(e.message)
+      })
+      .finally(() => {
+        if (sessionRef.current !== sid) return
+        setLoadingMore(false)
+      })
   }
-  // 現 prefix のリストキャッシュを丸ごと破棄して 1 ページ目から再 fetch。
-  // 別ユーザがアップロード / 削除した直後に押す想定。
-  const forceRefresh = () => {
+
+  const sentinelRef = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    const node = sentinelRef.current
+    if (!node) return
+    const io = new IntersectionObserver(entries => {
+      if (entries.some(e => e.isIntersecting)) loadMore()
+    }, { rootMargin: SENTINEL_ROOT_MARGIN })
+    io.observe(node)
+    return () => io.disconnect()
+    // loadMore を毎レンダで再観測するため cursor / loading 状態を deps に入れる
+    // (= cursor 取得済み or loading 解除直後に再評価される)。loadMore 自体は
+    // クロージャだが、内部で session gate するため stale capture は無害。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cursor, loading, loadingMore, hasMore])
+
+  // 当該ディレクトリ全体のキャッシュを破棄して 1 chunk 目から再 fetch。
+  // 別ユーザがアップロード / 削除した直後に押す想定。検索中でも
+  // 同じ prefix で前方一致 invalidate されるので search 結果も新鮮になる。
+  const forceRefresh = (): void => {
     api.invalidateList(connId, bucket, prefix)
-    setHistory([{}])
-    setPageIdx(0)
-    load({})
+    startNew()
   }
-  const hasMore = !!(page && nextCursor(page))
 
   // File rows のキーボード操作 (Enter/Space で preview を開く) 用ヘルパー。
   // dir 行は <Link> がネイティブにキーボード処理する。
@@ -99,13 +185,36 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
     }
   }
 
-  if (error) return <p className="error">{error}</p>
-  if (!page) return <p className="text-ink-7">{loading ? 'loading…' : ''}</p>
+  const isEmpty = !loading && dirs.length === 0 && files.length === 0
+  const isSearching = submittedQ.length > 0
 
   return (
     <div>
+      {/* 検索 input — 現ディレクトリ直下の前方一致 (再帰なし) */}
+      <div className="mb-2 flex items-center gap-2">
+        <input
+          type="search"
+          className="flex-1 max-w-[480px] rounded-2 border border-ink-3 bg-paper px-3 py-1.5 text-sm"
+          placeholder="このディレクトリ内を検索 (前方一致)"
+          value={q}
+          onChange={e => setQ(e.target.value)}
+          aria-label="ディレクトリ内検索"
+        />
+        {isSearching && (
+          <button
+            type="button"
+            onClick={() => setQ('')}
+            className="cursor-pointer rounded-2 border border-ink-3 bg-paper px-2 py-1 text-xs transition-colors hover:bg-ink-1"
+            aria-label="検索をクリア"
+          >
+            クリア
+          </button>
+        )}
+      </div>
+
       {/* 進捗バー領域: 高さ 2px を常時確保しレイアウトシフトを避ける。
-          loading 中だけバー要素を描画する。 */}
+          loading (1 chunk 目) のときだけバー要素を描画する。loadingMore は
+          下のセンチネル横に小さな indicator を出すので兼用しない。 */}
       <div className="relative h-[2px] w-full overflow-hidden bg-ink-1">
         {loading && (
           <div
@@ -115,6 +224,9 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
           />
         )}
       </div>
+
+      {error && <p className="error">{error}</p>}
+
       <div
         aria-busy={loading}
         className={loading ? 'pointer-events-none opacity-60 transition-opacity' : 'transition-opacity'}
@@ -129,7 +241,9 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
             </tr>
           </thead>
           <tbody>
-            {page.directories.map(d => {
+            {dirs.map(d => {
+              // 表示は現ディレクトリ基準で末尾を切る。検索中は effectivePrefix が
+              // `prefix + q` だが、入っているキーは prefix で始まるのでそのまま slice。
               const tail = d.startsWith(prefix) ? d.slice(prefix.length) : d
               const dirHref = `/storage/${encodeURIComponent(connId)}/${encodeURIComponent(bucket)}/${encPath(d)}`
               const dirS3Url  = `s3://${bucket}/${d}`
@@ -156,7 +270,7 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
                 </tr>
               )
             })}
-            {page.files.map(f => {
+            {files.map(f => {
               const tail = f.key.startsWith(prefix) ? f.key.slice(prefix.length) : f.key
               const select = () => onSelectFile?.(f.key)
               const s3Url = `s3://${bucket}/${f.key}`
@@ -193,26 +307,32 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
             })}
           </tbody>
         </table>
-        <div className="flex items-center justify-center gap-3 py-3 tabular-nums">
-          <button
-            className="cursor-pointer rounded-2 border border-ink-3 bg-paper px-3 py-1 transition-colors hover:bg-ink-1 hover:border-ink-5 disabled:cursor-default disabled:opacity-40"
-            onClick={prev}
-            disabled={pageIdx === 0 || loading}
-          >
-            ← Prev
-          </button>
-          <span>page {pageIdx + 1}{hasMore ? '+' : ''}</span>
-          <button
-            className="cursor-pointer rounded-2 border border-ink-3 bg-paper px-3 py-1 transition-colors hover:bg-ink-1 hover:border-ink-5 disabled:cursor-default disabled:opacity-40"
-            onClick={next}
-            disabled={!hasMore || loading}
-          >
-            Next →
-          </button>
+
+        {isEmpty && !error && (
+          <p className="py-4 text-center text-xs text-ink-7">
+            {isSearching ? `「${submittedQ}」に一致するエントリはありません。` : '空のディレクトリです。'}
+          </p>
+        )}
+
+        {/* 末尾センチネル: hasMore のときだけマウント。IntersectionObserver が
+            これを観測し画面に入ったら loadMore() を呼ぶ。 */}
+        {hasMore && (
+          <div ref={sentinelRef} className="flex items-center justify-center py-3 text-xs text-ink-7">
+            {loadingMore ? '読み込み中…' : '↓ さらに読み込む'}
+          </div>
+        )}
+
+        {/* hasMore が false なら「end」ラベル + refresh のみ。検索の有無に関わらず常に出す。 */}
+        <div className="flex items-center justify-center gap-3 py-3 text-xs text-ink-7 tabular-nums">
+          {!hasMore && !isEmpty && (
+            <span>
+              {dirs.length + files.length} 件 (全件表示済み)
+            </span>
+          )}
           <button
             className="cursor-pointer rounded-2 border border-ink-3 bg-paper px-3 py-1 transition-colors hover:bg-ink-1 hover:border-ink-5 disabled:cursor-default disabled:opacity-40"
             onClick={forceRefresh}
-            disabled={loading}
+            disabled={loading || loadingMore}
             title="キャッシュを破棄して再読み込み"
           >
             🔄
