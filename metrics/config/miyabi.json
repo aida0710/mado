@@ -16,8 +16,8 @@
     },
     {
       "category": "トークン使用率",
-      "display_command": "qhost",
-      "argv": ["qhost"],
+      "display_command": "show_token",
+      "argv": ["show_token"],
       "interval_seconds": 60
     }
   ]
