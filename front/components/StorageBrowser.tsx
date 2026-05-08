@@ -23,8 +23,12 @@ const tdNameClass =
   'max-w-0 overflow-hidden text-ellipsis whitespace-nowrap border-b border-ink-1 px-2 py-2'
 const tdNumClass =
   'w-px whitespace-nowrap border-b border-ink-1 px-2 py-2 text-right tabular-nums text-ink-7'
-const rowClass =
+// File rows: 行全体クリック (preview drawer 開閉) なので pointer cursor
+const fileRowClass =
   'cursor-pointer transition-colors hover:bg-ink-0 focus-within:bg-ink-1'
+// Dir rows: クリック領域は内側の <Link> だけ。inert セルでは pointer を出さない
+const dirRowClass =
+  'transition-colors hover:bg-ink-0 focus-within:bg-ink-1'
 
 export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) {
   const [page, setPage] = useState<ListResp | null>(null)
@@ -122,7 +126,7 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
                 { kind: 'copy', label: 'S3 URL をコピー', value: dirS3Url  },
               ]
               return (
-                <tr key={d} className={rowClass}>
+                <tr key={d} className={dirRowClass}>
                   <td className={`${tdNameClass} p-0`}>
                     <Link
                       to={dirHref}
@@ -159,7 +163,7 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
               return (
                 <tr
                   key={f.key}
-                  className={rowClass}
+                  className={fileRowClass}
                   role="button"
                   tabIndex={0}
                   onClick={select}
