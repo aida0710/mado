@@ -188,6 +188,39 @@ def run_once(config: Config, only: Optional[str] = None) -> int:
     return rc
 
 
+def run_loop(config: Config) -> int:
+    """常駐ループ。各コマンドは独立した next_run_at で due になったら実行。
+
+    push 失敗 (SystemExit) は catch して継続 — 一時的 NW 不調で daemon を
+    死なせないため。FATAL なエラー (config 不正など) は load_config 段階で
+    既に弾かれているはずなので、ここではループ継続を優先する。
+    """
+    n = len(config.commands)
+    next_run_at: List[float] = [0.0] * n  # 初回は即座に全部走る
+
+    print(f"[{_ts()}] starting loop: {n} commands, host={config.host}",
+          flush=True)
+
+    while True:
+        now = time.monotonic()
+        for i, cmd in enumerate(config.commands):
+            if next_run_at[i] <= now:
+                output = _run_subprocess(cmd)
+                try:
+                    push_started = time.monotonic()
+                    push(config.host, cmd.command, output, category=cmd.category)
+                    elapsed_ms = int((time.monotonic() - push_started) * 1000)
+                    print(f"[{_ts()}] {cmd.command} → push ok ({elapsed_ms}ms)",
+                          flush=True)
+                except SystemExit as e:
+                    print(f"[{_ts()}] {cmd.command} → push FAILED: {e}",
+                          flush=True, file=sys.stderr)
+                next_run_at[i] = time.monotonic() + cmd.interval_seconds
+
+        sleep_for = max(1.0, min(next_run_at) - time.monotonic())
+        time.sleep(sleep_for)
+
+
 def main() -> int:
     p = argparse.ArgumentParser(description="Config-driven metrics runner.")
     p.add_argument("config", type=Path, help="path to config JSON")
@@ -205,8 +238,7 @@ def main() -> int:
 
     if args.once:
         return run_once(cfg, only=args.only)
-    # default = --loop
-    raise NotImplementedError("--loop is wired in Task 4")
+    return run_loop(cfg)
 
 
 if __name__ == "__main__":
