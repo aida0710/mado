@@ -40,7 +40,7 @@ def _request_shutdown(signum: int, _frame: object) -> None:
     global _shutdown_requested
     _shutdown_requested = True
     sig_name = signal.Signals(signum).name
-    print(f"[{_ts()}] received {sig_name}, shutting down after current command...",
+    print(f"[{_ts()}] {sig_name} を受信。実行中のコマンドが終わったら終了します...",
           file=sys.stderr, flush=True)
 
 
@@ -68,10 +68,12 @@ def _to_positive_float(value: object, where: str, path: Path) -> float:
         result = float(value)  # type: ignore[arg-type]
     except (TypeError, ValueError) as e:
         raise ValueError(
-            f"{path}: {where} must be a number, got {value!r}"
+            f"{path}: {where} は数値である必要があります (got {value!r})"
         ) from e
     if not math.isfinite(result) or result <= 0:
-        raise ValueError(f"{path}: {where} must be > 0, got {result}")
+        raise ValueError(
+            f"{path}: {where} は 0 より大きい値である必要があります (got {result})"
+        )
     return result
 
 
@@ -82,11 +84,11 @@ def load_config(path: Path) -> Config:
     """
     raw = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(raw, dict):
-        raise ValueError(f"{path}: top-level must be an object")
+        raise ValueError(f"{path}: トップレベルは object である必要があります")
 
     host = raw.get("host")
     if not isinstance(host, str) or not host:
-        raise ValueError(f"{path}: 'host' must be a non-empty string")
+        raise ValueError(f"{path}: 'host' は空でない文字列である必要があります")
 
     default_interval = _to_positive_float(
         raw.get("default_interval_seconds", 180),
@@ -101,28 +103,28 @@ def load_config(path: Path) -> Config:
 
     commands_raw = raw.get("commands")
     if not isinstance(commands_raw, list) or not commands_raw:
-        raise ValueError(f"{path}: 'commands' must be a non-empty array")
+        raise ValueError(f"{path}: 'commands' は空でない配列である必要があります")
 
     commands: List[Command] = []
     for i, c in enumerate(commands_raw):
         if not isinstance(c, dict):
-            raise ValueError(f"{path}: commands[{i}] must be an object")
+            raise ValueError(f"{path}: commands[{i}] は object である必要があります")
         for key in ("category", "command", "argv"):
             if key not in c:
-                raise ValueError(f"{path}: commands[{i}] missing '{key}'")
+                raise ValueError(f"{path}: commands[{i}] に '{key}' がありません")
         for key in ("category", "command"):
             val = c[key]
             if not isinstance(val, str) or not val:
                 raise ValueError(
-                    f"{path}: commands[{i}].{key} must be a non-empty string"
+                    f"{path}: commands[{i}].{key} は空でない文字列である必要があります"
                 )
         if not isinstance(c["argv"], list) or not c["argv"]:
             raise ValueError(
-                f"{path}: commands[{i}].argv must be a non-empty array"
+                f"{path}: commands[{i}].argv は空でない配列である必要があります"
             )
         if not all(isinstance(x, str) for x in c["argv"]):
             raise ValueError(
-                f"{path}: commands[{i}].argv items must all be strings"
+                f"{path}: commands[{i}].argv の要素はすべて文字列である必要があります"
             )
         commands.append(Command(
             category=c["category"],
@@ -172,16 +174,16 @@ def _run_subprocess(cmd: Command) -> str:
             partial = raw or ""
         return (
             f"{partial}\n--- timeout ---\n"
-            f"command timed out after {cmd.timeout_seconds}s\n"
+            f"コマンドが {cmd.timeout_seconds}s でタイムアウトしました\n"
         )
     except FileNotFoundError:
-        return f"--- error ---\ncommand not found: {cmd.argv[0]}\n"
+        return f"--- error ---\nコマンドが見つかりません: {cmd.argv[0]}\n"
 
 
 def run_once(config: Config, only: Optional[str] = None) -> int:
     """全コマンド (or only に一致するもの) を 1 回ずつ実行 → push。
 
-    Returns: 0 on full success, 1 if any command's push failed
+    Returns: 全 push 成功で 0、いずれかが失敗したら 1
              (cron MAILTO で気付けるよう非ゼロを返す)。
 
     `only` は category または command の完全一致 (大文字小文字も区別)。
@@ -204,7 +206,7 @@ def run_once(config: Config, only: Optional[str] = None) -> int:
                   flush=True, file=sys.stderr)
             rc = 1
     if only is not None and matched == 0:
-        print(f"[{_ts()}] no commands matched --only {only!r}",
+        print(f"[{_ts()}] --only {only!r} に一致するコマンドがありません",
               file=sys.stderr, flush=True)
         rc = 1
     return rc
@@ -220,7 +222,7 @@ def run_loop(config: Config) -> int:
     n = len(config.commands)
     next_run_at: List[float] = [0.0] * n
 
-    print(f"[{_ts()}] starting loop: {n} commands, host={config.host}",
+    print(f"[{_ts()}] ループ開始: {n} commands, host={config.host}",
           flush=True)
 
     while not _shutdown_requested:
@@ -260,25 +262,25 @@ def run_loop(config: Config) -> int:
             time.sleep(chunk)
             slept += chunk
 
-    print(f"[{_ts()}] loop exited cleanly", file=sys.stderr, flush=True)
+    print(f"[{_ts()}] ループを正常終了", file=sys.stderr, flush=True)
     return 0
 
 
 def main() -> int:
-    p = argparse.ArgumentParser(description="Config-driven metrics runner.")
-    p.add_argument("config", type=Path, help="path to config JSON")
+    p = argparse.ArgumentParser(description="config 駆動のメトリクスランナー。")
+    p.add_argument("config", type=Path, help="config JSON ファイルへのパス")
     mode = p.add_mutually_exclusive_group()
     mode.add_argument("--once", action="store_true",
-                      help="run all commands once and exit")
+                      help="全コマンドを 1 回ずつ実行して終了")
     mode.add_argument("--loop", action="store_true",
-                      help="run continuously (default if neither flag given)")
+                      help="常駐ループ (どちらも指定しない場合のデフォルト)")
     p.add_argument("--only",
-                   help="run only commands whose category OR command "
-                        "exactly equals this string")
+                   help="category または command がこの文字列と完全一致する"
+                        "コマンドのみ実行")
     args = p.parse_args()
 
     if args.only and not args.once:
-        p.error("--only requires --once")
+        p.error("--only は --once と組み合わせて使用してください")
 
     cfg = load_config(args.config)
 

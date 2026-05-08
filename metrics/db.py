@@ -36,7 +36,7 @@ def push(
     base = os.environ.get("DASHBOARD_URL")
     token = os.environ.get("WRITE_TOKEN")
     if not base or not token:
-        sys.exit("DASHBOARD_URL and WRITE_TOKEN must be set in the environment")
+        sys.exit("環境変数 DASHBOARD_URL と WRITE_TOKEN を設定してください")
 
     qs = urlencode({"host": host, "command": command, "category": category})
     url = f"{base.rstrip('/')}/api/external/metrics/push?{qs}"
@@ -54,8 +54,8 @@ def push(
     try:
         with urlopen(req, timeout=timeout) as resp:
             if resp.status >= 400:
-                sys.exit(f"push failed: {resp.status} {resp.reason}")
+                sys.exit(f"push 失敗: {resp.status} {resp.reason}")
     except HTTPError as e:
-        sys.exit(f"push failed: HTTP {e.code} {e.reason}")
+        sys.exit(f"push 失敗: HTTP {e.code} {e.reason}")
     except URLError as e:
-        sys.exit(f"push failed: {e.reason}")
+        sys.exit(f"push 失敗: {e.reason}")
