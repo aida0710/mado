@@ -37,7 +37,7 @@ function StoragePageWithKey() {
 
 function Tabs() {
   return (
-    <nav className="flex items-stretch gap-6">
+    <nav className="flex items-stretch gap-4 sm:gap-6">
       <Tab to="/"            label="Home" />
       <Tab to="/storage"     label="Storage" />
       <Tab to="/connections" label="Settings" />
@@ -47,7 +47,7 @@ function Tabs() {
 
 export default function App() {
   return (
-    <div className="mx-auto max-w-[1180px] px-6">
+    <div className="mx-auto max-w-[1180px] px-4 sm:px-6">
       {/* ── Masthead ─────────────────────────────────────────────────
           newspaper の刊頭 (masthead) を意識:
           ・左 = upright serif で "mado." (ピリオドはタイポ的アクセント)
@@ -55,7 +55,7 @@ export default function App() {
           ・下に hairline rule (border-color はトークンの --color-rule)
           を thin に置く。                                             */}
       <header
-        className="flex items-center justify-between gap-4 pt-7 pb-4"
+        className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 pt-6 pb-4 sm:pt-7"
         style={{ borderBottom: '1px solid var(--rule)' }}
       >
         <Link

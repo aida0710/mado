@@ -342,7 +342,7 @@ pre { font-size: 12px; }
   grid-template-columns: 1fr;
   gap: var(--space-5);
 }
-@media (min-width: 980px) {
+@media (min-width: 1024px) {
   .storage-list:has(.drawer) { grid-template-columns: 1fr 380px; }
 }
 

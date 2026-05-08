@@ -96,10 +96,10 @@ export function NoteHistoryModal({ slug, currentBody, onClose }: Props) {
         )}
 
         {versions !== null && versions.length > 0 && (
-          <div className="grid gap-5 [grid-template-columns:240px_1fr] min-h-[60vh]">
+          <div className="grid gap-4 md:gap-5 grid-cols-1 md:[grid-template-columns:240px_1fr] min-h-[60vh]">
             <ul
-              className="m-0 list-none overflow-auto p-0"
-              style={{ borderRight: '1px solid var(--rule)' }}
+              className="m-0 list-none overflow-auto p-0 max-h-[40vh] md:max-h-none border-b md:border-b-0 md:[border-right:1px_solid_var(--rule)]"
+              style={{ borderColor: 'var(--rule)' }}
             >
               {versions.map((v, i) => {
                 const selected = selectedId === v.id
