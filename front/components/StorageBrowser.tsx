@@ -43,10 +43,6 @@ const nextCursor = (p: ListResp): Cursor | null =>
 // 検索 input の debounce 時間。ReadmeSearchPanel と揃える。
 const SEARCH_DEBOUNCE_MS = 250
 
-// IntersectionObserver の rootMargin。ユーザがスクロール末尾に着く
-// 少し手前で先読みして「途切れず流れる」体感にする。
-const SENTINEL_ROOT_MARGIN = '200px'
-
 // 行ごとに memo 化することで、StorageBrowser が loading フラグや scroll
 // 起動の loadMore で再レンダしても、エントリが変わらない既存行は描画を
 // スキップできる。各行は items: MenuItem[] を内部で useMemo して
@@ -241,21 +237,6 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
       })
   }
 
-  const sentinelRef = useRef<HTMLDivElement | null>(null)
-  useEffect(() => {
-    const node = sentinelRef.current
-    if (!node) return
-    const io = new IntersectionObserver(entries => {
-      if (entries.some(e => e.isIntersecting)) loadMore()
-    }, { rootMargin: SENTINEL_ROOT_MARGIN })
-    io.observe(node)
-    return () => io.disconnect()
-    // loadMore を毎レンダで再観測するため cursor / loading 状態を deps に入れる
-    // (= cursor 取得済み or loading 解除直後に再評価される)。loadMore 自体は
-    // クロージャだが、内部で session gate するため stale capture は無害。
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cursor, loading, loadingMore, hasMore])
-
   // 当該ディレクトリ全体のキャッシュを破棄して 1 chunk 目から再 fetch。
   // 別ユーザがアップロード / 削除した直後に押す想定。検索中でも
   // 同じ prefix で前方一致 invalidate されるので search 結果も新鮮になる。
@@ -359,11 +340,21 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
           </p>
         )}
 
-        {/* 末尾センチネル: hasMore のときだけマウント。IntersectionObserver が
-            これを観測し画面に入ったら loadMore() を呼ぶ。 */}
+        {/* 続きを読むボタン: hasMore のときだけマウント。明示クリックで loadMore()。
+            IntersectionObserver による自動読み込みは、短いリストで sentinel が
+            初期から viewport に入っているケース等で発火しないことがあったため
+            撤廃し、確実に押せるボタンに統一した (a11y / 信頼性 / 予測可能性)。 */}
         {hasMore && (
-          <div ref={sentinelRef} className="flex items-center justify-center py-3 text-xs text-ink-7">
-            {loadingMore ? '読み込み中…' : '↓ さらに読み込む'}
+          <div className="flex items-center justify-center py-3">
+            <button
+              type="button"
+              onClick={loadMore}
+              disabled={loadingMore || loading}
+              aria-busy={loadingMore}
+              className="cursor-pointer rounded-2 border border-ink-3 bg-paper px-4 py-1.5 text-xs text-ink-9 transition-colors hover:bg-ink-1 hover:border-ink-5 hover:text-ink-11 disabled:cursor-default disabled:opacity-40"
+            >
+              {loadingMore ? '読み込み中…' : '↓ さらに読み込む'}
+            </button>
           </div>
         )}
 
