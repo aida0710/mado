@@ -1,5 +1,5 @@
 import { useEffect, useState, type KeyboardEvent } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import type { z } from 'zod'
 import { api } from '../lib/api/client'
 import { StorageList } from '../lib/api/types'
@@ -24,10 +24,9 @@ const tdNameClass =
 const tdNumClass =
   'w-px whitespace-nowrap border-b border-ink-1 px-2 py-2 text-right tabular-nums text-ink-7'
 const rowClass =
-  'cursor-pointer transition-colors hover:bg-ink-0 focus-visible:bg-ink-1'
+  'cursor-pointer transition-colors hover:bg-ink-0 focus-within:bg-ink-1'
 
 export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) {
-  const navigate = useNavigate()
   const [page, setPage] = useState<ListResp | null>(null)
   // continuation トークンの履歴。history[0] は常に null (= 1ページ目)。
   const [history, setHistory] = useState<Array<string | null>>([null])
@@ -98,17 +97,17 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
         <tbody>
           {page.directories.map(d => {
             const tail = d.startsWith(prefix) ? d.slice(prefix.length) : d
-            const go = () => navigate(`/storage/${encodeURIComponent(connId)}/${encodeURIComponent(bucket)}/${encPath(d)}`)
+            const dirHref = `/storage/${encodeURIComponent(connId)}/${encodeURIComponent(bucket)}/${encPath(d)}`
             return (
-              <tr
-                key={d}
-                className={rowClass}
-                role="link"
-                tabIndex={0}
-                onClick={go}
-                onKeyDown={activate(go)}
-              >
-                <td className={`${tdNameClass} font-semibold`}>📁 {tail}</td>
+              <tr key={d} className={rowClass}>
+                <td className={`${tdNameClass} p-0`}>
+                  <Link
+                    to={dirHref}
+                    className="block px-2 py-2 font-semibold text-ink-11 no-underline"
+                  >
+                    📁 {tail}
+                  </Link>
+                </td>
                 <td className={tdNumClass}>—</td>
                 <td className={tdNumClass}>—</td>
                 <td className={tdNumClass}></td>
