@@ -2,19 +2,27 @@
 
 `push(host, command, output, category=...)` は生の stdout を
 ダッシュボードの `/api/external/metrics/push` エンドポイントに POST する。
-環境変数から `DASHBOARD_URL` と `WRITE_TOKEN` を読み取る
-(通常はソースホスト上で cron 行ごとに設定)。
+環境変数から `DASHBOARD_URL` と `WRITE_TOKEN` を読み取る。
 
-標準ライブラリのみ使用 — 多くのターゲットホストは `pip install` できる環境がなく、
-標準イメージの Python は 3.8 の場合がある。
+import 時に `metrics/.env` があれば自動で読み込んで `os.environ` に
+流し込む (`python-dotenv` 経由、`uv sync` で導入)。サンプルは
+`.env.example` 参照。
 """
 from __future__ import annotations
 
 import os
 import sys
+from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
+
+from dotenv import load_dotenv
+
+# `metrics/.env` を読み `os.environ` に流す (見つからなければ no-op)。
+# `override=False` がデフォルトなので、シェルで `DASHBOARD_URL=... python ...`
+# のように渡した値はそのまま優先される。
+load_dotenv(Path(__file__).resolve().parent / ".env")
 
 
 def push(
