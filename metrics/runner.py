@@ -170,11 +170,11 @@ def run_once(config: Config, only: Optional[str] = None) -> int:
         if only is not None and only != cmd.category and only != cmd.command:
             continue
         matched += 1
-        started = time.monotonic()
         output = _run_subprocess(cmd)
         try:
+            push_started = time.monotonic()
             push(config.host, cmd.command, output, category=cmd.category)
-            elapsed_ms = int((time.monotonic() - started) * 1000)
+            elapsed_ms = int((time.monotonic() - push_started) * 1000)
             print(f"[{_ts()}] {cmd.command} → push ok ({elapsed_ms}ms)",
                   flush=True)
         except SystemExit as e:
@@ -183,7 +183,7 @@ def run_once(config: Config, only: Optional[str] = None) -> int:
             rc = 1
     if only is not None and matched == 0:
         print(f"[{_ts()}] no commands matched --only {only!r}",
-              file=sys.stderr)
+              file=sys.stderr, flush=True)
         rc = 1
     return rc
 
