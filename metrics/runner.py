@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import json
+import math
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -38,7 +39,7 @@ def _to_positive_float(value: object, where: str, path: Path) -> float:
         raise ValueError(
             f"{path}: {where} must be a number, got {value!r}"
         ) from e
-    if result <= 0:
+    if not math.isfinite(result) or result <= 0:
         raise ValueError(f"{path}: {where} must be > 0, got {result}")
     return result
 
