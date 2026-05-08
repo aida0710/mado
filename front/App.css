@@ -175,7 +175,7 @@ pre { font-size: 12px; }
 .byline {
   margin: var(--space-7) 0 var(--space-3);
   text-align: center;
-  font: 400 13px/1.5 var(--font-serif);
+  font: 400 13px/1.5 var(--font-sans);
   color: var(--ink-7);
   letter-spacing: 0.01em;
 }
@@ -217,26 +217,21 @@ pre { font-size: 12px; }
   letter-spacing: 0.4em;
 }
 
-/* Article body — Team note 本文 / README をくるむ。                    */
+/* Article body — Team note 本文 / README をくるむ。
+   読みやすさを最優先して sans (Public Sans + Noto Sans JP)。
+   17px はラボツールとして長文を読むのに無理のないサイズ。              */
 .article {
-  max-width: 68ch;
-  font: 400 16.5px/1.7 var(--font-serif);
+  max-width: 72ch;
+  font: 400 17px/1.75 var(--font-sans);
   color: var(--ink-11);
   text-wrap: pretty;
-  font-variation-settings: 'opsz' 18;
 }
 .article p { margin: 0 0 1.05em; }
 .article p:last-child { margin-bottom: 0; }
-.article a { color: var(--ink-12); text-underline-offset: 2px; }
-
-/* Drop cap — opt-in via .article--drop。1 段落目だけ落とす。 */
-.article--drop > p:first-of-type::first-letter,
-.article--drop .wmde-markdown > p:first-of-type::first-letter {
-  font: 500 64px/0.88 var(--font-serif);
-  float: left;
-  margin: 6px 10px -4px -2px;
+.article a {
   color: var(--ink-12);
-  font-variation-settings: 'opsz' 60;
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
 }
 
 /* Inline error message. */
@@ -616,13 +611,12 @@ pre { font-size: 12px; }
 }
 .wmde-markdown li { display: list-item; }
 
-/* .article の中の wmde を editorial 体に上書き。MD 内の見出しと本文を
-   serif、コードブロックは mono。色は ink scale に揃える。 */
+/* .article の中の wmde を sans に上書き。本文・見出しすべて sans で読みやすく、
+   コードブロックは mono。色は ink scale に揃える。 */
 .article .wmde-markdown {
   background: transparent;
   color: var(--ink-11);
-  font: 400 16.5px/1.7 var(--font-serif);
-  font-variation-settings: 'opsz' 18;
+  font: 400 17px/1.75 var(--font-sans);
 }
 .article .wmde-markdown p,
 .article .wmde-markdown li { font-family: inherit; line-height: inherit; }
@@ -630,12 +624,12 @@ pre { font-size: 12px; }
 .article .wmde-markdown h2,
 .article .wmde-markdown h3,
 .article .wmde-markdown h4 {
-  font-family: var(--font-serif);
-  letter-spacing: -0.012em;
+  font-family: var(--font-sans);
+  letter-spacing: -0.005em;
   color: var(--ink-12);
 }
-.article .wmde-markdown h1 { font-weight: 500; font-size: 1.7em; margin-top: 1.4em; }
-.article .wmde-markdown h2 { font-weight: 500; font-size: 1.35em; margin-top: 1.4em; }
+.article .wmde-markdown h1 { font-weight: 700; font-size: 1.7em; margin-top: 1.4em; }
+.article .wmde-markdown h2 { font-weight: 700; font-size: 1.35em; margin-top: 1.4em; }
 .article .wmde-markdown h3 { font-weight: 600; font-size: 1.1em; margin-top: 1.3em; }
 .article .wmde-markdown blockquote {
   border-left: 2px solid var(--ink-9);

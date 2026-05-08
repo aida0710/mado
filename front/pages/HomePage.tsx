@@ -51,9 +51,6 @@ export default function HomePage() {
   if (!data) return null
 
   const isPresent = data.exists && data.body.trim().length > 0
-  // 段落数が多い "本格的な" Note のときだけ drop cap を効かせる。
-  // 短い箇条書きやメモのような Note では drop cap が浮くため抑制する。
-  const enableDropCap = isPresent && data.body.split(/\n{2,}/).length >= 3
 
   return (
     <>
@@ -76,7 +73,7 @@ export default function HomePage() {
         </header>
 
         {isPresent ? (
-          <article className={`article${enableDropCap ? ' article--drop' : ''} mt-2`}>
+          <article className="article mt-2">
             <MDEditor.Markdown source={data.body} rehypePlugins={[[rehypeSanitize]]} />
           </article>
         ) : (

@@ -50,9 +50,6 @@ export function ReadmeView({ connId, bucket, prefix }: Props) {
     >
       <header className="flex flex-wrap items-baseline gap-x-4 gap-y-2 mb-3">
         <p className="kicker m-0">S3 README</p>
-        <p className="m-0 text-[12px] text-ink-7">
-          この prefix の README.md
-        </p>
         <span className="ml-auto flex items-center gap-2">
           <button className="ghost" onClick={() => setEditing(true)}>
             <span aria-hidden>✎</span>
