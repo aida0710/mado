@@ -52,6 +52,23 @@ export function mountStorageListRoutes(app: Hono, deps: StorageListDeps): void {
       ContinuationToken: continuation,
       MaxKeys: 100,
     }))
+    // S3 互換サービス (mdx = DDN 互換等) で NextContinuationToken が
+    // 返らない / IsTruncated と矛盾するケースの切り分け用ログ。
+    // 正常な S3 では IsTruncated=true のときに NextContinuationToken が
+    // 必ず入る建前。
+    console.log(JSON.stringify({
+      ev: 'storage.list.s3resp',
+      connId: c.req.param('connId'),
+      bucket,
+      prefix,
+      hasContinuationIn: !!continuation,
+      isTruncated: out.IsTruncated ?? null,
+      keyCount: out.KeyCount ?? null,
+      maxKeys: out.MaxKeys ?? null,
+      hasNextContinuation: !!out.NextContinuationToken,
+      contentsLength: out.Contents?.length ?? 0,
+      commonPrefixesLength: out.CommonPrefixes?.length ?? 0,
+    }))
     return c.json({
       directories: (out.CommonPrefixes ?? [])
         .map(p => p.Prefix!)
