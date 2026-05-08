@@ -1,7 +1,14 @@
 #!/usr/bin/env python3
 """メトリクスコレクターのサンプル: `uptime` の出力をダッシュボードにプッシュする。
 
-任意のターゲットホスト上で cron から実行する:
+任意のターゲットホスト上で cron から実行する。`DASHBOARD_URL` は
+接続元によって異なる:
+
+  - LAN 内 (10.15.0.0/16):    http://mado.lan        (nginx :80)
+  - LAN 外 (HPC ノード等):    http://<server>:81     (nginx :81、/api/external/ 専用)
+  - dev:                      http://mado.lan:5173   (vite dev server)
+
+cron 例 (LAN 内ホスト):
 
     */5 * * * * DASHBOARD_URL=http://mado.lan \
         WRITE_TOKEN=xxxxxxxx /home/me/mado/metrics/example.py
