@@ -14,7 +14,7 @@ export const StorageFile = z.object({
   lastModified: z.string().nullable(),
 })
 // nextContinuation: AWS 公式 S3 等で次ページ取得用の opaque トークン。
-// nextStartAfter:   DDN 互換 S3 (mdx 等) が NextContinuationToken を返さない
+// nextStartAfter:   DDN 製などの S3 互換が NextContinuationToken を返さない
 //                   ときのフォールバック。最終キーを次ページの StartAfter に使う。
 // 同時に両方 set されることはない (server 側で前者を優先)。
 export const StorageList = z.object({
@@ -109,9 +109,10 @@ export const FavoriteBuckets = z.array(z.string())
 
 // listObjectsVersion: 接続先 S3 サーバへの ListObjects API バージョン。
 // 'v2' (既定): AWS / R2 / MinIO 等の正式な S3-compatible 実装向け。
-// 'v1':        MDX (s3ds.mdx.jp) や古い NetApp StorageGRID 等の V1 only サーバ向け。
-//              V2 を理解しないため ?start-after= が無視され、毎回先頭ページが
-//              返ってきてしまう。s3cmd は元々 V1 を使うので動く。
+// 'v1':        DDN 製のオブジェクトストレージや古い NetApp StorageGRID 等、
+//              V1 only のサーバ向け。V2 を理解しないため ?start-after= が
+//              無視され、毎回先頭ページが返ってきてしまう。s3cmd は元々 V1
+//              を使うので動く。
 export const ListObjectsVersion = z.enum(['v1', 'v2'])
 export type ListObjectsVersion = z.infer<typeof ListObjectsVersion>
 

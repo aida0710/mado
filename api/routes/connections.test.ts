@@ -175,13 +175,13 @@ describe('POST /connections', () => {
   })
 
   it('accepts listObjectsVersion=v1 and round-trips it through GET', async () => {
-    // V1 only サーバ (MDX 等) のために v1 を明示できる。
-    const created = await createOne({ name: 'mdx', listObjectsVersion: 'v1' })
+    // V1 only サーバ (DDN 製のオブジェクトストレージ等) のために v1 を明示できる。
+    const created = await createOne({ name: 'ddn-storage', listObjectsVersion: 'v1' })
     expect(created.listObjectsVersion).toBe('v1')
 
     const res = await app.request('/connections')
     const list = (await res.json()) as MaskedConnection[]
-    const got = list.find(c => c.name === 'mdx')
+    const got = list.find(c => c.name === 'ddn-storage')
     expect(got?.listObjectsVersion).toBe('v1')
   })
 

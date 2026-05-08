@@ -197,7 +197,7 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
   // 単一ページ取得 (replace)。前ページの dirs/files は応答到着まで残るので
   // ページ切替中も画面が空にならない (aria-busy + opacity-60 で dim 表現)。
   // force=true で forward navigation 時にキャッシュをバイパスする
-  // (DDN/MDX 互換 S3 が cursor を進めずに同じトークンを返してくるとき、
+  // (DDN 製などの S3 互換が cursor を進めずに同じトークンを返してくるとき、
   //  cache key 衝突で前ページのデータが返ってしまう問題への防衛)。
   const load = (cursor: Cursor, opts: { force?: boolean } = {}): void => {
     const sid = ++sessionRef.current
@@ -276,7 +276,7 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
   const dirs = page?.directories ?? []
   const files = page?.files ?? []
   // hasNext は「次がある」だけでなく「server が cursor を進めるか」も判定する。
-  // DDN/MDX 互換 S3 は IsTruncated=true でも ContinuationToken / 最終キーが
+  // DDN 製などの S3 互換は IsTruncated=true でも ContinuationToken / 最終キーが
   // 進まないことがあり、その状態で「次」を押しても同じデータしか返らないため
   // 末尾扱いにして disable する。
   const hasNext = (() => {
@@ -497,15 +497,16 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
         </p>
 
         {/* server が IsTruncated=true なのに cursor を進めずに返してきた場合の案内。
-            よくある原因は ListObjects v2 を理解しないサーバ (MDX 等) で、
-            設定 → 接続 → ListObjects API バージョンを v1 に切り替えると直る。 */}
+            よくある原因は ListObjects v2 を理解しないサーバ
+            (DDN 製のオブジェクトストレージ等) で、設定 → 接続 →
+            ListObjects API バージョンを v1 に切り替えると直る。 */}
         {cursorStuck && (
           <p className="mt-1 text-center text-[11px] text-ink-7">
             次へ進めません — server が cursor を進めずに同じトークンを返しています。
             <br />
             設定の <strong>ListObjects API バージョン</strong>{' '}
             を <span className="font-mono">v1</span> に切り替えてみてください
-            (MDX 等の V1 only サーバで起こります)。
+            (DDN 製のオブジェクトストレージ等、V1 only サーバで起こります)。
           </p>
         )}
       </div>

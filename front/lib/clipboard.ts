@@ -1,6 +1,6 @@
 // HTTPS / localhost 以外では navigator.clipboard が undefined になるため、
 // execCommand('copy') にフォールバックする。
-// LAN 内 HTTP 運用 (mado.mdx.internal:80) のために必要。
+// LAN 内 HTTP 運用 (例: mado.lan.internal:80) のために必要。
 
 export async function copyToClipboard(text: string): Promise<boolean> {
   // 1. モダン API (secure context のみ)

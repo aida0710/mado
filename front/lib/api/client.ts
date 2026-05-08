@@ -146,7 +146,7 @@ export const api = {
     // prefix の後ろに置くので invalidateList の prefix-match invalidation はそのまま有効。
     const cacheKey = k('list', connId, bucket, prefix, opts.recursive ? 'r' : '', cursor.continuation, cursor.startAfter)
     // force=true は「forward navigation で同じ cache key に到達して停滞する」現象の防衛。
-    // DDN/MDX 互換 S3 は ContinuationToken / 最終キーを進めずに返してくることがあり、
+    // DDN 製などの S3 互換は ContinuationToken / 最終キーを進めずに返してくることがあり、
     // そのとき同じ cursor で別ページを取りに行く想定の cache が衝突して前ページが返る。
     if (opts.force) listCache.invalidate(cacheKey)
     return listCache.get(cacheKey, () =>

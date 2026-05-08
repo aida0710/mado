@@ -7,7 +7,7 @@ import type { CryptoModule } from './crypto.js'
 
 // すべての S3Client で共有する keep-alive 付き agent。
 // AWS SDK v3 はバージョンによってデフォルトの keep-alive 挙動が違うため、
-// 明示的に設定して LAN MinIO / mdx s3 の TLS ハンドシェイク往復を抑える。
+// 明示的に設定して LAN MinIO / DDN 製ストレージ等の TLS ハンドシェイク往復を抑える。
 const httpAgent  = new HttpAgent({  keepAlive: true, maxSockets: 50 })
 const httpsAgent = new HttpsAgent({ keepAlive: true, maxSockets: 50 })
 
@@ -17,7 +17,7 @@ export type ListObjectsVersion = 'v1' | 'v2'
  *  違う等) サーバ依存のパラメータをここに集約する。 */
 export interface ConnectionConfig {
   /** ListObjects に v1 (Marker/NextMarker) と v2 (ContinuationToken/StartAfter) の
-   *  どちらを使うか。MDX/古い NetApp 等は v1 only、AWS/R2/MinIO は v2 推奨。 */
+   *  どちらを使うか。DDN 製や古い NetApp 等は v1 only、AWS/R2/MinIO は v2 推奨。 */
   listObjectsVersion: ListObjectsVersion
 }
 
@@ -87,8 +87,8 @@ export function createStorageFactory(deps: StorageFactoryDeps): StorageFactory {
       },
       forcePathStyle: row.force_path_style,
       // 明示的に keep-alive を効かせる。さらに maxAttempts=2 にして「成功するまでの
-      // 隠れたリトライ」を短く切る (mdx s3 等で初回 200 が遅延する時に SDK 内で
-      // 数秒の指数バックオフ + 再試行を踏むケースを回避)。
+      // 隠れたリトライ」を短く切る (DDN 製ストレージ等で初回 200 が遅延する時に
+      // SDK 内で数秒の指数バックオフ + 再試行を踏むケースを回避)。
       maxAttempts: 2,
       requestHandler: new NodeHttpHandler({
         httpAgent,
