@@ -45,42 +45,41 @@ export function mountStorageListRoutes(app: Hono, deps: StorageListDeps): void {
     if (!bucket) return c.json({ error: 'bucket is required' }, 400)
     const prefix = c.req.query('prefix') ?? ''
     const continuation = c.req.query('continuation') || undefined
+    const startAfter = c.req.query('startAfter') || undefined
     const out = await storage.send(new ListObjectsV2Command({
       Bucket: bucket,
       Prefix: prefix,
       Delimiter: '/',
+      // ContinuationToken 優先 (高速)。無いときだけ StartAfter で再開する。
+      // S3 仕様上 ContinuationToken を渡すと StartAfter は無視されるが、
+      // どちらか一方しか送らないほうが意図が明確。
       ContinuationToken: continuation,
+      StartAfter: continuation ? undefined : startAfter,
       MaxKeys: 100,
     }))
-    // S3 互換サービス (mdx = DDN 互換等) で NextContinuationToken が
-    // 返らない / IsTruncated と矛盾するケースの切り分け用ログ。
-    // 正常な S3 では IsTruncated=true のときに NextContinuationToken が
-    // 必ず入る建前。
-    console.log(JSON.stringify({
-      ev: 'storage.list.s3resp',
-      connId: c.req.param('connId'),
-      bucket,
-      prefix,
-      hasContinuationIn: !!continuation,
-      isTruncated: out.IsTruncated ?? null,
-      keyCount: out.KeyCount ?? null,
-      maxKeys: out.MaxKeys ?? null,
-      hasNextContinuation: !!out.NextContinuationToken,
-      contentsLength: out.Contents?.length ?? 0,
-      commonPrefixesLength: out.CommonPrefixes?.length ?? 0,
-    }))
+    // DDN 互換 S3 (mdx 等) は IsTruncated=true を返すのに
+    // NextContinuationToken を返さないことがある。その場合に最終キーで
+    // フォールバック。AWS 公式 S3 では NextContinuationToken が常に入る
+    // ので nextStartAfter は null のままになる。
+    const realToken = out.NextContinuationToken ?? null
+    const truncated = out.IsTruncated === true
+    const rawContents = out.Contents ?? []
+    const fallbackKey = !realToken && truncated && rawContents.length > 0
+      ? rawContents[rawContents.length - 1].Key ?? null
+      : null
     return c.json({
       directories: (out.CommonPrefixes ?? [])
         .map(p => p.Prefix!)
         .filter(Boolean),
-      files: (out.Contents ?? [])
+      files: rawContents
         .filter(o => o.Key && o.Key !== prefix)
         .map(o => ({
           key: o.Key!,
           size: o.Size ?? 0,
           lastModified: o.LastModified?.toISOString() ?? null,
         })),
-      nextContinuation: out.NextContinuationToken ?? null,
+      nextContinuation: realToken,
+      nextStartAfter: fallbackKey,
     })
   })
 }
