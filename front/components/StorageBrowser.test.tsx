@@ -32,6 +32,7 @@ describe('StorageBrowser - directory row', () => {
       directories: ['voice/jp/'],
       files: [],
       nextContinuation: null,
+      nextStartAfter: null,
     })
 
     renderBrowser('voice/')
@@ -48,6 +49,7 @@ describe('StorageBrowser - directory row', () => {
       directories: ['voice/jp/'],
       files: [],
       nextContinuation: null,
+      nextStartAfter: null,
     })
     // 2 回目 (prefix 変更後): 手動で resolve するまで pending
     let resolveSecond: (v: unknown) => void = () => {}
@@ -79,7 +81,7 @@ describe('StorageBrowser - directory row', () => {
     expect(screen.queryByRole('link', { name: /jp\// })).toBeInTheDocument()
 
     // 解決すれば消える
-    resolveSecond({ directories: [], files: [], nextContinuation: null })
+    resolveSecond({ directories: [], files: [], nextContinuation: null, nextStartAfter: null })
     await waitFor(() =>
       expect(screen.queryByRole('progressbar')).toBeNull()
     )
@@ -90,6 +92,7 @@ describe('StorageBrowser - directory row', () => {
       directories: ['voice/jp/'],
       files: [],
       nextContinuation: null,
+      nextStartAfter: null,
     })
 
     const user = userEvent.setup()

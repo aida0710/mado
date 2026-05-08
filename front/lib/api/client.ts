@@ -149,12 +149,13 @@ export const api = {
     bucketsCache.invalidate(k('buckets', connId))
   },
 
-  list: (connId: string, bucket: string, prefix: string, continuation?: string | null) =>
-    listCache.get(k('list', connId, bucket, prefix, continuation), () =>
+  list: (connId: string, bucket: string, prefix: string, cursor: { continuation?: string; startAfter?: string } = {}) =>
+    listCache.get(k('list', connId, bucket, prefix, cursor.continuation, cursor.startAfter), () =>
       getJson(buildUrl(`${API_BASE}/storage/${encodeURIComponent(connId)}/list`, {
         bucket,
         prefix,
-        continuation: continuation ?? undefined,
+        continuation: cursor.continuation,
+        startAfter: cursor.startAfter,
       }), StorageList),
     ),
 

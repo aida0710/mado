@@ -30,18 +30,29 @@ const fileRowClass =
 const dirRowClass =
   'transition-colors hover:bg-ink-0 focus-within:bg-ink-1'
 
+type Cursor = { continuation?: string; startAfter?: string }
+
+const nextCursor = (p: ListResp): Cursor | null =>
+  p.nextContinuation
+    ? { continuation: p.nextContinuation }
+    : p.nextStartAfter
+    ? { startAfter: p.nextStartAfter }
+    : null
+
 export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) {
   const [page, setPage] = useState<ListResp | null>(null)
-  // continuation トークンの履歴。history[0] は常に null (= 1ページ目)。
-  const [history, setHistory] = useState<Array<string | null>>([null])
+  // ページごとの cursor 履歴。history[0] は常に {} (= 1 ページ目、cursor 無し)。
+  // continuation (公式 S3) と startAfter (DDN 互換フォールバック) の
+  // どちらが入るかはサーバ応答次第なので両方持てる shape にする。
+  const [history, setHistory] = useState<Cursor[]>([{}])
   const [pageIdx, setPageIdx] = useState(0)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const load = (token: string | null) => {
+  const load = (cursor: Cursor) => {
     setLoading(true)
     setError(null)
-    api.list(connId, bucket, prefix, token)
+    api.list(connId, bucket, prefix, cursor)
       .then(setPage)
       .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false))
@@ -49,18 +60,19 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
 
   // 接続/バケット/プレフィックスが変わったときにページングを先頭ページにリセットする。
   useEffect(() => {
-    setHistory([null])
+    setHistory([{}])
     setPageIdx(0)
-    load(null)
+    load({})
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [connId, bucket, prefix])
 
   const next = () => {
-    if (!page?.nextContinuation) return
-    const token = page.nextContinuation
-    setHistory(h => [...h, token])
+    if (!page) return
+    const cursor = nextCursor(page)
+    if (!cursor) return
+    setHistory(h => [...h, cursor])
     setPageIdx(i => i + 1)
-    load(token)
+    load(cursor)
   }
   const prev = () => {
     if (pageIdx === 0) return
@@ -72,10 +84,11 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
   // 別ユーザがアップロード / 削除した直後に押す想定。
   const forceRefresh = () => {
     api.invalidateList(connId, bucket, prefix)
-    setHistory([null])
+    setHistory([{}])
     setPageIdx(0)
-    load(null)
+    load({})
   }
+  const hasMore = !!(page && nextCursor(page))
 
   // File rows のキーボード操作 (Enter/Space で preview を開く) 用ヘルパー。
   // dir 行は <Link> がネイティブにキーボード処理する。
@@ -188,11 +201,11 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
           >
             ← Prev
           </button>
-          <span>page {pageIdx + 1}{page.nextContinuation ? '+' : ''}</span>
+          <span>page {pageIdx + 1}{hasMore ? '+' : ''}</span>
           <button
             className="cursor-pointer rounded-2 border border-ink-3 bg-paper px-3 py-1 transition-colors hover:bg-ink-1 hover:border-ink-5 disabled:cursor-default disabled:opacity-40"
             onClick={next}
-            disabled={!page.nextContinuation || loading}
+            disabled={!hasMore || loading}
           >
             Next →
           </button>
