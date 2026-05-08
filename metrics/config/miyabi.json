@@ -4,13 +4,21 @@
   "commands": [
     {
       "category": "ノード使用率",
-      "command": "pbsnodes -aSj",
-      "argv": ["pbsnodes", "-aSj"]
+      "display_command": "qstat --rsc -b",
+      "argv": ["qstat", "---rsc", "-b"],
+      "interval_seconds": 60
     },
     {
-      "category": "ジョブ一覧",
-      "command": "qstat",
-      "argv": ["qstat"]
+      "category": "ジョブ使用率",
+      "display_command": "qstat --limit",
+      "argv": ["qstat", "--limit"],
+      "interval_seconds": 60
+    },
+    {
+      "category": "トークン使用率",
+      "display_command": "qhost",
+      "argv": ["qhost"],
+      "interval_seconds": 60
     }
   ]
 }
