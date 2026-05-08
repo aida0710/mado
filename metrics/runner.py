@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import math
+import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -110,3 +111,34 @@ def load_config(path: Path) -> Config:
         ))
 
     return Config(host=host, commands=commands)
+
+
+def _run_subprocess(cmd: Command) -> str:
+    """argv を実行し、push 用の output 文字列を返す。
+
+    成功/失敗/タイムアウト/コマンド未存在のいずれもサイレント断にせず、
+    人間が読める形で文字列に詰める (ダッシュボードに表示される)。
+    """
+    try:
+        proc = subprocess.run(
+            cmd.argv,
+            capture_output=True,
+            text=True,
+            timeout=cmd.timeout_seconds,
+            check=False,
+        )
+        output = proc.stdout
+        if proc.returncode != 0:
+            output = (
+                f"{output}\n--- stderr ---\n{proc.stderr}\n"
+                f"(exit {proc.returncode})\n"
+            )
+        return output
+    except subprocess.TimeoutExpired as e:
+        partial = e.stdout or ""
+        return (
+            f"{partial}\n--- timeout ---\n"
+            f"command timed out after {cmd.timeout_seconds}s\n"
+        )
+    except FileNotFoundError:
+        return f"--- error ---\ncommand not found: {cmd.argv[0]}\n"
