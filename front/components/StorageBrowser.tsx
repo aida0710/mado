@@ -90,9 +90,18 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
       {/* 進捗バー領域: 高さ 2px を常時確保しレイアウトシフトを避ける。
           loading 中だけバー要素を描画する。 */}
       <div className="relative h-[2px] w-full overflow-hidden bg-ink-1">
-        {loading && <div className="storage-progress h-full w-1/3 bg-ink-9" />}
+        {loading && (
+          <div
+            role="progressbar"
+            aria-label="読み込み中"
+            className="storage-progress h-full w-1/3 bg-ink-9"
+          />
+        )}
       </div>
-      <div className={loading ? 'pointer-events-none opacity-60 transition-opacity' : 'transition-opacity'}>
+      <div
+        aria-busy={loading}
+        className={loading ? 'pointer-events-none opacity-60 transition-opacity' : 'transition-opacity'}
+      >
         <table className="w-full border-collapse text-[13px]">
           <thead>
             <tr>

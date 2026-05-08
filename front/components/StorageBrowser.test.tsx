@@ -72,15 +72,17 @@ describe('StorageBrowser - directory row', () => {
     // 2 回目が in-flight: api.list が 2 回呼ばれている
     await waitFor(() => expect(listMock).toHaveBeenCalledTimes(2))
 
-    // 進捗バー要素が出る
-    expect(document.querySelector('.storage-progress')).not.toBeNull()
+    // 進捗バー要素 + ARIA progressbar role が出る
+    expect(screen.getByRole('progressbar', { name: '読み込み中' })).toBeInTheDocument()
 
     // 古い内容も dim 状態で残っている (link はまだ存在する)
     expect(screen.queryByRole('link', { name: /jp\// })).toBeInTheDocument()
 
     // 解決すれば消える
     resolveSecond({ directories: [], files: [], nextContinuation: null })
-    await waitFor(() => expect(document.querySelector('.storage-progress')).toBeNull())
+    await waitFor(() =>
+      expect(screen.queryByRole('progressbar')).toBeNull()
+    )
   })
 
   it('shows a copy menu on directory row with Web URL and S3 URL items', async () => {
