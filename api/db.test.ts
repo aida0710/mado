@@ -8,7 +8,7 @@ const RO = RW.replace('dashboard_rw', 'dashboard_ro')
 const pools = createPools({ rw: RW, ro: RO })
 
 beforeEach(async () => {
-  await pools.rw.query('TRUNCATE metrics RESTART IDENTITY')
+  await pools.rw.query('TRUNCATE notes')
   await pools.rw.query('TRUNCATE storage_readme_meta')
 })
 afterAll(() => closePools(pools))
@@ -16,19 +16,19 @@ afterAll(() => closePools(pools))
 describe('createPools', () => {
   it('rw can insert, ro can select', async () => {
     await pools.rw.query(
-      `INSERT INTO metrics(host, command, output) VALUES ($1, $2, $3)`,
-      ['example', 'uptime', 'hello']
+      `INSERT INTO notes(slug, body, last_editor) VALUES ($1, $2, $3)`,
+      ['db-test', 'hello', 'tester']
     )
     const r = await pools.ro.query(
-      'SELECT host, output FROM metrics ORDER BY id'
+      'SELECT slug, body FROM notes ORDER BY slug'
     )
-    expect(r.rows).toEqual([{ host: 'example', output: 'hello' }])
+    expect(r.rows).toEqual([{ slug: 'db-test', body: 'hello' }])
   })
 
   it('ro cannot insert', async () => {
     await expect(
       pools.ro.query(
-        `INSERT INTO metrics(host, command, output) VALUES ('x','y','z')`
+        `INSERT INTO notes(slug, body) VALUES ('x','y')`
       )
     ).rejects.toThrow(/permission denied/i)
   })

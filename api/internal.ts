@@ -8,14 +8,12 @@ import { createCrypto } from './crypto.js'
 import { createStorageFactory } from './storage.js'
 import { requireSafeOrigin } from './lib/originCheck.js'
 import { explainStorageError } from './lib/storageError.js'
-import { mountMetricsReadRoutes } from './routes/metrics.js'
 import { mountStorageListRoutes } from './routes/storage-list.js'
 import { mountStorageReadmeRoutes } from './routes/storage-readme.js'
 import { mountStoragePreviewRoutes } from './routes/storage-preview.js'
 import { mountStorageFavoritesRoutes } from './routes/storage-favorites.js'
 import { mountConnectionsRoutes } from './routes/connections.js'
 import { mountNotesRoutes } from './routes/notes.js'
-import { mountSettingsRoutes } from './routes/settings.js'
 
 const env = loadEnv()
 const pools = createPools({ rw: env.DATABASE_URL_RW, ro: env.DATABASE_URL_RO })
@@ -28,7 +26,6 @@ app.get('/healthz', c => c.text('ok'))
 
 const api = new Hono()
 api.use('*', requireSafeOrigin(env.ALLOWED_ORIGINS))
-mountMetricsReadRoutes(api, { pools })
 mountConnectionsRoutes(api, {
   pools,
   crypto,
@@ -39,7 +36,6 @@ mountStorageReadmeRoutes(api, { getStorage: storageFactory.getStorage, pools })
 mountStoragePreviewRoutes(api, { getStorage: storageFactory.getStorage, env })
 mountStorageFavoritesRoutes(api, { pools })
 mountNotesRoutes(api, { pools })
-mountSettingsRoutes(api, { pools })
 
 app.route('/api/internal', api)
 

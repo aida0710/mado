@@ -41,21 +41,6 @@ services:
       postgres:
         condition: service_healthy
 
-  api-external:
-    build: ./api
-    container_name: mado-dev-api-external
-    command: ["npx", "tsx", "watch", "external.ts"]
-    env_file:
-      - .env
-    environment:
-      PORT: 3001
-    volumes:
-      - ./api:/app
-      - /app/node_modules
-    depends_on:
-      postgres:
-        condition: service_healthy
-
   front:
     build: ./front
     container_name: mado-dev-front
@@ -66,7 +51,6 @@ services:
       - /app/node_modules
     depends_on:
       - api-internal
-      - api-external
 
 volumes:
   db_data:

@@ -9,12 +9,10 @@ describe('loadEnv', () => {
       PORT: '3000',
       DATABASE_URL_RW: 'postgres://rw@localhost/dashboard',
       DATABASE_URL_RO: 'postgres://ro@localhost/dashboard',
-      WRITE_TOKEN: VALID_KEY,
       ENCRYPTION_KEY: VALID_KEY,
       ALLOWED_ORIGINS: 'http://localhost:5173',
     })
     expect(env.PORT).toBe(3000)
-    expect(env.WRITE_TOKEN).toBe(VALID_KEY)
     expect(env.ENCRYPTION_KEY).toBe(VALID_KEY)
     expect(env.ALLOWED_ORIGINS).toEqual(['http://localhost:5173'])
     expect(env.PREVIEW_TEXT_LIMIT).toBe(65536) // デフォルト値
@@ -25,7 +23,6 @@ describe('loadEnv', () => {
     const env = loadEnv({
       DATABASE_URL_RW: 'postgres://rw@localhost/dashboard',
       DATABASE_URL_RO: 'postgres://ro@localhost/dashboard',
-      WRITE_TOKEN: VALID_KEY,
       ENCRYPTION_KEY: VALID_KEY,
       ALLOWED_ORIGINS: 'http://localhost:5173, http://lab-server ,',
     })
@@ -40,7 +37,6 @@ describe('loadEnv', () => {
       PORT: '3000',
       DATABASE_URL_RW: 'postgres://rw@localhost/dashboard',
       DATABASE_URL_RO: 'postgres://ro@localhost/dashboard',
-      WRITE_TOKEN: VALID_KEY,
       ENCRYPTION_KEY: VALID_KEY,
     })).toThrow(/ALLOWED_ORIGINS/)
   })
@@ -49,7 +45,6 @@ describe('loadEnv', () => {
     expect(() => loadEnv({
       DATABASE_URL_RW: 'postgres://rw@localhost/dashboard',
       DATABASE_URL_RO: 'postgres://ro@localhost/dashboard',
-      WRITE_TOKEN: VALID_KEY,
       ENCRYPTION_KEY: VALID_KEY,
       ALLOWED_ORIGINS: ' , , ,',
     })).toThrow(/ALLOWED_ORIGINS/)
@@ -59,29 +54,12 @@ describe('loadEnv', () => {
     expect(() => loadEnv({ PORT: '3000' })).toThrow(/DATABASE_URL_RW/)
   })
 
-  it('throws on WRITE_TOKEN with wrong format', () => {
-    expect(() => loadEnv({
-      PORT: '3000',
-      DATABASE_URL_RW: 'postgres://rw@localhost/dashboard',
-      DATABASE_URL_RO: 'postgres://ro@localhost/dashboard',
-      WRITE_TOKEN: 'too-short',
-      ENCRYPTION_KEY: VALID_KEY,
-    })).toThrow(/WRITE_TOKEN/)
-    expect(() => loadEnv({
-      PORT: '3000',
-      DATABASE_URL_RW: 'postgres://rw@localhost/dashboard',
-      DATABASE_URL_RO: 'postgres://ro@localhost/dashboard',
-      WRITE_TOKEN: 'z'.repeat(64),  // right length, non-hex
-      ENCRYPTION_KEY: VALID_KEY,
-    })).toThrow(/WRITE_TOKEN/)
-  })
-
   it('throws on missing ENCRYPTION_KEY', () => {
     expect(() => loadEnv({
       PORT: '3000',
       DATABASE_URL_RW: 'postgres://rw@localhost/dashboard',
       DATABASE_URL_RO: 'postgres://ro@localhost/dashboard',
-      WRITE_TOKEN: VALID_KEY,
+      ALLOWED_ORIGINS: 'http://localhost:5173',
     })).toThrow(/ENCRYPTION_KEY/)
   })
 
@@ -90,8 +68,8 @@ describe('loadEnv', () => {
       PORT: '3000',
       DATABASE_URL_RW: 'postgres://rw@localhost/dashboard',
       DATABASE_URL_RO: 'postgres://ro@localhost/dashboard',
-      WRITE_TOKEN: VALID_KEY,
       ENCRYPTION_KEY: 'abc',
+      ALLOWED_ORIGINS: 'http://localhost:5173',
     })).toThrow(/ENCRYPTION_KEY/)
   })
 
@@ -100,8 +78,8 @@ describe('loadEnv', () => {
       PORT: '3000',
       DATABASE_URL_RW: 'postgres://rw@localhost/dashboard',
       DATABASE_URL_RO: 'postgres://ro@localhost/dashboard',
-      WRITE_TOKEN: VALID_KEY,
       ENCRYPTION_KEY: 'z'.repeat(64),
+      ALLOWED_ORIGINS: 'http://localhost:5173',
     })).toThrow(/ENCRYPTION_KEY/)
   })
 })

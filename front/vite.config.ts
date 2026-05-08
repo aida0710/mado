@@ -8,7 +8,6 @@ export default defineConfig({
     host: true,
     proxy: {
       '/api/internal': 'http://api-internal:3000',
-      '/api/external': 'http://api-external:3001',
     },
   },
 })

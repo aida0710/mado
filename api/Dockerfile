@@ -19,7 +19,7 @@ COPY . .
 RUN chown -R node:node /app
 USER node
 
-EXPOSE 3000 3001
+EXPOSE 3000
 
-# entry / port は compose 側で上書き
+# port は compose 側で上書き可
 CMD ["npx", "tsx", "internal.ts"]
