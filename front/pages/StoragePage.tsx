@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useReducer } from 'react'
 import { Route, Routes, Link } from 'react-router-dom'
 import { api } from '../lib/api/client'
 import type { Connection } from '../lib/api/types'
@@ -8,21 +8,46 @@ import StorageBucket from './StorageBucket'
 
 interface Props { connId: string }
 
+interface State {
+  connection: Connection | null
+  error: string | null
+  loading: boolean
+}
+
+type Action =
+  | { type: 'startLoad' }
+  | { type: 'loadOk'; conn: Connection | null }
+  | { type: 'loadErr'; error: string }
+  | { type: 'notFound'; connId: string }
+
+const initial: State = { connection: null, error: null, loading: true }
+
+function reducer(s: State, a: Action): State {
+  switch (a.type) {
+    case 'startLoad':
+      return { ...s, loading: true, error: null }
+    case 'loadOk':
+      return { connection: a.conn, error: null, loading: false }
+    case 'loadErr':
+      return { ...s, error: a.error, loading: false }
+    case 'notFound':
+      return { connection: null, error: `接続が見つかりません: ${a.connId}`, loading: false }
+  }
+}
+
 export default function StoragePage({ connId }: Props) {
-  const [connection, setConnection] = useState<Connection | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [state, dispatch] = useReducer(reducer, initial)
+  const { connection, error, loading } = state
 
   useEffect(() => {
-    setLoading(true)
+    dispatch({ type: 'startLoad' })
     api.listConnections()
       .then(list => {
         const found = list.find(c => c.id === connId) ?? null
-        setConnection(found)
-        if (!found) setError(`接続が見つかりません: ${connId}`)
+        if (found) dispatch({ type: 'loadOk', conn: found })
+        else dispatch({ type: 'notFound', connId })
       })
-      .catch(e => setError((e as Error).message))
-      .finally(() => setLoading(false))
+      .catch(e => dispatch({ type: 'loadErr', error: (e as Error).message }))
   }, [connId])
 
   if (loading) {

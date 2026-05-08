@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useReducer } from 'react'
 import MDEditor from '@uiw/react-md-editor'
 import rehypeSanitize from 'rehype-sanitize'
 import { api } from '../lib/api/client'
@@ -18,6 +18,38 @@ interface Version {
   size_bytes: number
 }
 
+interface State {
+  versions: Version[] | null
+  error: string | null
+  selectedId: number | null
+  bodyOf: { id: number; body: string } | null
+}
+
+type Action =
+  | { type: 'versionsLoaded'; versions: Version[] }
+  | { type: 'selectVersion'; id: number }
+  | { type: 'bodyLoaded'; body: { id: number; body: string } }
+  | { type: 'fail'; error: string }
+
+const initial: State = { versions: null, error: null, selectedId: null, bodyOf: null }
+
+function reducer(s: State, a: Action): State {
+  switch (a.type) {
+    case 'versionsLoaded':
+      return {
+        ...s,
+        versions: a.versions,
+        selectedId: a.versions.length > 0 ? a.versions[0].id : null,
+      }
+    case 'selectVersion':
+      return { ...s, selectedId: a.id, bodyOf: null }
+    case 'bodyLoaded':
+      return { ...s, bodyOf: a.body }
+    case 'fail':
+      return { ...s, error: a.error }
+  }
+}
+
 function fmtTime(iso: string): string {
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return iso
@@ -30,26 +62,20 @@ function fmtTime(iso: string): string {
 // Team note (postgres notes テーブル) の編集履歴モーダル。S3 README 用の
 // ReadmeHistoryModal と同じ UX。識別タイトルで「Team note」を明示する。
 export function NoteHistoryModal({ slug, currentBody, onClose }: Props) {
-  const [versions, setVersions] = useState<Version[] | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [selectedId, setSelectedId] = useState<number | null>(null)
-  const [bodyOf, setBodyOf] = useState<{ id: number; body: string } | null>(null)
+  const [state, dispatch] = useReducer(reducer, initial)
+  const { versions, error, selectedId, bodyOf } = state
 
   useEffect(() => {
     api.noteHistory(slug)
-      .then(r => {
-        setVersions(r.versions)
-        if (r.versions.length > 0) setSelectedId(r.versions[0].id)
-      })
-      .catch((e: Error) => setError(e.message))
+      .then(r => dispatch({ type: 'versionsLoaded', versions: r.versions }))
+      .catch((e: Error) => dispatch({ type: 'fail', error: e.message }))
   }, [slug])
 
   useEffect(() => {
     if (selectedId == null) return
-    setBodyOf(null)
     api.noteHistoryVersion(slug, selectedId)
-      .then(r => setBodyOf({ id: r.id, body: r.body }))
-      .catch((e: Error) => setError(e.message))
+      .then(r => dispatch({ type: 'bodyLoaded', body: { id: r.id, body: r.body } }))
+      .catch((e: Error) => dispatch({ type: 'fail', error: e.message }))
   }, [slug, selectedId])
 
   useEffect(() => {
@@ -61,10 +87,16 @@ export function NoteHistoryModal({ slug, currentBody, onClose }: Props) {
   }, [onClose])
 
   return (
-    <div className="modal-backdrop modal-backdrop--entry" onClick={onClose}>
+    <div className="modal-backdrop modal-backdrop--entry" role="presentation">
+      <button
+        type="button"
+        className="modal-backdrop__close-overlay"
+        onClick={onClose}
+        aria-label="モーダルを閉じる"
+        tabIndex={-1}
+      />
       <div
         className="modal modal--entry"
-        onClick={e => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
         aria-labelledby="note-history-title"
@@ -113,7 +145,7 @@ export function NoteHistoryModal({ slug, currentBody, onClose }: Props) {
                         (selected ? 'bg-ink-0 ' : '')
                       }
                       style={selected ? { borderLeft: '2px solid var(--ink-12)', paddingLeft: '10px' } : undefined}
-                      onClick={() => setSelectedId(v.id)}
+                      onClick={() => dispatch({ type: 'selectVersion', id: v.id })}
                     >
                       <div className={'text-[13px] ' + (selected ? 'font-semibold text-ink-12' : 'font-medium text-ink-11')}>
                         {i === 0 && (
