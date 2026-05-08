@@ -22,6 +22,12 @@ from typing import List, Optional
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from db import push  # noqa: E402
 
+
+def _ts() -> str:
+    """ローカル TZ の ISO8601 タイムスタンプ (秒精度)。"""
+    return datetime.now().astimezone().isoformat(timespec="seconds")
+
+
 _shutdown_requested = False
 
 
@@ -172,11 +178,6 @@ def _run_subprocess(cmd: Command) -> str:
         return f"--- error ---\ncommand not found: {cmd.argv[0]}\n"
 
 
-def _ts() -> str:
-    """ローカル TZ の ISO8601 タイムスタンプ (秒精度)。"""
-    return datetime.now().astimezone().isoformat(timespec="seconds")
-
-
 def run_once(config: Config, only: Optional[str] = None) -> int:
     """全コマンド (or only に一致するもの) を 1 回ずつ実行 → push。
 
@@ -236,9 +237,12 @@ def run_loop(config: Config) -> int:
                     print(f"[{_ts()}] {cmd.command} → push ok ({elapsed_ms}ms)",
                           flush=True)
                 except SystemExit as e:
+                    # db.push の正常な失敗パス (HTTP error, missing env など)。
                     print(f"[{_ts()}] {cmd.command} → push FAILED: {e}",
                           flush=True, file=sys.stderr)
                 except Exception as e:
+                    # 想定外の例外 (db.py のバグ、URL parse error など)。
+                    # daemon を殺さずトレースバックだけ出して継続。
                     print(f"[{_ts()}] {cmd.command} → push CRASHED: "
                           f"{type(e).__name__}: {e}",
                           flush=True, file=sys.stderr)
