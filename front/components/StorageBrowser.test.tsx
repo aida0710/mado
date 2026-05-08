@@ -48,15 +48,15 @@ describe('StorageBrowser - directory row', () => {
       nextContinuation: null,
     })
 
+    const user = userEvent.setup()
     renderBrowser('voice/')
     await screen.findByRole('link', { name: /jp\// })
 
-    const user = userEvent.setup()
     // 行は 1 件 (dir のみ)。CopyMenu の trigger ボタンを開く
     await user.click(screen.getByRole('button', { name: 'アクション' }))
 
-    // Web URL 項目 (origin はテスト環境で http://localhost:3000 だが、
-    // value 表示文字列に含まれているので部分一致で見る)
+    // Web URL 項目 (jsdom の origin は http://localhost なので
+    // dirWebUrl は http://localhost/storage/... になる)
     expect(screen.getByRole('menuitem', { name: /Web URL をコピー/ })).toBeInTheDocument()
     expect(screen.getByRole('menuitem', { name: /S3 URL をコピー/ })).toBeInTheDocument()
 
