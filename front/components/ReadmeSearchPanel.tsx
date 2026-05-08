@@ -50,39 +50,67 @@ export function ReadmeSearchPanel({ connId }: Props) {
   }, [connId, q])
 
   return (
-    <section className="mt-2 mb-2">
+    <section className="mt-3 mb-4">
       <div className="flex items-center gap-2">
         <input
           type="search"
-          className="flex-1 max-w-[480px] rounded-2 border border-ink-3 bg-paper px-3 py-1.5 text-sm"
+          className="flex-1 max-w-[480px] rounded-1 bg-paper px-3 py-1.5 text-[13px] focus:outline-none"
+          style={{
+            border: '1px solid var(--color-rule-strong)',
+            fontFamily: 'var(--font-sans)',
+          }}
           placeholder="README 全文検索 (2 文字以上)"
           value={q}
           onChange={e => setQ(e.target.value)}
           aria-label="README 全文検索"
         />
-        {loading && <span className="text-xs text-ink-7">…</span>}
+        {loading && (
+          <span className="text-[11px] text-ink-7">検索中…</span>
+        )}
       </div>
 
       {error && <p className="error mt-2">{error}</p>}
 
       {hits !== null && hits.length === 0 && !loading && !error && (
-        <p className="mt-2 text-xs text-ink-7">ヒットなし。</p>
+        <p className="mt-3 text-[12px] text-ink-7">ヒットなし。</p>
       )}
 
       {hits !== null && hits.length > 0 && (
-        <ul className="m-0 mt-2 list-none p-0">
+        <ul
+          className="m-0 mt-3 list-none p-0"
+          style={{ borderTop: '1px solid var(--rule)' }}
+        >
           {hits.map(h => {
             const to =
               `/storage/${encodeURIComponent(connId)}` +
               `/${encodeURIComponent(h.bucket)}/${encPath(h.prefix)}`
             return (
-              <li key={`${h.bucket}/${h.prefix}`} className="border-b border-ink-1 py-2">
-                <Link to={to} className="text-ink-11 no-underline hover:underline">
-                  <span className="font-mono text-xs text-ink-7">{h.bucket}/</span>
-                  <span className="font-mono text-xs">{h.prefix || '(root)'}</span>
+              <li
+                key={`${h.bucket}/${h.prefix}`}
+                className="py-2.5 px-1 transition-colors hover:bg-ink-0"
+                style={{ borderBottom: '1px solid var(--rule)' }}
+              >
+                <Link to={to} className="block text-ink-12 no-underline">
+                  <span
+                    className="text-[12.5px] text-ink-7"
+                    style={{ fontFamily: 'var(--font-mono)', letterSpacing: '0.005em' }}
+                  >
+                    {h.bucket}/
+                  </span>
+                  <span
+                    className="text-[12.5px] font-medium text-ink-12"
+                    style={{ fontFamily: 'var(--font-mono)', letterSpacing: '0.005em' }}
+                  >
+                    {h.prefix || '(root)'}
+                  </span>
                 </Link>
-                <div className="text-[11px] text-ink-7 tabular-nums">
-                  last by {h.editor} · {fmtTime(h.edited_at)}
+                <div
+                  className="mt-0.5 text-[10.5px] text-ink-7 tabular-nums"
+                  style={{ fontFamily: 'var(--font-mono)', letterSpacing: '0.02em' }}
+                >
+                  last by <span className="text-ink-9">{h.editor}</span>{' '}
+                  <span className="text-ink-3">·</span>{' '}
+                  {fmtTime(h.edited_at)}
                 </div>
               </li>
             )

@@ -11,11 +11,12 @@ type Entry = Resp['entries'][number]
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const
 const DEFAULT_PAGE_SIZE = 10
 
-const tableCellClass = 'px-2 py-1 border-b border-ink-1'
+const tableHeadClass =
+  'px-2 py-2 text-left text-[10.5px] font-semibold uppercase tracking-[0.22em] text-ink-7'
 const rowClass = 'cursor-pointer transition-colors hover:bg-ink-0 focus-visible:bg-ink-1'
 const pagerBtnClass =
-  'cursor-pointer rounded-2 border border-ink-3 bg-paper px-3 py-1 transition-colors ' +
-  'hover:bg-ink-1 hover:border-ink-5 disabled:cursor-default disabled:opacity-40'
+  'cursor-pointer bg-paper px-3 py-1 text-[12px] transition-colors ' +
+  'hover:bg-ink-1 disabled:cursor-default disabled:opacity-40'
 
 export function PreviewArchive({ connId, bucket, k }: { connId: string; bucket: string; k: string }) {
   const [openedEntry, setOpenedEntry] = useState<Entry | null>(null)
@@ -93,12 +94,19 @@ export function PreviewArchive({ connId, bucket, k }: { connId: string; bucket: 
     return () => clearInterval(t)
   }, [data, error])
 
+  const ruleStyle = { border: '1px solid var(--color-rule-strong)', borderRadius: 'var(--radius-1)' } as const
+
   const sizeSelect = (
     <div className="flex items-center gap-2">
       <label className="flex items-center gap-2">
-        <span className="text-xs text-ink-7">表示件数</span>
+        <span
+          className="text-[10.5px] font-semibold uppercase tracking-[0.18em] text-ink-7"
+        >
+          表示件数
+        </span>
         <select
-          className="cursor-pointer rounded-2 border border-ink-3 bg-paper px-2 py-1 disabled:cursor-default disabled:opacity-50"
+          className="cursor-pointer bg-paper px-2 py-1 text-[12px] disabled:cursor-default disabled:opacity-50"
+          style={ruleStyle}
           value={pageSize}
           onChange={e => setPageSize(Number(e.target.value))}
           disabled={loading}
@@ -110,11 +118,13 @@ export function PreviewArchive({ connId, bucket, k }: { connId: string; bucket: 
       </label>
       <button
         className={pagerBtnClass}
+        style={ruleStyle}
         onClick={forceRefresh}
         disabled={loading}
         title="キャッシュを破棄して再読み込み"
+        aria-label="再読み込み"
       >
-        🔄
+        <span aria-hidden>↻</span>
       </button>
     </div>
   )
@@ -127,8 +137,11 @@ export function PreviewArchive({ connId, bucket, k }: { connId: string; bucket: 
       : 'connecting'
     return (
       <div>
-        <div className="mb-2 flex items-center justify-between">{sizeSelect}</div>
-        <p className="text-ink-7">
+        <div className="mb-3 flex items-center justify-between">{sizeSelect}</div>
+        <p
+          className="text-[13px] text-ink-7"
+          style={{ fontFamily: 'var(--font-mono)' }}
+        >
           <span>{modeLabel}…</span>{' '}
           <span className="tabular-nums">{progress.entries}</span>
           {' 件 · '}
@@ -154,17 +167,17 @@ export function PreviewArchive({ connId, bucket, k }: { connId: string; bucket: 
 
   return (
     <div>
-      <div className="mb-2 flex items-center justify-between">{sizeSelect}</div>
+      <div className="mb-3 flex items-center justify-between">{sizeSelect}</div>
       {data.truncated && (
-        <p className="text-ink-7">
+        <p className="text-[12px] text-ink-7">
           バイト上限に到達しました。これ以降は読み込めません。
         </p>
       )}
       <table className="w-full border-collapse text-[13px]">
         <thead>
-          <tr>
-            <th className="border-b border-ink-2 px-2 py-2 text-left text-[11px] font-medium uppercase tracking-[0.06em] text-ink-7">Name</th>
-            <th className="w-px whitespace-nowrap border-b border-ink-2 px-2 py-2 text-right text-[11px] font-medium uppercase tracking-[0.06em] text-ink-7">Size</th>
+          <tr style={{ borderBottom: '1px solid var(--color-rule-strong)' }}>
+            <th className={tableHeadClass}>Name</th>
+            <th className={`${tableHeadClass} w-px whitespace-nowrap text-right`}>Size</th>
           </tr>
         </thead>
         <tbody>
@@ -174,6 +187,7 @@ export function PreviewArchive({ connId, bucket, k }: { connId: string; bucket: 
               className={rowClass}
               role="button"
               tabIndex={0}
+              style={{ borderBottom: '1px solid var(--rule)' }}
               onClick={() => setOpenedEntry(e)}
               onKeyDown={(ev: KeyboardEvent<HTMLTableRowElement>) => {
                 if (ev.key === 'Enter' || ev.key === ' ') {
@@ -182,20 +196,34 @@ export function PreviewArchive({ connId, bucket, k }: { connId: string; bucket: 
                 }
               }}
             >
-              <td className={tableCellClass}>{e.name}</td>
-              <td className={`${tableCellClass} w-px whitespace-nowrap text-right text-ink-7 tabular-nums`}>
+              <td
+                className="px-2 py-2"
+                style={{ fontFamily: 'var(--font-mono)', fontSize: '12.5px' }}
+              >
+                {e.name}
+              </td>
+              <td
+                className="w-px whitespace-nowrap px-2 py-2 text-right text-ink-7 tabular-nums"
+                style={{ fontFamily: 'var(--font-mono)', fontSize: '12px' }}
+              >
                 {fmtSize(e.size)}
               </td>
             </tr>
           ))}
         </tbody>
       </table>
-      <div className="flex items-center justify-center gap-3 py-3 tabular-nums">
+      <div
+        className="flex items-center justify-center gap-3 py-3 text-[12px] tabular-nums text-ink-7"
+        style={{ fontFamily: 'var(--font-mono)' }}
+      >
         <button
           className={pagerBtnClass}
+          style={ruleStyle}
           onClick={() => setOffset(Math.max(0, offset - pageSize))}
           disabled={offset === 0 || loading}
-        >← Prev</button>
+        >
+          ← Prev
+        </button>
         <span>
           {data.entries.length > 0
             ? `${start}–${end}`
@@ -205,9 +233,12 @@ export function PreviewArchive({ connId, bucket, k }: { connId: string; bucket: 
         </span>
         <button
           className={pagerBtnClass}
+          style={ruleStyle}
           onClick={() => setOffset(offset + pageSize)}
           disabled={data.truncated || loading || data.entries.length === 0}
-        >Next →</button>
+        >
+          Next →
+        </button>
       </div>
       {openedEntry && (
         <TarEntryModal

@@ -33,16 +33,25 @@ export function TarEntryModal({ connId, bucket, archiveKey, entry, onClose }: Pr
         aria-modal="true"
         aria-labelledby="tar-entry-title"
       >
-        <header className="flex flex-wrap items-center gap-3 pb-3">
+        <header
+          className="flex flex-wrap items-center gap-3 pb-3 mb-3"
+          style={{ borderBottom: '1px solid var(--rule)' }}
+        >
           <p
             id="tar-entry-title"
             className="m-0 flex min-w-0 flex-1 flex-wrap items-center gap-1"
+            style={{ fontFamily: 'var(--font-mono)', fontSize: '12px' }}
           >
             <span className="text-ink-7 truncate">{archiveKey}</span>
-            <span className="text-ink-3 px-[2px]">/</span>
-            <span>{entry.name}</span>
+            <span className="text-ink-3 px-[2px]" style={{ fontFamily: 'var(--font-serif)' }}>›</span>
+            <span className="text-ink-12">{entry.name}</span>
           </p>
-          <span className="text-xs text-ink-7 tabular-nums">{fmtSize(entry.size)}</span>
+          <span
+            className="text-[11px] text-ink-7 tabular-nums"
+            style={{ fontFamily: 'var(--font-mono)' }}
+          >
+            {fmtSize(entry.size)}
+          </span>
           <a
             className="ghost no-underline"
             href={url}
@@ -50,7 +59,8 @@ export function TarEntryModal({ connId, bucket, archiveKey, entry, onClose }: Pr
             aria-label={`${entry.name} をダウンロード`}
             title="ダウンロード"
           >
-            ⬇ DL
+            <span aria-hidden>↓</span>
+            <span className="text-[10.5px] font-semibold uppercase tracking-[0.18em]">DL</span>
           </a>
           <button
             type="button"
@@ -58,7 +68,7 @@ export function TarEntryModal({ connId, bucket, archiveKey, entry, onClose }: Pr
             onClick={onClose}
             aria-label="Close entry"
           >
-            ✕
+            <span aria-hidden>✕</span>
           </button>
         </header>
         <div className="overflow-auto">
@@ -73,7 +83,18 @@ export function TarEntryModal({ connId, bucket, archiveKey, entry, onClose }: Pr
 }
 
 function ImageBody({ url, alt }: { url: string; alt: string }) {
-  return <img className="mx-auto block h-auto max-w-full rounded-2" src={url} alt={alt} />
+  return (
+    <img
+      className="mx-auto block h-auto max-w-full"
+      style={{
+        borderRadius: 'var(--radius-2)',
+        border: '1px solid var(--rule)',
+        boxShadow: '0 1px 4px rgba(10, 9, 4, 0.06)',
+      }}
+      src={url}
+      alt={alt}
+    />
+  )
 }
 
 function AudioBody({ url }: { url: string }) {
@@ -94,7 +115,9 @@ function TextBody({
   }, [connId, bucket, archiveKey, entry])
 
   if (error) return <p className="error">{error}</p>
-  if (text === null) return <p className="text-ink-7">loading…</p>
+  if (text === null) {
+    return <p className="text-[13px] text-ink-7">loading…</p>
+  }
 
   // .json (単一ドキュメント) はプリティプリントする。.jsonl / .ndjson は
   // 1行1JSON値の形式なのでそのまま表示する。
@@ -114,10 +137,22 @@ function TextBody({
 
   return (
     <div className="flex flex-col gap-2">
-      <p className="m-0 text-xs text-ink-7 tabular-nums">
+      <p
+        className="m-0 text-[11px] text-ink-7 tabular-nums"
+        style={{ fontFamily: 'var(--font-mono)', letterSpacing: '0.02em' }}
+      >
         <span>{lines} 行</span>
       </p>
-      <pre className="m-0 max-h-[70vh] overflow-auto whitespace-pre rounded-2 border border-ink-2 bg-ink-0 p-2 text-xs leading-snug">
+      <pre
+        className="m-0 max-h-[70vh] overflow-auto whitespace-pre p-3 text-[12px] leading-snug"
+        style={{
+          fontFamily: 'var(--font-mono)',
+          background: 'var(--ink-0)',
+          border: '1px solid var(--rule)',
+          borderRadius: 'var(--radius-2)',
+          color: 'var(--ink-11)',
+        }}
+      >
         {display}
       </pre>
     </div>
@@ -127,7 +162,7 @@ function TextBody({
 function UnknownBody({ url: _url, name: _name }: { url: string; name: string }) {
   // ダウンロードはヘッダの DL ボタンに集約済。
   return (
-    <p className="text-ink-7">
+    <p className="text-[13px] text-ink-7">
       プレビュー非対応のファイル種別です。上の DL ボタンからダウンロードできます。
     </p>
   )

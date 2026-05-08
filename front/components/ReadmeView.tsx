@@ -44,36 +44,52 @@ export function ReadmeView({ connId, bucket, prefix }: Props) {
   if (!data) return null
   return (
     <section
-      className="mb-6 border-b border-ink-2 pb-4"
+      className="pb-5"
+      style={{ borderBottom: '1px solid var(--rule)' }}
       data-color-mode="light"
     >
-      <header className="flex flex-wrap items-center gap-3">
-        <h3 className="m-0 text-sm font-semibold">S3 README</h3>
-        <span className="basis-full text-[11px] text-ink-7">この prefix の README.md を編集</span>
-        <button className="ghost" onClick={() => setEditing(true)}>
-          {data.exists ? '✎ 編集' : '✎ 作成'}
-        </button>
-        <button
-          className="ghost"
-          onClick={() => setHistoryOpen(true)}
-          title="編集履歴を表示"
-        >
-          ⏱ 履歴
-        </button>
-        <button
-          className="ghost"
-          onClick={forceRefresh}
-          title="キャッシュを破棄して再読み込み"
-        >
-          🔄 更新
-        </button>
-        {data.exists && data.last_editor && (
-          <span className="text-ink-7">last by {data.last_editor}</span>
-        )}
+      <header className="flex flex-wrap items-baseline gap-x-4 gap-y-2 mb-3">
+        <p className="kicker m-0">S3 README</p>
+        <p className="m-0 text-[12px] text-ink-7">
+          この prefix の README.md
+        </p>
+        <span className="ml-auto flex items-center gap-2">
+          <button className="ghost" onClick={() => setEditing(true)}>
+            <span aria-hidden>✎</span>
+            {data.exists ? '編集' : '作成'}
+          </button>
+          <button
+            className="ghost"
+            onClick={() => setHistoryOpen(true)}
+            title="編集履歴を表示"
+          >
+            <span aria-hidden>⏱</span>
+            履歴
+          </button>
+          <button
+            className="ghost"
+            onClick={forceRefresh}
+            title="キャッシュを破棄して再読み込み"
+            aria-label="更新"
+          >
+            <span aria-hidden>↻</span>
+          </button>
+          {data.exists && data.last_editor && (
+            <span className="text-[12px] text-ink-7">
+              last by <span className="font-medium text-ink-11">{data.last_editor}</span>
+            </span>
+          )}
+        </span>
       </header>
-      {data.exists
-        ? <div className="mt-2"><MDEditor.Markdown source={data.body} rehypePlugins={[[rehypeSanitize]]} /></div>
-        : <p className="text-ink-7">README なし</p>}
+      {data.exists ? (
+        <article className="article mt-1">
+          <MDEditor.Markdown source={data.body} rehypePlugins={[[rehypeSanitize]]} />
+        </article>
+      ) : (
+        <p className="text-[13px] text-ink-7">
+          README なし
+        </p>
+      )}
       {editing && (
         <Suspense fallback={null}>
           <MarkdownEditor

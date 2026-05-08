@@ -18,12 +18,15 @@ interface Props {
 type ListResp = z.infer<typeof StorageList>
 type FileEntry = ListResp['files'][number]
 
+// Editorial table: ヘッダ small caps + 0.22em tracking、罫線は hairline (var(--rule))
 const headThClass =
-  'border-b border-ink-2 px-2 py-2 text-left text-[11px] font-medium uppercase tracking-[0.06em] text-ink-7'
+  'px-2 py-2 text-left text-[10.5px] font-semibold uppercase tracking-[0.22em] text-ink-7'
+// 行内 cell。下端 hairline。tdNumClass は右寄せ + tabular-nums。
 const tdNameClass =
-  'max-w-0 overflow-hidden text-ellipsis whitespace-nowrap border-b border-ink-1 px-2 py-2'
+  'max-w-0 overflow-hidden text-ellipsis whitespace-nowrap px-2 py-2.5'
 const tdNumClass =
-  'w-px whitespace-nowrap border-b border-ink-1 px-2 py-2 text-right tabular-nums text-ink-7'
+  'w-px whitespace-nowrap px-2 py-2.5 text-right tabular-nums text-ink-7 ' +
+  'font-mono text-[12px]'
 // File rows: 行全体クリック (preview drawer 開閉) なので pointer cursor
 const fileRowClass =
   'cursor-pointer transition-colors hover:bg-ink-0 focus-within:bg-ink-1'
@@ -61,13 +64,18 @@ const DirRow = memo(function DirRow({
     { kind: 'copy', label: 'S3 URL をコピー', value: dirS3Url },
   ], [dirWebUrl, dirS3Url])
   return (
-    <tr className={dirRowClass}>
+    <tr className={dirRowClass} style={{ borderBottom: '1px solid var(--rule)' }}>
       <td className={`${tdNameClass} p-0`}>
         <Link
           to={dirHref}
-          className="block px-2 py-2 font-semibold text-ink-11 no-underline"
+          className={
+            'flex items-baseline gap-2 px-2 py-2.5 ' +
+            'font-semibold text-ink-12 no-underline'
+          }
         >
-          📁 {tail}
+          {/* dir glyph: chevron — folder シンボルとしての editorial 表現 */}
+          <span aria-hidden className="text-ink-5 select-none text-[10px]">▸</span>
+          <span className="truncate">{tail}</span>
         </Link>
       </td>
       <td className={tdNumClass}>—</td>
@@ -113,12 +121,28 @@ const FileRow = memo(function FileRow({
   return (
     <tr
       className={fileRowClass}
+      style={{ borderBottom: '1px solid var(--rule)' }}
       role="button"
       tabIndex={0}
       onClick={select}
       onKeyDown={onKeyDown}
     >
-      <td className={tdNameClass}>📄 {tail}</td>
+      <td className={tdNameClass}>
+        <span className="flex items-baseline gap-2">
+          {/* file glyph: 控えめな点 — タイポ的に存在を主張しすぎない */}
+          <span aria-hidden className="text-ink-3 select-none text-[10px]">·</span>
+          <span
+            className="truncate text-ink-11"
+            style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: '12.5px',
+              letterSpacing: '0.005em',
+            }}
+          >
+            {tail}
+          </span>
+        </span>
+      </td>
       <td className={tdNumClass}>{fmtSize(f.size)}</td>
       <td className={tdNumClass}>{f.lastModified?.slice(0, 10) ?? ''}</td>
       <td className={tdNumClass}>
@@ -250,14 +274,21 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
 
   return (
     <div>
-      {/* 検索 input + 再帰チェック。
+      {/* ── 検索 input + 再帰チェック ─────────────────────────
           再帰オフ: 現ディレクトリ "直下" の前方一致 (Delimiter='/')。
           再帰オン: prefix 配下を全て flat に列挙 (Delimiter なし)、
                   検索クエリ空でもサブディレクトリ全件を一覧できる便利モード。 */}
-      <div className="mb-2 flex flex-wrap items-center gap-2">
+      <div className="mb-3 flex flex-wrap items-center gap-3">
         <input
           type="search"
-          className="flex-1 max-w-[480px] rounded-2 border border-ink-3 bg-paper px-3 py-1.5 text-sm"
+          className={
+            'flex-1 max-w-[480px] rounded-1 bg-paper px-3 py-1.5 text-[13px] ' +
+            'transition-[border-color,box-shadow] focus:outline-none'
+          }
+          style={{
+            border: '1px solid var(--color-rule-strong)',
+            fontFamily: 'var(--font-sans)',
+          }}
           placeholder={recursive
             ? 'このディレクトリ配下を検索 (前方一致・再帰)'
             : 'このディレクトリ内を検索 (前方一致)'}
@@ -265,22 +296,27 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
           onChange={e => setQ(e.target.value)}
           aria-label="ディレクトリ内検索"
         />
-        <label className="flex cursor-pointer items-center gap-1 text-xs text-ink-9">
+        <label className="flex cursor-pointer items-center gap-1.5 text-[12px] text-ink-9">
           <input
             type="checkbox"
             checked={recursive}
             onChange={e => setRecursive(e.target.checked)}
           />
-          再帰検索
+          <span className="select-none">再帰検索</span>
         </label>
         {isSearching && (
           <button
             type="button"
             onClick={() => setQ('')}
-            className="cursor-pointer rounded-2 border border-ink-3 bg-paper px-2 py-1 text-xs transition-colors hover:bg-ink-1"
+            className={
+              'cursor-pointer rounded-1 bg-paper px-2 py-1 text-[11px] ' +
+              'font-semibold uppercase tracking-[0.16em] text-ink-7 ' +
+              'transition-colors hover:bg-ink-1 hover:text-ink-11'
+            }
+            style={{ border: '1px solid var(--color-rule-strong)' }}
             aria-label="検索をクリア"
           >
-            クリア
+            clear
           </button>
         )}
       </div>
@@ -288,7 +324,10 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
       {/* 進捗バー領域: 高さ 2px を常時確保しレイアウトシフトを避ける。
           loading (1 chunk 目) のときだけバー要素を描画する。loadingMore は
           下のセンチネル横に小さな indicator を出すので兼用しない。 */}
-      <div className="relative h-[2px] w-full overflow-hidden bg-ink-1">
+      <div
+        className="relative h-px w-full overflow-hidden"
+        style={{ background: 'var(--rule)' }}
+      >
         {loading && (
           <div
             role="progressbar"
@@ -306,7 +345,7 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
       >
         <table className="w-full border-collapse text-[13px]">
           <thead>
-            <tr>
+            <tr style={{ borderBottom: '1px solid var(--color-rule-strong)' }}>
               <th className={headThClass}>Name</th>
               <th className={`${headThClass} text-right`}>Size</th>
               <th className={`${headThClass} text-right`}>Modified</th>
@@ -331,7 +370,7 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
         </table>
 
         {isEmpty && !error && (
-          <p className="py-4 text-center text-xs text-ink-7">
+          <p className="py-6 text-center text-[13px] text-ink-7">
             {isSearching
               ? `「${submittedQ}」に一致するエントリはありません${recursive ? ' (再帰)' : ''}。`
               : recursive
@@ -351,7 +390,7 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
               onClick={loadMore}
               disabled={loadingMore || loading}
               aria-busy={loadingMore}
-              className="cursor-pointer rounded-2 border border-ink-3 bg-paper px-4 py-1.5 text-xs text-ink-9 transition-colors hover:bg-ink-1 hover:border-ink-5 hover:text-ink-11 disabled:cursor-default disabled:opacity-40"
+              className="cursor-pointer rounded-2 border border-ink-3 bg-paper px-4 py-1.5 text-[11.5px] text-ink-9 transition-colors hover:bg-ink-1 hover:border-ink-5 hover:text-ink-11 disabled:cursor-default disabled:opacity-40"
             >
               {loadingMore ? '読み込み中…' : '↓ さらに読み込む'}
             </button>
@@ -359,19 +398,27 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
         )}
 
         {/* hasMore が false なら「end」ラベル + refresh のみ。検索の有無に関わらず常に出す。 */}
-        <div className="flex items-center justify-center gap-3 py-3 text-xs text-ink-7 tabular-nums">
+        <div
+          className="flex items-center justify-center gap-3 py-3 text-[11px] text-ink-7 tabular-nums"
+          style={{ letterSpacing: '0.02em' }}
+        >
           {!hasMore && !isEmpty && (
-            <span>
+            <span style={{ fontFamily: 'var(--font-mono)' }}>
               {dirs.length + files.length} 件 (全件表示済み)
             </span>
           )}
           <button
-            className="cursor-pointer rounded-2 border border-ink-3 bg-paper px-3 py-1 transition-colors hover:bg-ink-1 hover:border-ink-5 disabled:cursor-default disabled:opacity-40"
+            className={
+              'cursor-pointer rounded-1 bg-paper px-2.5 py-1 ' +
+              'transition-colors hover:bg-ink-1 disabled:cursor-default disabled:opacity-40'
+            }
+            style={{ border: '1px solid var(--color-rule-strong)' }}
             onClick={forceRefresh}
             disabled={loading || loadingMore}
             title="キャッシュを破棄して再読み込み"
+            aria-label="再読み込み"
           >
-            🔄
+            <span aria-hidden>↻</span>
           </button>
         </div>
       </div>

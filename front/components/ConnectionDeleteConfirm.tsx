@@ -30,8 +30,18 @@ export function ConnectionDeleteConfirm({ name, onConfirm, onCancel }: Props) {
         aria-modal="true"
         aria-labelledby="conn-delete-title"
       >
+        <p className="kicker">Settings · 削除</p>
         <h3 id="conn-delete-title">接続を削除</h3>
-        <p>接続 '{name}' を削除します。よろしいですか?</p>
+        <p className="text-[14px] leading-relaxed text-ink-9">
+          接続&nbsp;
+          <span
+            className="font-semibold text-ink-12"
+            style={{ fontFamily: 'var(--font-mono)' }}
+          >
+            {name}
+          </span>
+          &nbsp;を削除します。よろしいですか?
+        </p>
         {error && <p className="error" aria-live="polite">{error}</p>}
         <div className="modal-actions">
           <button onClick={onCancel} disabled={busy}>キャンセル</button>
@@ -39,6 +49,11 @@ export function ConnectionDeleteConfirm({ name, onConfirm, onCancel }: Props) {
             className="conn-row__danger"
             onClick={submit}
             disabled={busy}
+            style={{
+              background: 'var(--danger)',
+              borderColor: 'var(--danger)',
+              color: 'var(--paper)',
+            }}
           >
             {busy ? '削除中…' : '削除'}
           </button>

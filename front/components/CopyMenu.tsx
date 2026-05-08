@@ -13,7 +13,7 @@ interface Props {
 }
 
 // ファイル行のアクションメニュー。クリックで開き、項目を選んで実行。
-// クリック外 / Escape で閉じる。Tailwind utility だけ。
+// クリック外 / Escape で閉じる。
 //
 // memo でラップ: StorageBrowser の各行は items を useMemo で安定化して
 // 渡すので、親の再レンダ時 (loading フラグ更新等) に各 CopyMenu を
@@ -62,8 +62,13 @@ export const CopyMenu = memo(function CopyMenu({ items, trigger = '⋯', ariaLab
       {open && (
         <div
           role="menu"
-          className="absolute right-0 z-30 min-w-[280px] max-w-[480px] rounded-3 border border-ink-3 bg-paper py-1 shadow-[0_8px_24px_rgba(0,0,0,0.10)]"
-          style={{ top: 'calc(100% + 4px)' }}
+          className="absolute right-0 z-30 min-w-[280px] max-w-[480px] bg-paper py-1"
+          style={{
+            top: 'calc(100% + 6px)',
+            border: '1px solid var(--color-rule-strong)',
+            borderRadius: 'var(--radius-2)',
+            boxShadow: '0 12px 28px -8px rgba(10, 9, 4, 0.20), 0 2px 6px rgba(10, 9, 4, 0.08)',
+          }}
         >
           {items.map(it => {
             if (it.kind === 'download') {
@@ -73,7 +78,10 @@ export const CopyMenu = memo(function CopyMenu({ items, trigger = '⋯', ariaLab
                   role="menuitem"
                   href={it.href}
                   download={it.filename}
-                  className="block w-full cursor-pointer border-0 bg-transparent px-3 py-2 text-left text-ink-11 no-underline transition-colors hover:bg-ink-1"
+                  className={
+                    'block w-full cursor-pointer border-0 bg-transparent px-3 py-2 ' +
+                    'text-[13px] text-ink-11 no-underline transition-colors hover:bg-ink-1'
+                  }
                   onClick={() => setOpen(false)}
                 >
                   {it.label}
@@ -85,12 +93,20 @@ export const CopyMenu = memo(function CopyMenu({ items, trigger = '⋯', ariaLab
                 key={it.label}
                 role="menuitem"
                 type="button"
-                className="block w-full cursor-pointer border-0 bg-transparent px-3 py-2 text-left text-ink-11 transition-colors hover:bg-ink-1"
+                className={
+                  'block w-full cursor-pointer border-0 bg-transparent px-3 py-2 ' +
+                  'text-left text-[13px] text-ink-11 transition-colors hover:bg-ink-1'
+                }
                 onClick={() => onCopy(it.label, it.value)}
                 title={it.value}
               >
                 <div>{it.label}</div>
-                <div className="mt-0.5 truncate font-mono text-[11px] text-ink-7">{it.value}</div>
+                <div
+                  className="mt-0.5 truncate text-[11px] text-ink-7"
+                  style={{ fontFamily: 'var(--font-mono)', letterSpacing: '0.005em' }}
+                >
+                  {it.value}
+                </div>
               </button>
             )
           })}

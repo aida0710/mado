@@ -40,17 +40,20 @@ export default function HomePage() {
 
   useEffect(() => { refresh() }, [refresh])
 
-  // string | null を返す軽量計算 — useMemo の deps 比較コストの方が
-  // 高くつくので素直にレンダ中に派生させる。
-  const byline = data?.exists
-    ? [data.last_editor, data.last_edited_at && formatByline(data.last_edited_at)]
-        .filter(Boolean)
-        .join(' · ') || null
-    : null
+  // 軽量な派生値 — useMemo の deps 比較コストの方が高くつくので
+  // 素直にレンダ中に派生させる。byline は editor / when の 2 つの片を
+  // .byline クラスの構造 (各 <span> に飾り罫 + 中点) に渡したいので
+  // 単一文字列ではなくフィールドのまま保持する。
+  const bylineEditor = data?.exists ? (data.last_editor || null) : null
+  const bylineWhen   = data?.exists && data.last_edited_at ? formatByline(data.last_edited_at) : null
+  const hasByline    = bylineEditor || bylineWhen
 
   if (!data) return null
 
   const isPresent = data.exists && data.body.trim().length > 0
+  // 段落数が多い "本格的な" Note のときだけ drop cap を効かせる。
+  // 短い箇条書きやメモのような Note では drop cap が浮くため抑制する。
+  const enableDropCap = isPresent && data.body.split(/\n{2,}/).length >= 3
 
   return (
     <>
@@ -58,41 +61,42 @@ export default function HomePage() {
         <header className="page-head">
           <h2>Team note</h2>
           <button className="ghost" onClick={() => setEditing(true)}>
-            {data.exists ? '✎ 編集' : '✎ 作成'}
+            <span aria-hidden>✎</span>
+            {data.exists ? '編集' : '作成'}
           </button>
           <button
             className="ghost"
             onClick={() => setHistoryOpen(true)}
             title="編集履歴を表示"
           >
-            ⏱ 履歴
+            <span aria-hidden>⏱</span>
+            履歴
           </button>
-          <span className="basis-full text-xs text-ink-7">Mado 全体で 1 つの共有メモ</span>
+          <p className="page-head__sub">Mado 全体で 1 つの共有メモ — LAN 内の誰でも編集できます</p>
         </header>
 
         {isPresent ? (
-          <article>
+          <article className={`article${enableDropCap ? ' article--drop' : ''} mt-2`}>
             <MDEditor.Markdown source={data.body} rehypePlugins={[[rehypeSanitize]]} />
           </article>
         ) : (
           <div className="empty-state">
-            <p className="text-ink-7">まだホームノートがありません。</p>
+            <h3>まだ何も書かれていません</h3>
+            <p>
+              ここはチーム全員で共有する一枚のノートです。<br />
+              最初の数行を書きはじめてみましょう。
+            </p>
             <button className="empty-state__cta" onClick={() => setEditing(true)}>
               最初のノートを書く
             </button>
           </div>
         )}
 
-        {byline && (
-          <footer
-            className={
-              "mt-8 text-center text-xs text-ink-7 " +
-              "before:mx-3 before:inline-block before:h-px before:w-6 before:bg-ink-3 before:align-middle " +
-              "after:mx-3 after:inline-block after:h-px after:w-6 after:bg-ink-3 after:align-middle"
-            }
-          >
-            <span>{byline}</span>
-          </footer>
+        {hasByline && (
+          <p className="byline">
+            {bylineEditor && <span>{bylineEditor}</span>}
+            {bylineWhen && <span>{bylineWhen}</span>}
+          </p>
         )}
       </div>
 

@@ -25,7 +25,9 @@ export default function StoragePage({ connId }: Props) {
       .finally(() => setLoading(false))
   }, [connId])
 
-  if (loading) return <p className="text-ink-7">読み込み中…</p>
+  if (loading) {
+    return <p className="text-[13px] text-ink-7">読み込み中…</p>
+  }
   if (error || !connection) {
     return (
       <div className="empty-state">

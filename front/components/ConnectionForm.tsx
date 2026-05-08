@@ -88,6 +88,7 @@ export function ConnectionForm({ mode, onClose }: Props) {
         aria-modal="true"
         aria-labelledby={titleId}
       >
+        <p className="kicker">Settings · 接続</p>
         <h3 id={titleId}>{isEdit ? '接続を編集' : '接続を追加'}</h3>
         <label>
           <span className="label">名前</span>
@@ -132,7 +133,7 @@ export function ConnectionForm({ mode, onClose }: Props) {
         </label>
         <label>
           <span className="label">シークレットアクセスキー</span>
-          <div className="relative flex items-stretch gap-1">
+          <div className="relative flex items-stretch gap-2">
             <input
               className="flex-1"
               type={showSecret ? 'text' : 'password'}
@@ -144,6 +145,7 @@ export function ConnectionForm({ mode, onClose }: Props) {
             />
             <button
               type="button"
+              className="ghost shrink-0"
               onClick={() => setShowSecret(s => !s)}
               aria-label={showSecret ? 'シークレットを隠す' : 'シークレットを表示'}
             >
@@ -151,7 +153,7 @@ export function ConnectionForm({ mode, onClose }: Props) {
             </button>
           </div>
         </label>
-        <div className="my-3">
+        <div className="my-4">
           <label className="!m-0 inline-flex cursor-pointer items-center gap-2">
             <input
               type="checkbox"
@@ -163,8 +165,8 @@ export function ConnectionForm({ mode, onClose }: Props) {
               Path-style URL を使用する
             </span>
           </label>
-          <p className="ml-[calc(13px+0.5rem)] mt-1 text-xs leading-relaxed text-ink-7">
-            MinIO や自前の S3互換サーバはこれを ON にしないと動かないことが多いです。
+          <p className="ml-[calc(13px+0.5rem)] mt-1.5 text-[12.5px] leading-relaxed text-ink-7">
+            MinIO や自前の S3 互換サーバはこれを ON にしないと動かないことが多いです。
             AWS S3 / Cloudflare R2 などはどちらでも OK。迷ったら ON のままで大丈夫。
           </p>
         </div>

@@ -12,6 +12,10 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@fontsource-variable/newsreader": "^5.2.10",
+    "@fontsource-variable/public-sans": "^5.2.7",
+    "@fontsource/ibm-plex-mono": "^5.2.7",
+    "@fontsource/noto-sans-jp": "^5.2.9",
     "@uiw/react-md-editor": "^4.1.0",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",

@@ -6,12 +6,7 @@ import { ConnectionForm } from '../components/ConnectionForm'
 import { ConnectionDeleteConfirm } from '../components/ConnectionDeleteConfirm'
 
 const sectionTitleClass =
-  'mb-2 mt-0 text-sm font-semibold uppercase tracking-[0.02em] text-ink-7'
-const rowClass =
-  'flex items-center justify-between gap-4 rounded-3 border border-ink-2 ' +
-  'bg-paper p-3 transition-colors hover:border-ink-3'
-const rowMetaClass = 'mt-1 font-mono text-xs text-ink-7'
-const rowActionsClass = 'flex gap-2'
+  'm-0 text-[10.5px] font-semibold uppercase tracking-[0.22em] text-ink-7'
 
 export default function ConnectionsPage() {
   const [connections, setConnections] = useState<Connection[]>([])
@@ -49,38 +44,67 @@ export default function ConnectionsPage() {
 
   return (
     <div>
-      <div className="page-head">
-        <h2>設定</h2>
-      </div>
+      <header className="page-head">
+        <h2>Settings</h2>
+      </header>
 
-      <section className="my-6 first-of-type:mt-2">
-        <div className="mb-2 flex items-baseline justify-between gap-3">
-          <h3 className={sectionTitleClass}>オブジェクトストレージ接続</h3>
-          <button className="ghost" onClick={() => setAdding(true)}>+ 追加</button>
+      <section className="mt-7">
+        <div
+          className="mb-3 flex items-baseline justify-between gap-3 pb-2"
+          style={{ borderBottom: '1px solid var(--rule)' }}
+        >
+          <h3 className={sectionTitleClass}>オブジェクトストレージ接続先の管理</h3>
+          <button className="ghost" onClick={() => setAdding(true)}>
+            <span aria-hidden>+</span> 追加
+          </button>
         </div>
-        {loading && <p className="text-ink-7">読み込み中…</p>}
+
+        {loading && (
+          <p className="text-[13px] text-ink-7">読み込み中…</p>
+        )}
         {error && <p className="error">{error}</p>}
+
         {!loading && connections.length === 0 && (
           <div className="empty-state">
             <h3>まだ接続がありません</h3>
-            <p className="text-ink-7">追加した接続は <code>/storage/&lt;id&gt;/</code> でアクセスできます。</p>
+            <p>
+              追加した接続は <code className="font-mono text-[0.92em]">/storage/&lt;id&gt;/</code> でアクセスできます。<br />
+              endpoint / region / アクセスキーをまとめて登録します。
+            </p>
             <button className="empty-state__cta" onClick={() => setAdding(true)}>
               最初の接続を追加
             </button>
           </div>
         )}
+
         {connections.length > 0 && (
-          <ul className="m-0 flex list-none flex-col gap-2 p-0">
+          <ul className="m-0 list-none p-0">
             {connections.map(conn => (
-              <li key={conn.id} className={rowClass}>
-                <div>
-                  <strong>{conn.name}</strong>
-                  <div className={rowMetaClass}>
-                    {conn.endpoint} · {conn.region} · {conn.accessKeyIdMasked}
-                    {conn.forcePathStyle && ' · path-style'}
+              <li
+                key={conn.id}
+                className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-3 px-4 py-4"
+                style={{ borderBottom: '1px solid var(--rule)' }}
+              >
+                <div className="min-w-0 flex-1">
+                  <strong className="block text-[15px] font-semibold tracking-[0.005em] text-ink-12">
+                    {conn.name}
+                  </strong>
+                  <div
+                    className="mt-1 font-mono text-[12px] text-ink-7"
+                    style={{ letterSpacing: '0.01em' }}
+                  >
+                    {conn.endpoint} <span className="text-ink-3">·</span>{' '}
+                    {conn.region} <span className="text-ink-3">·</span>{' '}
+                    {conn.accessKeyIdMasked}
+                    {conn.forcePathStyle && (
+                      <>
+                        {' '}<span className="text-ink-3">·</span>{' '}
+                        <span className="text-ink-5">path-style</span>
+                      </>
+                    )}
                   </div>
                 </div>
-                <div className={rowActionsClass}>
+                <div className="flex shrink-0 gap-2">
                   <Link className="ghost" to={`/storage/${encodeURIComponent(conn.id)}/`}>開く</Link>
                   <button className="ghost" onClick={() => setEditing(conn)}>編集</button>
                   <button

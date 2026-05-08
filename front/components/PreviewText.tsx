@@ -12,7 +12,16 @@ export function PreviewText({ connId, bucket, k }: { connId: string; bucket: str
     return () => { cancelled = true }
   }, [connId, bucket, k])
   return (
-    <pre className="m-0 max-h-[70vh] overflow-auto whitespace-pre rounded-2 border border-ink-2 bg-ink-0 p-2 text-xs leading-snug">
+    <pre
+      className="m-0 max-h-[70vh] overflow-auto whitespace-pre p-3 text-[12px] leading-snug"
+      style={{
+        fontFamily: 'var(--font-mono)',
+        background: 'var(--ink-0)',
+        border: '1px solid var(--rule)',
+        borderRadius: 'var(--radius-2)',
+        color: 'var(--ink-11)',
+      }}
+    >
       {text}
     </pre>
   )

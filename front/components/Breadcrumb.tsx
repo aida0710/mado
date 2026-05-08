@@ -14,9 +14,16 @@ function parentPath(connId: string, bucket: string, prefix: string): string {
   return `/storage/${encodeURIComponent(connId)}/${encodeURIComponent(bucket)}/${encPath(parentPrefix)}`
 }
 
+// editorial breadcrumb:
+// ・パス segment は font-mono (ファイルシステム表現)
+// ・separator は serif の "›"  (ink-3)
+// ・親へ戻るボタンは hairline 罫の正方形
 const linkClass =
-  'text-ink-11 no-underline px-1 py-[2px] rounded-1 hover:bg-ink-1'
-const sepClass = 'text-ink-3 px-[2px]'
+  'text-ink-11 no-underline px-1.5 py-[2px] rounded-1 ' +
+  'font-mono text-[12.5px] ' +
+  'transition-colors hover:bg-ink-1'
+const sepClass =
+  'text-ink-5 px-[3px] font-serif select-none'
 
 export function Breadcrumb({
   connId, bucket, prefix,
@@ -24,19 +31,28 @@ export function Breadcrumb({
   const connection = useConnection()
   const segments = prefix.split('/').filter(Boolean)
   return (
-    <nav className="flex flex-wrap items-center gap-1 my-2 text-sm">
+    <nav className="flex flex-wrap items-center gap-1 my-2" aria-label="パンくず">
       <Link
-        className="inline-flex h-7 w-7 items-center justify-center rounded-2 border border-ink-3 bg-paper text-ink-9 no-underline hover:bg-ink-1 hover:border-ink-5 transition-colors"
+        className={
+          'inline-flex h-7 w-7 items-center justify-center rounded-1 ' +
+          'text-ink-9 no-underline transition-colors ' +
+          'hover:bg-ink-1 hover:text-ink-12'
+        }
+        style={{ border: '1px solid var(--color-rule-strong)' }}
         to={parentPath(connId, bucket, prefix)}
         aria-label="親階層へ"
         title="親階層へ"
       >
-        ←
+        <span aria-hidden>↑</span>
       </Link>
-      <Link className={linkClass} to={`/storage/${encodeURIComponent(connId)}/`}>
+      <Link
+        className={`${linkClass} font-sans font-medium`}
+        style={{ fontFamily: 'var(--font-sans)' }}
+        to={`/storage/${encodeURIComponent(connId)}/`}
+      >
         {connection.name}
       </Link>
-      <span className={sepClass}>/</span>
+      <span className={sepClass}>›</span>
       <Link
         className={linkClass}
         to={`/storage/${encodeURIComponent(connId)}/${encodeURIComponent(bucket)}/`}
@@ -47,7 +63,7 @@ export function Breadcrumb({
         const subPrefix = segments.slice(0, i + 1).join('/') + '/'
         return (
           <span key={subPrefix} className="contents">
-            <span className={sepClass}>/</span>
+            <span className={sepClass}>›</span>
             <Link
               className={linkClass}
               to={`/storage/${encodeURIComponent(connId)}/${encodeURIComponent(bucket)}/${encPath(subPrefix)}`}
@@ -57,7 +73,7 @@ export function Breadcrumb({
           </span>
         )
       })}
-      {prefix && <span className={sepClass}>/</span>}
+      {prefix && <span className={sepClass}>›</span>}
     </nav>
   )
 }

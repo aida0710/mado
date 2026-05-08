@@ -27,9 +27,17 @@ export function PreviewDrawer({ connId, bucket, k, onClose }: Props) {
           aria-label={`${filename} をダウンロード`}
           title="ダウンロード"
         >
-          ⬇ DL
+          <span aria-hidden>↓</span>
+          <span className="text-[10.5px] font-semibold uppercase tracking-[0.18em]">DL</span>
         </a>
-        <button className="ghost" onClick={onClose} aria-label="Close preview">✕</button>
+        <button
+          className="ghost"
+          onClick={onClose}
+          aria-label="Close preview"
+          title="閉じる"
+        >
+          <span aria-hidden>✕</span>
+        </button>
       </header>
       <div className="drawer__body">
         {kind === 'text' && <PreviewText connId={connId} bucket={bucket} k={k} />}
@@ -37,7 +45,7 @@ export function PreviewDrawer({ connId, bucket, k, onClose }: Props) {
         {kind === 'audio' && <PreviewAudio connId={connId} bucket={bucket} k={k} />}
         {kind === 'archive' && <PreviewArchive connId={connId} bucket={bucket} k={k} />}
         {kind === 'unknown' && (
-          <p className="text-ink-7">
+          <p className="text-[13px] text-ink-7">
             プレビュー非対応のファイル種別です。上の DL ボタンからダウンロードできます。
           </p>
         )}

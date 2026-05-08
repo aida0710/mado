@@ -73,60 +73,89 @@ export function ReadmeHistoryModal({ connId, bucket, prefix, currentBody, onClos
         aria-labelledby="readme-history-title"
         data-color-mode="light"
       >
-        <header className="flex items-center gap-3 pb-3">
-          <h3 id="readme-history-title" className="m-0 flex-1">
-            S3 README 履歴 — {prefix || '(root)'}
-          </h3>
+        <header className="flex items-baseline gap-3 pb-4 mb-2" style={{ borderBottom: '1px solid var(--rule)' }}>
+          <div className="flex-1 min-w-0">
+            <p className="kicker">S3 README · 履歴</p>
+            <h3
+              id="readme-history-title"
+              className="m-0 truncate"
+              style={{ fontFamily: 'var(--font-mono)', fontSize: '17px', fontWeight: 500, letterSpacing: '0' }}
+            >
+              {prefix || '(root)'}
+            </h3>
+          </div>
           <button
             type="button"
             className="ghost"
             onClick={onClose}
             aria-label="履歴を閉じる"
           >
-            ✕
+            <span aria-hidden>✕</span>
           </button>
         </header>
 
         {error && <p className="error">{error}</p>}
-        {!error && versions === null && <p className="text-ink-7">loading…</p>}
+        {!error && versions === null && (
+          <p className="text-[13px] text-ink-7">loading…</p>
+        )}
         {!error && versions !== null && versions.length === 0 && (
-          <p className="text-ink-7">履歴はありません。</p>
+          <p className="text-[13px] text-ink-7">履歴はありません。</p>
         )}
 
         {versions !== null && versions.length > 0 && (
-          <div className="grid gap-4 [grid-template-columns:240px_1fr] min-h-[60vh]">
-            <ul className="m-0 list-none overflow-auto p-0">
-              {versions.map((v, i) => (
-                <li key={v.id} className="border-b border-ink-1">
-                  <button
-                    type="button"
-                    className={
-                      'block w-full cursor-pointer border-0 bg-transparent px-2 py-2 text-left transition-colors hover:bg-ink-1 ' +
-                      (selectedId === v.id ? 'bg-ink-1 font-semibold ' : '')
-                    }
-                    onClick={() => setSelectedId(v.id)}
-                  >
-                    <div className="text-sm">
-                      {i === 0 ? '★ ' : ''}{v.editor}
-                    </div>
-                    <div className="text-[11px] text-ink-7 tabular-nums">
-                      {fmtTime(v.edited_at)} · {fmtSize(v.size_bytes)}
-                    </div>
-                  </button>
-                </li>
-              ))}
+          <div className="grid gap-5 [grid-template-columns:240px_1fr] min-h-[60vh]">
+            <ul
+              className="m-0 list-none overflow-auto p-0"
+              style={{ borderRight: '1px solid var(--rule)' }}
+            >
+              {versions.map((v, i) => {
+                const selected = selectedId === v.id
+                return (
+                  <li key={v.id} style={{ borderBottom: '1px solid var(--rule)' }}>
+                    <button
+                      type="button"
+                      className={
+                        'block w-full cursor-pointer border-0 bg-transparent py-2.5 pr-3 pl-3 text-left ' +
+                        'transition-colors hover:bg-ink-0 ' +
+                        (selected ? 'bg-ink-0 ' : '')
+                      }
+                      style={selected ? { borderLeft: '2px solid var(--ink-12)', paddingLeft: '10px' } : undefined}
+                      onClick={() => setSelectedId(v.id)}
+                    >
+                      <div className={'text-[13px] ' + (selected ? 'font-semibold text-ink-12' : 'font-medium text-ink-11')}>
+                        {i === 0 && (
+                          <span aria-label="latest" className="mr-1 text-ink-9">●</span>
+                        )}
+                        {v.editor}
+                      </div>
+                      <div
+                        className="mt-0.5 text-[10.5px] text-ink-7 tabular-nums"
+                        style={{ fontFamily: 'var(--font-mono)', letterSpacing: '0.02em' }}
+                      >
+                        {fmtTime(v.edited_at)} <span className="text-ink-3">·</span> {fmtSize(v.size_bytes)}
+                      </div>
+                    </button>
+                  </li>
+                )
+              })}
             </ul>
             <div className="overflow-auto">
-              {bodyOf === null && <p className="text-ink-7">loading…</p>}
+              {bodyOf === null && (
+                <p className="text-[13px] text-ink-7">loading…</p>
+              )}
               {bodyOf !== null && (
                 <>
                   {currentBody !== null && bodyOf.body === currentBody && (
-                    <p className="m-0 mb-2 text-xs text-ink-7">この版は現在の本文と一致します。</p>
+                    <p className="m-0 mb-3 text-[11.5px] text-ink-7">
+                      この版は現在の本文と一致します。
+                    </p>
                   )}
-                  <MDEditor.Markdown
-                    source={bodyOf.body}
-                    rehypePlugins={[[rehypeSanitize]]}
-                  />
+                  <article className="article">
+                    <MDEditor.Markdown
+                      source={bodyOf.body}
+                      rehypePlugins={[[rehypeSanitize]]}
+                    />
+                  </article>
                 </>
               )}
             </div>
