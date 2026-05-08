@@ -73,6 +73,8 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
     load(null)
   }
 
+  // File rows のキーボード操作 (Enter/Space で preview を開く) 用ヘルパー。
+  // dir 行は <Link> がネイティブにキーボード処理する。
   const activate = (fn: () => void) => (e: KeyboardEvent<HTMLTableRowElement>) => {
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault()
