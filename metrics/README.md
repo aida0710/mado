@@ -13,49 +13,52 @@ metrics/
 
 ## Deploy
 
-Copy the directory to the target host's user account:
+Copy the directory to the target host's user account, then `uv sync`
+to install the runtime dependency (`python-dotenv`):
 
 ```sh
 scp -r metrics you@example.host:~/mado/metrics/
+ssh you@example.host 'cd ~/mado/metrics && uv sync'
 ```
 
-`db.py` has no dependencies beyond Python 3.8+ stdlib.
+最低 Python 3.8 / `uv` がターゲットホストで使える前提。
 
 ## Environment variables
 
 `db.push` は `DASHBOARD_URL` と `WRITE_TOKEN` を `os.environ` から読む。
-渡し方は 2 通り:
+ローカル開発では `.env` ファイル経由が楽:
 
-### A) シェルで直接渡す (cron 等で従来からのやり方)
+```sh
+cd metrics
+uv sync                          # python-dotenv を含む依存をインストール
+cp .env.example .env
+$EDITOR .env                     # DASHBOARD_URL / WRITE_TOKEN を埋める
+uv run runner.py config/miyabi.json --once
+```
+
+`db.py` が import 時に `python-dotenv` 経由で `metrics/.env` を読み込む
+ので、`.env` を置けば環境変数の手動指定は不要。`.env` は `.gitignore`
+済 (秘密のトークンを誤コミットしないため)。
+
+シェルで直接渡したい場合 (cron 等) はそちらが優先される:
 
 ```sh
 DASHBOARD_URL=http://mado.lan WRITE_TOKEN=xxx python3 example.py
 ```
 
-### B) `.env` ファイル (ローカル開発で楽)
-
-`metrics/.env.example` をコピーして埋めると、`db.py` が import 時に
-自動で読み込む。`.env` は `.gitignore` 済 (秘密のトークンを誤コミット
-しないため)。
-
-```sh
-cd metrics
-cp .env.example .env
-$EDITOR .env       # DASHBOARD_URL / WRITE_TOKEN を埋める
-python3 runner.py config/miyabi.json --once   # 環境変数なしで動く
-```
-
-シェル変数のほうが優先される (`DASHBOARD_URL=foo python ...` で渡せば
-`.env` の値は無視される)。
-
 ## Run once
 
+`.env` を埋めてあれば環境変数の手動指定なしで動く:
+
 ```sh
-# prod: nginx が port 80 で公開 (デフォルト)
-# dev:  vite dev server が port 5173 (http://mado.lan:5173)
-DASHBOARD_URL=http://mado.lan \
-WRITE_TOKEN=xxxxxxxx \
-  python3 ~/mado/metrics/example.py
+cd ~/mado/metrics && uv run example.py
+```
+
+シェルで直接渡すなら (`.env` を使わない場合):
+
+```sh
+DASHBOARD_URL=http://mado.lan WRITE_TOKEN=xxxxxxxx \
+  uv run --directory ~/mado/metrics example.py
 ```
 
 A successful push exits 0; failure exits non-zero with a message on
@@ -63,11 +66,13 @@ stderr (cron's `MAILTO` will pick it up).
 
 ## Schedule
 
-In the target host's crontab:
+In the target host's crontab (`uv` が PATH にある前提):
 
 ```cron
-*/5 * * * * DASHBOARD_URL=http://mado.lan WRITE_TOKEN=xxx /home/me/mado/metrics/example.py
+*/5 * * * * cd /home/me/mado/metrics && uv run example.py
 ```
+
+`.env` で `DASHBOARD_URL` / `WRITE_TOKEN` を渡すか、cron 行で `env` 経由で渡す。
 
 ## Categories
 
@@ -136,18 +141,19 @@ cron で 5 分間隔のような粒度で済むならこれが一番シンプル
 - `commands[].interval_seconds` — このコマンド固有の interval (override)
 - `commands[].timeout_seconds` — このコマンド固有のタイムアウト (override)
 
-実行:
+実行 (`.env` を埋めてある前提):
 
 ```sh
+cd ~/mado/metrics
+
 # 本番 (常駐ループ — デフォルト)
-DASHBOARD_URL=http://mado.lan WRITE_TOKEN=xxx \
-  python3 ~/mado/metrics/runner.py ~/mado/metrics/config/miyabi.json
+uv run runner.py config/miyabi.json
 
 # 単発実行 (cron / 手動テスト用)
-python3 runner.py config/miyabi.json --once
+uv run runner.py config/miyabi.json --once
 
 # 特定コマンドだけ (デバッグ)
-python3 runner.py config/miyabi.json --once --only "ノード使用率"
+uv run runner.py config/miyabi.json --once --only "ノード使用率"
 ```
 
 `--once` / `--loop` を省略すると `--loop` (常駐) がデフォルト。SIGTERM / Ctrl-C で graceful shutdown (現在実行中のコマンドが終わったら exit 0)。push 失敗は `--loop` ではログのみでループ継続、`--once` では非ゼロ exit (cron MAILTO で気付ける)。
@@ -157,7 +163,7 @@ python3 runner.py config/miyabi.json --once --only "ノード使用率"
 `--once` で全コマンドが想定通り push できることをまず確認:
 
 ```sh
-DASHBOARD_URL=... WRITE_TOKEN=... python3 runner.py config/miyabi.json --once
+cd ~/mado/metrics && uv run runner.py config/miyabi.json --once
 ```
 
 ダッシュボードに各 category のカードが表示されれば OK。タイムアウトやコマンド未存在は "command timed out after Xs" / "command not found" として push されるので、ダッシュボードで気付ける。
@@ -166,9 +172,9 @@ DASHBOARD_URL=... WRITE_TOKEN=... python3 runner.py config/miyabi.json --once
 
 ```sh
 scp -r metrics you@miyabi:~/mado/metrics/
-ssh you@miyabi 'nohup env DASHBOARD_URL=... WRITE_TOKEN=... \
-  python3 ~/mado/metrics/runner.py ~/mado/metrics/config/miyabi.json \
-  > ~/mado/metrics/runner.log 2>&1 &'
+ssh you@miyabi 'cd ~/mado/metrics && uv sync'
+ssh you@miyabi 'cd ~/mado/metrics && cp .env.example .env && $EDITOR .env'
+ssh you@miyabi 'cd ~/mado/metrics && nohup uv run runner.py config/miyabi.json > runner.log 2>&1 &'
 ```
 
 systemd / launchd ユニット化はまだ用意していない (運用してから必要性を判断)。
