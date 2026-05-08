@@ -19,7 +19,8 @@ const linkClass =
 
 export default function StorageIndex({ connId }: Props) {
   const [buckets, setBuckets] = useState<BucketRow[]>([])
-  const [favorites, setFavorites] = useState<Set<string>>(new Set())
+  // 関数形式: そうしないと毎レンダ new Set() が走って即破棄される。
+  const [favorites, setFavorites] = useState<Set<string>>(() => new Set())
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
@@ -58,8 +59,13 @@ export default function StorageIndex({ connId }: Props) {
     }
   }
 
-  const favoriteRows = buckets.filter(b => favorites.has(b.name))
-  const otherRows    = buckets.filter(b => !favorites.has(b.name))
+  // 1 パス分割: filter を 2 回回すより 1 ループで dispatch する。
+  // バケット数は通常少ないので実害は小さいが、規約として揃える。
+  const favoriteRows: BucketRow[] = []
+  const otherRows: BucketRow[] = []
+  for (const b of buckets) {
+    (favorites.has(b.name) ? favoriteRows : otherRows).push(b)
+  }
 
   return (
     <section>

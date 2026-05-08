@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { memo, useEffect, useRef, useState } from 'react'
 import { copyToClipboard } from '../lib/clipboard'
 
 export type MenuItem =
@@ -14,7 +14,11 @@ interface Props {
 
 // ファイル行のアクションメニュー。クリックで開き、項目を選んで実行。
 // クリック外 / Escape で閉じる。Tailwind utility だけ。
-export function CopyMenu({ items, trigger = '⋯', ariaLabel = 'アクション' }: Props) {
+//
+// memo でラップ: StorageBrowser の各行は items を useMemo で安定化して
+// 渡すので、親の再レンダ時 (loading フラグ更新等) に各 CopyMenu を
+// 再描画しなくて済む。
+export const CopyMenu = memo(function CopyMenu({ items, trigger = '⋯', ariaLabel = 'アクション' }: Props) {
   const [open, setOpen] = useState(false)
   const [feedback, setFeedback] = useState<string | null>(null)
   const root = useRef<HTMLDivElement>(null)
@@ -94,4 +98,4 @@ export function CopyMenu({ items, trigger = '⋯', ariaLabel = 'アクション'
       )}
     </div>
   )
-}
+})

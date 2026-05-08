@@ -1,11 +1,19 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 import MDEditor from '@uiw/react-md-editor'
 import rehypeSanitize from 'rehype-sanitize'
 import type { z } from 'zod'
 import { api } from '../lib/api/client'
 import { Note } from '../lib/api/types'
-import { MarkdownEditor } from '../components/MarkdownEditor'
-import { NoteHistoryModal } from '../components/NoteHistoryModal'
+
+// 編集モーダルと履歴モーダルはクリック後にしか描画されないので、
+// React.lazy() で別チャンクに切り出す。MarkdownEditor チャンクには
+// CodeMirror ベースの重量級 UI と専用 CSS が同梱される。
+const MarkdownEditor = lazy(() =>
+  import('../components/MarkdownEditor').then(m => ({ default: m.MarkdownEditor })),
+)
+const NoteHistoryModal = lazy(() =>
+  import('../components/NoteHistoryModal').then(m => ({ default: m.NoteHistoryModal })),
+)
 
 type NoteData = z.infer<typeof Note>
 
@@ -32,13 +40,13 @@ export default function HomePage() {
 
   useEffect(() => { refresh() }, [refresh])
 
-  const byline = useMemo(() => {
-    if (!data?.exists) return null
-    const parts: string[] = []
-    if (data.last_editor) parts.push(data.last_editor)
-    if (data.last_edited_at) parts.push(formatByline(data.last_edited_at))
-    return parts.length ? parts.join(' · ') : null
-  }, [data])
+  // string | null を返す軽量計算 — useMemo の deps 比較コストの方が
+  // 高くつくので素直にレンダ中に派生させる。
+  const byline = data?.exists
+    ? [data.last_editor, data.last_edited_at && formatByline(data.last_edited_at)]
+        .filter(Boolean)
+        .join(' · ') || null
+    : null
 
   if (!data) return null
 
@@ -89,23 +97,27 @@ export default function HomePage() {
       </div>
 
       {editing && (
-        <MarkdownEditor
-          title="Edit Home"
-          initialBody={data.exists ? data.body : ''}
-          initialEditor={data.exists ? (data.last_editor ?? '') : ''}
-          onSave={(body, editor) =>
-            api.putNote('home', body, editor).then(() => undefined)
-          }
-          onSaved={() => { setEditing(false); refresh() }}
-          onClose={() => setEditing(false)}
-        />
+        <Suspense fallback={null}>
+          <MarkdownEditor
+            title="Edit Home"
+            initialBody={data.exists ? data.body : ''}
+            initialEditor={data.exists ? (data.last_editor ?? '') : ''}
+            onSave={(body, editor) =>
+              api.putNote('home', body, editor).then(() => undefined)
+            }
+            onSaved={() => { setEditing(false); refresh() }}
+            onClose={() => setEditing(false)}
+          />
+        </Suspense>
       )}
       {historyOpen && (
-        <NoteHistoryModal
-          slug="home"
-          currentBody={data.exists ? data.body : null}
-          onClose={() => setHistoryOpen(false)}
-        />
+        <Suspense fallback={null}>
+          <NoteHistoryModal
+            slug="home"
+            currentBody={data.exists ? data.body : null}
+            onClose={() => setHistoryOpen(false)}
+          />
+        </Suspense>
       )}
     </>
   )
