@@ -56,7 +56,7 @@ export default function StorageLanding() {
           >
             <Link
               to={`/storage/${encodeURIComponent(c.id)}/`}
-              className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 px-4 py-4 text-inherit no-underline"
+              className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 p-4 text-inherit no-underline"
             >
               <strong className="text-[15px] font-semibold tracking-[0.005em] text-ink-12">
                 {c.name}

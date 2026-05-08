@@ -5,8 +5,7 @@ export function PreviewText({ connId, bucket, k }: { connId: string; bucket: str
   const [text, setText] = useState<string>('loading…')
   useEffect(() => {
     let cancelled = false
-    fetch(api.textPreviewUrl(connId, bucket, k))
-      .then(r => r.ok ? r.text() : Promise.reject(new Error(r.statusText)))
+    api.textPreview(connId, bucket, k)
       .then(t => { if (!cancelled) setText(t) })
       .catch((e: Error) => { if (!cancelled) setText(`error: ${e.message}`) })
     return () => { cancelled = true }

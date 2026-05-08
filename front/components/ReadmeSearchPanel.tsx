@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useReducer, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../lib/api/client'
 import { encPath } from '../lib/route'
@@ -15,39 +15,91 @@ interface Hit {
   size_bytes: number
 }
 
+interface State {
+  q: string
+  hits: Hit[] | null
+  loading: boolean
+  error: string | null
+}
+
+type Action =
+  | { type: 'setQ'; q: string }
+  | { type: 'startSearch' }
+  | { type: 'reset' }
+  | { type: 'resetWithEmptyQ' }
+  | { type: 'searchOk'; hits: Hit[] }
+  | { type: 'searchErr'; error: string }
+
+const initial: State = { q: '', hits: null, loading: false, error: null }
+
+function reducer(s: State, a: Action): State {
+  switch (a.type) {
+    case 'setQ':
+      return { ...s, q: a.q }
+    case 'startSearch':
+      return { ...s, loading: true, error: null }
+    case 'reset':
+      return { ...s, hits: null, loading: false, error: null }
+    case 'resetWithEmptyQ':
+      return { q: '', hits: null, loading: false, error: null }
+    case 'searchOk':
+      return { ...s, hits: a.hits, loading: false }
+    case 'searchErr':
+      return { ...s, error: a.error, loading: false }
+  }
+}
+
 function fmtTime(iso: string): string {
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return iso
   return d.toLocaleDateString('ja-JP')
 }
 
+const SEARCH_DEBOUNCE_MS = 250
+
 // 接続内の README 全文検索パネル。input ≥ 2 文字で debounce してリクエスト。
 // 結果は最新版のみ対象、クリックでその prefix へ遷移する。
 export function ReadmeSearchPanel({ connId }: Props) {
-  const [q, setQ] = useState('')
-  const [hits, setHits] = useState<Hit[] | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [state, dispatch] = useReducer(reducer, initial)
+  const { q, hits, loading, error } = state
 
-  // debounce 250ms。連打しても 1 リクエストに収まる。
+  const debounceRef = useRef<number | null>(null)
+  const sessionRef = useRef(0)
+
+  // connId 切替時に検索状態をリセット (異なる接続に同じ q を引き継がない)。
   useEffect(() => {
-    if (q.trim().length < 2) {
-      setHits(null)
-      setError(null)
-      setLoading(false)
+    if (debounceRef.current != null) window.clearTimeout(debounceRef.current)
+    sessionRef.current++
+    dispatch({ type: 'resetWithEmptyQ' })
+  }, [connId])
+
+  const onChangeQ = (next: string) => {
+    dispatch({ type: 'setQ', q: next })
+    if (debounceRef.current != null) window.clearTimeout(debounceRef.current)
+    if (next.trim().length < 2) {
+      dispatch({ type: 'reset' })
       return
     }
-    let cancelled = false
-    setLoading(true)
-    setError(null)
-    const t = setTimeout(() => {
-      api.readmesSearch(connId, q.trim())
-        .then(r => { if (!cancelled) setHits(r.hits) })
-        .catch((e: Error) => { if (!cancelled) setError(e.message) })
-        .finally(() => { if (!cancelled) setLoading(false) })
-    }, 250)
-    return () => { cancelled = true; clearTimeout(t) }
-  }, [connId, q])
+    dispatch({ type: 'startSearch' })
+    const sid = ++sessionRef.current
+    debounceRef.current = window.setTimeout(() => {
+      api.readmesSearch(connId, next.trim())
+        .then(r => {
+          if (sessionRef.current !== sid) return
+          dispatch({ type: 'searchOk', hits: r.hits })
+        })
+        .catch((e: Error) => {
+          if (sessionRef.current !== sid) return
+          dispatch({ type: 'searchErr', error: e.message })
+        })
+    }, SEARCH_DEBOUNCE_MS)
+  }
+
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current != null) window.clearTimeout(debounceRef.current)
+    }
+  }, [])
 
   return (
     <section className="mt-3 mb-4">
@@ -61,7 +113,7 @@ export function ReadmeSearchPanel({ connId }: Props) {
           }}
           placeholder="README 全文検索 (2 文字以上)"
           value={q}
-          onChange={e => setQ(e.target.value)}
+          onChange={e => onChangeQ(e.target.value)}
           aria-label="README 全文検索"
         />
         {loading && (

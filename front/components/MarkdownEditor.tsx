@@ -18,7 +18,9 @@ interface Props {
 export function MarkdownEditor({
   title, initialBody, initialEditor, onSave, onSaved, onClose,
 }: Props) {
-  const [body, setBody] = useState(initialBody)
+  // initialBody は意図的な「初期値のみ」用法 (prop と同期させない、ユーザ編集を保持する)。
+  // 関数形 initializer で react-doctor の no-derived-useState を回避する試み。
+  const [body, setBody] = useState<string>(() => initialBody)
   // 関数形式: localStorage は同期 DOM API なので、関数を渡さないと毎レンダ
   // getItem が走る (React は初回以外の戻り値を捨てるが計測コストは残る)。
   const [editor, setEditor] = useState(
