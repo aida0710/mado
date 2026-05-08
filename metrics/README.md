@@ -21,6 +21,33 @@ scp -r metrics you@example.host:~/mado/metrics/
 
 `db.py` has no dependencies beyond Python 3.8+ stdlib.
 
+## Environment variables
+
+`db.push` は `DASHBOARD_URL` と `WRITE_TOKEN` を `os.environ` から読む。
+渡し方は 2 通り:
+
+### A) シェルで直接渡す (cron 等で従来からのやり方)
+
+```sh
+DASHBOARD_URL=http://mado.lan WRITE_TOKEN=xxx python3 example.py
+```
+
+### B) `.env` ファイル (ローカル開発で楽)
+
+`metrics/.env.example` をコピーして埋めると、`db.py` が import 時に
+自動で読み込む。`.env` は `.gitignore` 済 (秘密のトークンを誤コミット
+しないため)。
+
+```sh
+cd metrics
+cp .env.example .env
+$EDITOR .env       # DASHBOARD_URL / WRITE_TOKEN を埋める
+python3 runner.py config/miyabi.json --once   # 環境変数なしで動く
+```
+
+シェル変数のほうが優先される (`DASHBOARD_URL=foo python ...` で渡せば
+`.env` の値は無視される)。
+
 ## Run once
 
 ```sh
