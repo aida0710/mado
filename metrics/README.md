@@ -86,12 +86,12 @@ cron で 5 分間隔のような粒度で済むならこれが一番シンプル
   "commands": [
     {
       "category": "ノード使用率",
-      "command": "pbsnodes -aSj",
+      "display_command": "pbsnodes -aSj",
       "argv": ["pbsnodes", "-aSj"]
     },
     {
       "category": "ジョブ一覧",
-      "command": "qstat",
+      "display_command": "qstat",
       "argv": ["qstat"]
     }
   ]
@@ -104,8 +104,8 @@ cron で 5 分間隔のような粒度で済むならこれが一番シンプル
 - `default_interval_seconds` (省略時 180) — 各コマンドの interval 既定値
 - `default_timeout_seconds` (省略時 30) — 各コマンドのタイムアウト既定値
 - `commands[].category` — フロントエンドのセクション見出し
-- `commands[].command` — 表示用ラベル
-- `commands[].argv` — 実行する引数配列 (`shell=False` で実行)
+- `commands[].display_command` — 表示用ラベル (ダッシュボードのカードに出る文字列)
+- `commands[].argv` — 実行する引数配列 (`shell=False` で実行)。表示用と分離しているので長い引数列でも `display_command` だけ短くできる
 - `commands[].interval_seconds` — このコマンド固有の interval (override)
 - `commands[].timeout_seconds` — このコマンド固有のタイムアウト (override)
 

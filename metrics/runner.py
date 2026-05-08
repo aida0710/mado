@@ -51,7 +51,7 @@ signal.signal(signal.SIGINT, _request_shutdown)
 @dataclass(frozen=True)
 class Command:
     category: str
-    command: str
+    display_command: str
     argv: List[str]
     interval_seconds: float
     timeout_seconds: float
@@ -109,10 +109,10 @@ def load_config(path: Path) -> Config:
     for i, c in enumerate(commands_raw):
         if not isinstance(c, dict):
             raise ValueError(f"{path}: commands[{i}] は object である必要があります")
-        for key in ("category", "command", "argv"):
+        for key in ("category", "display_command", "argv"):
             if key not in c:
                 raise ValueError(f"{path}: commands[{i}] に '{key}' がありません")
-        for key in ("category", "command"):
+        for key in ("category", "display_command"):
             val = c[key]
             if not isinstance(val, str) or not val:
                 raise ValueError(
@@ -128,7 +128,7 @@ def load_config(path: Path) -> Config:
             )
         commands.append(Command(
             category=c["category"],
-            command=c["command"],
+            display_command=c["display_command"],
             argv=list(c["argv"]),
             interval_seconds=_to_positive_float(
                 c.get("interval_seconds", default_interval),
@@ -186,23 +186,23 @@ def run_once(config: Config, only: Optional[str] = None) -> int:
     Returns: 全 push 成功で 0、いずれかが失敗したら 1
              (cron MAILTO で気付けるよう非ゼロを返す)。
 
-    `only` は category または command の完全一致 (大文字小文字も区別)。
+    `only` は category または display_command の完全一致 (大文字小文字も区別)。
     """
     rc = 0
     matched = 0
     for cmd in config.commands:
-        if only is not None and only != cmd.category and only != cmd.command:
+        if only is not None and only != cmd.category and only != cmd.display_command:
             continue
         matched += 1
         output = _run_subprocess(cmd)
         try:
             push_started = time.monotonic()
-            push(config.host, cmd.command, output, category=cmd.category)
+            push(config.host, cmd.display_command, output, category=cmd.category)
             elapsed_ms = int((time.monotonic() - push_started) * 1000)
-            print(f"[{_ts()}] {cmd.command} → push ok ({elapsed_ms}ms)",
+            print(f"[{_ts()}] {cmd.display_command} → push ok ({elapsed_ms}ms)",
                   flush=True)
         except SystemExit as e:
-            print(f"[{_ts()}] {cmd.command} → push FAILED: {e}",
+            print(f"[{_ts()}] {cmd.display_command} → push FAILED: {e}",
                   flush=True, file=sys.stderr)
             rc = 1
     if only is not None and matched == 0:
@@ -234,18 +234,18 @@ def run_loop(config: Config) -> int:
                 output = _run_subprocess(cmd)
                 try:
                     push_started = time.monotonic()
-                    push(config.host, cmd.command, output, category=cmd.category)
+                    push(config.host, cmd.display_command, output, category=cmd.category)
                     elapsed_ms = int((time.monotonic() - push_started) * 1000)
-                    print(f"[{_ts()}] {cmd.command} → push ok ({elapsed_ms}ms)",
+                    print(f"[{_ts()}] {cmd.display_command} → push ok ({elapsed_ms}ms)",
                           flush=True)
                 except SystemExit as e:
                     # db.push の正常な失敗パス (HTTP error, missing env など)。
-                    print(f"[{_ts()}] {cmd.command} → push FAILED: {e}",
+                    print(f"[{_ts()}] {cmd.display_command} → push FAILED: {e}",
                           flush=True, file=sys.stderr)
                 except Exception as e:
                     # 想定外の例外 (db.py のバグ、URL parse error など)。
                     # daemon を殺さずトレースバックだけ出して継続。
-                    print(f"[{_ts()}] {cmd.command} → push CRASHED: "
+                    print(f"[{_ts()}] {cmd.display_command} → push CRASHED: "
                           f"{type(e).__name__}: {e}",
                           flush=True, file=sys.stderr)
                     traceback.print_exc(file=sys.stderr)
@@ -275,7 +275,7 @@ def main() -> int:
     mode.add_argument("--loop", action="store_true",
                       help="常駐ループ (どちらも指定しない場合のデフォルト)")
     p.add_argument("--only",
-                   help="category または command がこの文字列と完全一致する"
+                   help="category または display_command がこの文字列と完全一致する"
                         "コマンドのみ実行")
     args = p.parse_args()
 
