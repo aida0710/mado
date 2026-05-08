@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { StorageBrowser } from './StorageBrowser'
@@ -38,5 +39,30 @@ describe('StorageBrowser - directory row', () => {
     const link = await screen.findByRole('link', { name: /jp\// })
     expect(link.tagName).toBe('A')
     expect(link.getAttribute('href')).toBe('/storage/c1/b1/voice/jp/')
+  })
+
+  it('shows a copy menu on directory row with Web URL and S3 URL items', async () => {
+    ;(api.list as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      directories: ['voice/jp/'],
+      files: [],
+      nextContinuation: null,
+    })
+
+    renderBrowser('voice/')
+    await screen.findByRole('link', { name: /jp\// })
+
+    const user = userEvent.setup()
+    // 行は 1 件 (dir のみ)。CopyMenu の trigger ボタンを開く
+    await user.click(screen.getByRole('button', { name: 'アクション' }))
+
+    // Web URL 項目 (origin はテスト環境で http://localhost:3000 だが、
+    // value 表示文字列に含まれているので部分一致で見る)
+    expect(screen.getByRole('menuitem', { name: /Web URL をコピー/ })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: /S3 URL をコピー/ })).toBeInTheDocument()
+
+    // S3 URL の値が trailing slash 入りで s3://b1/voice/jp/ になっていること
+    // (CopyMenu は item の value を title 属性 + 小さなプレビュー文字列に出す)
+    const s3Item = screen.getByRole('menuitem', { name: /S3 URL をコピー/ })
+    expect(s3Item).toHaveAttribute('title', 's3://b1/voice/jp/')
   })
 })

@@ -100,6 +100,12 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
           {page.directories.map(d => {
             const tail = d.startsWith(prefix) ? d.slice(prefix.length) : d
             const dirHref = `/storage/${encodeURIComponent(connId)}/${encodeURIComponent(bucket)}/${encPath(d)}`
+            const dirS3Url  = `s3://${bucket}/${d}`
+            const dirWebUrl = `${window.location.origin}${dirHref}`
+            const items: MenuItem[] = [
+              { kind: 'copy', label: 'Web URL をコピー', value: dirWebUrl },
+              { kind: 'copy', label: 'S3 URL をコピー', value: dirS3Url  },
+            ]
             return (
               <tr key={d} className={rowClass}>
                 <td className={`${tdNameClass} p-0`}>
@@ -112,7 +118,9 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
                 </td>
                 <td className={tdNumClass}>—</td>
                 <td className={tdNumClass}>—</td>
-                <td className={tdNumClass}></td>
+                <td className={tdNumClass}>
+                  <CopyMenu items={items} />
+                </td>
               </tr>
             )
           })}
