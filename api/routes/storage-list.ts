@@ -46,10 +46,14 @@ export function mountStorageListRoutes(app: Hono, deps: StorageListDeps): void {
     const prefix = c.req.query('prefix') ?? ''
     const continuation = c.req.query('continuation') || undefined
     const startAfter = c.req.query('startAfter') || undefined
+    // recursive=1 のときは Delimiter を外し、prefix 配下を flat に列挙する。
+    // これは UI 側の「再帰検索」チェックボックスから来る。CommonPrefixes は
+    // 空になるので結果は全部 Contents に並ぶ。
+    const recursive = c.req.query('recursive') === '1'
     const out = await storage.send(new ListObjectsV2Command({
       Bucket: bucket,
       Prefix: prefix,
-      Delimiter: '/',
+      Delimiter: recursive ? undefined : '/',
       // ContinuationToken 優先 (高速)。無いときだけ StartAfter で再開する。
       // S3 仕様上 ContinuationToken を渡すと StartAfter は無視されるが、
       // どちらか一方しか送らないほうが意図が明確。

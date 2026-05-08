@@ -135,13 +135,22 @@ export const api = {
     bucketsCache.invalidate(k('buckets', connId))
   },
 
-  list: (connId: string, bucket: string, prefix: string, cursor: { continuation?: string; startAfter?: string } = {}) =>
-    listCache.get(k('list', connId, bucket, prefix, cursor.continuation, cursor.startAfter), () =>
+  list: (
+    connId: string,
+    bucket: string,
+    prefix: string,
+    cursor: { continuation?: string; startAfter?: string } = {},
+    opts: { recursive?: boolean } = {},
+  ) =>
+    // recursive フラグもキャッシュキーに含める (= 通常 list と再帰 list は別エントリ)。
+    // prefix の後ろに置くので invalidateList の prefix-match invalidation はそのまま有効。
+    listCache.get(k('list', connId, bucket, prefix, opts.recursive ? 'r' : '', cursor.continuation, cursor.startAfter), () =>
       getJson(buildUrl(`${API_BASE}/storage/${encodeURIComponent(connId)}/list`, {
         bucket,
         prefix,
         continuation: cursor.continuation,
         startAfter: cursor.startAfter,
+        recursive: opts.recursive ? '1' : undefined,
       }), StorageList),
     ),
 

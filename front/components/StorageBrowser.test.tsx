@@ -15,6 +15,9 @@ vi.mock('../lib/api/client', () => ({
 import { api } from '../lib/api/client'
 
 afterEach(() => {
+  // mockResolvedValueOnce のキューを完全に空にするため reset (clear だけだと残る)。
+  // 残ったキューが次のテストで誤消費されると、見かけ上関係ないテストが落ちる。
+  ;(api.list as ReturnType<typeof vi.fn>).mockReset()
   vi.clearAllMocks()
 })
 
@@ -108,14 +111,40 @@ describe('StorageBrowser - directory row', () => {
     renderBrowser('voice/')
     await screen.findByRole('link', { name: /jp\// })
     expect(listMock).toHaveBeenCalledTimes(1)
-    // 初回呼び出しの prefix は 'voice/'
-    expect(listMock.mock.calls[0]).toEqual(['c1', 'b1', 'voice/', {}])
+    // 初回呼び出しの prefix は 'voice/'、再帰オフ
+    expect(listMock.mock.calls[0]).toEqual(['c1', 'b1', 'voice/', {}, { recursive: false }])
 
     // 検索 input に 'j' を入力 → debounce 後に 2 回目の list が走る
     await user.type(screen.getByLabelText('ディレクトリ内検索'), 'j')
     await waitFor(() => expect(listMock).toHaveBeenCalledTimes(2), { timeout: 1000 })
     // 2 回目の prefix は 'voice/' + 'j' = 'voice/j'
-    expect(listMock.mock.calls[1]).toEqual(['c1', 'b1', 'voice/j', {}])
+    expect(listMock.mock.calls[1]).toEqual(['c1', 'b1', 'voice/j', {}, { recursive: false }])
+  })
+
+  it('passes recursive=true to api.list when the recursive checkbox is toggled', async () => {
+    const listMock = api.list as ReturnType<typeof vi.fn>
+    listMock.mockResolvedValueOnce({
+      directories: ['voice/jp/'],
+      files: [],
+      nextContinuation: null,
+      nextStartAfter: null,
+    })
+    listMock.mockResolvedValueOnce({
+      directories: [],
+      files: [{ key: 'voice/jp/a.wav', size: 1, lastModified: null }],
+      nextContinuation: null,
+      nextStartAfter: null,
+    })
+
+    const user = userEvent.setup()
+    renderBrowser('voice/')
+    await screen.findByRole('link', { name: /jp\// })
+    expect(listMock.mock.calls[0]).toEqual(['c1', 'b1', 'voice/', {}, { recursive: false }])
+
+    // 再帰チェックを ON → 同じ prefix で recursive: true で再 fetch
+    await user.click(screen.getByLabelText('再帰検索'))
+    await waitFor(() => expect(listMock).toHaveBeenCalledTimes(2))
+    expect(listMock.mock.calls[1]).toEqual(['c1', 'b1', 'voice/', {}, { recursive: true }])
   })
 
   it('renders the lazy-load sentinel when the response carries a next cursor', async () => {

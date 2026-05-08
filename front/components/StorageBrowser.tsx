@@ -48,11 +48,13 @@ const SEARCH_DEBOUNCE_MS = 250
 const SENTINEL_ROOT_MARGIN = '200px'
 
 export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) {
-  // 検索クエリ — 現ディレクトリ "直下" の前方一致 (= S3 ListObjectsV2 の Prefix を
-  // `prefix + q` にして Delimiter='/' のまま投げる)。サブディレクトリ配下は
-  // 含めない仕様 (再帰検索したくなったら別エンドポイントに切る)。
+  // 検索クエリ — 既定は現ディレクトリ "直下" の前方一致 (= S3 ListObjectsV2 の
+  // Prefix を `prefix + q` にして Delimiter='/' のまま投げる)。
+  // 再帰チェックを入れると Delimiter を外して配下を全て flat に列挙する
+  // (CommonPrefixes は空になるので結果は全部 ファイル行 として並ぶ)。
   const [q, setQ] = useState('')
   const [submittedQ, setSubmittedQ] = useState('')
+  const [recursive, setRecursive] = useState(false)
 
   // q を debounce して submittedQ に反映。これが effective prefix を駆動する。
   useEffect(() => {
@@ -60,12 +62,13 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
     return () => clearTimeout(t)
   }, [q])
 
-  // 別ディレクトリへ移動したら検索ボックスもクリアする。さもないと
-  // /etc/ で "config" 検索中に /var/ に移ると /var/config* を検索する形になり
-  // ユーザの意図と乖離する。
+  // 別ディレクトリへ移動したら検索ボックスと再帰チェックもクリアする。
+  // さもないと /etc/ で "config" 再帰検索中に /var/ に移ると /var/ 全体を再帰
+  // 走査し続けることになりユーザの意図と乖離する。
   useEffect(() => {
     setQ('')
     setSubmittedQ('')
+    setRecursive(false)
   }, [connId, bucket, prefix])
 
   const effectivePrefix = prefix + submittedQ
@@ -91,7 +94,7 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
     const sid = ++sessionRef.current
     setError(null)
     setLoading(true)
-    api.list(connId, bucket, effectivePrefix, {})
+    api.list(connId, bucket, effectivePrefix, {}, { recursive })
       .then(r => {
         if (sessionRef.current !== sid) return
         setDirs(r.directories)
@@ -110,13 +113,13 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
       })
   }
 
-  // 接続/バケット/prefix/検索クエリのいずれかが変わったら新規セッション。
+  // 接続/バケット/prefix/検索クエリ/再帰フラグのいずれかが変わったら新規セッション。
   useEffect(() => {
     startNew()
     // startNew は state setter 群を閉じ込んだクロージャ。依存に入れると毎レンダで
     // 再生成され無限ループするので明示列挙。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [connId, bucket, prefix, submittedQ])
+  }, [connId, bucket, prefix, submittedQ, recursive])
 
   // sentinel が画面に入ったら次 chunk を append。
   // - cursor が null (= 最終 chunk まで取得済み) → 何もしない
@@ -125,7 +128,7 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
     if (loadingMore || loading || !cursor) return
     const sid = sessionRef.current
     setLoadingMore(true)
-    api.list(connId, bucket, effectivePrefix, cursor)
+    api.list(connId, bucket, effectivePrefix, cursor, { recursive })
       .then(r => {
         if (sessionRef.current !== sid) return
         // 重複防止: API は通常 cursor 境界で重複しないが、DDN 互換 S3 で
@@ -190,16 +193,29 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
 
   return (
     <div>
-      {/* 検索 input — 現ディレクトリ直下の前方一致 (再帰なし) */}
-      <div className="mb-2 flex items-center gap-2">
+      {/* 検索 input + 再帰チェック。
+          再帰オフ: 現ディレクトリ "直下" の前方一致 (Delimiter='/')。
+          再帰オン: prefix 配下を全て flat に列挙 (Delimiter なし)、
+                  検索クエリ空でもサブディレクトリ全件を一覧できる便利モード。 */}
+      <div className="mb-2 flex flex-wrap items-center gap-2">
         <input
           type="search"
           className="flex-1 max-w-[480px] rounded-2 border border-ink-3 bg-paper px-3 py-1.5 text-sm"
-          placeholder="このディレクトリ内を検索 (前方一致)"
+          placeholder={recursive
+            ? 'このディレクトリ配下を検索 (前方一致・再帰)'
+            : 'このディレクトリ内を検索 (前方一致)'}
           value={q}
           onChange={e => setQ(e.target.value)}
           aria-label="ディレクトリ内検索"
         />
+        <label className="flex cursor-pointer items-center gap-1 text-xs text-ink-9">
+          <input
+            type="checkbox"
+            checked={recursive}
+            onChange={e => setRecursive(e.target.checked)}
+          />
+          再帰検索
+        </label>
         {isSearching && (
           <button
             type="button"
@@ -310,7 +326,11 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
 
         {isEmpty && !error && (
           <p className="py-4 text-center text-xs text-ink-7">
-            {isSearching ? `「${submittedQ}」に一致するエントリはありません。` : '空のディレクトリです。'}
+            {isSearching
+              ? `「${submittedQ}」に一致するエントリはありません${recursive ? ' (再帰)' : ''}。`
+              : recursive
+              ? 'このディレクトリ配下にエントリがありません。'
+              : '空のディレクトリです。'}
           </p>
         )}
 
