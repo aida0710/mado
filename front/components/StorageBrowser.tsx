@@ -1,5 +1,5 @@
 import { useEffect, useState, type KeyboardEvent } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import type { z } from 'zod'
 import { api } from '../lib/api/client'
 import { StorageList } from '../lib/api/types'
@@ -23,11 +23,14 @@ const tdNameClass =
   'max-w-0 overflow-hidden text-ellipsis whitespace-nowrap border-b border-ink-1 px-2 py-2'
 const tdNumClass =
   'w-px whitespace-nowrap border-b border-ink-1 px-2 py-2 text-right tabular-nums text-ink-7'
-const rowClass =
-  'cursor-pointer transition-colors hover:bg-ink-0 focus-visible:bg-ink-1'
+// File rows: 行全体クリック (preview drawer 開閉) なので pointer cursor
+const fileRowClass =
+  'cursor-pointer transition-colors hover:bg-ink-0 focus-within:bg-ink-1'
+// Dir rows: クリック領域は内側の <Link> だけ。inert セルでは pointer を出さない
+const dirRowClass =
+  'transition-colors hover:bg-ink-0 focus-within:bg-ink-1'
 
 export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) {
-  const navigate = useNavigate()
   const [page, setPage] = useState<ListResp | null>(null)
   // continuation トークンの履歴。history[0] は常に null (= 1ページ目)。
   const [history, setHistory] = useState<Array<string | null>>([null])
@@ -74,6 +77,8 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
     load(null)
   }
 
+  // File rows のキーボード操作 (Enter/Space で preview を開く) 用ヘルパー。
+  // dir 行は <Link> がネイティブにキーボード処理する。
   const activate = (fn: () => void) => (e: KeyboardEvent<HTMLTableRowElement>) => {
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault()
@@ -86,96 +91,120 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
 
   return (
     <div>
-      <table className="w-full border-collapse text-[13px]">
-        <thead>
-          <tr>
-            <th className={headThClass}>Name</th>
-            <th className={`${headThClass} text-right`}>Size</th>
-            <th className={`${headThClass} text-right`}>Modified</th>
-            <th className={headThClass}></th>
-          </tr>
-        </thead>
-        <tbody>
-          {page.directories.map(d => {
-            const tail = d.startsWith(prefix) ? d.slice(prefix.length) : d
-            const go = () => navigate(`/storage/${encodeURIComponent(connId)}/${encodeURIComponent(bucket)}/${encPath(d)}`)
-            return (
-              <tr
-                key={d}
-                className={rowClass}
-                role="link"
-                tabIndex={0}
-                onClick={go}
-                onKeyDown={activate(go)}
-              >
-                <td className={`${tdNameClass} font-semibold`}>📁 {tail}</td>
-                <td className={tdNumClass}>—</td>
-                <td className={tdNumClass}>—</td>
-                <td className={tdNumClass}></td>
-              </tr>
-            )
-          })}
-          {page.files.map(f => {
-            const tail = f.key.startsWith(prefix) ? f.key.slice(prefix.length) : f.key
-            const select = () => onSelectFile?.(f.key)
-            const s3Url = `s3://${bucket}/${f.key}`
-            // Web URL は dashboard origin + 現在ナビゲーション + ?preview=<key>
-            // 別ユーザに送るときに「直リンクで preview drawer が開く」。
-            const webUrl =
-              `${window.location.origin}` +
-              `/storage/${encodeURIComponent(connId)}/${encodeURIComponent(bucket)}/${encPath(prefix)}` +
-              `?preview=${encodeURIComponent(f.key)}`
-            const downloadUrl = api.downloadUrl(connId, bucket, f.key)
-            const filename = f.key.split('/').pop() ?? 'file'
-            const items: MenuItem[] = [
-              { kind: 'download', label: 'このファイルをダウンロード', href: downloadUrl, filename },
-              { kind: 'copy',     label: 'Web URL をコピー',           value: webUrl },
-              { kind: 'copy',     label: 'S3 URL をコピー',            value: s3Url },
-            ]
-            return (
-              <tr
-                key={f.key}
-                className={rowClass}
-                role="button"
-                tabIndex={0}
-                onClick={select}
-                onKeyDown={activate(select)}
-              >
-                <td className={tdNameClass}>📄 {tail}</td>
-                <td className={tdNumClass}>{fmtSize(f.size)}</td>
-                <td className={tdNumClass}>{f.lastModified?.slice(0, 10) ?? ''}</td>
-                <td className={tdNumClass}>
-                  <CopyMenu items={items} />
-                </td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
-      <div className="flex items-center justify-center gap-3 py-3 tabular-nums">
-        <button
-          className="cursor-pointer rounded-2 border border-ink-3 bg-paper px-3 py-1 transition-colors hover:bg-ink-1 hover:border-ink-5 disabled:cursor-default disabled:opacity-40"
-          onClick={prev}
-          disabled={pageIdx === 0 || loading}
-        >
-          ← Prev
-        </button>
-        <span>page {pageIdx + 1}{page.nextContinuation ? '+' : ''}</span>
-        <button
-          className="cursor-pointer rounded-2 border border-ink-3 bg-paper px-3 py-1 transition-colors hover:bg-ink-1 hover:border-ink-5 disabled:cursor-default disabled:opacity-40"
-          onClick={next}
-          disabled={!page.nextContinuation || loading}
-        >
-          Next →
-        </button>
-        <button
-          className="cursor-pointer rounded-2 border border-ink-3 bg-paper px-3 py-1 transition-colors hover:bg-ink-1 hover:border-ink-5 disabled:cursor-default disabled:opacity-40"
-          onClick={forceRefresh}
-          disabled={loading}
-          title="キャッシュを破棄して再読み込み"
-        >
-          🔄
-        </button>
+      {/* 進捗バー領域: 高さ 2px を常時確保しレイアウトシフトを避ける。
+          loading 中だけバー要素を描画する。 */}
+      <div className="relative h-[2px] w-full overflow-hidden bg-ink-1">
+        {loading && (
+          <div
+            role="progressbar"
+            aria-label="読み込み中"
+            className="storage-progress h-full w-1/3 bg-ink-9"
+          />
+        )}
+      </div>
+      <div
+        aria-busy={loading}
+        className={loading ? 'pointer-events-none opacity-60 transition-opacity' : 'transition-opacity'}
+      >
+        <table className="w-full border-collapse text-[13px]">
+          <thead>
+            <tr>
+              <th className={headThClass}>Name</th>
+              <th className={`${headThClass} text-right`}>Size</th>
+              <th className={`${headThClass} text-right`}>Modified</th>
+              <th className={headThClass}></th>
+            </tr>
+          </thead>
+          <tbody>
+            {page.directories.map(d => {
+              const tail = d.startsWith(prefix) ? d.slice(prefix.length) : d
+              const dirHref = `/storage/${encodeURIComponent(connId)}/${encodeURIComponent(bucket)}/${encPath(d)}`
+              const dirS3Url  = `s3://${bucket}/${d}`
+              const dirWebUrl = `${window.location.origin}${dirHref}`
+              const items: MenuItem[] = [
+                { kind: 'copy', label: 'Web URL をコピー', value: dirWebUrl },
+                { kind: 'copy', label: 'S3 URL をコピー', value: dirS3Url  },
+              ]
+              return (
+                <tr key={d} className={dirRowClass}>
+                  <td className={`${tdNameClass} p-0`}>
+                    <Link
+                      to={dirHref}
+                      className="block px-2 py-2 font-semibold text-ink-11 no-underline"
+                    >
+                      📁 {tail}
+                    </Link>
+                  </td>
+                  <td className={tdNumClass}>—</td>
+                  <td className={tdNumClass}>—</td>
+                  <td className={tdNumClass}>
+                    <CopyMenu items={items} />
+                  </td>
+                </tr>
+              )
+            })}
+            {page.files.map(f => {
+              const tail = f.key.startsWith(prefix) ? f.key.slice(prefix.length) : f.key
+              const select = () => onSelectFile?.(f.key)
+              const s3Url = `s3://${bucket}/${f.key}`
+              // Web URL は dashboard origin + 現在ナビゲーション + ?preview=<key>
+              // 別ユーザに送るときに「直リンクで preview drawer が開く」。
+              const webUrl =
+                `${window.location.origin}` +
+                `/storage/${encodeURIComponent(connId)}/${encodeURIComponent(bucket)}/${encPath(prefix)}` +
+                `?preview=${encodeURIComponent(f.key)}`
+              const downloadUrl = api.downloadUrl(connId, bucket, f.key)
+              const filename = f.key.split('/').pop() ?? 'file'
+              const items: MenuItem[] = [
+                { kind: 'download', label: 'このファイルをダウンロード', href: downloadUrl, filename },
+                { kind: 'copy',     label: 'Web URL をコピー',           value: webUrl },
+                { kind: 'copy',     label: 'S3 URL をコピー',            value: s3Url },
+              ]
+              return (
+                <tr
+                  key={f.key}
+                  className={fileRowClass}
+                  role="button"
+                  tabIndex={0}
+                  onClick={select}
+                  onKeyDown={activate(select)}
+                >
+                  <td className={tdNameClass}>📄 {tail}</td>
+                  <td className={tdNumClass}>{fmtSize(f.size)}</td>
+                  <td className={tdNumClass}>{f.lastModified?.slice(0, 10) ?? ''}</td>
+                  <td className={tdNumClass}>
+                    <CopyMenu items={items} />
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+        <div className="flex items-center justify-center gap-3 py-3 tabular-nums">
+          <button
+            className="cursor-pointer rounded-2 border border-ink-3 bg-paper px-3 py-1 transition-colors hover:bg-ink-1 hover:border-ink-5 disabled:cursor-default disabled:opacity-40"
+            onClick={prev}
+            disabled={pageIdx === 0 || loading}
+          >
+            ← Prev
+          </button>
+          <span>page {pageIdx + 1}{page.nextContinuation ? '+' : ''}</span>
+          <button
+            className="cursor-pointer rounded-2 border border-ink-3 bg-paper px-3 py-1 transition-colors hover:bg-ink-1 hover:border-ink-5 disabled:cursor-default disabled:opacity-40"
+            onClick={next}
+            disabled={!page.nextContinuation || loading}
+          >
+            Next →
+          </button>
+          <button
+            className="cursor-pointer rounded-2 border border-ink-3 bg-paper px-3 py-1 transition-colors hover:bg-ink-1 hover:border-ink-5 disabled:cursor-default disabled:opacity-40"
+            onClick={forceRefresh}
+            disabled={loading}
+            title="キャッシュを破棄して再読み込み"
+          >
+            🔄
+          </button>
+        </div>
       </div>
     </div>
   )

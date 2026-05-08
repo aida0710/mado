@@ -1,1 +1,9 @@
 /* App.css owns :root and global resets. */
+
+@keyframes storage-progress {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(400%); }
+}
+.storage-progress {
+  animation: storage-progress 1.1s ease-in-out infinite;
+}
