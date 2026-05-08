@@ -5,11 +5,14 @@
 """
 from __future__ import annotations
 
+import argparse
 import json
 import math
 import subprocess
 import sys
+import time
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
 
@@ -146,3 +149,65 @@ def _run_subprocess(cmd: Command) -> str:
         )
     except FileNotFoundError:
         return f"--- error ---\ncommand not found: {cmd.argv[0]}\n"
+
+
+def _ts() -> str:
+    """ローカル TZ の ISO8601 タイムスタンプ (秒精度)。"""
+    return datetime.now().astimezone().isoformat(timespec="seconds")
+
+
+def run_once(config: Config, only: Optional[str] = None) -> int:
+    """全コマンド (or only に一致するもの) を 1 回ずつ実行 → push。
+
+    Returns: 0 on full success, 1 if any command's push failed
+             (cron MAILTO で気付けるよう非ゼロを返す)。
+
+    `only` は category または command の完全一致 (大文字小文字も区別)。
+    """
+    rc = 0
+    matched = 0
+    for cmd in config.commands:
+        if only is not None and only != cmd.category and only != cmd.command:
+            continue
+        matched += 1
+        started = time.monotonic()
+        output = _run_subprocess(cmd)
+        try:
+            push(config.host, cmd.command, output, category=cmd.category)
+            elapsed_ms = int((time.monotonic() - started) * 1000)
+            print(f"[{_ts()}] {cmd.command} → push ok ({elapsed_ms}ms)",
+                  flush=True)
+        except SystemExit as e:
+            print(f"[{_ts()}] {cmd.command} → push FAILED: {e}",
+                  flush=True, file=sys.stderr)
+            rc = 1
+    if only is not None and matched == 0:
+        print(f"[{_ts()}] no commands matched --only {only!r}",
+              file=sys.stderr)
+        rc = 1
+    return rc
+
+
+def main() -> int:
+    p = argparse.ArgumentParser(description="Config-driven metrics runner.")
+    p.add_argument("config", type=Path, help="path to config JSON")
+    mode = p.add_mutually_exclusive_group()
+    mode.add_argument("--once", action="store_true",
+                      help="run all commands once and exit")
+    mode.add_argument("--loop", action="store_true",
+                      help="run continuously (default if neither flag given)")
+    p.add_argument("--only",
+                   help="run only commands whose category OR command "
+                        "exactly equals this string")
+    args = p.parse_args()
+
+    cfg = load_config(args.config)
+
+    if args.once:
+        return run_once(cfg, only=args.only)
+    # default = --loop
+    raise NotImplementedError("--loop is wired in Task 4")
+
+
+if __name__ == "__main__":
+    sys.exit(main())
