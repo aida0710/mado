@@ -1,5 +1,20 @@
 import '@testing-library/jest-dom'
 
+// jsdom には matchMedia が無い。テストはすべて desktop (>= sm) 想定で書かれて
+// いるので、どのクエリに対しても matches=true を返す no-op を入れる。
+// 個別テストで mobile 表示が要るときは spyOn して上書きする。
+;(globalThis as unknown as { matchMedia: typeof window.matchMedia }).matchMedia =
+  ((query: string) => ({
+    matches: true,
+    media: query,
+    onchange: null,
+    addListener: () => {},
+    removeListener: () => {},
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    dispatchEvent: () => false,
+  })) as unknown as typeof window.matchMedia
+
 // jsdom には IntersectionObserver が無いので、観測だけ受け流す no-op モックを
 // 入れる。実際の交差判定が要るテストでは spyOn して上書きする想定。
 class MockIntersectionObserver {
