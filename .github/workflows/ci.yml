@@ -1,0 +1,54 @@
+# PR / main push 時に api と front の typecheck を回す。
+#
+# 当面は typecheck だけにとどめる:
+# - lint: front 側に既存の累積エラー (react-hooks/set-state-in-effect 等) が
+#   12 件残っており、green にするには別途整理が必要。CI に入れてしまうと
+#   全 PR が即 red になるので、lint クリーンアップ PR を出してから合流させる。
+# - tests: api テストは Postgres service container が要る、front テストは
+#   @testing-library/jest-dom の取り回しの整備が要る。最低限の安全網として
+#   まず typecheck だけで動かす。
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  typecheck-api:
+    name: api typecheck
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: api/package-lock.json
+      - run: npm ci
+      - run: npx tsc --noEmit
+
+  typecheck-front:
+    name: front typecheck
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: front
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: front/package-lock.json
+      - run: npm ci
+      # front は project references (tsconfig.json が files: [] でルート参照のみ)
+      # なので tsc --noEmit ではなく tsc -b で参照プロジェクトを順次 typecheck
+      # する必要がある。referenced configs は noEmit:true なので emit はされない。
+      - run: npx tsc -b
