@@ -13,11 +13,16 @@ ssh you@example.host chmod +x ~/mado-push.sh
 ## 2. 環境変数
 
 ```sh
-# prod: nginx が port 80 で公開 (デフォルト)
-# dev:  vite dev server が port 5173 (http://mado.lan:5173)
-DASHBOARD_URL=http://mado.lan        # ダッシュボードのオリジン (prod)
+# prod LAN 内 (10.15.0.0/16):  http://mado.lan        (nginx :80)
+# prod LAN 外 (HPC ノード等):  http://<server>:81     (nginx :81、/api/external/ 専用)
+# dev:                         http://mado.lan:5173   (vite dev server)
+DASHBOARD_URL=http://mado.lan        # ダッシュボードのオリジン
 WRITE_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxxxxxx  # `.env` の WRITE_TOKEN
 ```
+
+prod の `:80` は LAN 内ホスト用 (UI と API)。Miyabi 等の **LAN 外** からは
+`:81` を使う (同じ nginx の別 server ブロックで `/api/external/` のみ受ける
+構成 — それ以外のパスは 404)。Bearer `WRITE_TOKEN` で防御。
 
 ## 3. 単発実行
 

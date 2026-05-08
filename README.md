@@ -49,7 +49,7 @@ External cron ────┼───┼──┐ /api/external/* ──► api
                   │                                               ▼     │
                   │                                          postgres   │
                   └─────────────────────────────────────────────────────┘
-                  公開ポート: dev=5173 のみ / prod=80 のみ
+                  公開ポート: dev=5173 のみ / prod=80 (LAN 用) + 81 (LAN 外 ingest 用)
 ```
 
 | サービス | dev | prod |
@@ -115,18 +115,24 @@ docker compose -f compose.prod.yaml up -d --build
 ```
 
 dev との差分:
-- nginx が `:80` (host) を listen して全トラフィックを受ける (api コンテナはホスト公開なし)
+- nginx が `:80` (LAN 用、UI / API すべて) と `:81` (LAN 外からの `/api/external/` 専用) を listen
+- api コンテナはホストに直接公開しない (nginx 経由のみ)
 - api は image build 時の `tsc` 成果物 (`dist/`) を `node` で実行
 - nginx と api は **non-root user** (nginx=uid 101, api=uid 1000) で動作
 - 全コンテナが `restart: unless-stopped`
+
+`:81` は port 80 が LAN 内 (10.15.0.0/16) に firewall されている環境向けの逃げ道。HPC ノード等から `/api/external/metrics/push` を叩くために用意したもので、それ以外のパスは 404 を返す (UI / internal API は晒さない)。詳細は `nginx/default.conf` 冒頭コメント。
 
 ## HPC ホスト側 cron セットアップ
 
 各 HPC ノードに `metrics/` 以下を配置して cron 登録:
 
 ```cron
-*/5 * * * * DASHBOARD_URL=http://mado.lan WRITE_TOKEN=xxxxx /home/me/mado/metrics/example.py
+# LAN 内 (10.15.*.*) なら http://mado.lan、LAN 外なら http://<server>:81
+*/5 * * * * cd /home/me/mado/metrics && uv run example.py
 ```
+
+`DASHBOARD_URL` / `WRITE_TOKEN` は `metrics/.env` 経由で渡せる (`metrics/db.py` が `python-dotenv` で auto-load)。
 
 - `metrics/db.py` が `urllib` で `${DASHBOARD_URL}/api/external/metrics/push?host=...&command=...&category=...` に POST
 - body は raw stdout (text/plain)
