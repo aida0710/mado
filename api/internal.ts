@@ -31,7 +31,10 @@ mountConnectionsRoutes(api, {
   crypto,
   invalidate: storageFactory.invalidate,
 })
-mountStorageListRoutes(api, { getStorage: storageFactory.getStorage })
+mountStorageListRoutes(api, {
+  getStorage: storageFactory.getStorage,
+  getConnectionConfig: storageFactory.getConnectionConfig,
+})
 mountStorageReadmeRoutes(api, { getStorage: storageFactory.getStorage, pools })
 mountStoragePreviewRoutes(api, { getStorage: storageFactory.getStorage, env })
 mountStorageFavoritesRoutes(api, { pools })

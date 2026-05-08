@@ -63,7 +63,7 @@ export function MarkdownEditor({
             }}
           />
         </div>
-        <label>
+        <label className="modal-field">
           <span className="label">Your name (last editor)</span>
           <input
             aria-label="Your name"

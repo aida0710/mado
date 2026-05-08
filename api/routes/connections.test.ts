@@ -30,6 +30,7 @@ interface MaskedConnection {
   region: string
   accessKeyIdMasked: string
   forcePathStyle: boolean
+  listObjectsVersion: 'v1' | 'v2'
   createdAt: string
   updatedAt: string
 }
@@ -48,14 +49,18 @@ async function createOne(overrides: Partial<{
   accessKeyId: string
   secretAccessKey: string
   forcePathStyle: boolean
+  listObjectsVersion: 'v1' | 'v2'
 }> = {}): Promise<MaskedConnection> {
-  const body = {
+  const body: Record<string, unknown> = {
     name: overrides.name ?? 'primary',
     endpoint: overrides.endpoint ?? 'https://s3.example.com/',
     region: overrides.region ?? 'auto',
     accessKeyId: overrides.accessKeyId ?? 'AKIAEXAMPLE12345',
     secretAccessKey: overrides.secretAccessKey ?? 'super-secret-value-9999',
     forcePathStyle: overrides.forcePathStyle ?? true,
+  }
+  if (overrides.listObjectsVersion !== undefined) {
+    body.listObjectsVersion = overrides.listObjectsVersion
   }
   const res = await app.request('/connections', {
     method: 'POST',
@@ -96,6 +101,8 @@ describe('POST /connections', () => {
     expect(created.region).toBe('auto')
     expect(created.accessKeyIdMasked).toBe('AKIA…2345')
     expect(created.forcePathStyle).toBe(true)
+    // 既定値は 'v2' (AWS / R2 / MinIO 等の新しい実装向け)。
+    expect(created.listObjectsVersion).toBe('v2')
     expect(typeof created.createdAt).toBe('string')
     expect(typeof created.updatedAt).toBe('string')
     // 平文フィールドはレスポンスに含まれてはならない。
@@ -162,6 +169,31 @@ describe('POST /connections', () => {
         name: `ssrf-${Math.random().toString(36).slice(2, 8)}`,
         endpoint,
         accessKeyId: 'a', secretAccessKey: 'b',
+      }),
+    })
+    expect(res.status).toBe(400)
+  })
+
+  it('accepts listObjectsVersion=v1 and round-trips it through GET', async () => {
+    // V1 only サーバ (MDX 等) のために v1 を明示できる。
+    const created = await createOne({ name: 'mdx', listObjectsVersion: 'v1' })
+    expect(created.listObjectsVersion).toBe('v1')
+
+    const res = await app.request('/connections')
+    const list = (await res.json()) as MaskedConnection[]
+    const got = list.find(c => c.name === 'mdx')
+    expect(got?.listObjectsVersion).toBe('v1')
+  })
+
+  it('rejects an invalid listObjectsVersion value', async () => {
+    const res = await app.request('/connections', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: 'bogus',
+        endpoint: 'https://s3.example.com/',
+        accessKeyId: 'a', secretAccessKey: 'b',
+        listObjectsVersion: 'v3',
       }),
     })
     expect(res.status).toBe(400)
@@ -267,6 +299,32 @@ describe('PUT /connections/:id', () => {
     expect(got.accessKeyIdMasked).toBe(created.accessKeyIdMasked)
     // No-op: 何も変更されなかった場合 invalidate は呼ばれてはならない。
     expect(invalidate).not.toHaveBeenCalled()
+  })
+
+  it('updates listObjectsVersion v2 → v1 and back', async () => {
+    const created = await createOne()
+    expect(created.listObjectsVersion).toBe('v2')
+
+    // v1 へ切替
+    let res = await app.request(`/connections/${created.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ listObjectsVersion: 'v1' }),
+    })
+    expect(res.status).toBe(200)
+    let updated = (await res.json()) as MaskedConnection
+    expect(updated.listObjectsVersion).toBe('v1')
+    expect(invalidate).toHaveBeenCalledWith(created.id)
+
+    // v2 へ戻す
+    res = await app.request(`/connections/${created.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ listObjectsVersion: 'v2' }),
+    })
+    expect(res.status).toBe(200)
+    updated = (await res.json()) as MaskedConnection
+    expect(updated.listObjectsVersion).toBe('v2')
   })
 
   it('returns 404 for non-existent id', async () => {

@@ -140,11 +140,16 @@ export const api = {
     bucket: string,
     prefix: string,
     cursor: { continuation?: string; startAfter?: string } = {},
-    opts: { recursive?: boolean } = {},
-  ) =>
+    opts: { recursive?: boolean; force?: boolean } = {},
+  ) => {
     // recursive フラグもキャッシュキーに含める (= 通常 list と再帰 list は別エントリ)。
     // prefix の後ろに置くので invalidateList の prefix-match invalidation はそのまま有効。
-    listCache.get(k('list', connId, bucket, prefix, opts.recursive ? 'r' : '', cursor.continuation, cursor.startAfter), () =>
+    const cacheKey = k('list', connId, bucket, prefix, opts.recursive ? 'r' : '', cursor.continuation, cursor.startAfter)
+    // force=true は「forward navigation で同じ cache key に到達して停滞する」現象の防衛。
+    // DDN/MDX 互換 S3 は ContinuationToken / 最終キーを進めずに返してくることがあり、
+    // そのとき同じ cursor で別ページを取りに行く想定の cache が衝突して前ページが返る。
+    if (opts.force) listCache.invalidate(cacheKey)
+    return listCache.get(cacheKey, () =>
       getJson(buildUrl(`${API_BASE}/storage/${encodeURIComponent(connId)}/list`, {
         bucket,
         prefix,
@@ -152,7 +157,8 @@ export const api = {
         startAfter: cursor.startAfter,
         recursive: opts.recursive ? '1' : undefined,
       }), StorageList),
-    ),
+    )
+  },
 
   // 1 prefix のリスト全ページを破棄 (アップロード/削除や手動 refresh 後に呼ぶ)。
   invalidateList: (connId: string, bucket: string, prefix: string): void => {

@@ -107,6 +107,14 @@ export const TarPreview = z.object({
 
 export const FavoriteBuckets = z.array(z.string())
 
+// listObjectsVersion: 接続先 S3 サーバへの ListObjects API バージョン。
+// 'v2' (既定): AWS / R2 / MinIO 等の正式な S3-compatible 実装向け。
+// 'v1':        MDX (s3ds.mdx.jp) や古い NetApp StorageGRID 等の V1 only サーバ向け。
+//              V2 を理解しないため ?start-after= が無視され、毎回先頭ページが
+//              返ってきてしまう。s3cmd は元々 V1 を使うので動く。
+export const ListObjectsVersion = z.enum(['v1', 'v2'])
+export type ListObjectsVersion = z.infer<typeof ListObjectsVersion>
+
 export const Connection = z.object({
   id: z.string(),
   name: z.string(),
@@ -114,6 +122,7 @@ export const Connection = z.object({
   region: z.string(),
   accessKeyIdMasked: z.string(),
   forcePathStyle: z.boolean(),
+  listObjectsVersion: ListObjectsVersion,
   createdAt: z.string(),
   updatedAt: z.string(),
 })
@@ -130,6 +139,7 @@ export interface ConnectionCreateInput {
   accessKeyId: string
   secretAccessKey: string
   forcePathStyle: boolean
+  listObjectsVersion: ListObjectsVersion
 }
 
 // PUT /api/internal/connections/:id — 部分更新。認証情報フィールドを省略すると既存の値が保持される。
@@ -140,6 +150,7 @@ export interface ConnectionUpdateInput {
   accessKeyId?: string
   secretAccessKey?: string
   forcePathStyle?: boolean
+  listObjectsVersion?: ListObjectsVersion
 }
 
 export const NoteAbsent  = z.object({ exists: z.literal(false) })

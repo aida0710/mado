@@ -11,10 +11,22 @@ import type { CryptoModule } from './crypto.js'
 const httpAgent  = new HttpAgent({  keepAlive: true, maxSockets: 50 })
 const httpsAgent = new HttpsAgent({ keepAlive: true, maxSockets: 50 })
 
+export type ListObjectsVersion = 'v1' | 'v2'
+
+/** 接続行から読み出した API 設定。S3Client では表現できない (= 呼ぶコマンドが
+ *  違う等) サーバ依存のパラメータをここに集約する。 */
+export interface ConnectionConfig {
+  /** ListObjects に v1 (Marker/NextMarker) と v2 (ContinuationToken/StartAfter) の
+   *  どちらを使うか。MDX/古い NetApp 等は v1 only、AWS/R2/MinIO は v2 推奨。 */
+  listObjectsVersion: ListObjectsVersion
+}
+
 export interface StorageFactory {
   /** 指定した connectionId のキャッシュ済み S3Client を返す。
    *  接続が存在しない場合は { code: 'NOT_FOUND' } (Error に .code あり) を投げる。 */
   getStorage(connId: string): Promise<S3Client>
+  /** 指定した connectionId の API 設定 (list_objects_version 等) を返す。 */
+  getConnectionConfig(connId: string): Promise<ConnectionConfig>
   /** connectionId のキャッシュを破棄する (UPDATE/DELETE 後に呼び出す)。 */
   invalidate(connId: string): void
   /** シャットダウン時にすべてのキャッシュ済みクライアントを破棄する。 */
@@ -33,27 +45,37 @@ export class ConnectionNotFoundError extends Error {
   }
 }
 
-export function createStorageFactory(deps: StorageFactoryDeps): StorageFactory {
-  const cache = new Map<string, S3Client>()
+interface CachedEntry {
+  client: S3Client
+  config: ConnectionConfig
+}
 
-  async function getStorage(connId: string): Promise<S3Client> {
+interface DbRow {
+  endpoint: string
+  region: string
+  access_key_id_enc: string
+  secret_access_key_enc: string
+  force_path_style: boolean
+  list_objects_version: ListObjectsVersion
+}
+
+export function createStorageFactory(deps: StorageFactoryDeps): StorageFactory {
+  // client と connection 設定 (list_objects_version 等) を 1 entry にまとめて
+  // キャッシュする。getStorage と getConnectionConfig は同じ DB row から派生
+  // する値を共有するので、別々にキャッシュすると 2 度引きや invalidate ズレが起きる。
+  const cache = new Map<string, CachedEntry>()
+
+  async function load(connId: string): Promise<CachedEntry> {
     const cached = cache.get(connId)
     if (cached) return cached
 
-    const r = await deps.pools.ro.query(
-      `SELECT endpoint, region, access_key_id_enc, secret_access_key_enc, force_path_style
+    const r = await deps.pools.ro.query<DbRow>(
+      `SELECT endpoint, region, access_key_id_enc, secret_access_key_enc,
+              force_path_style, list_objects_version
          FROM storage_connections WHERE id = $1`,
       [connId],
     )
-    const row = r.rows[0] as
-      | {
-          endpoint: string
-          region: string
-          access_key_id_enc: string
-          secret_access_key_enc: string
-          force_path_style: boolean
-        }
-      | undefined
+    const row = r.rows[0]
     if (!row) throw new ConnectionNotFoundError(connId)
 
     const client = new S3Client({
@@ -75,22 +97,34 @@ export function createStorageFactory(deps: StorageFactoryDeps): StorageFactory {
         socketTimeout:    30_000,
       }),
     })
-    cache.set(connId, client)
-    return client
+    const entry: CachedEntry = {
+      client,
+      config: { listObjectsVersion: row.list_objects_version },
+    }
+    cache.set(connId, entry)
+    return entry
+  }
+
+  async function getStorage(connId: string): Promise<S3Client> {
+    return (await load(connId)).client
+  }
+
+  async function getConnectionConfig(connId: string): Promise<ConnectionConfig> {
+    return (await load(connId)).config
   }
 
   function invalidate(connId: string): void {
-    const c = cache.get(connId)
-    if (c) {
-      c.destroy()
+    const entry = cache.get(connId)
+    if (entry) {
+      entry.client.destroy()
       cache.delete(connId)
     }
   }
 
   async function close(): Promise<void> {
-    for (const c of cache.values()) c.destroy()
+    for (const entry of cache.values()) entry.client.destroy()
     cache.clear()
   }
 
-  return { getStorage, invalidate, close }
+  return { getStorage, getConnectionConfig, invalidate, close }
 }

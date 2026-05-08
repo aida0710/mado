@@ -196,11 +196,14 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
 
   // 単一ページ取得 (replace)。前ページの dirs/files は応答到着まで残るので
   // ページ切替中も画面が空にならない (aria-busy + opacity-60 で dim 表現)。
-  const load = (cursor: Cursor): void => {
+  // force=true で forward navigation 時にキャッシュをバイパスする
+  // (DDN/MDX 互換 S3 が cursor を進めずに同じトークンを返してくるとき、
+  //  cache key 衝突で前ページのデータが返ってしまう問題への防衛)。
+  const load = (cursor: Cursor, opts: { force?: boolean } = {}): void => {
     const sid = ++sessionRef.current
     setError(null)
     setLoading(true)
-    api.list(connId, bucket, effectivePrefix, cursor, { recursive })
+    api.list(connId, bucket, effectivePrefix, cursor, { recursive, force: opts.force })
       .then(r => {
         if (sessionRef.current !== sid) return
         setPage(r)
@@ -228,8 +231,9 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
   // 次ページ。current の応答に nextCursor が無ければ no-op。
   // 既に「戻る」で過去ページに居て、次の history が積まれているならそれを再利用
   // (= 同じページに同じ cursor で戻れる)。最後尾なら history を伸ばす。
+  // 未訪問ページへ進むときは force:true でキャッシュをバイパスする。
   const next = (): void => {
-    if (!page || loading) return
+    if (!page || loading || !hasNext) return
     const c = nextCursor(page)
     if (!c) return
     if (pageIdx + 1 < history.length) {
@@ -239,7 +243,7 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
     } else {
       setHistory(h => [...h, c])
       setPageIdx(i => i + 1)
-      load(c)
+      load(c, { force: true })
     }
   }
 
@@ -271,7 +275,18 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
 
   const dirs = page?.directories ?? []
   const files = page?.files ?? []
-  const hasNext = !!(page && nextCursor(page))
+  // hasNext は「次がある」だけでなく「server が cursor を進めるか」も判定する。
+  // DDN/MDX 互換 S3 は IsTruncated=true でも ContinuationToken / 最終キーが
+  // 進まないことがあり、その状態で「次」を押しても同じデータしか返らないため
+  // 末尾扱いにして disable する。
+  const hasNext = (() => {
+    if (!page) return false
+    const c = nextCursor(page)
+    if (!c) return false
+    const used = history[pageIdx] ?? {}
+    return c.continuation !== used.continuation || c.startAfter !== used.startAfter
+  })()
+  const cursorStuck = !!(page && nextCursor(page) && !hasNext)
   const isEmpty = !loading && dirs.length === 0 && files.length === 0
   const isSearching = submittedQ.length > 0
   // 訪問済み最終ページか (= history を伸ばし得るのはここでだけ)。
@@ -480,6 +495,19 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
             </>
           )}
         </p>
+
+        {/* server が IsTruncated=true なのに cursor を進めずに返してきた場合の案内。
+            よくある原因は ListObjects v2 を理解しないサーバ (MDX 等) で、
+            設定 → 接続 → ListObjects API バージョンを v1 に切り替えると直る。 */}
+        {cursorStuck && (
+          <p className="mt-1 text-center text-[11px] text-ink-7">
+            次へ進めません — server が cursor を進めずに同じトークンを返しています。
+            <br />
+            設定の <strong>ListObjects API バージョン</strong>{' '}
+            を <span className="font-mono">v1</span> に切り替えてみてください
+            (MDX 等の V1 only サーバで起こります)。
+          </p>
+        )}
       </div>
     </div>
   )

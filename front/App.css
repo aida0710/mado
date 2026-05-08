@@ -418,17 +418,32 @@ pre { font-size: 12px; }
   color: var(--ink-12);
   font-variation-settings: 'opsz' 22;
 }
-.modal label { display: block; margin: var(--space-3) 0; }
-.modal label .label {
+/* .modal-field = 「縦並びの form 項目」(span.label + input、または
+   legend + choice rows)。明示的にこのクラスを付けたものだけが対象。
+   汎用 `.modal label` 指定は specificity battle を生むので持たない。 */
+.modal-field {
+  display: block;
+  margin: var(--space-3) 0;
+  border: 0;          /* fieldset のデフォルト罫を消す */
+  padding: 0;
+  min-inline-size: 0; /* fieldset のデフォルト min 制約を解除 (子の flex 等が縮める) */
+}
+
+/* .label = セクションヘッダ。span / legend / p 何でも OK。 */
+.modal .label {
   display: block;
   margin-bottom: 6px;
+  padding: 0;
   font: 600 10.5px/1 var(--font-sans);
   color: var(--ink-7);
   letter-spacing: 0.18em;
   text-transform: uppercase;
 }
+/* テキスト系 input + textarea のみが対象。checkbox / radio は除外しないと
+   width: 100% と padding 8px 12px が効いて、小さい丸/四角の左右に
+   巨大な空きスペースが生まれてしまう。 */
 .modal textarea,
-.modal input {
+.modal input:not([type="checkbox"]):not([type="radio"]) {
   width: 100%;
   padding: 8px 12px;
   border: 1px solid var(--color-rule-strong);
@@ -439,7 +454,7 @@ pre { font-size: 12px; }
   transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 .modal textarea:focus,
-.modal input:focus {
+.modal input:not([type="checkbox"]):not([type="radio"]):focus {
   border-color: var(--ink-9);
   box-shadow: 0 0 0 3px var(--ring);
   outline: none;
@@ -485,6 +500,41 @@ pre { font-size: 12px; }
 /* Modifiers */
 .modal--narrow { width: min(420px, 100%); max-width: 420px; }
 .modal--editor { width: min(880px, 100%); max-width: 880px; }
+
+/* ── Choice row (checkbox / radio + 主ラベル + 説明) ──────────────
+   ConnectionForm の Path-style URL / ListObjects API バージョン用。
+   .modal label の汎用ルールが無くなったので specificity battle なし。
+   主ラベルは <strong>、説明は <small> をそのまま使う (追加 class 不要)。 */
+.modal-choice {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  cursor: pointer;
+  margin: 0;
+  padding: 4px 0;
+}
+.modal-choice + .modal-choice { margin-top: var(--space-2); }
+.modal-choice input[type="checkbox"],
+.modal-choice input[type="radio"] {
+  margin: 4px 0 0;    /* 1 行目テキストの cap height と揃える */
+  flex: 0 0 auto;
+  cursor: pointer;
+}
+.modal-choice strong {
+  display: block;
+  font: 500 14px/1.4 var(--font-sans);
+  color: var(--ink-12);
+}
+.modal-choice small {
+  display: block;
+  margin-top: 3px;
+  font: 400 12.5px/1.55 var(--font-sans);
+  color: var(--ink-7);
+}
+.modal-choice small code {
+  font: 400 12px/1.55 var(--font-mono);
+  color: var(--ink-9);
+}
 
 /* ====================================================================
    Empty state — "まだ何もない" ページの中央演出

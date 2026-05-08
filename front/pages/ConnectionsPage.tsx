@@ -102,6 +102,8 @@ export default function ConnectionsPage() {
                         <span className="text-ink-5">path-style</span>
                       </>
                     )}
+                    {' '}<span className="text-ink-3">·</span>{' '}
+                    <span className="text-ink-5">list-{conn.listObjectsVersion}</span>
                   </div>
                 </div>
                 <div className="flex shrink-0 gap-2">
