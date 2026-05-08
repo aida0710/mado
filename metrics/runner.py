@@ -8,6 +8,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import signal
 import subprocess
 import sys
 import time
@@ -20,6 +21,25 @@ from typing import List, Optional
 # `python -m metrics.runner` を使わず直接実行できるよう example.py と同じ手法。
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from db import push  # noqa: E402
+
+_shutdown_requested = False
+
+
+def _request_shutdown(signum: int, _frame: object) -> None:
+    """SIGTERM/SIGINT で shutdown フラグを立てる。
+
+    実装はフラグを立てるだけで、ループ側が次の iteration で見て抜ける。
+    現在実行中のコマンドは subprocess なので signal の影響を受けない。
+    """
+    global _shutdown_requested
+    _shutdown_requested = True
+    sig_name = signal.Signals(signum).name
+    print(f"[{_ts()}] received {sig_name}, shutting down after current command...",
+          file=sys.stderr, flush=True)
+
+
+signal.signal(signal.SIGTERM, _request_shutdown)
+signal.signal(signal.SIGINT, _request_shutdown)
 
 
 @dataclass(frozen=True)
@@ -193,18 +213,20 @@ def run_loop(config: Config) -> int:
     """常駐ループ。各コマンドは独立した next_run_at で due になったら実行。
 
     push 失敗 (SystemExit) は catch して継続 — 一時的 NW 不調で daemon を
-    死なせないため。FATAL なエラー (config 不正など) は load_config 段階で
-    既に弾かれているはずなので、ここではループ継続を優先する。
+    死なせないため。SIGTERM/SIGINT 受信時は現在のコマンドが終わるのを
+    待って正常終了する。
     """
     n = len(config.commands)
-    next_run_at: List[float] = [0.0] * n  # 初回は即座に全部走る
+    next_run_at: List[float] = [0.0] * n
 
     print(f"[{_ts()}] starting loop: {n} commands, host={config.host}",
           flush=True)
 
-    while True:
+    while not _shutdown_requested:
         now = time.monotonic()
         for i, cmd in enumerate(config.commands):
+            if _shutdown_requested:
+                break
             if next_run_at[i] <= now:
                 output = _run_subprocess(cmd)
                 try:
@@ -214,20 +236,28 @@ def run_loop(config: Config) -> int:
                     print(f"[{_ts()}] {cmd.command} → push ok ({elapsed_ms}ms)",
                           flush=True)
                 except SystemExit as e:
-                    # db.push の正常な失敗パス (HTTP error, missing env など)。
                     print(f"[{_ts()}] {cmd.command} → push FAILED: {e}",
                           flush=True, file=sys.stderr)
                 except Exception as e:
-                    # 想定外の例外 (db.py のバグ、URL parse error など)。
-                    # daemon を殺さずトレースバックだけ出して継続。
                     print(f"[{_ts()}] {cmd.command} → push CRASHED: "
                           f"{type(e).__name__}: {e}",
                           flush=True, file=sys.stderr)
                     traceback.print_exc(file=sys.stderr)
                 next_run_at[i] = time.monotonic() + cmd.interval_seconds
 
+        if _shutdown_requested:
+            break
+
         sleep_for = max(1.0, min(next_run_at) - time.monotonic())
-        time.sleep(sleep_for)
+        # sleep を細かく分割し shutdown 反応を ~0.5s 以内に。
+        slept = 0.0
+        while slept < sleep_for and not _shutdown_requested:
+            chunk = min(0.5, sleep_for - slept)
+            time.sleep(chunk)
+            slept += chunk
+
+    print(f"[{_ts()}] loop exited cleanly", file=sys.stderr, flush=True)
+    return 0
 
 
 def main() -> int:
