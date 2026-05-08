@@ -19,9 +19,7 @@ export async function copyToClipboard(text: string): Promise<boolean> {
   ta.value = text
   // 画面外に置く (フォーカスで scroll が起きないように readonly + style)
   ta.setAttribute('readonly', '')
-  ta.style.position = 'fixed'
-  ta.style.top = '0'
-  ta.style.left = '-9999px'
+  ta.style.cssText = 'position:fixed;top:0;left:-9999px'
   document.body.appendChild(ta)
   try {
     ta.focus({ preventScroll: true })

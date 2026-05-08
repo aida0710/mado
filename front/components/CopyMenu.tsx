@@ -47,14 +47,15 @@ export const CopyMenu = memo(function CopyMenu({ items, trigger = '⋯', ariaLab
   }
 
   return (
-    <div ref={root} className="relative inline-flex" onClick={e => e.stopPropagation()}>
+    <div ref={root} className="relative inline-flex">
       <button
         type="button"
         className="ghost text-base leading-none"
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label={ariaLabel}
-        onClick={() => setOpen(o => !o)}
+        // 親行 (FileRow) の onClick=preview を抑止しつつメニューを開く。
+        onClick={e => { e.stopPropagation(); setOpen(o => !o) }}
         title={ariaLabel}
       >
         {feedback ?? trigger}
@@ -82,7 +83,8 @@ export const CopyMenu = memo(function CopyMenu({ items, trigger = '⋯', ariaLab
                     'block w-full cursor-pointer border-0 bg-transparent px-3 py-2 ' +
                     'text-[13px] text-ink-11 no-underline transition-colors hover:bg-ink-1'
                   }
-                  onClick={() => setOpen(false)}
+                  // 親行 (FileRow) の onClick=preview 抑止のため stopPropagation。
+                  onClick={e => { e.stopPropagation(); setOpen(false) }}
                 >
                   {it.label}
                 </a>
@@ -97,7 +99,8 @@ export const CopyMenu = memo(function CopyMenu({ items, trigger = '⋯', ariaLab
                   'block w-full cursor-pointer border-0 bg-transparent px-3 py-2 ' +
                   'text-left text-[13px] text-ink-11 transition-colors hover:bg-ink-1'
                 }
-                onClick={() => onCopy(it.label, it.value)}
+                // 親行 (FileRow) の onClick=preview 抑止のため stopPropagation。
+                onClick={e => { e.stopPropagation(); onCopy(it.label, it.value) }}
                 title={it.value}
               >
                 <div>{it.label}</div>

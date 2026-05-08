@@ -25,10 +25,16 @@ export function TarEntryModal({ connId, bucket, archiveKey, entry, onClose }: Pr
   }, [onClose])
 
   return (
-    <div className="modal-backdrop modal-backdrop--entry" onClick={onClose}>
+    <div className="modal-backdrop modal-backdrop--entry" role="presentation">
+      <button
+        type="button"
+        className="modal-backdrop__close-overlay"
+        onClick={onClose}
+        aria-label="モーダルを閉じる"
+        tabIndex={-1}
+      />
       <div
         className="modal modal--entry"
-        onClick={e => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
         aria-labelledby="tar-entry-title"

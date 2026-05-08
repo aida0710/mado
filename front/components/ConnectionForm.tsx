@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useReducer } from 'react'
 import type {
   Connection,
   ConnectionCreateInput,
@@ -15,21 +15,67 @@ interface Props {
   onClose: () => void
 }
 
+interface FormState {
+  name: string
+  endpoint: string
+  region: string
+  accessKeyId: string
+  secretAccessKey: string
+  forcePathStyle: boolean
+  listObjectsVersion: ListObjectsVersion
+  showSecret: boolean
+  saving: boolean
+  error: string | null
+}
+
+type FieldName = Exclude<keyof FormState, 'saving' | 'error'>
+
+type Action =
+  | { type: 'setField'; field: FieldName; value: FormState[FieldName] }
+  | { type: 'startSave' }
+  | { type: 'saveFailed'; error: string }
+  | { type: 'saveDone' }
+  | { type: 'setError'; error: string | null }
+
+function reducer(state: FormState, action: Action): FormState {
+  switch (action.type) {
+    case 'setField':
+      return { ...state, [action.field]: action.value }
+    case 'startSave':
+      return { ...state, saving: true, error: null }
+    case 'saveFailed':
+      return { ...state, saving: false, error: action.error }
+    case 'saveDone':
+      return { ...state, saving: false }
+    case 'setError':
+      return { ...state, error: action.error }
+  }
+}
+
+function initialState(current: Connection | null): FormState {
+  return {
+    name: current?.name ?? '',
+    endpoint: current?.endpoint ?? '',
+    region: current?.region ?? 'auto',
+    accessKeyId: '',
+    secretAccessKey: '',
+    forcePathStyle: current?.forcePathStyle ?? true,
+    listObjectsVersion: current?.listObjectsVersion ?? 'v2',
+    showSecret: false,
+    saving: false,
+    error: null,
+  }
+}
+
 export function ConnectionForm({ mode, onClose }: Props) {
   const isEdit = mode.kind === 'edit'
   const current = mode.kind === 'edit' ? mode.current : null
 
-  const [name, setName] = useState(current?.name ?? '')
-  const [endpoint, setEndpoint] = useState(current?.endpoint ?? '')
-  const [region, setRegion] = useState(current?.region ?? 'auto')
-  const [accessKeyId, setAccessKeyId] = useState('')
-  const [secretAccessKey, setSecretAccessKey] = useState('')
-  const [forcePathStyle, setForcePathStyle] = useState(current?.forcePathStyle ?? true)
-  const [listObjectsVersion, setListObjectsVersion] =
-    useState<ListObjectsVersion>(current?.listObjectsVersion ?? 'v2')
-  const [showSecret, setShowSecret] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [state, dispatch] = useReducer(reducer, current, initialState)
+  const {
+    name, endpoint, region, accessKeyId, secretAccessKey,
+    forcePathStyle, listObjectsVersion, showSecret, saving, error,
+  } = state
 
   const titleId = 'connection-form-title'
 
@@ -47,12 +93,11 @@ export function ConnectionForm({ mode, onClose }: Props) {
   const submit = async () => {
     const clientError = validateClientSide()
     if (clientError) {
-      setError(clientError)
+      dispatch({ type: 'setError', error: clientError })
       return
     }
 
-    setSaving(true)
-    setError(null)
+    dispatch({ type: 'startSave' })
     try {
       if (mode.kind === 'create') {
         const input: ConnectionCreateInput = {
@@ -77,10 +122,9 @@ export function ConnectionForm({ mode, onClose }: Props) {
         if (secretAccessKey) input.secretAccessKey = secretAccessKey
         await mode.onSubmit(input)
       }
+      dispatch({ type: 'saveDone' })
     } catch (e) {
-      setError((e as Error).message)
-    } finally {
-      setSaving(false)
+      dispatch({ type: 'saveFailed', error: (e as Error).message })
     }
   }
 
@@ -104,7 +148,7 @@ export function ConnectionForm({ mode, onClose }: Props) {
           <span className="label">名前</span>
           <input
             value={name}
-            onChange={e => setName(e.target.value)}
+            onChange={e => dispatch({ type: 'setField', field: 'name', value: e.target.value })}
             placeholder="例: production"
             autoComplete="off"
             spellCheck={false}
@@ -115,7 +159,7 @@ export function ConnectionForm({ mode, onClose }: Props) {
           <input
             type="url"
             value={endpoint}
-            onChange={e => setEndpoint(e.target.value)}
+            onChange={e => dispatch({ type: 'setField', field: 'endpoint', value: e.target.value })}
             placeholder="https://s3.example.com"
             autoComplete="off"
             spellCheck={false}
@@ -125,7 +169,7 @@ export function ConnectionForm({ mode, onClose }: Props) {
           <span className="label">リージョン</span>
           <input
             value={region}
-            onChange={e => setRegion(e.target.value)}
+            onChange={e => dispatch({ type: 'setField', field: 'region', value: e.target.value })}
             placeholder="auto"
             autoComplete="off"
             spellCheck={false}
@@ -135,7 +179,7 @@ export function ConnectionForm({ mode, onClose }: Props) {
           <span className="label">アクセスキー ID</span>
           <input
             value={accessKeyId}
-            onChange={e => setAccessKeyId(e.target.value)}
+            onChange={e => dispatch({ type: 'setField', field: 'accessKeyId', value: e.target.value })}
             placeholder={accessKeyPlaceholder}
             autoComplete="off"
             spellCheck={false}
@@ -148,7 +192,7 @@ export function ConnectionForm({ mode, onClose }: Props) {
               className="flex-1"
               type={showSecret ? 'text' : 'password'}
               value={secretAccessKey}
-              onChange={e => setSecretAccessKey(e.target.value)}
+              onChange={e => dispatch({ type: 'setField', field: 'secretAccessKey', value: e.target.value })}
               placeholder={secretPlaceholder}
               autoComplete="off"
               spellCheck={false}
@@ -156,7 +200,7 @@ export function ConnectionForm({ mode, onClose }: Props) {
             <button
               type="button"
               className="ghost shrink-0"
-              onClick={() => setShowSecret(s => !s)}
+              onClick={() => dispatch({ type: 'setField', field: 'showSecret', value: !showSecret })}
               aria-label={showSecret ? 'シークレットを隠す' : 'シークレットを表示'}
             >
               {showSecret ? '隠す' : '表示'}
@@ -170,8 +214,9 @@ export function ConnectionForm({ mode, onClose }: Props) {
           <label className="modal-choice">
             <input
               type="checkbox"
+              aria-label="Path-style URL を使用する"
               checked={forcePathStyle}
-              onChange={e => setForcePathStyle(e.target.checked)}
+              onChange={e => dispatch({ type: 'setField', field: 'forcePathStyle', value: e.target.checked })}
             />
             <div>
               <strong>Path-style URL を使用する</strong>
@@ -193,8 +238,9 @@ export function ConnectionForm({ mode, onClose }: Props) {
               type="radio"
               name="listObjectsVersion"
               value="v2"
+              aria-label="ListObjects v2"
               checked={listObjectsVersion === 'v2'}
-              onChange={() => setListObjectsVersion('v2')}
+              onChange={() => dispatch({ type: 'setField', field: 'listObjectsVersion', value: 'v2' })}
             />
             <div>
               <strong>v2</strong>
@@ -206,8 +252,9 @@ export function ConnectionForm({ mode, onClose }: Props) {
               type="radio"
               name="listObjectsVersion"
               value="v1"
+              aria-label="ListObjects v1"
               checked={listObjectsVersion === 'v1'}
-              onChange={() => setListObjectsVersion('v1')}
+              onChange={() => dispatch({ type: 'setField', field: 'listObjectsVersion', value: 'v1' })}
             />
             <div>
               <strong>v1</strong>

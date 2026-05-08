@@ -261,36 +261,51 @@ export const api = {
     let done: DoneShape | null = null
     let buf = ''
 
+    const handleLine = (line: string): void => {
+      if (line.length === 0) return
+      const obj = JSON.parse(line) as Record<string, unknown>
+      if ('mode' in obj) {
+        cb.onMode?.(obj.mode as 'range' | 'stream')
+      } else if ('entry' in obj) {
+        const entry = obj.entry as { name: string; size: number; type: string }
+        entries.push(entry)
+        cb.onEntry?.(entry)
+      } else if ('progress' in obj) {
+        cb.onProgress?.(obj.progress as { bytes: number; requests?: number })
+      } else if ('done' in obj) {
+        done = obj.done as DoneShape
+      } else if ('error' in obj) {
+        throw new Error(String(obj.error))
+      }
+    }
+
     while (true) {
       const { value, done: streamDone } = await reader.read()
       if (streamDone) break
       buf += dec.decode(value, { stream: true })
-      let nl = buf.indexOf('\n')
-      while (nl !== -1) {
-        const line = buf.slice(0, nl)
-        buf = buf.slice(nl + 1)
-        if (line.length > 0) {
-          const obj = JSON.parse(line) as Record<string, unknown>
-          if ('mode' in obj) {
-            cb.onMode?.(obj.mode as 'range' | 'stream')
-          } else if ('entry' in obj) {
-            const entry = obj.entry as { name: string; size: number; type: string }
-            entries.push(entry)
-            cb.onEntry?.(entry)
-          } else if ('progress' in obj) {
-            cb.onProgress?.(obj.progress as { bytes: number; requests?: number })
-          } else if ('done' in obj) {
-            done = obj.done as DoneShape
-          } else if ('error' in obj) {
-            throw new Error(String(obj.error))
-          }
-        }
-        nl = buf.indexOf('\n')
-      }
+      // chunk ごとに分割: 最後の要素は incomplete 行なので buf に戻す。
+      // 完了行 (\n 終端) のみを順に処理する。
+      const parts = buf.split('\n')
+      buf = parts.pop() ?? ''
+      for (const line of parts) handleLine(line)
     }
+    // closure (handleLine) 経由で代入するので TS は narrow できない。
+    // ここまで来れば必ず DoneShape が入っていることを assert する。
     if (!done) throw new Error('tar stream ended without done marker')
-    return TarPreview.parse({ entries, ...done })
+    const finalDone: DoneShape = done
+    return TarPreview.parse({ entries, ...finalDone })
     })
+  },
+
+  // text preview を Promise で返す。PreviewText の useEffect で fetch() を直接
+  // 呼ばずに済むよう、fetch 抽象を集中させる。
+  textPreview: async (connId: string, bucket: string, key: string): Promise<string> => {
+    const res = await fetch(buildUrl(
+      `${API_BASE}/storage/${encodeURIComponent(connId)}/preview/text`,
+      { bucket, key },
+    ))
+    if (!res.ok) throw new Error(res.statusText)
+    return res.text()
   },
 
   textPreviewUrl: (connId: string, bucket: string, key: string): string =>

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useReducer } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../lib/api/client'
 import type { Connection, ConnectionCreateInput, ConnectionUpdateInput } from '../lib/api/types'
@@ -8,38 +8,84 @@ import { ConnectionDeleteConfirm } from '../components/ConnectionDeleteConfirm'
 const sectionTitleClass =
   'm-0 text-[10.5px] font-semibold uppercase tracking-[0.22em] text-ink-7'
 
+interface State {
+  connections: Connection[]
+  loading: boolean
+  error: string | null
+  adding: boolean
+  editing: Connection | null
+  deleting: Connection | null
+}
+
+type Action =
+  | { type: 'startLoad' }
+  | { type: 'loadOk'; rows: Connection[] }
+  | { type: 'loadErr'; error: string }
+  | { type: 'openAdd' }
+  | { type: 'closeAdd' }
+  | { type: 'openEdit'; conn: Connection }
+  | { type: 'closeEdit' }
+  | { type: 'openDelete'; conn: Connection }
+  | { type: 'closeDelete' }
+
+const initial: State = {
+  connections: [],
+  loading: true,
+  error: null,
+  adding: false,
+  editing: null,
+  deleting: null,
+}
+
+function reducer(s: State, a: Action): State {
+  switch (a.type) {
+    case 'startLoad':
+      return { ...s, loading: true, error: null }
+    case 'loadOk':
+      return { ...s, loading: false, connections: a.rows }
+    case 'loadErr':
+      return { ...s, loading: false, error: a.error }
+    case 'openAdd':
+      return { ...s, adding: true }
+    case 'closeAdd':
+      return { ...s, adding: false }
+    case 'openEdit':
+      return { ...s, editing: a.conn }
+    case 'closeEdit':
+      return { ...s, editing: null }
+    case 'openDelete':
+      return { ...s, deleting: a.conn }
+    case 'closeDelete':
+      return { ...s, deleting: null }
+  }
+}
+
 export default function ConnectionsPage() {
-  const [connections, setConnections] = useState<Connection[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [adding, setAdding] = useState(false)
-  const [editing, setEditing] = useState<Connection | null>(null)
-  const [deleting, setDeleting] = useState<Connection | null>(null)
+  const [state, dispatch] = useReducer(reducer, initial)
+  const { connections, loading, error, adding, editing, deleting } = state
 
   const refresh = useCallback(() => {
-    setLoading(true)
-    setError(null)
+    dispatch({ type: 'startLoad' })
     api.listConnections()
-      .then(rows => setConnections(rows))
-      .catch((e: Error) => setError(e.message))
-      .finally(() => setLoading(false))
+      .then(rows => dispatch({ type: 'loadOk', rows }))
+      .catch((e: Error) => dispatch({ type: 'loadErr', error: e.message }))
   }, [])
   useEffect(() => { refresh() }, [refresh])
 
   const handleCreate = async (input: ConnectionCreateInput) => {
     await api.createConnection(input)
+    dispatch({ type: 'closeAdd' })
     refresh()
-    setAdding(false)
   }
   const handleUpdate = (id: string) => async (input: ConnectionUpdateInput) => {
     await api.updateConnection(id, input)
+    dispatch({ type: 'closeEdit' })
     refresh()
-    setEditing(null)
   }
   const handleDelete = (id: string) => async () => {
     await api.deleteConnection(id)
+    dispatch({ type: 'closeDelete' })
     refresh()
-    setDeleting(null)
   }
 
   return (
@@ -54,7 +100,7 @@ export default function ConnectionsPage() {
           style={{ borderBottom: '1px solid var(--rule)' }}
         >
           <h3 className={sectionTitleClass}>オブジェクトストレージ接続先の管理</h3>
-          <button className="ghost" onClick={() => setAdding(true)}>
+          <button className="ghost" onClick={() => dispatch({ type: 'openAdd' })}>
             <span aria-hidden>+</span> 追加
           </button>
         </div>
@@ -71,7 +117,7 @@ export default function ConnectionsPage() {
               追加した接続は <code className="font-mono text-[0.92em]">/storage/&lt;id&gt;/</code> でアクセスできます。<br />
               endpoint / region / アクセスキーをまとめて登録します。
             </p>
-            <button className="empty-state__cta" onClick={() => setAdding(true)}>
+            <button className="empty-state__cta" onClick={() => dispatch({ type: 'openAdd' })}>
               最初の接続を追加
             </button>
           </div>
@@ -82,7 +128,7 @@ export default function ConnectionsPage() {
             {connections.map(conn => (
               <li
                 key={conn.id}
-                className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-3 px-4 py-4"
+                className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-3 p-4"
                 style={{ borderBottom: '1px solid var(--rule)' }}
               >
                 <div className="min-w-0 flex-1">
@@ -108,10 +154,10 @@ export default function ConnectionsPage() {
                 </div>
                 <div className="flex shrink-0 gap-2">
                   <Link className="ghost" to={`/storage/${encodeURIComponent(conn.id)}/`}>開く</Link>
-                  <button className="ghost" onClick={() => setEditing(conn)}>編集</button>
+                  <button className="ghost" onClick={() => dispatch({ type: 'openEdit', conn })}>編集</button>
                   <button
                     className="ghost conn-row__danger"
-                    onClick={() => setDeleting(conn)}
+                    onClick={() => dispatch({ type: 'openDelete', conn })}
                   >
                     削除
                   </button>
@@ -125,20 +171,20 @@ export default function ConnectionsPage() {
       {adding && (
         <ConnectionForm
           mode={{ kind: 'create', onSubmit: handleCreate }}
-          onClose={() => setAdding(false)}
+          onClose={() => dispatch({ type: 'closeAdd' })}
         />
       )}
       {editing && (
         <ConnectionForm
           mode={{ kind: 'edit', current: editing, onSubmit: handleUpdate(editing.id) }}
-          onClose={() => setEditing(null)}
+          onClose={() => dispatch({ type: 'closeEdit' })}
         />
       )}
       {deleting && (
         <ConnectionDeleteConfirm
           name={deleting.name}
           onConfirm={handleDelete(deleting.id)}
-          onCancel={() => setDeleting(null)}
+          onCancel={() => dispatch({ type: 'closeDelete' })}
         />
       )}
     </div>

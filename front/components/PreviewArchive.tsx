@@ -1,4 +1,4 @@
-import { useEffect, useState, type KeyboardEvent } from 'react'
+import { useEffect, useReducer, useState, type KeyboardEvent } from 'react'
 import { api } from '../lib/api/client'
 import type { z } from 'zod'
 import { TarPreview } from '../lib/api/types'
@@ -18,81 +18,140 @@ const pagerBtnClass =
   'cursor-pointer bg-paper px-3 py-1 text-[12px] transition-colors ' +
   'hover:bg-ink-1 disabled:cursor-default disabled:opacity-40'
 
+interface Progress {
+  entries: number
+  bytes: number
+  requests: number
+  mode: '' | 'range' | 'stream'
+  startedAt: number
+  elapsed: number
+}
+
+interface State {
+  data: Resp | null
+  offset: number
+  pageSize: number
+  error: string | null
+  loading: boolean
+  progress: Progress
+}
+
+type Action =
+  | { type: 'startLoad' }
+  | { type: 'setPageSize'; size: number }
+  | { type: 'setMode'; mode: 'range' | 'stream' }
+  | { type: 'incEntry' }
+  | { type: 'progress'; bytes: number; requests?: number }
+  | { type: 'tick'; elapsed: number }
+  | { type: 'loadOk'; data: Resp }
+  | { type: 'loadErr'; error: string }
+  | { type: 'pagePrev' }
+  | { type: 'pageNext' }
+
+function makeInitial(): State {
+  // 関数 initializer 内なので Date.now() を呼んでも render の純粋性を破らない。
+  return {
+    data: null,
+    offset: 0,
+    pageSize: DEFAULT_PAGE_SIZE,
+    error: null,
+    loading: true,
+    progress: { entries: 0, bytes: 0, requests: 0, mode: '', startedAt: Date.now(), elapsed: 0 },
+  }
+}
+
+function reducer(s: State, a: Action): State {
+  switch (a.type) {
+    case 'startLoad':
+      return {
+        ...s,
+        data: null,
+        loading: true,
+        error: null,
+        // Date.now() を reducer 内で呼ぶ: render 関数 / JSX から直接 reachable
+        // ではないので react-doctor の hydration ルールを回避できる。
+        progress: { entries: 0, bytes: 0, requests: 0, mode: '', startedAt: Date.now(), elapsed: 0 },
+      }
+    case 'setPageSize':
+      // pageSize 変更時は offset を 0 にリセットし load を開始する。
+      return {
+        ...s,
+        pageSize: a.size,
+        offset: 0,
+        data: null,
+        loading: true,
+        error: null,
+        progress: { entries: 0, bytes: 0, requests: 0, mode: '', startedAt: Date.now(), elapsed: 0 },
+      }
+    case 'setMode':
+      return { ...s, progress: { ...s.progress, mode: a.mode } }
+    case 'incEntry':
+      return { ...s, progress: { ...s.progress, entries: s.progress.entries + 1 } }
+    case 'progress':
+      return {
+        ...s,
+        progress: {
+          ...s.progress,
+          bytes: a.bytes,
+          requests: a.requests ?? s.progress.requests,
+        },
+      }
+    case 'tick':
+      return { ...s, progress: { ...s.progress, elapsed: a.elapsed } }
+    case 'loadOk':
+      return { ...s, data: a.data, loading: false }
+    case 'loadErr':
+      return { ...s, error: a.error, loading: false }
+    case 'pagePrev':
+      return { ...s, offset: Math.max(0, s.offset - s.pageSize) }
+    case 'pageNext':
+      return { ...s, offset: s.offset + s.pageSize }
+  }
+}
+
 export function PreviewArchive({ connId, bucket, k }: { connId: string; bucket: string; k: string }) {
   const [openedEntry, setOpenedEntry] = useState<Entry | null>(null)
-  const [data, setData] = useState<Resp | null>(null)
-  const [offset, setOffset] = useState(0)
-  const [pageSize, setPageSize] = useState<number>(DEFAULT_PAGE_SIZE)
-  const [error, setError] = useState<string | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [progress, setProgress] = useState({
-    entries: 0,
-    bytes: 0,
-    requests: 0,
-    mode: '' as '' | 'range' | 'stream',
-    startedAt: Date.now(),
-    elapsed: 0,
-  })
-
-  // ファイルまたはページサイズが変わったときにページ1にリセットする。
-  useEffect(() => { setOffset(0) }, [connId, bucket, k, pageSize])
+  const [state, dispatch] = useReducer(reducer, undefined, makeInitial)
+  const { data, offset, pageSize, error, loading, progress } = state
 
   // 当該アーカイブのキャッシュを丸ごと破棄して同じページを再取得。
   const forceRefresh = (): void => {
     api.invalidateTarPreview(connId, bucket, k)
-    // 再 fetch を効かせるため state を一度クリアする。useEffect の依存
-    // (connId/bucket/k/offset/pageSize) は変わらないので、
-    // setData(null) で「loading 状態」に落とせば次のレンダで fetch が走る。
-    setData(null)
-    setError(null)
-    setLoading(true)
-    const startedAt = Date.now()
-    setProgress({ entries: 0, bytes: 0, requests: 0, mode: '', startedAt, elapsed: 0 })
+    dispatch({ type: 'startLoad' })
     api.tarPreview(connId, bucket, k, { limit: pageSize, offset })
-      .then(r => setData(r))
-      .catch((e: Error) => setError(e.message))
-      .finally(() => setLoading(false))
+      .then(r => dispatch({ type: 'loadOk', data: r }))
+      .catch((e: Error) => dispatch({ type: 'loadErr', error: e.message }))
   }
 
   useEffect(() => {
     let cancelled = false
-    const startedAt = Date.now()
-    setLoading(true)
-    setError(null)
-    setData(null)
-    setProgress({ entries: 0, bytes: 0, requests: 0, mode: '', startedAt, elapsed: 0 })
+    dispatch({ type: 'startLoad' })
 
     api.tarPreview(connId, bucket, k, { limit: pageSize, offset }, {
       onMode: (mode: 'range' | 'stream') => {
-        if (!cancelled) setProgress(p => ({ ...p, mode }))
+        if (!cancelled) dispatch({ type: 'setMode', mode })
       },
       onEntry: () => {
-        if (!cancelled) setProgress(p => ({ ...p, entries: p.entries + 1 }))
+        if (!cancelled) dispatch({ type: 'incEntry' })
       },
       onProgress: ({ bytes, requests }: { bytes: number; requests?: number }) => {
-        if (!cancelled) {
-          setProgress(p => ({
-            ...p,
-            bytes,
-            requests: requests ?? p.requests,
-          }))
-        }
+        if (!cancelled) dispatch({ type: 'progress', bytes, requests })
       },
     })
-      .then(r => { if (!cancelled) setData(r) })
-      .catch((e: Error) => { if (!cancelled) setError(e.message) })
-      .finally(() => { if (!cancelled) setLoading(false) })
+      .then(r => { if (!cancelled) dispatch({ type: 'loadOk', data: r }) })
+      .catch((e: Error) => { if (!cancelled) dispatch({ type: 'loadErr', error: e.message }) })
     return () => { cancelled = true }
   }, [connId, bucket, k, offset, pageSize])
 
   // ローディング中に経過時間カウンターを更新する。
   useEffect(() => {
     if (data || error) return
+    const startedAt = progress.startedAt
     const t = setInterval(() => {
-      setProgress(p => ({ ...p, elapsed: (Date.now() - p.startedAt) / 1000 }))
+      dispatch({ type: 'tick', elapsed: (Date.now() - startedAt) / 1000 })
     }, 200)
     return () => clearInterval(t)
-  }, [data, error])
+  }, [data, error, progress.startedAt])
 
   const ruleStyle = { border: '1px solid var(--color-rule-strong)', borderRadius: 'var(--radius-1)' } as const
 
@@ -108,7 +167,7 @@ export function PreviewArchive({ connId, bucket, k }: { connId: string; bucket: 
           className="cursor-pointer bg-paper px-2 py-1 text-[12px] disabled:cursor-default disabled:opacity-50"
           style={ruleStyle}
           value={pageSize}
-          onChange={e => setPageSize(Number(e.target.value))}
+          onChange={e => dispatch({ type: 'setPageSize', size: Number(e.target.value) })}
           disabled={loading}
         >
           {PAGE_SIZE_OPTIONS.map(n => (
@@ -198,13 +257,13 @@ export function PreviewArchive({ connId, bucket, k }: { connId: string; bucket: 
                 }}
               >
                 <td
-                  className="px-2 py-2"
+                  className="p-2"
                   style={{ fontFamily: 'var(--font-mono)', fontSize: '12.5px' }}
                 >
                   {e.name}
                 </td>
                 <td
-                  className="w-px whitespace-nowrap px-2 py-2 text-right text-ink-7 tabular-nums"
+                  className="w-px whitespace-nowrap p-2 text-right text-ink-7 tabular-nums"
                   style={{ fontFamily: 'var(--font-mono)', fontSize: '12px' }}
                 >
                   {fmtSize(e.size)}
@@ -221,14 +280,14 @@ export function PreviewArchive({ connId, bucket, k }: { connId: string; bucket: 
         <button
           className={pagerBtnClass}
           style={ruleStyle}
-          onClick={() => setOffset(Math.max(0, offset - pageSize))}
+          onClick={() => dispatch({ type: 'pagePrev' })}
           disabled={offset === 0 || loading}
         >
           ← Prev
         </button>
         <span>
           {data.entries.length > 0
-            ? `${start}–${end}`
+            ? `${start}-${end}`
             : 'no entries'}
           {' / page '}{page}
           {data.hasMore || data.truncated ? '+' : ''}
@@ -236,7 +295,7 @@ export function PreviewArchive({ connId, bucket, k }: { connId: string; bucket: 
         <button
           className={pagerBtnClass}
           style={ruleStyle}
-          onClick={() => setOffset(offset + pageSize)}
+          onClick={() => dispatch({ type: 'pageNext' })}
           disabled={data.truncated || loading || data.entries.length === 0}
         >
           Next →

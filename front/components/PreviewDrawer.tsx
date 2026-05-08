@@ -43,7 +43,15 @@ export function PreviewDrawer({ connId, bucket, k, onClose }: Props) {
         {kind === 'text' && <PreviewText connId={connId} bucket={bucket} k={k} />}
         {kind === 'image' && <PreviewImage connId={connId} bucket={bucket} k={k} />}
         {kind === 'audio' && <PreviewAudio connId={connId} bucket={bucket} k={k} />}
-        {kind === 'archive' && <PreviewArchive connId={connId} bucket={bucket} k={k} />}
+        {kind === 'archive' && (
+          <PreviewArchive
+            // ファイル切替時に内部 state (offset / pageSize) を一括リセットする。
+            key={`${connId}|${bucket}|${k}`}
+            connId={connId}
+            bucket={bucket}
+            k={k}
+          />
+        )}
         {kind === 'unknown' && (
           <p className="text-[13px] text-ink-7">
             プレビュー非対応のファイル種別です。上の DL ボタンからダウンロードできます。
