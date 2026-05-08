@@ -1,0 +1,23 @@
+# メトリクスコレクター用の最小 pyproject。
+#
+# 用途: ローカルで `uv run metrics/runner.py config/miyabi.json --once`
+# のような形でランナーを動かすため、および IDE / ツールにプロジェクト
+# ルートを認識させるため。
+#
+# このディレクトリは「ターゲットホスト (Miyabi 等) に scp して動かす
+# stdlib only な Python スクリプト集」という性格上:
+#   - 実行時依存は無し (dependencies = [])
+#   - パッケージとして build しない (tool.uv.package = false)
+#   - 最小サポートは Python 3.8 (deploy 先の最低ライン)
+[project]
+name = "mado-metrics"
+version = "0.1.0"
+description = "Mado ダッシュボード向けメトリクスコレクター (任意ホストから push する Python スクリプト集)"
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = []
+
+[tool.uv]
+# このプロジェクトはライブラリとして配布しない (scp デプロイのみ) ため
+# build を要求させない。
+package = false
