@@ -1,0 +1,16 @@
+{
+  "host": "miyabi",
+  "default_interval_seconds": 180,
+  "commands": [
+    {
+      "category": "ノード使用率",
+      "command": "pbsnodes -aSj",
+      "argv": ["pbsnodes", "-aSj"]
+    },
+    {
+      "category": "ジョブ一覧",
+      "command": "qstat",
+      "argv": ["qstat"]
+    }
+  ]
+}

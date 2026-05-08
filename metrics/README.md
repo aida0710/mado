@@ -60,20 +60,91 @@ silent cron disappears from the UI rather than displaying stale numbers.
 
 ## Adding a new host or command
 
-Copy `example.py` to e.g. `df.py` and adjust:
+ターゲットホストと用途で 2 通り使い分ける:
+
+### A) 1 ホスト 1 コマンドの最小ケース → `example.py` をコピー
+
+`example.py` を `df.py` 等にコピーして `HOST` / `COMMAND` / `CATEGORY` / `ARGV` を書き換える:
 
 - `HOST = "example"`
 - `COMMAND = "df"`
 - `CATEGORY = "disk"`
 - `ARGV = ["df", "-h", "/"]`
 
-The file remains a thin wrapper around `db.push`. If output preprocessing
-is ever needed (formatting, header trimming), do it inline before the
-`push(...)` call — `db.push` only deals with the HTTP wire format.
+cron で 5 分間隔のような粒度で済むならこれが一番シンプル。出力前処理が要るなら `push(...)` の手前に書く。
 
-For multiple metrics from one host, write multiple scripts (e.g.
-`example-load.py`, `example-disk.py`) or a single script that calls
-`push()` several times with different categories.
+### B) 1 ホストから複数コマンド / 細かい interval → `runner.py` + JSON config
+
+`metrics/config/<host>.json` に複数コマンドと per-command interval を書き、`runner.py` を常駐させる。Miyabi (東大スパコン) のような HPC 監視向け。
+
+サンプル (`metrics/config/miyabi.json`):
+
+```json
+{
+  "host": "miyabi",
+  "default_interval_seconds": 180,
+  "commands": [
+    {
+      "category": "ノード使用率",
+      "command": "pbsnodes -aSj",
+      "argv": ["pbsnodes", "-aSj"]
+    },
+    {
+      "category": "ジョブ一覧",
+      "command": "qstat",
+      "argv": ["qstat"]
+    }
+  ]
+}
+```
+
+フィールド:
+
+- `host` — ダッシュボードの host 名 (1 ファイル = 1 ホスト)
+- `default_interval_seconds` (省略時 180) — 各コマンドの interval 既定値
+- `default_timeout_seconds` (省略時 30) — 各コマンドのタイムアウト既定値
+- `commands[].category` — フロントエンドのセクション見出し
+- `commands[].command` — 表示用ラベル
+- `commands[].argv` — 実行する引数配列 (`shell=False` で実行)
+- `commands[].interval_seconds` — このコマンド固有の interval (override)
+- `commands[].timeout_seconds` — このコマンド固有のタイムアウト (override)
+
+実行:
+
+```sh
+# 本番 (常駐ループ — デフォルト)
+DASHBOARD_URL=http://mado.lan WRITE_TOKEN=xxx \
+  python3 ~/mado/metrics/runner.py ~/mado/metrics/config/miyabi.json
+
+# 単発実行 (cron / 手動テスト用)
+python3 runner.py config/miyabi.json --once
+
+# 特定コマンドだけ (デバッグ)
+python3 runner.py config/miyabi.json --once --only "ノード使用率"
+```
+
+`--once` / `--loop` を省略すると `--loop` (常駐) がデフォルト。SIGTERM / Ctrl-C で graceful shutdown (現在実行中のコマンドが終わったら exit 0)。push 失敗は `--loop` ではログのみでループ継続、`--once` では非ゼロ exit (cron MAILTO で気付ける)。
+
+### 動作確認
+
+`--once` で全コマンドが想定通り push できることをまず確認:
+
+```sh
+DASHBOARD_URL=... WRITE_TOKEN=... python3 runner.py config/miyabi.json --once
+```
+
+ダッシュボードに各 category のカードが表示されれば OK。タイムアウトやコマンド未存在は "command timed out after Xs" / "command not found" として push されるので、ダッシュボードで気付ける。
+
+### デプロイ
+
+```sh
+scp -r metrics you@miyabi:~/mado/metrics/
+ssh you@miyabi 'nohup env DASHBOARD_URL=... WRITE_TOKEN=... \
+  python3 ~/mado/metrics/runner.py ~/mado/metrics/config/miyabi.json \
+  > ~/mado/metrics/runner.log 2>&1 &'
+```
+
+systemd / launchd ユニット化はまだ用意していない (運用してから必要性を判断)。
 
 ## Why Python and not bash
 
