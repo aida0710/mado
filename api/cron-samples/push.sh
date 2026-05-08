@@ -10,7 +10,10 @@
 #   ./push.sh example uptime -- uptime
 #
 # 各メトリクスソースホストの cron から呼び出す。
-# DASHBOARD_URL は prod なら nginx (port 80)、dev なら vite (port 5173) を指す。
+# DASHBOARD_URL は接続元によって異なる:
+#   - prod LAN 内 (10.15.0.0/16):  http://mado.lan      (nginx :80)
+#   - prod LAN 外 (HPC ノード等):  http://<server>:81   (nginx :81、/api/external/ 専用)
+#   - dev:                          http://mado.lan:5173 (vite dev server)
 set -euo pipefail
 
 HOST=${1:?host label required (e.g. example)}; shift

@@ -26,6 +26,17 @@ ssh you@example.host 'cd ~/mado/metrics && uv sync'
 ## Environment variables
 
 `db.push` は `DASHBOARD_URL` と `WRITE_TOKEN` を `os.environ` から読む。
+
+`DASHBOARD_URL` の値は接続元によって異なる:
+
+| 接続元 | URL | 経路 |
+|---|---|---|
+| LAN 内 (10.15.0.0/16) | `http://mado.lan` | nginx :80 (UI / API すべて) |
+| LAN 外 (Miyabi 等の HPC ノード) | `http://<server>:81` | nginx :81 (`/api/external/` 専用) |
+| dev (vite) | `http://mado.lan:5173` | vite dev server |
+
+`:80` は LAN 限定 firewall 想定なので、LAN 外からは `:81` を使う (`/api/external/metrics/push` のみ受ける別 server ブロック、Bearer token で防御)。
+
 ローカル開発では `.env` ファイル経由が楽:
 
 ```sh
