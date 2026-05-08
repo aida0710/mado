@@ -147,7 +147,7 @@ describe('StorageBrowser - directory row', () => {
     expect(listMock.mock.calls[1]).toEqual(['c1', 'b1', 'voice/', {}, { recursive: true }])
   })
 
-  it('renders the lazy-load sentinel when the response carries a next cursor', async () => {
+  it('enables the "次" pager button when the response carries a next cursor', async () => {
     const listMock = api.list as ReturnType<typeof vi.fn>
     listMock.mockResolvedValueOnce({
       directories: [],
@@ -159,10 +159,49 @@ describe('StorageBrowser - directory row', () => {
     renderBrowser('voice/')
     await screen.findByText(/a\.mp3/)
 
-    // hasMore=true なら sentinel 行 ("↓ さらに読み込む") が DOM に出る。
-    // 実際の交差判定は jsdom 上で再現できないため、ここでは sentinel が
-    // 描画されているところまでを検証する。
-    expect(screen.getByText(/さらに読み込む/)).toBeInTheDocument()
+    // 応答に nextContinuation があれば「次 →」ボタンが活きる。
+    // 1 ページ目なので「戻る」は disabled、「次」は enabled。
+    const nextBtn = screen.getByRole('button', { name: '次のページへ' })
+    expect(nextBtn).toBeEnabled()
+    const prevBtn = screen.getByRole('button', { name: '前のページへ' })
+    expect(prevBtn).toBeDisabled()
+  })
+
+  it('advances to page 2 when the user clicks "次 →" and uses the next cursor', async () => {
+    const listMock = api.list as ReturnType<typeof vi.fn>
+    // 1 ページ目: nextContinuation='tok1' で次があることを示す
+    listMock.mockResolvedValueOnce({
+      directories: [],
+      files: [{ key: 'voice/a.mp3', size: 1, lastModified: null }],
+      nextContinuation: 'tok1',
+      nextStartAfter: null,
+    })
+    // 2 ページ目: 末尾 (next なし)
+    listMock.mockResolvedValueOnce({
+      directories: [],
+      files: [{ key: 'voice/b.mp3', size: 2, lastModified: null }],
+      nextContinuation: null,
+      nextStartAfter: null,
+    })
+
+    const user = userEvent.setup()
+    renderBrowser('voice/')
+    await screen.findByText(/a\.mp3/)
+    expect(listMock).toHaveBeenCalledTimes(1)
+
+    await user.click(screen.getByRole('button', { name: '次のページへ' }))
+
+    // 2 回目の list は cursor: { continuation: 'tok1' } で呼ばれる
+    await waitFor(() => expect(listMock).toHaveBeenCalledTimes(2))
+    expect(listMock.mock.calls[1]).toEqual([
+      'c1', 'b1', 'voice/', { continuation: 'tok1' }, { recursive: false },
+    ])
+
+    // 表示が page 2 の中身 (b.mp3) に置き換わる
+    await screen.findByText(/b\.mp3/)
+    // page 2 では next が disabled (nextContinuation=null)、戻るは enabled
+    expect(screen.getByRole('button', { name: '次のページへ' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '前のページへ' })).toBeEnabled()
   })
 
   it('shows a copy menu on directory row with Web URL and S3 URL items', async () => {

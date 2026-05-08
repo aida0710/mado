@@ -178,35 +178,32 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
 
   const effectivePrefix = prefix + submittedQ
 
-  // ページネーション撤廃 → 全 chunk を順に append していく単一リスト。
-  const [dirs, setDirs] = useState<string[]>([])
-  const [files, setFiles] = useState<FileEntry[]>([])
-  const [cursor, setCursor] = useState<Cursor | null>(null)
-  const [hasMore, setHasMore] = useState(false)
-  const [loading, setLoading] = useState(false)        // 1 chunk 目 (リセット時)
-  const [loadingMore, setLoadingMore] = useState(false) // 2 chunk 目以降
+  // ページ単位でリストを取得 (append しない)。
+  // - page: 現ページの ListResp (directories / files / nextContinuation / nextStartAfter)
+  // - history: 訪問済みページの cursor 履歴。history[i] は「ページ i+1 を
+  //   取りに行くときに渡す cursor」。history[0] は常に {} (= 1 ページ目)。
+  // - pageIdx: 現在のページ index (0-based)。表示は pageIdx + 1。
+  // S3 は前方向 cursor のみ提供するので、戻る/任意ページジャンプは「訪問済み」に限る。
+  const [page, setPage] = useState<ListResp | null>(null)
+  const [history, setHistory] = useState<Cursor[]>([{}])
+  const [pageIdx, setPageIdx] = useState(0)
+  const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // 並行 fetch (素早い prefix 切替 / 検索キー入力) で stale chunk が
-  // append されないように「セッション ID」で gate する。
-  // sessionRef を bump → それ以前の Promise の result は捨てる。
+  // 並行 fetch (素早い prefix 切替 / 検索キー入力 / ページャ連打) で stale 応答を
+  // 反映しないように「セッション ID」で gate する。bump → 以前の Promise は捨てる。
   const sessionRef = useRef(0)
 
-  // 1 chunk 目: 既存の dirs/files は表示したまま、新しい chunk が届いたら置換。
-  // → stale-while-revalidate により prefix 切替時に画面が空にならない
-  // (既存テストが「古い内容が dim で残る」ことを確認しているのでこの挙動は維持)。
-  const startNew = (): void => {
+  // 単一ページ取得 (replace)。前ページの dirs/files は応答到着まで残るので
+  // ページ切替中も画面が空にならない (aria-busy + opacity-60 で dim 表現)。
+  const load = (cursor: Cursor): void => {
     const sid = ++sessionRef.current
     setError(null)
     setLoading(true)
-    api.list(connId, bucket, effectivePrefix, {}, { recursive })
+    api.list(connId, bucket, effectivePrefix, cursor, { recursive })
       .then(r => {
         if (sessionRef.current !== sid) return
-        setDirs(r.directories)
-        setFiles(r.files)
-        const nc = nextCursor(r)
-        setCursor(nc)
-        setHasMore(!!nc)
+        setPage(r)
       })
       .catch((e: Error) => {
         if (sessionRef.current !== sid) return
@@ -218,59 +215,71 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
       })
   }
 
-  // 接続/バケット/prefix/検索クエリ/再帰フラグのいずれかが変わったら新規セッション。
+  // 接続/バケット/prefix/検索クエリ/再帰フラグのいずれかが変わったら 1 ページ目に戻す。
   useEffect(() => {
-    startNew()
-    // startNew は state setter 群を閉じ込んだクロージャ。依存に入れると毎レンダで
+    setHistory([{}])
+    setPageIdx(0)
+    load({})
+    // load は state setter を閉じ込んだクロージャ。依存に入れると毎レンダで
     // 再生成され無限ループするので明示列挙。
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [connId, bucket, prefix, submittedQ, recursive])
 
-  // sentinel が画面に入ったら次 chunk を append。
-  // - cursor が null (= 最終 chunk まで取得済み) → 何もしない
-  // - 既に in-flight → 何もしない (= IO 連発を吸収)
-  const loadMore = (): void => {
-    if (loadingMore || loading || !cursor) return
-    const sid = sessionRef.current
-    setLoadingMore(true)
-    api.list(connId, bucket, effectivePrefix, cursor, { recursive })
-      .then(r => {
-        if (sessionRef.current !== sid) return
-        // 重複防止: API は通常 cursor 境界で重複しないが、DDN 互換 S3 で
-        // StartAfter フォールバック時に最終キーが再出することがあるため
-        // key/path で de-dup する。
-        setDirs(d => {
-          const seen = new Set(d)
-          return [...d, ...r.directories.filter(x => !seen.has(x))]
-        })
-        setFiles(f => {
-          const seen = new Set(f.map(x => x.key))
-          return [...f, ...r.files.filter(x => !seen.has(x.key))]
-        })
-        const nc = nextCursor(r)
-        setCursor(nc)
-        setHasMore(!!nc)
-      })
-      .catch((e: Error) => {
-        if (sessionRef.current !== sid) return
-        setError(e.message)
-      })
-      .finally(() => {
-        if (sessionRef.current !== sid) return
-        setLoadingMore(false)
-      })
+  // 次ページ。current の応答に nextCursor が無ければ no-op。
+  // 既に「戻る」で過去ページに居て、次の history が積まれているならそれを再利用
+  // (= 同じページに同じ cursor で戻れる)。最後尾なら history を伸ばす。
+  const next = (): void => {
+    if (!page || loading) return
+    const c = nextCursor(page)
+    if (!c) return
+    if (pageIdx + 1 < history.length) {
+      const newIdx = pageIdx + 1
+      setPageIdx(newIdx)
+      load(history[newIdx])
+    } else {
+      setHistory(h => [...h, c])
+      setPageIdx(i => i + 1)
+      load(c)
+    }
   }
 
-  // 当該ディレクトリ全体のキャッシュを破棄して 1 chunk 目から再 fetch。
+  // 前ページ。1 ページ目で押されたら no-op。
+  const prev = (): void => {
+    if (pageIdx === 0 || loading) return
+    const newIdx = pageIdx - 1
+    setPageIdx(newIdx)
+    load(history[newIdx])
+  }
+
+  // 訪問済みページへのジャンプ。S3 は前方向 cursor のみなので、
+  // history に積まれていないページにはこの API では飛べない。
+  const goto = (idx: number): void => {
+    if (idx < 0 || idx >= history.length || idx === pageIdx || loading) return
+    setPageIdx(idx)
+    load(history[idx])
+  }
+
+  // 当該ディレクトリ全体のキャッシュを破棄して 1 ページ目から再 fetch。
   // 別ユーザがアップロード / 削除した直後に押す想定。検索中でも
   // 同じ prefix で前方一致 invalidate されるので search 結果も新鮮になる。
   const forceRefresh = (): void => {
     api.invalidateList(connId, bucket, prefix)
-    startNew()
+    setHistory([{}])
+    setPageIdx(0)
+    load({})
   }
 
+  const dirs = page?.directories ?? []
+  const files = page?.files ?? []
+  const hasNext = !!(page && nextCursor(page))
   const isEmpty = !loading && dirs.length === 0 && files.length === 0
   const isSearching = submittedQ.length > 0
+  // 訪問済み最終ページか (= history を伸ばし得るのはここでだけ)。
+  // この pageIdx より先にも未訪問のページが続くなら "+" を付けて示す。
+  const isTrailingPage = pageIdx === history.length - 1
+  const totalLabel = isTrailingPage && hasNext
+    ? `${pageIdx + 1} / ${history.length}+`
+    : `${pageIdx + 1} / ${history.length}`
 
   return (
     <div>
@@ -379,48 +388,98 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
           </p>
         )}
 
-        {/* 続きを読むボタン: hasMore のときだけマウント。明示クリックで loadMore()。
-            IntersectionObserver による自動読み込みは、短いリストで sentinel が
-            初期から viewport に入っているケース等で発火しないことがあったため
-            撤廃し、確実に押せるボタンに統一した (a11y / 信頼性 / 予測可能性)。 */}
-        {hasMore && (
-          <div className="flex items-center justify-center py-3">
-            <button
-              type="button"
-              onClick={loadMore}
-              disabled={loadingMore || loading}
-              aria-busy={loadingMore}
-              className="cursor-pointer rounded-2 border border-ink-3 bg-paper px-4 py-1.5 text-[11.5px] text-ink-9 transition-colors hover:bg-ink-1 hover:border-ink-5 hover:text-ink-11 disabled:cursor-default disabled:opacity-40"
-            >
-              {loadingMore ? '読み込み中…' : '↓ さらに読み込む'}
-            </button>
-          </div>
-        )}
-
-        {/* hasMore が false なら「end」ラベル + refresh のみ。検索の有無に関わらず常に出す。 */}
-        <div
-          className="flex items-center justify-center gap-3 py-3 text-[11px] text-ink-7 tabular-nums"
-          style={{ letterSpacing: '0.02em' }}
+        {/* ── ページャ ───────────────────────────────────────
+            戻る / 訪問済みページ番号 / 次 / 再読み込み を一列に並べる。
+            S3 は前方向 cursor しか返さないので任意ページジャンプは「訪問済み」
+            のみ。先に進むときは「次」ボタンで 1 ページずつ history を伸ばす。 */}
+        <nav
+          className="flex flex-wrap items-center justify-center gap-1.5 py-3"
+          aria-label="ページ送り"
         >
-          {!hasMore && !isEmpty && (
-            <span style={{ fontFamily: 'var(--font-mono)' }}>
-              {dirs.length + files.length} 件 (全件表示済み)
-            </span>
-          )}
           <button
+            type="button"
+            onClick={prev}
+            disabled={pageIdx === 0 || loading}
+            className={
+              'cursor-pointer rounded-1 bg-paper px-2.5 py-1 text-[11.5px] text-ink-9 ' +
+              'transition-colors hover:bg-ink-1 hover:text-ink-11 ' +
+              'disabled:cursor-default disabled:opacity-40'
+            }
+            style={{ border: '1px solid var(--color-rule-strong)' }}
+            aria-label="前のページへ"
+          >
+            ← 戻る
+          </button>
+
+          {history.map((_, i) => {
+            const current = i === pageIdx
+            return (
+              <button
+                key={i}
+                type="button"
+                onClick={() => goto(i)}
+                disabled={loading || current}
+                aria-current={current ? 'page' : undefined}
+                className={
+                  'cursor-pointer rounded-1 px-2.5 py-1 text-[11.5px] tabular-nums ' +
+                  'transition-colors disabled:cursor-default ' +
+                  (current
+                    ? 'bg-ink-12 text-paper'
+                    : 'bg-paper text-ink-9 hover:bg-ink-1 hover:text-ink-11 disabled:opacity-40')
+                }
+                style={{ border: '1px solid var(--color-rule-strong)' }}
+              >
+                {i + 1}
+              </button>
+            )
+          })}
+
+          <button
+            type="button"
+            onClick={next}
+            disabled={!hasNext || loading}
+            className={
+              'cursor-pointer rounded-1 bg-paper px-2.5 py-1 text-[11.5px] text-ink-9 ' +
+              'transition-colors hover:bg-ink-1 hover:text-ink-11 ' +
+              'disabled:cursor-default disabled:opacity-40'
+            }
+            style={{ border: '1px solid var(--color-rule-strong)' }}
+            aria-label="次のページへ"
+          >
+            次 →
+          </button>
+
+          <button
+            type="button"
+            onClick={forceRefresh}
+            disabled={loading}
             className={
               'cursor-pointer rounded-1 bg-paper px-2.5 py-1 ' +
               'transition-colors hover:bg-ink-1 disabled:cursor-default disabled:opacity-40'
             }
             style={{ border: '1px solid var(--color-rule-strong)' }}
-            onClick={forceRefresh}
-            disabled={loading || loadingMore}
             title="キャッシュを破棄して再読み込み"
             aria-label="再読み込み"
           >
             <span aria-hidden>↻</span>
           </button>
-        </div>
+        </nav>
+
+        {/* 件数 / 現ページ表示。空ディレクトリのときは件数を出さない。 */}
+        <p
+          className="text-center text-[11px] text-ink-7 tabular-nums"
+          style={{ letterSpacing: '0.02em' }}
+        >
+          <span style={{ fontFamily: 'var(--font-mono)' }}>ページ {totalLabel}</span>
+          {!isEmpty && (
+            <>
+              {' · '}
+              <span style={{ fontFamily: 'var(--font-mono)' }}>
+                {dirs.length + files.length} 件
+              </span>
+            </>
+          )}
+        </p>
       </div>
     </div>
   )
