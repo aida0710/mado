@@ -232,45 +232,47 @@ export function PreviewArchive({ connId, bucket, k }: { connId: string; bucket: 
           バイト上限に到達しました。これ以降は読み込めません。
         </p>
       )}
-      <table className="w-full border-collapse text-[13px]">
-        <thead>
-          <tr style={{ borderBottom: '1px solid var(--color-rule-strong)' }}>
-            <th className={tableHeadClass}>Name</th>
-            <th className={`${tableHeadClass} w-px whitespace-nowrap text-right`}>Size</th>
-          </tr>
-        </thead>
-        <tbody>
-          {data.entries.map(e => (
-            <tr
-              key={e.name}
-              className={rowClass}
-              role="button"
-              tabIndex={0}
-              style={{ borderBottom: '1px solid var(--rule)' }}
-              onClick={() => setOpenedEntry(e)}
-              onKeyDown={(ev: KeyboardEvent<HTMLTableRowElement>) => {
-                if (ev.key === 'Enter' || ev.key === ' ') {
-                  ev.preventDefault()
-                  setOpenedEntry(e)
-                }
-              }}
-            >
-              <td
-                className="p-2"
-                style={{ fontFamily: 'var(--font-mono)', fontSize: '12.5px' }}
-              >
-                {e.name}
-              </td>
-              <td
-                className="w-px whitespace-nowrap p-2 text-right text-ink-7 tabular-nums"
-                style={{ fontFamily: 'var(--font-mono)', fontSize: '12px' }}
-              >
-                {fmtSize(e.size)}
-              </td>
+      <div className="overflow-x-auto">
+        <table className="w-full border-collapse text-[13px]">
+          <thead>
+            <tr style={{ borderBottom: '1px solid var(--color-rule-strong)' }}>
+              <th className={tableHeadClass}>Name</th>
+              <th className={`${tableHeadClass} w-px whitespace-nowrap text-right`}>Size</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {data.entries.map(e => (
+              <tr
+                key={e.name}
+                className={rowClass}
+                role="button"
+                tabIndex={0}
+                style={{ borderBottom: '1px solid var(--rule)' }}
+                onClick={() => setOpenedEntry(e)}
+                onKeyDown={(ev: KeyboardEvent<HTMLTableRowElement>) => {
+                  if (ev.key === 'Enter' || ev.key === ' ') {
+                    ev.preventDefault()
+                    setOpenedEntry(e)
+                  }
+                }}
+              >
+                <td
+                  className="p-2"
+                  style={{ fontFamily: 'var(--font-mono)', fontSize: '12.5px' }}
+                >
+                  {e.name}
+                </td>
+                <td
+                  className="w-px whitespace-nowrap p-2 text-right text-ink-7 tabular-nums"
+                  style={{ fontFamily: 'var(--font-mono)', fontSize: '12px' }}
+                >
+                  {fmtSize(e.size)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
       <div
         className="flex items-center justify-center gap-3 py-3 text-[12px] tabular-nums text-ink-7"
         style={{ fontFamily: 'var(--font-mono)' }}

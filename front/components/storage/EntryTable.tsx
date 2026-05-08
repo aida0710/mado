@@ -59,7 +59,7 @@ const DirRow = memo(function DirRow({
         </Link>
       </td>
       <td className={tdNumClass}>-</td>
-      <td className={tdNumClass}>-</td>
+      <td className={`${tdNumClass} hidden sm:table-cell`}>-</td>
       <td className={tdNumClass}>
         <CopyMenu items={items} />
       </td>
@@ -124,7 +124,7 @@ const FileRow = memo(function FileRow({
         </span>
       </td>
       <td className={tdNumClass}>{fmtSize(f.size)}</td>
-      <td className={tdNumClass}>{f.lastModified?.slice(0, 10) ?? ''}</td>
+      <td className={`${tdNumClass} hidden sm:table-cell`}>{f.lastModified?.slice(0, 10) ?? ''}</td>
       <td className={tdNumClass}>
         <CopyMenu items={items} />
       </td>
@@ -143,30 +143,32 @@ interface Props {
 
 export function EntryTable({ dirs, files, prefix, connId, bucket, onSelectFile }: Props) {
   return (
-    <table className="w-full border-collapse text-[13px]">
-      <thead>
-        <tr style={{ borderBottom: '1px solid var(--color-rule-strong)' }}>
-          <th className={headThClass}>Name</th>
-          <th className={`${headThClass} text-right`}>Size</th>
-          <th className={`${headThClass} text-right`}>Modified</th>
-          <th className={headThClass}></th>
-        </tr>
-      </thead>
-      <tbody>
-        {dirs.map(d => (
-          <DirRow key={d} d={d} prefix={prefix} connId={connId} bucket={bucket} />
-        ))}
-        {files.map(f => (
-          <FileRow
-            key={f.key}
-            f={f}
-            prefix={prefix}
-            connId={connId}
-            bucket={bucket}
-            onSelectFile={onSelectFile}
-          />
-        ))}
-      </tbody>
-    </table>
+    <div className="overflow-x-auto">
+      <table className="w-full border-collapse text-[13px]">
+        <thead>
+          <tr style={{ borderBottom: '1px solid var(--color-rule-strong)' }}>
+            <th className={headThClass}>Name</th>
+            <th className={`${headThClass} text-right`}>Size</th>
+            <th className={`${headThClass} text-right hidden sm:table-cell`}>Modified</th>
+            <th className={headThClass}></th>
+          </tr>
+        </thead>
+        <tbody>
+          {dirs.map(d => (
+            <DirRow key={d} d={d} prefix={prefix} connId={connId} bucket={bucket} />
+          ))}
+          {files.map(f => (
+            <FileRow
+              key={f.key}
+              f={f}
+              prefix={prefix}
+              connId={connId}
+              bucket={bucket}
+              onSelectFile={onSelectFile}
+            />
+          ))}
+        </tbody>
+      </table>
+    </div>
   )
 }
