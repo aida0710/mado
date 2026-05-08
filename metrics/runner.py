@@ -277,6 +277,9 @@ def main() -> int:
                         "exactly equals this string")
     args = p.parse_args()
 
+    if args.only and not args.once:
+        p.error("--only requires --once")
+
     cfg = load_config(args.config)
 
     if args.once:
