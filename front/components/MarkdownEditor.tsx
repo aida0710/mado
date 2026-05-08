@@ -1,5 +1,10 @@
 import { useState } from 'react'
 import MDEditor from '@uiw/react-md-editor'
+// フル編集 UI (CodeMirror + ツールバー) の CSS。MarkdownEditor は HomePage /
+// ReadmeView から React.lazy() でロードされるため、ここで import すると
+// Vite が同じ非同期チャンクに同梱してくれる (= 編集モーダルを開かない
+// ユーザは数十 KB のスタイルをロードしない)。
+import '@uiw/react-md-editor/markdown-editor.css'
 
 interface Props {
   title: string
@@ -14,8 +19,10 @@ export function MarkdownEditor({
   title, initialBody, initialEditor, onSave, onSaved, onClose,
 }: Props) {
   const [body, setBody] = useState(initialBody)
+  // 関数形式: localStorage は同期 DOM API なので、関数を渡さないと毎レンダ
+  // getItem が走る (React は初回以外の戻り値を捨てるが計測コストは残る)。
   const [editor, setEditor] = useState(
-    initialEditor || localStorage.getItem('dashboard.lastEditor') || '',
+    () => initialEditor || localStorage.getItem('dashboard.lastEditor') || '',
   )
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)

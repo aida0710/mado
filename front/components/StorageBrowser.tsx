@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { Link } from 'react-router-dom'
 import type { z } from 'zod'
 import { api } from '../lib/api/client'
@@ -46,6 +46,91 @@ const SEARCH_DEBOUNCE_MS = 250
 // IntersectionObserver の rootMargin。ユーザがスクロール末尾に着く
 // 少し手前で先読みして「途切れず流れる」体感にする。
 const SENTINEL_ROOT_MARGIN = '200px'
+
+// 行ごとに memo 化することで、StorageBrowser が loading フラグや scroll
+// 起動の loadMore で再レンダしても、エントリが変わらない既存行は描画を
+// スキップできる。各行は items: MenuItem[] を内部で useMemo して
+// CopyMenu の memo を活かす。
+const DirRow = memo(function DirRow({
+  d, prefix, connId, bucket,
+}: { d: string; prefix: string; connId: string; bucket: string }) {
+  // 表示は現ディレクトリ基準で末尾を切る。検索中は effectivePrefix が
+  // `prefix + q` だが、入っているキーは prefix で始まるのでそのまま slice。
+  const tail = d.startsWith(prefix) ? d.slice(prefix.length) : d
+  const dirHref = `/storage/${encodeURIComponent(connId)}/${encodeURIComponent(bucket)}/${encPath(d)}`
+  const dirS3Url = `s3://${bucket}/${d}`
+  const dirWebUrl = `${window.location.origin}${dirHref}`
+  const items = useMemo<MenuItem[]>(() => [
+    { kind: 'copy', label: 'Web URL をコピー', value: dirWebUrl },
+    { kind: 'copy', label: 'S3 URL をコピー', value: dirS3Url },
+  ], [dirWebUrl, dirS3Url])
+  return (
+    <tr className={dirRowClass}>
+      <td className={`${tdNameClass} p-0`}>
+        <Link
+          to={dirHref}
+          className="block px-2 py-2 font-semibold text-ink-11 no-underline"
+        >
+          📁 {tail}
+        </Link>
+      </td>
+      <td className={tdNumClass}>—</td>
+      <td className={tdNumClass}>—</td>
+      <td className={tdNumClass}>
+        <CopyMenu items={items} />
+      </td>
+    </tr>
+  )
+})
+
+const FileRow = memo(function FileRow({
+  f, prefix, connId, bucket, onSelectFile,
+}: {
+  f: FileEntry
+  prefix: string
+  connId: string
+  bucket: string
+  onSelectFile?: (key: string) => void
+}) {
+  const tail = f.key.startsWith(prefix) ? f.key.slice(prefix.length) : f.key
+  const select = useCallback(() => onSelectFile?.(f.key), [onSelectFile, f.key])
+  // Enter / Space で preview を開く。dir 行は <Link> がネイティブで処理する。
+  const onKeyDown = useCallback((e: KeyboardEvent<HTMLTableRowElement>) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault()
+      select()
+    }
+  }, [select])
+  // Web URL は dashboard origin + 現在ナビゲーション + ?preview=<key>。
+  // 別ユーザに送ると「直リンクで preview drawer が開く」共有 URL になる。
+  const webUrl = `${window.location.origin}`
+    + `/storage/${encodeURIComponent(connId)}/${encodeURIComponent(bucket)}/${encPath(prefix)}`
+    + `?preview=${encodeURIComponent(f.key)}`
+  const s3Url = `s3://${bucket}/${f.key}`
+  const downloadUrl = api.downloadUrl(connId, bucket, f.key)
+  const filename = f.key.split('/').pop() ?? 'file'
+  const items = useMemo<MenuItem[]>(() => [
+    { kind: 'download', label: 'このファイルをダウンロード', href: downloadUrl, filename },
+    { kind: 'copy',     label: 'Web URL をコピー',           value: webUrl },
+    { kind: 'copy',     label: 'S3 URL をコピー',            value: s3Url },
+  ], [downloadUrl, webUrl, s3Url, filename])
+  return (
+    <tr
+      className={fileRowClass}
+      role="button"
+      tabIndex={0}
+      onClick={select}
+      onKeyDown={onKeyDown}
+    >
+      <td className={tdNameClass}>📄 {tail}</td>
+      <td className={tdNumClass}>{fmtSize(f.size)}</td>
+      <td className={tdNumClass}>{f.lastModified?.slice(0, 10) ?? ''}</td>
+      <td className={tdNumClass}>
+        <CopyMenu items={items} />
+      </td>
+    </tr>
+  )
+})
 
 export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) {
   // 検索クエリ — 既定は現ディレクトリ "直下" の前方一致 (= S3 ListObjectsV2 の
@@ -179,15 +264,6 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
     startNew()
   }
 
-  // File rows のキーボード操作 (Enter/Space で preview を開く) 用ヘルパー。
-  // dir 行は <Link> がネイティブにキーボード処理する。
-  const activate = (fn: () => void) => (e: KeyboardEvent<HTMLTableRowElement>) => {
-    if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault()
-      fn()
-    }
-  }
-
   const isEmpty = !loading && dirs.length === 0 && files.length === 0
   const isSearching = submittedQ.length > 0
 
@@ -257,70 +333,19 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
             </tr>
           </thead>
           <tbody>
-            {dirs.map(d => {
-              // 表示は現ディレクトリ基準で末尾を切る。検索中は effectivePrefix が
-              // `prefix + q` だが、入っているキーは prefix で始まるのでそのまま slice。
-              const tail = d.startsWith(prefix) ? d.slice(prefix.length) : d
-              const dirHref = `/storage/${encodeURIComponent(connId)}/${encodeURIComponent(bucket)}/${encPath(d)}`
-              const dirS3Url  = `s3://${bucket}/${d}`
-              const dirWebUrl = `${window.location.origin}${dirHref}`
-              const items: MenuItem[] = [
-                { kind: 'copy', label: 'Web URL をコピー', value: dirWebUrl },
-                { kind: 'copy', label: 'S3 URL をコピー', value: dirS3Url  },
-              ]
-              return (
-                <tr key={d} className={dirRowClass}>
-                  <td className={`${tdNameClass} p-0`}>
-                    <Link
-                      to={dirHref}
-                      className="block px-2 py-2 font-semibold text-ink-11 no-underline"
-                    >
-                      📁 {tail}
-                    </Link>
-                  </td>
-                  <td className={tdNumClass}>—</td>
-                  <td className={tdNumClass}>—</td>
-                  <td className={tdNumClass}>
-                    <CopyMenu items={items} />
-                  </td>
-                </tr>
-              )
-            })}
-            {files.map(f => {
-              const tail = f.key.startsWith(prefix) ? f.key.slice(prefix.length) : f.key
-              const select = () => onSelectFile?.(f.key)
-              const s3Url = `s3://${bucket}/${f.key}`
-              // Web URL は dashboard origin + 現在ナビゲーション + ?preview=<key>
-              // 別ユーザに送るときに「直リンクで preview drawer が開く」。
-              const webUrl =
-                `${window.location.origin}` +
-                `/storage/${encodeURIComponent(connId)}/${encodeURIComponent(bucket)}/${encPath(prefix)}` +
-                `?preview=${encodeURIComponent(f.key)}`
-              const downloadUrl = api.downloadUrl(connId, bucket, f.key)
-              const filename = f.key.split('/').pop() ?? 'file'
-              const items: MenuItem[] = [
-                { kind: 'download', label: 'このファイルをダウンロード', href: downloadUrl, filename },
-                { kind: 'copy',     label: 'Web URL をコピー',           value: webUrl },
-                { kind: 'copy',     label: 'S3 URL をコピー',            value: s3Url },
-              ]
-              return (
-                <tr
-                  key={f.key}
-                  className={fileRowClass}
-                  role="button"
-                  tabIndex={0}
-                  onClick={select}
-                  onKeyDown={activate(select)}
-                >
-                  <td className={tdNameClass}>📄 {tail}</td>
-                  <td className={tdNumClass}>{fmtSize(f.size)}</td>
-                  <td className={tdNumClass}>{f.lastModified?.slice(0, 10) ?? ''}</td>
-                  <td className={tdNumClass}>
-                    <CopyMenu items={items} />
-                  </td>
-                </tr>
-              )
-            })}
+            {dirs.map(d => (
+              <DirRow key={d} d={d} prefix={prefix} connId={connId} bucket={bucket} />
+            ))}
+            {files.map(f => (
+              <FileRow
+                key={f.key}
+                f={f}
+                prefix={prefix}
+                connId={connId}
+                bucket={bucket}
+                onSelectFile={onSelectFile}
+              />
+            ))}
           </tbody>
         </table>
 

@@ -1,11 +1,18 @@
-import { useCallback, useEffect, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 import MDEditor from '@uiw/react-md-editor'
 import rehypeSanitize from 'rehype-sanitize'
 import { api } from '../lib/api/client'
 import type { z } from 'zod'
 import { Readme } from '../lib/api/types'
-import { MarkdownEditor } from './MarkdownEditor'
-import { ReadmeHistoryModal } from './ReadmeHistoryModal'
+
+// 編集 UI と履歴ビューワは「ボタンを押した後にだけ」マウントされる。
+// React.lazy() で別チャンクに分け、初回ロード時の JS / CSS 量を絞る。
+const MarkdownEditor = lazy(() =>
+  import('./MarkdownEditor').then(m => ({ default: m.MarkdownEditor })),
+)
+const ReadmeHistoryModal = lazy(() =>
+  import('./ReadmeHistoryModal').then(m => ({ default: m.ReadmeHistoryModal })),
+)
 
 type ReadmeData = z.infer<typeof Readme>
 
@@ -68,25 +75,29 @@ export function ReadmeView({ connId, bucket, prefix }: Props) {
         ? <div className="mt-2"><MDEditor.Markdown source={data.body} rehypePlugins={[[rehypeSanitize]]} /></div>
         : <p className="text-ink-7">README なし</p>}
       {editing && (
-        <MarkdownEditor
-          title={`Edit README — ${prefix || '(root)'}`}
-          initialBody={data.exists ? data.body : ''}
-          initialEditor={data.exists ? (data.last_editor ?? '') : ''}
-          onSave={(body, editor) =>
-            api.putReadme(connId, bucket, prefix, body, editor).then(() => undefined)
-          }
-          onSaved={() => { setEditing(false); refresh() }}
-          onClose={() => setEditing(false)}
-        />
+        <Suspense fallback={null}>
+          <MarkdownEditor
+            title={`Edit README — ${prefix || '(root)'}`}
+            initialBody={data.exists ? data.body : ''}
+            initialEditor={data.exists ? (data.last_editor ?? '') : ''}
+            onSave={(body, editor) =>
+              api.putReadme(connId, bucket, prefix, body, editor).then(() => undefined)
+            }
+            onSaved={() => { setEditing(false); refresh() }}
+            onClose={() => setEditing(false)}
+          />
+        </Suspense>
       )}
       {historyOpen && (
-        <ReadmeHistoryModal
-          connId={connId}
-          bucket={bucket}
-          prefix={prefix}
-          currentBody={data.exists ? data.body : null}
-          onClose={() => setHistoryOpen(false)}
-        />
+        <Suspense fallback={null}>
+          <ReadmeHistoryModal
+            connId={connId}
+            bucket={bucket}
+            prefix={prefix}
+            currentBody={data.exists ? data.body : null}
+            onClose={() => setHistoryOpen(false)}
+          />
+        </Suspense>
       )}
     </section>
   )
