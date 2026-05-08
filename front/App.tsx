@@ -89,14 +89,6 @@ export default function App() {
           <Route path="/storage/:connId/*" element={<StoragePageWithKey />} />
         </Routes>
       </main>
-
-      {/* Colophon — 紙の出版物のように footer に静かなクレジット。 */}
-      <footer
-        className="mt-10 mb-8 pt-5 text-center text-[11px] font-semibold uppercase tracking-[0.22em] text-ink-5"
-        style={{ borderTop: '1px solid var(--rule)' }}
-      >
-        mado · LAN/VPN internal
-      </footer>
     </div>
   )
 }

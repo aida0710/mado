@@ -69,7 +69,7 @@ export default function HomePage() {
             <span aria-hidden>⏱</span>
             履歴
           </button>
-          <p className="page-head__sub">Mado 全体で 1 つの共有メモ — LAN 内の誰でも編集できます</p>
+          <p className="page-head__sub">Mado 全体で1つの共有メモ</p>
         </header>
 
         {isPresent ? (
@@ -79,10 +79,11 @@ export default function HomePage() {
         ) : (
           <div className="empty-state">
             <h3>まだ何も書かれていません</h3>
-            <p>
-              ここはチーム全員で共有する一枚のノートです。<br />
-              最初の数行を書きはじめてみましょう。
-            </p>
+            <p>全員で1つだけ共有するノートです。たとえば:</p>
+            <ul className="empty-state__examples">
+              <li>他アプリケーションの情報</li>
+              <li>ストレージ接続まわりの補足 (どこに何があるか)</li>
+            </ul>
             <button className="empty-state__cta" onClick={() => setEditing(true)}>
               最初のノートを書く
             </button>

@@ -520,6 +520,24 @@ pre { font-size: 12px; }
   color: var(--ink-7);
   font: 400 14px/1.6 var(--font-sans);
 }
+/* Empty state の "何を書くか" 具体例リスト。中央寄せの empty-state 内で
+   箇条書きを左揃えで表示するため inline-block で固める。               */
+.empty-state__examples {
+  display: inline-block;
+  margin: var(--space-2) auto var(--space-4);
+  padding: 0;
+  list-style: none;
+  text-align: left;
+  color: var(--ink-9);
+  font: 400 13.5px/1.85 var(--font-sans);
+}
+.empty-state__examples li { display: list-item; }
+.empty-state__examples li::before {
+  content: "・";
+  display: inline-block;
+  margin-right: 2px;
+  color: var(--ink-5);
+}
 .empty-state__cta {
   display: inline-block;
   padding: 10px 26px;
