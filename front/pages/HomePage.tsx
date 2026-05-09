@@ -79,7 +79,7 @@ export default function HomePage() {
         ) : (
           <div className="empty-state">
             <h3>まだ何も書かれていません</h3>
-            <p>全員で1つだけ共有するノートです。たとえば:</p>
+            <p>メンバー全員で同じノートを書き足していきます。例:</p>
             <ul className="empty-state__examples">
               <li>他アプリケーションの情報</li>
               <li>ストレージ接続まわりの補足 (どこに何があるか)</li>
