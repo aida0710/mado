@@ -14,7 +14,7 @@
 //     ストリーミングリーダーを使う。
 
 import { GetObjectCommand, type S3Client } from '@aws-sdk/client-s3'
-import type { TarEntry } from './tar-stream.js'
+import { isMacOsMetadata, type TarEntry } from './tar-stream.js'
 
 export interface RangeOpts {
   entryLimit: number
@@ -91,9 +91,11 @@ export async function listTarHeadersByRange(
     // tar メタデータレコード (POSIX pax `x` / `g`、GNU 長名 `L` / long-link `K`) は
     // 実エントリの前置レコードであり、アーカイブ内のファイルではない。
     // 位置的にスキップするが列挙結果には含めない。
+    // macOS の AppleDouble (`._*`) / `.DS_Store` / `__MACOSX/` も同様に隠す。
     const isMetadata =
       parsed.type === 'x' || parsed.type === 'g' ||
-      parsed.type === 'L' || parsed.type === 'K'
+      parsed.type === 'L' || parsed.type === 'K' ||
+      isMacOsMetadata(parsed.name)
 
     if (!isMetadata) {
       if (skipped < offset) {

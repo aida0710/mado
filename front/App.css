@@ -346,10 +346,11 @@ pre { font-size: 12px; }
   .storage-list:has(.drawer) { grid-template-columns: 1fr 380px; }
 }
 
-/* ── Preview drawer — 右側スティッキーパネル。 */
+/* ── Preview drawer — 右側スティッキーパネル。
+   editorial: 角丸ゼロで紙面のような直角の枠。drawer / 各種 modal すべて同じ。 */
 .drawer {
   border: 1px solid var(--color-rule-strong);
-  border-radius: var(--radius-3);
+  border-radius: 0;
   background: var(--paper);
   padding: var(--space-3) var(--space-4) var(--space-4);
   position: sticky;
@@ -416,7 +417,7 @@ pre { font-size: 12px; }
   width: min(560px, 100%);
   max-width: 560px;
   background: var(--paper);
-  border-radius: var(--radius-3);
+  border-radius: 0;
   padding: var(--space-5) var(--space-6);
   border: 1px solid var(--color-rule-strong);
   box-shadow: 0 18px 48px -12px rgba(10, 9, 4, 0.30),
@@ -628,6 +629,7 @@ pre { font-size: 12px; }
    ==================================================================== */
 
 .modal-backdrop--entry { z-index: 60; padding: var(--space-4); }
+/* tar の中身を覗く "サブウィンドウ"。.modal の border-radius:0 を継承する。 */
 .modal--entry {
   width: min(960px, 100%);
   max-width: 960px;

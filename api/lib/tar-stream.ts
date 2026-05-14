@@ -13,6 +13,24 @@ export interface TarEntry {
   type: string
 }
 
+/**
+ * macOS が tar に紛れ込ませてくる「実際のファイルではない」メタデータ。
+ * Mac の BSD tar / Finder の圧縮機能は各ファイルに拡張属性 (resource fork
+ * 等) を AppleDouble 形式の `._<file>` として併存させる。これは中身が
+ * 0x00 0x05 0x16 0x07 から始まるバイナリで、対応する `<file>` の WAV / JSON
+ * とは別物 — そのまま preview/audio に渡すとブラウザがデコードに失敗する。
+ *
+ * `__MACOSX/` 配下ディレクトリと `.DS_Store` も同類のノイズ。listing API
+ * からはまるごと隠す (entryLimit / offset の数え対象にもしない)。
+ */
+export function isMacOsMetadata(name: string): boolean {
+  const base = name.split('/').filter(Boolean).pop() ?? name
+  if (base.startsWith('._')) return true
+  if (base === '.DS_Store') return true
+  if (name === '__MACOSX' || name.startsWith('__MACOSX/') || name.includes('/__MACOSX/')) return true
+  return false
+}
+
 export interface TarOptions {
   entryLimit: number
   byteLimit: number
@@ -142,6 +160,13 @@ export function listTarEntries(
     }
 
     ext.on('entry', (header, stream, next) => {
+      // macOS の AppleDouble (`._*`) や `.DS_Store` 等は listing から除外。
+      // offset / entryLimit のカウントにも入れない (見えない方の実体は読まない)。
+      if (isMacOsMetadata(header.name)) {
+        stream.on('end', next)
+        stream.resume()
+        return
+      }
       // まずカーソル分をスキップする。
       if (skipped < offset) {
         skipped++

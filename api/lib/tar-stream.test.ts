@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { createReadStream } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { listTarEntries } from './tar-stream.js'
+import { isMacOsMetadata, listTarEntries } from './tar-stream.js'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const fix = (name: string) => resolve(here, 'test-fixtures', name)
@@ -111,5 +111,31 @@ describe('listTarEntries', () => {
     )
     const a = r.entries.find(e => e.name === 'd/a.txt')
     expect(a?.size).toBe(6) // 'alpha\n' の長さ
+  })
+})
+
+describe('isMacOsMetadata', () => {
+  it.each<[string, boolean, string]>([
+    // AppleDouble (Mac BSD tar / Finder の圧縮) — 隠す
+    ['._foo.wav',         true,  'AppleDouble at root'],
+    ['./._foo.wav',       true,  'AppleDouble after ./'],
+    ['dir/._foo.json',    true,  'AppleDouble in subdir'],
+    ['._',                true,  'bare AppleDouble prefix'],
+    // .DS_Store — 隠す
+    ['.DS_Store',         true,  'Finder metadata at root'],
+    ['some/dir/.DS_Store', true, 'Finder metadata nested'],
+    // __MACOSX/ ディレクトリ (zip でよくあるが tar でも稀に同梱される) — 隠す
+    ['__MACOSX',          true,  '__MACOSX dir entry'],
+    ['__MACOSX/',         true,  '__MACOSX dir trailing slash'],
+    ['__MACOSX/file',     true,  'inside __MACOSX'],
+    ['root/__MACOSX/x',   true,  'nested __MACOSX'],
+    // 通常のファイル — 隠さない
+    ['foo.wav',           false, 'normal file'],
+    ['./0001.wav',        false, 'normal file with ./ prefix'],
+    ['dir/file.json',     false, 'normal file in subdir'],
+    ['.gitignore',        false, 'dotfile that is not metadata'],
+    ['_underscore.txt',   false, 'single underscore (not "._")'],
+  ])('%s -> %s (%s)', (name, expected) => {
+    expect(isMacOsMetadata(name)).toBe(expected)
   })
 })
