@@ -1,6 +1,6 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import { BrowserRouter } from 'react-router-dom'
+import { createBrowserRouter, RouterProvider } from 'react-router-dom'
 
 // ── Editorial type stack (self-hosted via @fontsource) ──────────────
 // LAN/VPN 内ツールなので CDN には依存させず、Vite のバンドルに同梱する。
@@ -16,18 +16,18 @@ import '@fontsource/noto-sans-jp/japanese-400.css'        // 日本語 body
 import '@fontsource/noto-sans-jp/japanese-500.css'
 import '@fontsource/noto-sans-jp/japanese-700.css'
 
-// MarkdownPreview の CSS は HomePage / ReadmeView の初回描画 (MDEditor.Markdown)
-// で使うので eager。フルエディタの CSS は MarkdownEditor 自体に同梱して
-// React.lazy のチャンクで初めてロードされるようにする (= 編集に進まない
-// ユーザはダウンロードしない)。
-import '@uiw/react-markdown-preview/markdown.css'
 import App from './App.tsx'
 import './index.css'
 
+// React Router v7 の data router を使う (createBrowserRouter + RouterProvider)。
+// 単純な BrowserRouter だと useBlocker (編集ページの離脱警告) が動かないため。
+// 既存ルート定義は <App /> 内の <Routes> がそのまま握るので、ここは catch-all 1 本でよい。
+const router = createBrowserRouter([
+  { path: '*', element: <App /> },
+])
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <BrowserRouter>
-      <App />
-    </BrowserRouter>
+    <RouterProvider router={router} />
   </StrictMode>,
 )

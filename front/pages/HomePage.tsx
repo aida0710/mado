@@ -1,16 +1,13 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
-import MDEditor from '@uiw/react-md-editor'
+import { Link } from 'react-router-dom'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import rehypeSanitize from 'rehype-sanitize'
 import type { z } from 'zod'
 import { api } from '../lib/api/client'
 import { Note } from '../lib/api/types'
 
-// 編集モーダルと履歴モーダルはクリック後にしか描画されないので、
-// React.lazy() で別チャンクに切り出す。MarkdownEditor チャンクには
-// CodeMirror ベースの重量級 UI と専用 CSS が同梱される。
-const MarkdownEditor = lazy(() =>
-  import('../components/MarkdownEditor').then(m => ({ default: m.MarkdownEditor })),
-)
+// 履歴モーダルはボタンを押した後にだけ描画する。React.lazy() で別チャンクへ。
 const NoteHistoryModal = lazy(() =>
   import('../components/NoteHistoryModal').then(m => ({ default: m.NoteHistoryModal })),
 )
@@ -31,7 +28,6 @@ function formatByline(iso: string): string {
 
 export default function HomePage() {
   const [data, setData] = useState<NoteData | null>(null)
-  const [editing, setEditing] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
 
   const refresh = useCallback(() => {
@@ -57,10 +53,10 @@ export default function HomePage() {
       <div data-color-mode="light">
         <header className="page-head">
           <h2>Team note</h2>
-          <button className="ghost" onClick={() => setEditing(true)}>
+          <Link className="ghost" to="/edit-note">
             <span aria-hidden>✎</span>
             {data.exists ? '編集' : '作成'}
-          </button>
+          </Link>
           <button
             className="ghost"
             onClick={() => setHistoryOpen(true)}
@@ -74,7 +70,14 @@ export default function HomePage() {
 
         {isPresent ? (
           <article className="article mt-2">
-            <MDEditor.Markdown source={data.body} rehypePlugins={[[rehypeSanitize]]} />
+            <div className="markdown-body">
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                rehypePlugins={[rehypeSanitize]}
+              >
+                {data.body}
+              </ReactMarkdown>
+            </div>
           </article>
         ) : (
           <div className="empty-state">
@@ -84,9 +87,9 @@ export default function HomePage() {
               <li>他アプリケーションの情報</li>
               <li>ストレージ接続まわりの補足 (どこに何があるか)</li>
             </ul>
-            <button className="empty-state__cta" onClick={() => setEditing(true)}>
+            <Link className="empty-state__cta" to="/edit-note">
               最初のノートを書く
-            </button>
+            </Link>
           </div>
         )}
 
@@ -98,20 +101,6 @@ export default function HomePage() {
         )}
       </div>
 
-      {editing && (
-        <Suspense fallback={null}>
-          <MarkdownEditor
-            title="Edit Home"
-            initialBody={data.exists ? data.body : ''}
-            initialEditor={data.exists ? (data.last_editor ?? '') : ''}
-            onSave={(body, editor) =>
-              api.putNote('home', body, editor).then(() => undefined)
-            }
-            onSaved={() => { setEditing(false); refresh() }}
-            onClose={() => setEditing(false)}
-          />
-        </Suspense>
-      )}
       {historyOpen && (
         <Suspense fallback={null}>
           <NoteHistoryModal

@@ -518,7 +518,6 @@ pre { font-size: 12px; }
 
 /* Modifiers */
 .modal--narrow { width: min(420px, 100%); max-width: 420px; }
-.modal--editor { width: min(880px, 100%); max-width: 880px; }
 
 /* ── Choice row (checkbox / radio + 主ラベル + 説明) ──────────────
    ConnectionForm の Path-style URL / ListObjects API バージョン用。
@@ -663,98 +662,433 @@ pre { font-size: 12px; }
 }
 
 /* ====================================================================
-   @uiw markdown editor library — surgical CSS overrides
+   Markdown body — react-markdown 出力をくるむラッパー (.markdown-body)
    ==================================================================== */
 
-.md-shell { margin: var(--space-3) 0; }
-.md-shell .w-md-editor {
-  border: 1px solid var(--color-rule-strong);
-  border-radius: var(--radius-2);
-  box-shadow: none;
-  background: var(--paper);
-}
-.md-shell .w-md-editor-toolbar { border-radius: var(--radius-2) var(--radius-2) 0 0; }
-.md-shell .w-md-editor-text { position: relative; height: 100%; }
-.md-shell .w-md-editor-text-input,
-.md-shell .w-md-editor-text-pre,
-.md-shell .w-md-editor textarea {
-  width: 100% !important;
-  height: 100% !important;
-  resize: none !important;
-  background-color: transparent !important;
-  font-family: var(--font-mono) !important;
-}
-.md-shell .w-md-editor-text-input {
-  line-height: inherit !important;
-  padding: inherit !important;
-}
+/* react-markdown はラッパー要素を持たないので親側で `<div class="markdown-body">`
+   を用意して囲む。HomePage / ReadmeView の表示用、編集ページの preview には
+   使わない (Monaco 内で完結)。 */
 
-/* Markdown preview をくるんだ .article の中で serif 化される。
-   wmde の生 ul/ol は preflight で消えるので browser default に戻す。 */
-.wmde-markdown ul,
-.wmde-markdown ol {
+/* .article の外: ul/ol を browser default に戻す (Tailwind preflight 対策)。 */
+.markdown-body ul,
+.markdown-body ol {
   list-style: revert;
   padding: revert;
   margin: revert;
 }
-.wmde-markdown li { display: list-item; }
+.markdown-body li { display: list-item; }
 
-/* .article の中の wmde を sans に上書き。本文・見出しすべて sans で読みやすく、
-   コードブロックは mono。色は ink scale に揃える。 */
-.article .wmde-markdown {
+/* .article の中: sans 17px の editorial 本文。見出しは ink-12、本文は ink-11。
+   コードは mono。 */
+.article .markdown-body {
   background: transparent;
   color: var(--ink-11);
   font: 400 17px/1.75 var(--font-sans);
 }
-.article .wmde-markdown p,
-.article .wmde-markdown li { font-family: inherit; line-height: inherit; }
-.article .wmde-markdown h1,
-.article .wmde-markdown h2,
-.article .wmde-markdown h3,
-.article .wmde-markdown h4 {
+.article .markdown-body p,
+.article .markdown-body li { font-family: inherit; line-height: inherit; }
+.article .markdown-body h1,
+.article .markdown-body h2,
+.article .markdown-body h3,
+.article .markdown-body h4 {
   font-family: var(--font-sans);
   letter-spacing: -0.005em;
   color: var(--ink-12);
 }
-.article .wmde-markdown h1 { font-weight: 700; font-size: 1.7em; margin-top: 1.4em; }
-.article .wmde-markdown h2 { font-weight: 700; font-size: 1.35em; margin-top: 1.4em; }
-.article .wmde-markdown h3 { font-weight: 600; font-size: 1.1em; margin-top: 1.3em; }
-.article .wmde-markdown blockquote {
+.article .markdown-body h1 { font-weight: 700; font-size: 1.7em; margin-top: 1.4em; }
+.article .markdown-body h2 { font-weight: 700; font-size: 1.35em; margin-top: 1.4em; }
+.article .markdown-body h3 { font-weight: 600; font-size: 1.1em; margin-top: 1.3em; }
+.article .markdown-body blockquote {
   border-left: 2px solid var(--ink-9);
   background: transparent;
   margin-left: 0;
   padding: 0 var(--space-4);
   color: var(--ink-9);
 }
-.article .wmde-markdown code {
+.article .markdown-body code {
   background: var(--ink-1);
   border-radius: var(--radius-1);
   padding: 0.1em 0.35em;
   font-size: 0.9em;
+  font-family: var(--font-mono);
 }
-.article .wmde-markdown pre {
+.article .markdown-body pre {
   background: var(--ink-0);
   border: 1px solid var(--rule);
   border-radius: var(--radius-2);
   padding: var(--space-3) var(--space-4);
+  overflow-x: auto;
 }
-.article .wmde-markdown pre > code {
+.article .markdown-body pre > code {
   background: transparent;
   padding: 0;
   font-size: 0.9em;
 }
-.article .wmde-markdown a {
+.article .markdown-body a {
   color: var(--ink-12);
   text-underline-offset: 3px;
   text-decoration-thickness: 1px;
 }
-.article .wmde-markdown hr {
+.article .markdown-body hr {
   border: 0;
   height: 1px;
   background: var(--rule);
   margin: var(--space-6) 0;
 }
-.article .wmde-markdown table th,
-.article .wmde-markdown table td {
+.article .markdown-body table {
+  border-collapse: collapse;
+  margin: var(--space-3) 0;
+}
+.article .markdown-body table th,
+.article .markdown-body table td {
+  border: 1px solid var(--color-rule-strong);
+  padding: 4px 10px;
+}
+
+/* ── compact バリアント — ReadmeView 用 ─────────────────────────────
+   StorageBucket ページの README は本文よりは「補足情報」なので、ホームの
+   Team note (17px) より一段小さく表示する。さらに長い README は 15 行で
+   打ち切り、`▼ すべて表示` ボタンで全展開できるようにする (下に gradient fade)。 */
+.article .markdown-body--compact {
+  font: 400 13.5px/1.65 var(--font-sans);
+  color: var(--ink-11);
+}
+.article .markdown-body--compact h1 { font-size: 1.3em; margin-top: 1.1em; }
+.article .markdown-body--compact h2 { font-size: 1.15em; margin-top: 1.0em; }
+.article .markdown-body--compact h3 { font-size: 1.02em; margin-top: 0.9em; }
+.article .markdown-body--compact h4 { font-size: 0.98em; margin-top: 0.85em; }
+.article .markdown-body--compact code { font-size: 0.92em; }
+.article .markdown-body--compact pre {
+  padding: var(--space-2) var(--space-3);
+  font-size: 0.92em;
+}
+.article .markdown-body--compact blockquote { padding: 0 var(--space-3); }
+
+/* 15 行を超える README は折りたたむ。`lh` は要素の line-height 1 行分の高さ。
+   Chrome 99+ / Safari 16.4+ / Firefox 120+ で利用可。下端の gradient fade で
+   切れ目を視覚的に和らげる。`max-height` を持つ要素は position: relative にして
+   ::after で paper への減衰を載せる。 */
+.markdown-body--compact.is-collapsed {
+  max-height: 15lh;
+  overflow: hidden;
+  position: relative;
+}
+.markdown-body--compact.is-collapsed::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 56px;
+  pointer-events: none;
+  background: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--paper) 0%, transparent),
+    var(--paper)
+  );
+}
+
+/* 「すべて表示 / 折りたたむ」 ボタン。article の末尾に独立 row として配置。
+   控えめな ghost 風 — newspaper の section break と同居しても浮かない見た目に。 */
+.markdown-body__expand {
+  display: block;
+  margin: var(--space-2) auto 0;
+  padding: 4px 14px;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-1);
+  background: transparent;
+  font: 500 11px/1.4 var(--font-sans);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-9);
+  cursor: pointer;
+  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+}
+.markdown-body__expand:hover {
+  background: var(--ink-0);
   border-color: var(--color-rule-strong);
+  color: var(--ink-12);
+}
+
+/* ====================================================================
+   Edit pages — /edit-note と /storage/:connId/edit-readme/:bucket/*
+   ====================================================================
+   両ページの共通シェル。editorial 路線維持: paper bg、直角枠、hairline 罫。
+   1-pane (note 編集) と 2-pane (README 編集) を leftPane の有無で切替。 */
+
+.editpage {
+  display: flex;
+  flex-direction: column;
+  /* viewport から masthead と main の垂直マージンを引いた残りを *固定高さ* で占有。
+     min-height ではなく height を使うのが重要 — 内容が増えても外側 (<main>) が
+     スクロールせず、Monaco / .filelist__rows が内側で縦スクロールを担当する。 */
+  height: calc(100vh - 160px);
+  /* 念のため 100dvh に対応するブラウザでは動的ビューポートを優先 (Safari の
+     アドレスバー出し入れに追従) 。古いブラウザは上の値にフォールバックする。 */
+  height: calc(100dvh - 160px);
+  /* デバイスが極端に低い場合の最低限の編集可能高さ */
+  min-height: 360px;
+  border: 1px solid var(--color-rule-strong);
+  border-radius: 0;
+  background: var(--paper);
+  overflow: hidden;
+}
+.editpage__head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--rule);
+}
+.editpage__head-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.editpage__kicker { margin: 0 0 var(--space-1); }
+.editpage__title {
+  margin: 0;
+  font: 500 22px/1.2 var(--font-serif);
+  color: var(--ink-12);
+  font-variation-settings: 'opsz' 22;
+}
+/* sidebar toggle はモバイルでのみ出す (CSS で制御)。デスクトップでは display:none で
+   隠れる。React 側は leftPane が undefined の場合に DOM にも出さない。 */
+.editpage__sidebar-toggle {
+  display: none;
+  flex: 0 0 auto;
+}
+
+/* body: 1-pane なら全幅、2-pane なら左サイドバー + 右エディタ。
+   min-height: 0 + overflow: hidden で「親の固定高さを子に正しく伝える」役割。
+   これがないと内側の Monaco が無限に縦に伸びてしまう (flex 子の暗黙の min-height
+   auto による)。 */
+.editpage__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+}
+.editpage--two-pane .editpage__body {
+  /* sidebar は固定幅、editor は残り全部 */
+}
+.editpage__sidebar {
+  flex: 0 0 280px;
+  border-right: 1px solid var(--rule);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--paper) 92%, var(--ink-3));
+}
+.editpage__editor-area {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+}
+.editpage__editor-area > * { flex: 1 1 auto; min-height: 0; }
+
+/* footer bar: 編集者名 + actions */
+.editpage__bar {
+  flex: 0 0 auto;
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  flex-wrap: wrap;
+  padding: var(--space-3) var(--space-4);
+  border-top: 1px solid var(--rule);
+}
+.editpage__name {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 200px;
+}
+.editpage__name .label {
+  font: 600 10.5px/1 var(--font-sans);
+  color: var(--ink-7);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+.editpage__name input {
+  padding: 6px 10px;
+  border: 1px solid var(--color-rule-strong);
+  border-radius: var(--radius-1);
+  background: var(--paper);
+  font: inherit;
+  color: var(--ink-12);
+}
+.editpage__error {
+  margin: 0;
+  color: var(--danger);
+  font: 400 12px/1.4 var(--font-sans);
+}
+.editpage__actions {
+  margin-left: auto;
+  display: flex;
+  gap: var(--space-2);
+}
+.editpage__save {
+  padding: 6px 18px;
+  background: var(--ink-12);
+  color: var(--paper);
+  border: 1px solid var(--ink-12);
+  border-radius: var(--radius-1);
+  font: 500 12px/1.4 var(--font-sans);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+.editpage__save:hover:not(:disabled) { background: var(--ink-11); border-color: var(--ink-11); }
+.editpage__save:disabled { opacity: 0.45; cursor: default; }
+
+/* ────────────── Mobile (<700px) — tier 1 + tier 2 ──────────────
+   tier 1: head / footer の高さを節約してエディタ領域を最大化。footer は
+            「編集者名 (full-width)」 → 「ボタン (右寄せ)」 の縦積み。
+   tier 2: 2-pane の左サイドバーを collapsible 化。デフォルト畳んで toggle ボタン
+            で開く。開いた状態でも縦積み (上に sidebar、下に Monaco)。           */
+@media (max-width: 700px) {
+  /* tier 1: head 圧縮、ボタン表示 */
+  .editpage__head {
+    padding: var(--space-2) var(--space-3);
+    gap: var(--space-2);
+  }
+  .editpage__title { font-size: 18px; }
+  .editpage__kicker { margin-bottom: 2px; }
+  .editpage__sidebar-toggle { display: inline-flex; }
+
+  /* tier 2: 2-pane を縦積み (open のときのみ sidebar 出現) */
+  .editpage--two-pane .editpage__body { flex-direction: column; }
+  .editpage__sidebar {
+    flex: 0 0 auto;
+    max-height: 240px;
+    border-right: 0;
+    border-bottom: 1px solid var(--rule);
+  }
+  /* 閉じている時は完全に消す。data-mobile-open はデスクトップでは無視される
+     (mobile breakpoint 内のルール) ので影響なし。                            */
+  .editpage__sidebar[data-mobile-open="false"] { display: none; }
+
+  /* tier 1: footer は縦積み — 編集者名フル幅 → ボタン行 右寄せ */
+  .editpage__bar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+  }
+  .editpage__name {
+    min-width: 0;
+    width: 100%;
+  }
+  .editpage__actions {
+    margin-left: auto;
+    /* キャンセル / 保存 ボタンを左→右に並べたまま末尾右寄せ */
+  }
+  .editpage__error { order: 1; }   /* エラーは編集者名とボタン行の間に挟む */
+}
+
+/* ====================================================================
+   InsertableFileList — README 編集ページの左ペイン
+   ==================================================================== */
+
+.filelist {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+}
+.filelist__crumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  align-items: baseline;
+  padding: var(--space-3) var(--space-3);
+  border-bottom: 1px solid var(--rule);
+  font: 400 12px/1.4 var(--font-mono);
+  color: var(--ink-9);
+}
+.filelist__crumb {
+  background: transparent;
+  border: 0;
+  padding: 2px 4px;
+  font: inherit;
+  color: var(--ink-9);
+  cursor: pointer;
+  border-radius: var(--radius-1);
+}
+.filelist__crumb:hover:not(:disabled) {
+  background: var(--ink-1);
+  color: var(--ink-12);
+}
+.filelist__crumb:disabled {
+  color: var(--ink-12);
+  cursor: default;
+  font-weight: 600;
+}
+.filelist__crumb-wrap { display: contents; }
+.filelist__crumb-sep { color: var(--ink-5); padding: 0 2px; }
+
+.filelist__rows {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: var(--space-1) 0;
+  margin: 0;
+  list-style: none;
+}
+.filelist__row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 0 var(--space-2);
+}
+.filelist__row + .filelist__row { border-top: 1px solid var(--rule); }
+.filelist__name {
+  flex: 1 1 auto;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  padding: 8px 6px;
+  font: 400 13px/1.4 var(--font-mono);
+  color: var(--ink-11);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.filelist__name:hover { background: var(--ink-1); color: var(--ink-12); }
+.filelist__icon { flex: 0 0 auto; font-size: 12px; opacity: 0.85; }
+.filelist__open {
+  flex: 0 0 auto;
+  background: transparent;
+  border: 1px solid var(--rule);
+  padding: 3px 8px;
+  font: 400 10.5px/1.3 var(--font-sans);
+  color: var(--ink-9);
+  cursor: pointer;
+  border-radius: var(--radius-1);
+  letter-spacing: 0.08em;
+}
+.filelist__open:hover { background: var(--paper); border-color: var(--color-rule-strong); color: var(--ink-12); }
+
+.filelist__loading,
+.filelist__empty,
+.filelist__error,
+.filelist__hint {
+  padding: var(--space-3) var(--space-3);
+  margin: 0;
+  font: 400 12px/1.5 var(--font-sans);
+  color: var(--ink-7);
+}
+.filelist__error { color: var(--danger); }
+.filelist__hint {
+  border-top: 1px solid var(--rule);
+  background: var(--ink-0);
+  font-style: italic;
 }

@@ -1,15 +1,15 @@
-import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
-import MDEditor from '@uiw/react-md-editor'
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import rehypeSanitize from 'rehype-sanitize'
 import { api } from '../lib/api/client'
 import type { z } from 'zod'
 import { Readme } from '../lib/api/types'
+import { encPath } from '../lib/route'
 
-// 編集 UI と履歴ビューワは「ボタンを押した後にだけ」マウントされる。
+// 履歴ビューワは「ボタンを押した後にだけ」マウントされる。
 // React.lazy() で別チャンクに分け、初回ロード時の JS / CSS 量を絞る。
-const MarkdownEditor = lazy(() =>
-  import('./MarkdownEditor').then(m => ({ default: m.MarkdownEditor })),
-)
 const ReadmeHistoryModal = lazy(() =>
   import('./ReadmeHistoryModal').then(m => ({ default: m.ReadmeHistoryModal })),
 )
@@ -24,8 +24,11 @@ interface Props {
 
 export function ReadmeView({ connId, bucket, prefix }: Props) {
   const [data, setData] = useState<ReadmeData | null>(null)
-  const [editing, setEditing] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
+  // README プレビューは普段は 15 行で打ち切り。長い時だけ「すべて表示」が出る。
+  const [expanded, setExpanded] = useState(false)
+  const [needsExpand, setNeedsExpand] = useState(false)
+  const bodyRef = useRef<HTMLDivElement>(null)
 
   // refresh: 通常のリロード。キャッシュが効いていれば即時に解決する。
   // forceRefresh: 🔄 ボタンから呼ぶ。キャッシュを破棄してから fetch する
@@ -41,7 +44,31 @@ export function ReadmeView({ connId, bucket, prefix }: Props) {
 
   useEffect(() => { refresh() }, [refresh])
 
+  // 表示対象が prefix を跨いだら expand 状態をリセット (別ディレクトリでは別カウント)。
+  useEffect(() => { setExpanded(false) }, [connId, bucket, prefix])
+
+  // 折りたたみ中に「内容が 15 行を超えているか」を判定。展開中は再測定しない
+  // (overflow が消えてもボタンを出し続けるため)。ResizeObserver で画面幅変化にも追従。
+  const currentBody = data?.exists ? data.body : ''
+  useLayoutEffect(() => {
+    const el = bodyRef.current
+    if (!el) return
+    const check = () => {
+      if (expanded) return
+      setNeedsExpand(el.scrollHeight > el.clientHeight + 1)
+    }
+    check()
+    const ro = new ResizeObserver(check)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [currentBody, expanded])
+
   if (!data) return null
+
+  // 編集ページへの URL — bucket は単一セグメントなので encodeURIComponent で十分。
+  // prefix は `/` を含み得るので encPath で path segment ごとに encode。
+  const editHref = `/storage/${encodeURIComponent(connId)}/edit-readme/${encodeURIComponent(bucket)}/${encPath(prefix)}`
+
   return (
     <section
       className="pb-5"
@@ -51,10 +78,10 @@ export function ReadmeView({ connId, bucket, prefix }: Props) {
       <header className="flex flex-wrap items-baseline gap-x-4 gap-y-2 mb-3">
         <p className="kicker m-0">S3 README</p>
         <span className="ml-auto flex items-center gap-2">
-          <button className="ghost" onClick={() => setEditing(true)}>
+          <Link className="ghost" to={editHref}>
             <span aria-hidden>✎</span>
             {data.exists ? '編集' : '作成'}
-          </button>
+          </Link>
           <button
             className="ghost"
             onClick={() => setHistoryOpen(true)}
@@ -80,26 +107,32 @@ export function ReadmeView({ connId, bucket, prefix }: Props) {
       </header>
       {data.exists ? (
         <article className="article mt-1">
-          <MDEditor.Markdown source={data.body} rehypePlugins={[[rehypeSanitize]]} />
+          <div
+            ref={bodyRef}
+            className={`markdown-body markdown-body--compact${expanded ? '' : ' is-collapsed'}`}
+          >
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              rehypePlugins={[rehypeSanitize]}
+            >
+              {data.body}
+            </ReactMarkdown>
+          </div>
+          {(needsExpand || expanded) && (
+            <button
+              type="button"
+              className="markdown-body__expand"
+              onClick={() => setExpanded(e => !e)}
+              aria-expanded={expanded}
+            >
+              {expanded ? '▲ 折りたたむ' : '▼ すべて表示'}
+            </button>
+          )}
         </article>
       ) : (
         <p className="text-[13px] text-ink-7">
           README なし
         </p>
-      )}
-      {editing && (
-        <Suspense fallback={null}>
-          <MarkdownEditor
-            title={`Edit README — ${prefix || '(root)'}`}
-            initialBody={data.exists ? data.body : ''}
-            initialEditor={data.exists ? (data.last_editor ?? '') : ''}
-            onSave={(body, editor) =>
-              api.putReadme(connId, bucket, prefix, body, editor).then(() => undefined)
-            }
-            onSaved={() => { setEditing(false); refresh() }}
-            onClose={() => setEditing(false)}
-          />
-        </Suspense>
       )}
       {historyOpen && (
         <Suspense fallback={null}>

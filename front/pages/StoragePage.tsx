@@ -1,10 +1,14 @@
-import { useEffect, useReducer } from 'react'
+import { lazy, Suspense, useEffect, useReducer } from 'react'
 import { Route, Routes, Link } from 'react-router-dom'
 import { api } from '../lib/api/client'
 import type { Connection } from '../lib/api/types'
 import { ConnectionContext } from '../lib/connectionContext'
 import StorageIndex from './StorageIndex'
 import StorageBucket from './StorageBucket'
+
+// README 編集ページは Monaco エディタを抱えるので別チャンクに切り出す。
+// 編集ボタンを押さないユーザに ~1MB のロードを発生させないため。
+const ReadmeEditPage = lazy(() => import('./ReadmeEditPage'))
 
 interface Props { connId: string }
 
@@ -63,10 +67,15 @@ export default function StoragePage({ connId }: Props) {
   }
   return (
     <ConnectionContext.Provider value={connection}>
-      <Routes>
-        <Route path="/"         element={<StorageIndex  connId={connId} />} />
-        <Route path=":bucket/*" element={<StorageBucket connId={connId} />} />
-      </Routes>
+      <Suspense fallback={<p className="text-[13px] text-ink-7">読み込み中…</p>}>
+        <Routes>
+          <Route path="/"                       element={<StorageIndex  connId={connId} />} />
+          {/* edit-readme は固定セグメントから始まるので :bucket/* より specificity が高く、
+              :bucket = 'edit-readme' という偶発的衝突は発生しない。               */}
+          <Route path="edit-readme/:bucket/*"   element={<ReadmeEditPage connId={connId} />} />
+          <Route path=":bucket/*"               element={<StorageBucket  connId={connId} />} />
+        </Routes>
+      </Suspense>
     </ConnectionContext.Provider>
   )
 }

@@ -1,9 +1,14 @@
+import { lazy, Suspense } from 'react'
 import { Link, Route, Routes, useLocation, useParams } from 'react-router-dom'
 import HomePage from './pages/HomePage'
 import StoragePage from './pages/StoragePage'
 import StorageLanding from './pages/StorageLanding'
 import ConnectionsPage from './pages/ConnectionsPage'
 import './App.css'
+
+// NoteEditPage は Monaco エディタを抱える重量級ページ (~1MB)。
+// ホーム閲覧だけのユーザに Monaco をロードさせないよう、別チャンクに切り出す。
+const NoteEditPage = lazy(() => import('./pages/NoteEditPage'))
 
 /* ── Tab — masthead 右側のナビ。
    editorial: 小キャップ + tracking。アクティブは細い下線で示す
@@ -82,12 +87,15 @@ export default function App() {
       </header>
 
       <main className="mado-page-in pt-6 pb-12">
-        <Routes>
-          <Route path="/"                  element={<HomePage />} />
-          <Route path="/connections"       element={<ConnectionsPage />} />
-          <Route path="/storage"           element={<StorageLanding />} />
-          <Route path="/storage/:connId/*" element={<StoragePageWithKey />} />
-        </Routes>
+        <Suspense fallback={<p className="text-[13px] text-ink-7">読み込み中…</p>}>
+          <Routes>
+            <Route path="/"                  element={<HomePage />} />
+            <Route path="/edit-note"         element={<NoteEditPage />} />
+            <Route path="/connections"       element={<ConnectionsPage />} />
+            <Route path="/storage"           element={<StorageLanding />} />
+            <Route path="/storage/:connId/*" element={<StoragePageWithKey />} />
+          </Routes>
+        </Suspense>
       </main>
     </div>
   )
