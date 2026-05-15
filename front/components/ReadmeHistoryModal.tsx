@@ -183,10 +183,7 @@ export function ReadmeHistoryModal({ connId, bucket, prefix, currentBody, onClos
                     </p>
                   )}
                   <article className="article">
-                    {/* README 履歴は ReadmeView と同じ compact スタイルで揃える
-                        (バリアントの一貫性 — 通常表示と履歴で字体が変わらない)。
-                        15 行 collapse はモーダル内の overflow:auto に任せるので不要。 */}
-                    <div className="markdown-body markdown-body--compact">
+                    <div className="markdown-body">
                       <ReactMarkdown
                         remarkPlugins={[remarkGfm]}
                         rehypePlugins={[rehypeSanitize]}

@@ -26,6 +26,8 @@ export function ReadmeView({ connId, bucket, prefix }: Props) {
   const [data, setData] = useState<ReadmeData | null>(null)
   const [historyOpen, setHistoryOpen] = useState(false)
   // README プレビューは普段は 15 行で打ち切り。長い時だけ「すべて表示」が出る。
+  // フォントサイズは HomePage と同じ (`.markdown-body` のベース 17px) — ここでは
+  // 折りたたみ機能だけ載せる。
   const [expanded, setExpanded] = useState(false)
   const [needsExpand, setNeedsExpand] = useState(false)
   const bodyRef = useRef<HTMLDivElement>(null)
@@ -109,7 +111,7 @@ export function ReadmeView({ connId, bucket, prefix }: Props) {
         <article className="article mt-1">
           <div
             ref={bodyRef}
-            className={`markdown-body markdown-body--compact${expanded ? '' : ' is-collapsed'}`}
+            className={`markdown-body${expanded ? '' : ' is-collapsed'}`}
           >
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
