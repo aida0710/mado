@@ -155,7 +155,7 @@ pre { font-size: 12px; }
   margin: var(--space-4) 0 var(--space-5);
 }
 .page-head h2 {
-  margin: 0;
+  margin: 0 auto 0 0;  /* h2 の右に auto margin。後続の actions (編集/履歴 等) を右端へ */
   font: 500 30px/1.15 var(--font-serif);
   letter-spacing: -0.018em;
   text-wrap: balance;
