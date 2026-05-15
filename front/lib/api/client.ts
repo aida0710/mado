@@ -35,10 +35,13 @@ const API_BASE = '/api/internal'
 const CACHE_TTL_MS      = 5 * 60 * 1000
 const LONG_CACHE_TTL_MS = 6 * 60 * 60 * 1000
 
-const listCache      = new TTLCache<z.infer<typeof StorageList>>(LONG_CACHE_TTL_MS)
-const readmeCache    = new TTLCache<z.infer<typeof Readme>>(LONG_CACHE_TTL_MS)
-const tarCache       = new TTLCache<z.infer<typeof TarPreview>>(LONG_CACHE_TTL_MS)
-const bucketsCache   = new TTLCache<z.infer<typeof ListBuckets>>(LONG_CACHE_TTL_MS)
+// 長 TTL なキャッシュは localStorage にも書き出してブラウザリロード越しでも
+// 生かす (= 同じ prefix を再度開いた時、MDX への 7〜24 秒の fetch を避ける)。
+// favorites は短 TTL + DB 由来で頻繁に変わるので、永続化せず in-memory のみ。
+const listCache      = new TTLCache<z.infer<typeof StorageList>>(LONG_CACHE_TTL_MS,    { persistKey: 'mado.cache.list' })
+const readmeCache    = new TTLCache<z.infer<typeof Readme>>(LONG_CACHE_TTL_MS,         { persistKey: 'mado.cache.readme' })
+const tarCache       = new TTLCache<z.infer<typeof TarPreview>>(LONG_CACHE_TTL_MS,     { persistKey: 'mado.cache.tar' })
+const bucketsCache   = new TTLCache<z.infer<typeof ListBuckets>>(LONG_CACHE_TTL_MS,    { persistKey: 'mado.cache.buckets' })
 const favoritesCache = new TTLCache<z.infer<typeof FavoriteBuckets>>(CACHE_TTL_MS)
 
 // キャッシュキー作成。'|' は S3 のキー / prefix では出現しないため衝突しない。
