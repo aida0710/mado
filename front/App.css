@@ -669,14 +669,19 @@ pre { font-size: 12px; }
    を用意して囲む。HomePage / ReadmeView の表示用、編集ページの preview には
    使わない (Monaco 内で完結)。 */
 
-/* .article の外: ul/ol を browser default に戻す (Tailwind preflight 対策)。 */
+/* .article の外: ul/ol を browser default に戻す (Tailwind preflight 対策)。
+   margin だけは default の 1em を継ぐと隣接段落との間が空きすぎるので 0.5em に詰める。 */
 .markdown-body ul,
 .markdown-body ol {
   list-style: revert;
   padding: revert;
-  margin: revert;
+  margin: 0.5em 0;
 }
 .markdown-body li { display: list-item; }
+/* 段落も同じ 0.5em で揃える。隣り合った p + ul / ul + p / p + p で margin collapse
+   が効いて 0.5em (=6.75px) の一定間隔になる。一覧の直前に「ヒント文」を
+   書いた時に "詰まりすぎ" にも "離れすぎ" にもならない密度。 */
+.markdown-body p { margin: 0.5em 0; }
 
 /* .article の中: sans の compact 本文。HomePage の Team note も S3 README も
    このベースを使う。「補足情報の密度感」を出すために本文 13.5px / 行高 1.65、
