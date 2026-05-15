@@ -9,6 +9,8 @@ vi.mock('../lib/api/client', () => ({
     list: vi.fn(),
     invalidateList: vi.fn(),
     downloadUrl: vi.fn(() => 'http://x/dl'),
+    // CacheMeta は fetchedAt が null なら描画しないので、テストでは固定で null を返す。
+    lastFetched: { list: vi.fn(() => null) },
   },
 }))
 

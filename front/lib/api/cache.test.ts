@@ -66,4 +66,34 @@ describe('TTLCache', () => {
     cache.invalidatePrefix('a/')
     expect(cache._size()).toBe(1) // 'b/z' のみ
   })
+
+  describe('getFetchedAt', () => {
+    it('未登録のキーは null', () => {
+      const cache = new TTLCache<number>(60_000)
+      expect(cache.getFetchedAt('nope')).toBeNull()
+    })
+
+    it('値が確定したタイミングをエポック ms で返す', async () => {
+      vi.setSystemTime(new Date('2026-05-15T10:30:00Z'))
+      const cache = new TTLCache<number>(60_000)
+      await cache.get('k', async () => 42)
+      // get 後の "現在時刻" が fetchedAt として返る (TTL は内部の expiresAt から逆算)
+      expect(cache.getFetchedAt('k')).toBe(new Date('2026-05-15T10:30:00Z').getTime())
+    })
+
+    it('in-flight (value 未確定) のときは null を返す — 取れたタイミングが確定しないので', () => {
+      const cache = new TTLCache<number>(60_000)
+      // 解決させずに promise だけ走らせる
+      void cache.get('k', () => new Promise<number>(() => {}))
+      expect(cache.getFetchedAt('k')).toBeNull()
+    })
+
+    it('invalidate 後は null', async () => {
+      const cache = new TTLCache<number>(60_000)
+      await cache.get('k', async () => 1)
+      expect(cache.getFetchedAt('k')).not.toBeNull()
+      cache.invalidate('k')
+      expect(cache.getFetchedAt('k')).toBeNull()
+    })
+  })
 })
