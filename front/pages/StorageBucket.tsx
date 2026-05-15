@@ -1,10 +1,11 @@
 import { useCallback } from 'react'
-import { useParams, useSearchParams } from 'react-router-dom'
+import { Navigate, useParams, useSearchParams } from 'react-router-dom'
 import { Breadcrumb } from '../components/Breadcrumb'
 import { ConnectionSwitcher } from '../components/ConnectionSwitcher'
 import { StorageBrowser } from '../components/StorageBrowser'
 import { ReadmeView } from '../components/ReadmeView'
 import { PreviewDrawer } from '../components/PreviewDrawer'
+import { fileLinkToDirRedirect } from '../lib/route'
 
 interface Props { connId: string }
 
@@ -12,6 +13,15 @@ export default function StorageBucket({ connId }: Props) {
   const params = useParams<{ bucket: string; '*': string }>()
   const bucket = decodeURIComponent(params.bucket ?? '')
   const prefix = params['*'] ?? ''
+
+  // ファイル直リンク (末尾が `/` でない URL) なら、親ディレクトリのリスト +
+  // `?preview=<key>` にリダイレクトする。README に貼った Markdown リンクや
+  // 別アプリで生成された URL から「ファイルそのものに飛んできた」ケースで、
+  // 親の並びを開きつつ preview drawer をそのファイルに合わせて開いた状態に揃える。
+  // ディレクトリ判定は trailing slash 単純判定 — S3 慣習に沿うので確実。
+  if (prefix !== '' && !prefix.endsWith('/')) {
+    return <Navigate to={fileLinkToDirRedirect(connId, bucket, prefix)} replace />
+  }
 
   // 選択中ファイルは URL の ?preview=<key> で表現する。
   // 直リンク (deep-link) で復元可能、選択するたびに URL も更新するので
