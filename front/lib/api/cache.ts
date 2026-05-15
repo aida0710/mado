@@ -48,6 +48,15 @@ export class TTLCache<V> {
     }
   }
 
+  /** 該当キーの「値が確定したタイムスタンプ」(epoch ms)。値が無いか
+   *  まだ in-flight (promise だけ) なら null を返す。`expiresAt - ttlMs` を
+   *  逆算するので追加のメモリは不要。UI で「いつのキャッシュか」を出すのに使う。 */
+  getFetchedAt(key: string): number | null {
+    const cur = this.store.get(key)
+    if (!cur || cur.value === undefined) return null
+    return cur.expiresAt - this.ttlMs
+  }
+
   /** 1 キーを破棄 (次回 get で fetch される)。 */
   invalidate(key: string): void {
     this.store.delete(key)

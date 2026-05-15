@@ -258,6 +258,7 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
           isEmpty={isEmpty}
           totalLabel={totalLabel}
           entryCount={dirs.length + files.length}
+          fetchedAt={api.lastFetched.list(connId, bucket, effectivePrefix, history[pageIdx] ?? {}, { recursive })}
           onPrev={prev}
           onNext={next}
           onGoto={goto}

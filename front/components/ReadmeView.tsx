@@ -7,6 +7,7 @@ import { api } from '../lib/api/client'
 import type { z } from 'zod'
 import { Readme } from '../lib/api/types'
 import { encPath } from '../lib/route'
+import { CacheMeta } from './CacheMeta'
 
 // 履歴ビューワは「ボタンを押した後にだけ」マウントされる。
 // React.lazy() で別チャンクに分け、初回ロード時の JS / CSS 量を絞る。
@@ -100,6 +101,7 @@ export function ReadmeView({ connId, bucket, prefix }: Props) {
           >
             <span aria-hidden>↻</span>
           </button>
+          <CacheMeta fetchedAt={api.lastFetched.readme(connId, bucket, prefix)} />
           {data.exists && data.last_editor && (
             <span className="text-[12px] text-ink-7">
               last by <span className="font-medium text-ink-11">{data.last_editor}</span>

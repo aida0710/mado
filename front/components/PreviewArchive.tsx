@@ -4,6 +4,7 @@ import type { z } from 'zod'
 import { TarPreview } from '../lib/api/types'
 import { fmtSize } from '../lib/format'
 import { TarEntryModal } from './TarEntryModal'
+import { CacheMeta } from './CacheMeta'
 
 type Resp = z.infer<typeof TarPreview>
 type Entry = Resp['entries'][number]
@@ -185,6 +186,7 @@ export function PreviewArchive({ connId, bucket, k }: { connId: string; bucket: 
       >
         <span aria-hidden>↻</span>
       </button>
+      <CacheMeta fetchedAt={api.lastFetched.tar(connId, bucket, k, { limit: pageSize, offset })} />
     </div>
   )
 

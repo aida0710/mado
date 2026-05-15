@@ -3,6 +3,7 @@ import {Link} from 'react-router-dom'
 import {api} from '../lib/api/client'
 import {ConnectionSwitcher} from '../components/ConnectionSwitcher'
 import {ReadmeSearchPanel} from '../components/ReadmeSearchPanel'
+import {CacheMeta} from '../components/CacheMeta'
 
 interface BucketRow {
     name: string;
@@ -78,7 +79,7 @@ export default function StorageIndex({connId}: Props) {
         <section>
             <header className="page-head">
                 <h2>Storage</h2>
-                <span className="ml-auto"/>
+                <CacheMeta fetchedAt={api.lastFetched.buckets(connId)} />
                 <button
                     className="ghost"
                     onClick={forceRefresh}

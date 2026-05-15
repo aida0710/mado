@@ -18,3 +18,20 @@ export function fmtAgo(iso: string): string {
   const d = Math.floor(h / 24)
   return `${d}d ago`
 }
+
+// キャッシュの「いつ取得したか」表示用。長 TTL (6h) 内なら同日なので時刻のみ、
+// 日付が変わってしまった場合は MM/DD HH:mm で日付も出す。
+export function fmtCacheTime(d: Date): string {
+  const now = new Date()
+  const sameDay =
+    d.getFullYear() === now.getFullYear() &&
+    d.getMonth()    === now.getMonth() &&
+    d.getDate()     === now.getDate()
+  if (sameDay) {
+    return d.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit', hour12: false })
+  }
+  return d.toLocaleString('ja-JP', {
+    month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  })
+}

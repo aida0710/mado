@@ -24,20 +24,21 @@ const API_BASE = '/api/internal'
 // セッション内 (タブを開いている間) のレスポンスキャッシュ。
 // S3 ディレクトリの行き来や preview の開閉でで毎回 fetch が走るのを抑える。
 //
-// 既定 TTL は 5 分: 「同じファイルをすぐ見直す」ユースケースを吸収しつつ、
-// 他人がアップロードした変更も次の 5 分で見える。明示的に最新化したいときは
-// UI の 🔄 refresh ボタンが invalidate を呼ぶ。
-const CACHE_TTL_MS = 5 * 60 * 1000
+// 短 TTL (5 分) は favorites 用 — DB 由来で他端末からの toggle が
+// 概ね 5 分以内に見える。
+// 長 TTL (6 時間) は list / tar / buckets / readme 用 — MDX のレイテンシが高い上、
+// 内容は「ディレクトリ階層」「tar の中身」「README 本文」のように増減が緩い。
+// UI で「取得 HH:mm」を薄く表示してキャッシュ鮮度を可視化する (api.lastFetched.*)。
+// 変更時は対応する invalidateXxx() を明示的に呼んで破棄する設計
+// (アップロード/削除/編集等のミューテーション + UI の 🔄 refresh ボタン)。
+// tar はアーカイブ自体が immutable なので実質永久キャッシュでも安全。
+const CACHE_TTL_MS      = 5 * 60 * 1000
+const LONG_CACHE_TTL_MS = 6 * 60 * 60 * 1000
 
-// バケット一覧は滅多に増減しないので長めの TTL。MDX への ListBuckets は 1 回 7-8 秒
-// かかることがあり、Storage タブを行き来した時の体感に直撃する。バケット作成/削除
-// 等のミューテーションは UI から invalidateBuckets() を呼んで破棄する想定。
-const BUCKETS_CACHE_TTL_MS = 6 * 60 * 60 * 1000  // 6 時間
-
-const listCache      = new TTLCache<z.infer<typeof StorageList>>(CACHE_TTL_MS)
-const readmeCache    = new TTLCache<z.infer<typeof Readme>>(CACHE_TTL_MS)
-const tarCache       = new TTLCache<z.infer<typeof TarPreview>>(CACHE_TTL_MS)
-const bucketsCache   = new TTLCache<z.infer<typeof ListBuckets>>(BUCKETS_CACHE_TTL_MS)
+const listCache      = new TTLCache<z.infer<typeof StorageList>>(LONG_CACHE_TTL_MS)
+const readmeCache    = new TTLCache<z.infer<typeof Readme>>(LONG_CACHE_TTL_MS)
+const tarCache       = new TTLCache<z.infer<typeof TarPreview>>(LONG_CACHE_TTL_MS)
+const bucketsCache   = new TTLCache<z.infer<typeof ListBuckets>>(LONG_CACHE_TTL_MS)
 const favoritesCache = new TTLCache<z.infer<typeof FavoriteBuckets>>(CACHE_TTL_MS)
 
 // キャッシュキー作成。'|' は S3 のキー / prefix では出現しないため衝突しない。
@@ -406,5 +407,40 @@ export const api = {
     )
     if (!res.ok) throw new Error(res.statusText)
     favoritesCache.invalidate(k('favorites', connId))
+  },
+
+  // 該当キャッシュエントリが「いつ S3 から取得されたか」を Date で返す。
+  // null = まだ取得していない / 取得失敗 / invalidate された直後。
+  // UI で「取得 HH:mm」を薄く表示してキャッシュ鮮度をユーザに見せるのに使う。
+  // 各メソッドは対応する fetch メソッドと同じ引数を取って同じ cache key を組み立てる。
+  lastFetched: {
+    list: (
+      connId: string,
+      bucket: string,
+      prefix: string,
+      cursor: { continuation?: string; startAfter?: string } = {},
+      opts: { recursive?: boolean } = {},
+    ): Date | null => {
+      const cacheKey = k('list', connId, bucket, prefix, opts.recursive ? 'r' : '', cursor.continuation, cursor.startAfter)
+      const at = listCache.getFetchedAt(cacheKey)
+      return at != null ? new Date(at) : null
+    },
+    readme: (connId: string, bucket: string, prefix: string): Date | null => {
+      const at = readmeCache.getFetchedAt(k('readme', connId, bucket, prefix))
+      return at != null ? new Date(at) : null
+    },
+    tar: (
+      connId: string,
+      bucket: string,
+      key: string,
+      opts: { limit?: number; offset?: number } = {},
+    ): Date | null => {
+      const at = tarCache.getFetchedAt(k('tar', connId, bucket, key, opts.offset ?? 0, opts.limit ?? 0))
+      return at != null ? new Date(at) : null
+    },
+    buckets: (connId: string): Date | null => {
+      const at = bucketsCache.getFetchedAt(k('buckets', connId))
+      return at != null ? new Date(at) : null
+    },
   },
 }
