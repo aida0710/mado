@@ -24,15 +24,20 @@ const API_BASE = '/api/internal'
 // セッション内 (タブを開いている間) のレスポンスキャッシュ。
 // S3 ディレクトリの行き来や preview の開閉でで毎回 fetch が走るのを抑える。
 //
-// TTL は 5 分: 「同じファイルをすぐ見直す」ユースケースを吸収しつつ、
+// 既定 TTL は 5 分: 「同じファイルをすぐ見直す」ユースケースを吸収しつつ、
 // 他人がアップロードした変更も次の 5 分で見える。明示的に最新化したいときは
 // UI の 🔄 refresh ボタンが invalidate を呼ぶ。
 const CACHE_TTL_MS = 5 * 60 * 1000
 
+// バケット一覧は滅多に増減しないので長めの TTL。MDX への ListBuckets は 1 回 7-8 秒
+// かかることがあり、Storage タブを行き来した時の体感に直撃する。バケット作成/削除
+// 等のミューテーションは UI から invalidateBuckets() を呼んで破棄する想定。
+const BUCKETS_CACHE_TTL_MS = 6 * 60 * 60 * 1000  // 6 時間
+
 const listCache      = new TTLCache<z.infer<typeof StorageList>>(CACHE_TTL_MS)
 const readmeCache    = new TTLCache<z.infer<typeof Readme>>(CACHE_TTL_MS)
 const tarCache       = new TTLCache<z.infer<typeof TarPreview>>(CACHE_TTL_MS)
-const bucketsCache   = new TTLCache<z.infer<typeof ListBuckets>>(CACHE_TTL_MS)
+const bucketsCache   = new TTLCache<z.infer<typeof ListBuckets>>(BUCKETS_CACHE_TTL_MS)
 const favoritesCache = new TTLCache<z.infer<typeof FavoriteBuckets>>(CACHE_TTL_MS)
 
 // キャッシュキー作成。'|' は S3 のキー / prefix では出現しないため衝突しない。
