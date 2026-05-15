@@ -24,25 +24,39 @@ const API_BASE = '/api/internal'
 // セッション内 (タブを開いている間) のレスポンスキャッシュ。
 // S3 ディレクトリの行き来や preview の開閉でで毎回 fetch が走るのを抑える。
 //
-// 短 TTL (5 分) は favorites 用 — DB 由来で他端末からの toggle が
-// 概ね 5 分以内に見える。
-// 長 TTL (6 時間) は list / tar / buckets / readme 用 — MDX のレイテンシが高い上、
-// 内容は「ディレクトリ階層」「tar の中身」「README 本文」のように増減が緩い。
-// UI で「取得 HH:mm」を薄く表示してキャッシュ鮮度を可視化する (api.lastFetched.*)。
-// 変更時は対応する invalidateXxx() を明示的に呼んで破棄する設計
-// (アップロード/削除/編集等のミューテーション + UI の 🔄 refresh ボタン)。
-// tar はアーカイブ自体が immutable なので実質永久キャッシュでも安全。
+// 短 TTL (5 分) — in-memory のみ、永続化しない:
+//   favorites: DB 由来で他端末からの toggle が概ね 5 分以内に見える。
+//   tar:       一度プレビューすれば次は別アーカイブを見るユースケースが多く、
+//              localStorage に貯める価値が薄い (容量も大きい)。in-flight dedup と
+//              ページャ内の前後ボタン用にのみ in-memory cache を残す。
+// 長 TTL (6 時間) — localStorage 永続化:
+//   list / readme / buckets: MDX のレイテンシが 7〜24 秒と高く、ディレクトリ階層や
+//              README の増減は緩いのでリロード越しのキャッシュ効果が大きい。
+//   UI で「取得 HH:mm」を薄く表示してキャッシュ鮮度を可視化 (api.lastFetched.*)。
+//   変更時は対応する invalidateXxx() を明示的に呼んで破棄する設計
+//   (アップロード/削除/編集等のミューテーション + UI の 🔄 refresh ボタン)。
 const CACHE_TTL_MS      = 5 * 60 * 1000
 const LONG_CACHE_TTL_MS = 6 * 60 * 60 * 1000
 
-// 長 TTL なキャッシュは localStorage にも書き出してブラウザリロード越しでも
-// 生かす (= 同じ prefix を再度開いた時、MDX への 7〜24 秒の fetch を避ける)。
-// favorites は短 TTL + DB 由来で頻繁に変わるので、永続化せず in-memory のみ。
 const listCache      = new TTLCache<z.infer<typeof StorageList>>(LONG_CACHE_TTL_MS,    { persistKey: 'mado.cache.list' })
 const readmeCache    = new TTLCache<z.infer<typeof Readme>>(LONG_CACHE_TTL_MS,         { persistKey: 'mado.cache.readme' })
-const tarCache       = new TTLCache<z.infer<typeof TarPreview>>(LONG_CACHE_TTL_MS,     { persistKey: 'mado.cache.tar' })
+const tarCache       = new TTLCache<z.infer<typeof TarPreview>>(CACHE_TTL_MS)
 const bucketsCache   = new TTLCache<z.infer<typeof ListBuckets>>(LONG_CACHE_TTL_MS,    { persistKey: 'mado.cache.buckets' })
 const favoritesCache = new TTLCache<z.infer<typeof FavoriteBuckets>>(CACHE_TTL_MS)
+
+// 以前 tar も localStorage に永続化していたので、その残骸を起動時に一度だけ
+// 掃除する。今のビルドはこのキーを読み書きしないため、放置しても害は無いが
+// 容量を食うので消しておく。失敗しても無害なので silent。
+if (typeof localStorage !== 'undefined') {
+  try {
+    const victims: string[] = []
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i)
+      if (k && k.startsWith('mado.cache.tar:')) victims.push(k)
+    }
+    for (const k of victims) localStorage.removeItem(k)
+  } catch { /* silent */ }
+}
 
 // キャッシュキー作成。'|' は S3 のキー / prefix では出現しないため衝突しない。
 const k = (...parts: Array<string | number | null | undefined>): string =>

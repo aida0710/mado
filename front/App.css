@@ -26,6 +26,8 @@
   --color-ink-12: #0a0904;
   --color-accent: #0a0904;
   --color-danger: #8a1c1c;          /* 暗朱 — editorial にふさわしい控えめな赤 */
+  --color-link:   #1d4ed8;          /* 標準的な web link 青 (Tailwind blue-700) */
+  --color-link-hover: #1e40af;      /*       同 blue-800 — hover で一段濃く */
   --color-rule:   rgba(10, 9, 4, 0.10);   /* hairline 罫線 */
   --color-rule-strong: rgba(10, 9, 4, 0.18);
 
@@ -746,10 +748,12 @@ pre { font-size: 12px; }
   font-size: 0.9em;
 }
 .article .markdown-body a {
-  color: var(--ink-12);
+  color: var(--color-link);
+  text-decoration: underline;
   text-underline-offset: 3px;
   text-decoration-thickness: 1px;
 }
+.article .markdown-body a:hover { color: var(--color-link-hover); }
 .article .markdown-body hr {
   border: 0;
   height: 1px;
