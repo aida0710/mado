@@ -1,5 +1,6 @@
 import { useEffect, useReducer } from 'react'
-import MDEditor from '@uiw/react-md-editor'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import rehypeSanitize from 'rehype-sanitize'
 import { api } from '../lib/api/client'
 import { fmtSize } from '../lib/format'
@@ -176,10 +177,14 @@ export function NoteHistoryModal({ slug, currentBody, onClose }: Props) {
                     </p>
                   )}
                   <article className="article">
-                    <MDEditor.Markdown
-                      source={bodyOf.body}
-                      rehypePlugins={[[rehypeSanitize]]}
-                    />
+                    <div className="markdown-body">
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
+                        rehypePlugins={[rehypeSanitize]}
+                      >
+                        {bodyOf.body}
+                      </ReactMarkdown>
+                    </div>
                   </article>
                 </>
               )}

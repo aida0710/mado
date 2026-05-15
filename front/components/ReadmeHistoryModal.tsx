@@ -1,5 +1,6 @@
 import { useEffect, useReducer } from 'react'
-import MDEditor from '@uiw/react-md-editor'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import rehypeSanitize from 'rehype-sanitize'
 import { api } from '../lib/api/client'
 import { fmtSize } from '../lib/format'
@@ -182,10 +183,17 @@ export function ReadmeHistoryModal({ connId, bucket, prefix, currentBody, onClos
                     </p>
                   )}
                   <article className="article">
-                    <MDEditor.Markdown
-                      source={bodyOf.body}
-                      rehypePlugins={[[rehypeSanitize]]}
-                    />
+                    {/* README 履歴は ReadmeView と同じ compact スタイルで揃える
+                        (バリアントの一貫性 — 通常表示と履歴で字体が変わらない)。
+                        15 行 collapse はモーダル内の overflow:auto に任せるので不要。 */}
+                    <div className="markdown-body markdown-body--compact">
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
+                        rehypePlugins={[rehypeSanitize]}
+                      >
+                        {bodyOf.body}
+                      </ReactMarkdown>
+                    </div>
                   </article>
                 </>
               )}
