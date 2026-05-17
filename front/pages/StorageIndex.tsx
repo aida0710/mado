@@ -3,6 +3,7 @@ import {Link} from 'react-router-dom'
 import {api} from '../lib/api/client'
 import {ConnectionSwitcher} from '../components/ConnectionSwitcher'
 import {ReadmeSearchPanel} from '../components/ReadmeSearchPanel'
+import {S3PathPanel} from '../components/S3PathPanel'
 import {CacheMeta} from '../components/CacheMeta'
 
 interface BucketRow {
@@ -93,6 +94,7 @@ export default function StorageIndex({connId}: Props) {
             </header>
 
             <ReadmeSearchPanel connId={connId}/>
+            <S3PathPanel connId={connId}/>
 
             {error && <p className="error">{error}</p>}
             {loading && buckets.length === 0 && (

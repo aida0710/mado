@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { encPath, fileLinkToDirRedirect } from './route'
+import { encPath, fileLinkToDirRedirect, parseS3Path } from './route'
 
 describe('encPath', () => {
   it('スラッシュ構造を保ったままセグメント単位で encode する', () => {
@@ -50,5 +50,47 @@ describe('fileLinkToDirRedirect', () => {
   it('connId / bucket / パスセグメントに特殊文字があっても encode する', () => {
     expect(fileLinkToDirRedirect('c 1', 'b/1', 'foo bar/file?.txt'))
       .toBe('/storage/c%201/b%2F1/foo%20bar/?preview=foo%20bar%2Ffile%3F.txt')
+  })
+})
+
+describe('parseS3Path', () => {
+  it('s3:// スキーム付きのディレクトリパスを分解する', () => {
+    expect(parseS3Path('s3://dataset/debug/x/'))
+      .toEqual({ bucket: 'dataset', prefix: 'debug/x/' })
+  })
+
+  it('末尾スラッシュなしの不完全 prefix も保持する (前方一致用)', () => {
+    expect(parseS3Path('s3://dataset/debug/dialogue-sidon-parakeet-v1/partition-test-1gp'))
+      .toEqual({ bucket: 'dataset', prefix: 'debug/dialogue-sidon-parakeet-v1/partition-test-1gp' })
+  })
+
+  it('bucket だけ (prefix なし)', () => {
+    expect(parseS3Path('s3://dataset')).toEqual({ bucket: 'dataset', prefix: '' })
+  })
+
+  it('bucket + 末尾スラッシュのみ', () => {
+    expect(parseS3Path('s3://dataset/')).toEqual({ bucket: 'dataset', prefix: '' })
+  })
+
+  it('s3:// スキームは省略可能', () => {
+    expect(parseS3Path('dataset/debug')).toEqual({ bucket: 'dataset', prefix: 'debug' })
+  })
+
+  it('スキームは大小文字を問わず剥がす (bucket 名はそのまま)', () => {
+    expect(parseS3Path('S3://Dataset/X')).toEqual({ bucket: 'Dataset', prefix: 'X' })
+  })
+
+  it('前後の空白を trim する', () => {
+    expect(parseS3Path('  s3://dataset/x  ')).toEqual({ bucket: 'dataset', prefix: 'x' })
+  })
+
+  it('先頭の余分なスラッシュを除去する', () => {
+    expect(parseS3Path('/dataset/x')).toEqual({ bucket: 'dataset', prefix: 'x' })
+  })
+
+  it('空文字 / スキームのみは null', () => {
+    expect(parseS3Path('')).toBeNull()
+    expect(parseS3Path('   ')).toBeNull()
+    expect(parseS3Path('s3://')).toBeNull()
   })
 })

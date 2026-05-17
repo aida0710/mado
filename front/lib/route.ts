@@ -13,6 +13,32 @@ export function encPath(s: string): string {
   return s.split('/').map(encodeURIComponent).join('/')
 }
 
+export interface S3PathParts {
+  bucket: string
+  prefix: string
+}
+
+// `s3://bucket/a/b/` や `bucket/a/b` を { bucket, prefix } に分解する。
+//
+// - `s3://` スキームは大小文字問わず剥がす。先頭スラッシュも除去。
+// - bucket = 最初の `/` まで。prefix = 残り (末尾スラッシュは構造として保持)。
+// - bucket が取り出せない (空入力 / `s3://` だけ 等) 場合は null。
+//
+// 例:
+//   's3://dataset/debug/x/'  → { bucket: 'dataset', prefix: 'debug/x/' }
+//   's3://dataset'           → { bucket: 'dataset', prefix: '' }
+//   'dataset/debug'          → { bucket: 'dataset', prefix: 'debug' }
+//   ''                       → null
+export function parseS3Path(input: string): S3PathParts | null {
+  let s = input.trim()
+  s = s.replace(/^s3:\/\//i, '')   // s3:// スキーム (大小文字寛容)
+  s = s.replace(/^\/+/, '')        // 先頭スラッシュ
+  if (s === '') return null
+  const slash = s.indexOf('/')
+  if (slash === -1) return { bucket: s, prefix: '' }
+  return { bucket: s.slice(0, slash), prefix: s.slice(slash + 1) }
+}
+
 // ファイル直リンク (`/storage/<conn>/<bucket>/<...>/file.ext`) を、その親ディレクトリの
 // リスト + `?preview=<key>` URL に書き換えるためのヘルパー。
 //
