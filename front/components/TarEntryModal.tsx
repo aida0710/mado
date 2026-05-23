@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { api } from '../lib/api/client'
 import { classifyEntry } from '../lib/api/mime'
 import { fmtSize } from '../lib/format'
+import { copyToClipboard } from '../lib/clipboard'
 
 interface Props {
   connId: string
@@ -81,7 +82,7 @@ export function TarEntryModal({ connId, bucket, archiveKey, entry, onClose }: Pr
           {kind === 'image'   && <ImageBody url={url} alt={entry.name} />}
           {kind === 'audio'   && <AudioBody url={url} />}
           {kind === 'text'    && <TextBody connId={connId} bucket={bucket} archiveKey={archiveKey} entry={entry.name} />}
-          {kind === 'unknown' && <UnknownBody url={url} name={entry.name} />}
+          {kind === 'unknown' && <UnknownBody />}
         </div>
       </div>
     </div>
@@ -112,6 +113,7 @@ function TextBody({
 }: { connId: string; bucket: string; archiveKey: string; entry: string }) {
   const [text, setText] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [copyMsg, setCopyMsg] = useState<string | null>(null)
   useEffect(() => {
     let cancelled = false
     api.tarEntryText(connId, bucket, archiveKey, entry)
@@ -141,14 +143,32 @@ function TextBody({
   const trimmed = display.endsWith('\n') ? display.slice(0, -1) : display
   const lines = trimmed.length === 0 ? 0 : trimmed.split('\n').length
 
+  // 表示中の内容 (display: .json は整形済) をまるごとクリップボードへ。
+  const handleCopy = async () => {
+    const ok = await copyToClipboard(display)
+    setCopyMsg(ok ? 'コピーしました ✓' : 'コピー失敗')
+    setTimeout(() => setCopyMsg(null), 1500)
+  }
+
   return (
     <div className="flex flex-col gap-2">
-      <p
-        className="m-0 text-[11px] text-ink-7 tabular-nums"
-        style={{ fontFamily: 'var(--font-mono)', letterSpacing: '0.02em' }}
-      >
-        <span>{lines} 行</span>
-      </p>
+      <div className="flex items-center justify-between gap-2">
+        <span
+          className="text-[11px] text-ink-7 tabular-nums"
+          style={{ fontFamily: 'var(--font-mono)', letterSpacing: '0.02em' }}
+        >
+          {lines} 行
+        </span>
+        <button
+          type="button"
+          className="ghost text-[11px]"
+          onClick={handleCopy}
+          title="内容をコピー"
+          aria-label="内容をコピー"
+        >
+          {copyMsg ?? '内容をコピー'}
+        </button>
+      </div>
       <pre
         className="m-0 max-h-[70vh] overflow-auto whitespace-pre p-3 text-[12px] leading-snug"
         style={{
@@ -165,7 +185,7 @@ function TextBody({
   )
 }
 
-function UnknownBody({ url: _url, name: _name }: { url: string; name: string }) {
+function UnknownBody() {
   // ダウンロードはヘッダの DL ボタンに集約済。
   return (
     <p className="text-[13px] text-ink-7">

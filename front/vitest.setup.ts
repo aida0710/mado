@@ -28,3 +28,14 @@ class MockIntersectionObserver {
 }
 ;(globalThis as unknown as { IntersectionObserver: typeof IntersectionObserver }).IntersectionObserver =
   MockIntersectionObserver as unknown as typeof IntersectionObserver
+
+// jsdom には ResizeObserver も無い。ReadmeView の折りたたみ判定などが生成するので
+// 観測を受け流す no-op を入れる。サイズ変化に応じた再判定が要るテストでは
+// spyOn して上書きする想定。
+class MockResizeObserver {
+  observe(): void {}
+  unobserve(): void {}
+  disconnect(): void {}
+}
+;(globalThis as unknown as { ResizeObserver: typeof ResizeObserver }).ResizeObserver =
+  MockResizeObserver as unknown as typeof ResizeObserver

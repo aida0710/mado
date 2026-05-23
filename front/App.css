@@ -343,13 +343,84 @@ pre { font-size: 12px; }
   display: grid;
   grid-template-columns: 1fr;
   gap: var(--space-5);
+  /* リサイズハンドル (.drawer__resize) の絶対配置基準。 */
+  position: relative;
 }
+/* ── リサイズ可能な preview drawer (2 カラムになる 1024px 以上のみ) ────────
+   既定幅は画面追従の clamp。左端ハンドルのドラッグで広げると、リスト (1fr) は
+   既定幅のまま据え置き、drawer が margin-left を負にしてその上に重なる (overlay)。
+   狭める時は track も縮めてリストを広げる。実値は useDrawerResize が px の
+   CSS 変数で上書きし、localStorage に記憶する。スマホ (<1024px) は 1 カラムの
+   ままドロワーが全幅で下に積まれる (従来どおり)。 */
 @media (min-width: 1024px) {
-  .storage-list:has(.drawer) { grid-template-columns: 1fr 380px; }
+  .storage-list:has(.drawer) {
+    grid-template-columns: 1fr var(--drawer-track, clamp(320px, 28%, 720px));
+  }
+  .drawer {
+    width: var(--drawer-w, auto);
+    margin-left: var(--drawer-ml, 0px);
+  }
+}
+
+/* 縦のリサイズハンドル。drawer 内に置き、その左端 (高さ = drawer の高さ) に重ねる。
+   こうするとリスト全高を貫通せず、drawer (= プレビュー内容) の範囲だけに収まり、
+   sticky な drawer のスクロールにも追従する。
+   既定はうっすら線、hover / focus / ドラッグで強調 (editorial: 普段は静か)。 */
+.drawer__resize {
+  display: none;
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 12px;
+  /* わずかに外へ出して掴みやすく。リスト側へのはみ出しは最小に。 */
+  margin-left: -2px;
+  cursor: col-resize;
+  z-index: 10;
+  touch-action: none;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  appearance: none;
+}
+.drawer__resize::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 2px;
+  width: 2px;
+  /* 既定でもうっすら見せて掴める位置を示し、hover/focus/ドラッグで強調する。 */
+  background: var(--rule);
+  transition: background var(--transition-fast);
+}
+.drawer__resize:hover::after,
+.drawer__resize:focus-visible::after,
+.drawer__resize:active::after {
+  background: var(--color-rule-strong);
+}
+.drawer__resize:focus-visible {
+  outline: none;
+}
+
+/* display:block は base 規則 (display:none) より「後」に置く — 同一詳細度なので
+   source 順で勝たせないと none に上書きされ、ハンドルが出ずリサイズできない。 */
+@media (min-width: 1024px) {
+  .drawer__resize { display: block; }
+}
+
+/* 幅リセットボタン (drawer ヘッダ内)。リサイズが効く ≥1024px だけ表示。
+   .ghost (display:inline-flex) より後に置き、source 順で表示制御を勝たせる。 */
+.drawer__reset { display: none; }
+@media (min-width: 1024px) {
+  .drawer__reset { display: inline-flex; }
 }
 
 /* ── Preview drawer — 右側スティッキーパネル。
-   editorial: 角丸ゼロで紙面のような直角の枠。drawer / 各種 modal すべて同じ。 */
+   editorial: 角丸ゼロで紙面のような直角の枠。drawer / 各種 modal すべて同じ。
+   ヘッダ固定 + 本文スクロールの flex 構成。リサイズハンドル (drawer 内・絶対配置) を
+   drawer の高さに収め、スクロールにも追従させる。overflow:visible で左端ハンドルの
+   はみ出しを切らない (縦スクロールは .drawer__body 側が担当)。 */
 .drawer {
   border: 1px solid var(--color-rule-strong);
   border-radius: 0;
@@ -359,9 +430,12 @@ pre { font-size: 12px; }
   top: var(--space-3);
   align-self: start;
   max-height: calc(100vh - var(--space-6));
-  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  overflow: visible;
 }
 .drawer__head {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   gap: var(--space-2);
@@ -376,7 +450,12 @@ pre { font-size: 12px; }
   word-break: break-all;
   color: var(--ink-9);
 }
-.drawer__body { padding-top: 0; }
+.drawer__body {
+  padding-top: 0;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
 
 /* ====================================================================
    Modal — form モーダル共通
@@ -774,13 +853,16 @@ pre { font-size: 12px; }
    `lh` は要素の line-height 1 行分の高さ。Chrome 99+ / Safari 16.4+ / Firefox 120+
    で利用可。下端の gradient fade で切れ目を視覚的に和らげる。`max-height` を持つ
    要素は position: relative にして ::after で paper への減衰を載せる。
-   フォントサイズは `.markdown-body` のベースを継承 (= HomePage と同じ表示)。 */
+   フォントサイズは `.markdown-body` のベースを継承 (= HomePage と同じ表示)。
+   もや (::after) は is-collapsed ではなく is-faded に紐づける — is-collapsed は
+   高さ判定のため未展開なら常時付くので、短い README にまで fade が出てしまう。
+   ReadmeView は「実際にあふれている」時だけ is-faded を付与する。 */
 .markdown-body.is-collapsed {
   max-height: 15lh;
   overflow: hidden;
   position: relative;
 }
-.markdown-body.is-collapsed::after {
+.markdown-body.is-faded::after {
   content: "";
   position: absolute;
   left: 0;

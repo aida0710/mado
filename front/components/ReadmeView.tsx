@@ -113,7 +113,9 @@ export function ReadmeView({ connId, bucket, prefix }: Props) {
         <article className="article mt-1">
           <div
             ref={bodyRef}
-            className={`markdown-body${expanded ? '' : ' is-collapsed'}`}
+            // is-collapsed: max-height でクリップ (高さ判定に必須なので未展開なら常時付与)。
+            // is-faded: 下端のもや。実際にあふれている時だけ — 短い README には出さない。
+            className={`markdown-body${expanded ? '' : ' is-collapsed'}${needsExpand && !expanded ? ' is-faded' : ''}`}
           >
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
