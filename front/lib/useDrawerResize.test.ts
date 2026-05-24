@@ -8,10 +8,10 @@ import {
 
 describe('computeDrawerVars - responsive default (effW = null)', () => {
   it('scales the default width with container width', () => {
-    // 28% of 1280 = 358.4 → 358
-    expect(computeDrawerVars(1280, null).width).toBe(358)
-    // 28% of 1920 = 537.6 → 538
-    expect(computeDrawerVars(1920, null).width).toBe(538)
+    // 36% of 1280 = 460.8 → 461
+    expect(computeDrawerVars(1280, null).width).toBe(461)
+    // 36% of 1920 = 691.2 → 691
+    expect(computeDrawerVars(1920, null).width).toBe(691)
   })
 
   it('clamps the default to the max on very wide screens', () => {
@@ -19,8 +19,8 @@ describe('computeDrawerVars - responsive default (effW = null)', () => {
   })
 
   it('clamps the default to the min on narrow 2-col screens', () => {
-    // 28% of 1000 = 280 → floored to MIN_W
-    expect(computeDrawerVars(1000, null).width).toBe(DRAWER_MIN_W)
+    // 36% of 800 = 288 → floored to MIN_W
+    expect(computeDrawerVars(800, null).width).toBe(DRAWER_MIN_W)
   })
 
   it('never overlays at the default (marginLeft 0, track === width)', () => {

@@ -354,7 +354,7 @@ pre { font-size: 12px; }
    ままドロワーが全幅で下に積まれる (従来どおり)。 */
 @media (min-width: 1024px) {
   .storage-list:has(.drawer) {
-    grid-template-columns: 1fr var(--drawer-track, clamp(320px, 28%, 720px));
+    grid-template-columns: 1fr var(--drawer-track, clamp(320px, 36%, 840px));
   }
   .drawer {
     width: var(--drawer-w, auto);

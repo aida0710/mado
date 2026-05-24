@@ -11,8 +11,8 @@ import {
 // preview drawer の幅。既定はコンテナ幅追従 (clamp)。ユーザがハンドルで広げると
 // リストは既定幅のまま保持し、drawer がその上に重なる (overlay)。
 export const DRAWER_MIN_W = 320          // drawer の下限幅
-export const DRAWER_MAX_DEFAULT_W = 720  // 既定 (未操作時) 幅の上限
-export const DRAWER_FRACTION = 0.28      // 既定幅 = コンテナ幅のこの割合
+export const DRAWER_MAX_DEFAULT_W = 840  // 既定 (未操作時) 幅の上限
+export const DRAWER_FRACTION = 0.36      // 既定幅 = コンテナ幅のこの割合 (= メインリストを狭める)
 export const DRAWER_MIN_LIST_VISIBLE = 220 // overlay 時に必ず残すリストの可視幅
 export const DRAWER_KEYBOARD_STEP = 24    // 矢印キー 1 回の増減幅
 
