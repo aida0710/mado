@@ -11,9 +11,11 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      # dev はゼロ設定で動くよう既定値あり。.env で上書き可能。
+      # 注意: いずれも DB ボリュームの初回 init 時のみ反映 (既存DBは ALTER ROLE)。
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-postgres}"
       POSTGRES_DB: dashboard
-      DASHBOARD_PASSWORD: CHANGEME
+      DASHBOARD_PASSWORD: "${DASHBOARD_PASSWORD:-CHANGEME}"
     ports:
       - "127.0.0.1:5432:5432"
     volumes:

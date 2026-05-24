@@ -24,6 +24,23 @@ docker compose -f compose.dev.yaml down -v   # WARNING: deletes db_data volume
 docker compose -f compose.dev.yaml up -d
 ```
 
+## Credentials (passwords)
+
+DB passwords come from env vars, consumed **only when the `db_data` volume is first created**:
+
+- `POSTGRES_PASSWORD` — the `postgres` superuser.
+- `DASHBOARD_PASSWORD` — the `dashboard_rw` / `dashboard_ro` roles. **Must match** the password embedded in `DATABASE_URL_RW` / `DATABASE_URL_RO`.
+
+`compose.prod.yaml` requires both (startup fails if unset) — set strong values in `.env` before the first `up` (`openssl rand -hex 24`). `compose.dev.yaml` falls back to `postgres` / `CHANGEME` for zero-config local dev.
+
+Because they apply only at first init, **changing them later does not affect an existing volume**. To rotate on a running DB, use `ALTER ROLE`:
+
+```sh
+docker compose -f compose.prod.yaml exec postgres \
+  psql -U postgres -c "ALTER ROLE dashboard_rw PASSWORD 'NEW'; ALTER ROLE dashboard_ro PASSWORD 'NEW';"
+# then update DATABASE_URL_* (and DASHBOARD_PASSWORD) in .env and recreate the api service.
+```
+
 ## Schema source of truth
 
 `db/migrations/001_init.sql` is the only schema file. The Docker init script reads it via the `./db/migrations:/migrations:ro` bind mount in `compose.dev.yaml` / `compose.prod.yaml`, so there is nothing to keep in sync.

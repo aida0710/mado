@@ -14,9 +14,11 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      # 本番は弱い既定値を埋め込まず、.env からの注入を必須にする (未設定なら起動失敗)。
+      # 注意: いずれも DB ボリュームの初回 init 時のみ反映。既存DBは ALTER ROLE で変更する。
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?.env に POSTGRES_PASSWORD を設定してください}"
       POSTGRES_DB: dashboard
-      DASHBOARD_PASSWORD: CHANGEME
+      DASHBOARD_PASSWORD: "${DASHBOARD_PASSWORD:?.env に DASHBOARD_PASSWORD を設定してください (DATABASE_URL のパスワードと一致させること)}"
     volumes:
       - db_data:/var/lib/postgresql/data
       - ./db/init:/docker-entrypoint-initdb.d:ro
