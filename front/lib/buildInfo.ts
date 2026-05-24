@@ -14,6 +14,6 @@ export const GIT_COMMIT: string =
 export const GIT_DATE: string =
   typeof __GIT_DATE__ !== 'undefined' ? __GIT_DATE__ : ''
 
-export const REPO_URL = 'https://github.com/aida0710/web-dashboard'
+export const REPO_URL = 'https://github.com/aida0710/mado'
 
 export const commitUrl = (hash: string): string => `${REPO_URL}/commit/${hash}`

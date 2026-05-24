@@ -9,8 +9,8 @@ describe('About', () => {
     render(<About />)
     expect(screen.getByText(/オブジェクトストレージを横断的に/)).toBeInTheDocument()
     expect(screen.getByText(/^v\d+\.\d+\.\d+$/)).toBeInTheDocument()
-    const repo = screen.getByRole('link', { name: /github\.com\/aida0710\/web-dashboard/ })
-    expect(repo).toHaveAttribute('href', 'https://github.com/aida0710/web-dashboard')
+    const repo = screen.getByRole('link', { name: /github\.com\/aida0710\/mado/ })
+    expect(repo).toHaveAttribute('href', 'https://github.com/aida0710/mado')
   })
 
   it('shows the commit as plain text (no link) when commit info is absent', () => {
