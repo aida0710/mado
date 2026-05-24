@@ -46,6 +46,11 @@ services:
   front:
     build: ./front
     container_name: mado-dev-front
+    # About のコミット表示用。dev コンテナには git が無いので host から渡す
+    # (./dev.sh が export)。未指定なら About は 'dev' 表示にフォールバック。
+    environment:
+      VITE_GIT_COMMIT: "${VITE_GIT_COMMIT:-}"
+      VITE_GIT_DATE: "${VITE_GIT_DATE:-}"
     ports:
       - "5173:5173"
     volumes:
