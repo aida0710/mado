@@ -4,6 +4,7 @@ import { api } from '../lib/api/client'
 import type { Connection, ConnectionCreateInput, ConnectionUpdateInput } from '../lib/api/types'
 import { ConnectionForm } from '../components/ConnectionForm'
 import { ConnectionDeleteConfirm } from '../components/ConnectionDeleteConfirm'
+import { About } from '../components/About'
 
 const sectionTitleClass =
   'm-0 text-[10.5px] font-semibold uppercase tracking-[0.22em] text-ink-7'
@@ -167,6 +168,8 @@ export default function ConnectionsPage() {
           </ul>
         )}
       </section>
+
+      <About />
 
       {adding && (
         <ConnectionForm

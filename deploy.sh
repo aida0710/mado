@@ -23,7 +23,12 @@ fi
 echo "==> git pull origin main"
 git pull origin main
 
-echo "==> docker compose -f compose.prod.yaml up -d --build"
+# About 表示用のコミット情報を front ビルドへ渡す (compose の build.args が参照)。
+VITE_GIT_COMMIT="$(git rev-parse --short HEAD)"
+VITE_GIT_DATE="$(git log -1 --format=%cI)"
+export VITE_GIT_COMMIT VITE_GIT_DATE
+
+echo "==> docker compose -f compose.prod.yaml up -d --build (commit ${VITE_GIT_COMMIT})"
 docker compose -f compose.prod.yaml up -d --build
 
 echo "==> docker compose -f compose.prod.yaml ps"

@@ -272,6 +272,15 @@ pre { font-size: 12px; }
 .ghost:active:not(:disabled) { background: var(--ink-2); }
 .ghost:disabled { opacity: 0.45; cursor: default; }
 
+/* About (Settings) のインラインリンク。.article 外なので色を個別に当てる。 */
+.about-link {
+  color: var(--color-link);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  transition: color var(--transition-fast);
+}
+.about-link:hover { color: var(--color-link-hover); }
+
 /* Subtle "danger" variant of .ghost — Connection 行の Delete 用。 */
 .conn-row__danger {
   border-color: color-mix(in srgb, var(--danger) 30%, var(--color-rule-strong));

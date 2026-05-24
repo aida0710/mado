@@ -46,6 +46,10 @@ services:
     build:
       context: .
       dockerfile: nginx/Dockerfile
+      # About 表示用のコミット情報を front ビルドへ渡す (deploy.sh が export する)。
+      args:
+        VITE_GIT_COMMIT: "${VITE_GIT_COMMIT:-}"
+        VITE_GIT_DATE: "${VITE_GIT_DATE:-}"
     container_name: mado-prod-nginx
     # nginx は非 root user (uid 101) で動くため container 内では :8080 を listen する。
     # host 側のみ 80 を晒す。
