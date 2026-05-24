@@ -46,8 +46,8 @@ services:
   front:
     build: ./front
     container_name: mado-dev-front
-    # About のコミット表示用。dev コンテナには git が無いので host から渡す
-    # (./dev.sh が export)。未指定なら About は 'dev' 表示にフォールバック。
+    # About のコミット表示。通常は下の .git マウント + コンテナ内 git で解決される。
+    # env が設定されていれば (例: ./dev.sh) そちらを優先 (vite.config が env→git→'dev')。
     environment:
       VITE_GIT_COMMIT: "${VITE_GIT_COMMIT:-}"
       VITE_GIT_DATE: "${VITE_GIT_DATE:-}"
@@ -56,6 +56,8 @@ services:
     volumes:
       - ./front:/app
       - /app/node_modules
+      # vite.config がコミット情報を読むため host の .git を read-only で渡す。
+      - ./.git:/app/.git:ro
     depends_on:
       - api-internal
 
