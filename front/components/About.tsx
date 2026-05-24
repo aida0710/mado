@@ -1,7 +1,5 @@
 import { APP_VERSION, GIT_COMMIT, GIT_DATE, REPO_URL, commitUrl } from '../lib/buildInfo'
 
-const sectionTitleClass =
-  'm-0 text-[10.5px] font-semibold uppercase tracking-[0.22em] text-ink-7'
 const dtClass = 'text-ink-7'
 const ddClass = 'm-0 text-ink-11'
 
@@ -13,9 +11,9 @@ export function About() {
 
   return (
     <section className="mt-10">
-      <div className="mb-3 pb-2" style={{ borderBottom: '1px solid var(--rule)' }}>
-        <h3 className={sectionTitleClass}>About</h3>
-      </div>
+      <header className="page-head">
+        <h2>About</h2>
+      </header>
 
       <p className="m-0 mb-4 text-[13px] leading-relaxed text-ink-9">
         オブジェクトストレージを横断的にブラウズ、プレビューし、バケット内のディレクトリを適切に管理する社内向けダッシュボード
