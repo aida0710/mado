@@ -29,7 +29,7 @@ export function About() {
         <dd className={ddClass}>
           {hasCommit ? (
             <a className="about-link" href={commitUrl(GIT_COMMIT)} target="_blank" rel="noreferrer">
-              {GIT_COMMIT}
+              {GIT_COMMIT.slice(0, 7)}
             </a>
           ) : (
             <span className="text-ink-7">dev</span>

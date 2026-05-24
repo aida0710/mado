@@ -21,7 +21,9 @@ function git(args: string[]): string {
 //   1. 環境変数 (Docker prod は deploy.sh → build arg 経由で渡す)
 //   2. git (ホストで直接ビルドする場合)
 //   3. 'dev' / '' (git も env も無い dev コンテナ等)
-const commit = process.env.VITE_GIT_COMMIT?.trim() || git(['rev-parse', '--short', 'HEAD']) || 'dev'
+// フルハッシュを保持する (GitHub のコミット URL は短縮だと解決できない場合があるため)。
+// 表示は About 側で先頭 7 桁に短縮する。
+const commit = process.env.VITE_GIT_COMMIT?.trim() || git(['rev-parse', 'HEAD']) || 'dev'
 const commitDate = process.env.VITE_GIT_DATE?.trim() || git(['log', '-1', '--format=%cI']) || ''
 
 export default defineConfig({

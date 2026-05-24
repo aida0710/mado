@@ -24,7 +24,7 @@ echo "==> git pull origin main"
 git pull origin main
 
 # About 表示用のコミット情報を front ビルドへ渡す (compose の build.args が参照)。
-VITE_GIT_COMMIT="$(git rev-parse --short HEAD)"
+VITE_GIT_COMMIT="$(git rev-parse HEAD)"
 VITE_GIT_DATE="$(git log -1 --format=%cI)"
 export VITE_GIT_COMMIT VITE_GIT_DATE
 
