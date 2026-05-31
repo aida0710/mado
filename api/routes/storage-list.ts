@@ -15,6 +15,18 @@ export interface StorageListDeps {
   getConnectionConfig: (connId: string) => Promise<ConnectionConfig>
 }
 
+/** ディレクトリを開いたとき (prefix が `/` 終わり) に S3 互換実装が返す
+ *  「そのディレクトリ自身」を表す 0 バイトの placeholder オブジェクト
+ *  (Key === prefix) を一覧から隠すための判定。
+ *
+ *  prefix が `/` で終わらない場合 (= S3PathPanel でフルキー / 部分キーを
+ *  入力した検索) は、Key === prefix は「探しているファイルそのもの」なので
+ *  隠してはいけない。ここを一律 `Key !== prefix` で弾いていたために、
+ *  完全なオブジェクトキーを検索すると 0 件になるバグがあった。 */
+function isSelfPlaceholder(key: string, prefix: string): boolean {
+  return prefix.endsWith('/') && key === prefix
+}
+
 export function mountStorageListRoutes(app: Hono, deps: StorageListDeps): void {
   app.get('/storage/:connId/buckets', async c => {
     // フェーズごとに所要時間を JSON ログに出して、
@@ -89,7 +101,7 @@ export function mountStorageListRoutes(app: Hono, deps: StorageListDeps): void {
           .map(p => p.Prefix!)
           .filter(Boolean),
         files: rawContents
-          .filter(o => o.Key && o.Key !== prefix)
+          .filter(o => o.Key && !isSelfPlaceholder(o.Key, prefix))
           .map(o => ({
             key: o.Key!,
             size: o.Size ?? 0,
@@ -131,7 +143,7 @@ export function mountStorageListRoutes(app: Hono, deps: StorageListDeps): void {
         .map(p => p.Prefix!)
         .filter(Boolean),
       files: rawContents
-        .filter(o => o.Key && o.Key !== prefix)
+        .filter(o => o.Key && !isSelfPlaceholder(o.Key, prefix))
         .map(o => ({
           key: o.Key!,
           size: o.Size ?? 0,

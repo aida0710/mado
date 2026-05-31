@@ -4,6 +4,8 @@
 // パスが不完全 (末尾が `/` でない) なら前方一致した結果を出す = `s3cmd ls s3://bucket/par`
 // と同じ挙動。これは内部的に api.list(connId, bucket, prefix) を叩くだけで成立する
 // (S3 が delimiter 付き ListObjects で prefix 前方一致を返すため)。
+// フルキー (完全なオブジェクトキー) を貼った場合も、それを prefix とした前方一致で
+// そのファイル 1 件がヒットする (= 単一ファイル検索)。
 //
 // 末尾 `/` (= 実在ディレクトリ指定) や bucket 直下の場合は「→ 開く」リンク + Enter で
 // 直接そのページへ遷移できる。
@@ -129,7 +131,7 @@ export function S3PathPanel({ connId }: Props) {
           type="search"
           className={inputClass}
           style={{ border: '1px solid var(--color-rule-strong)', fontFamily: 'var(--font-mono)' }}
-          placeholder="s3://bucket/prefix/ で移動 (前方一致)"
+          placeholder="s3://bucket/key を貼付 (前方一致・フルキーで単一ファイルも検索可)"
           value={raw}
           onChange={e => onChange(e.target.value)}
           onKeyDown={onKeyDown}
