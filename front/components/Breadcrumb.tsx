@@ -1,6 +1,8 @@
+import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { useConnection } from '../lib/connectionContext'
 import { encPath } from '../lib/route'
+import { CopyMenu, type MenuItem } from './CopyMenu'
 
 // 現在の bucket+prefix から「1階層上」へ移動する:
 //   /storage/<conn>/b/voice/jp/  → /storage/<conn>/b/voice/
@@ -30,6 +32,18 @@ export function Breadcrumb({
 }: { connId: string; bucket: string; prefix: string }) {
   const connection = useConnection()
   const segments = prefix.split('/').filter(Boolean)
+
+  // ヘッダの「現在地コピー」メニュー。行メニュー (EntryTable) と同じ MenuItem 形で、
+  // 現在の bucket+prefix をそのまま渡す。Breadcrumb は StorageBucket でしか描画されず
+  // 常に bucket を持つので、最浅でも s3://<bucket>/ (= bucket 直下、prefix='') になり、
+  // 接続ルート (バケット一覧) には出ない。深い階層ではそのディレクトリ URL をコピーできる。
+  const dirHref =
+    `/storage/${encodeURIComponent(connId)}/${encodeURIComponent(bucket)}/${encPath(prefix)}`
+  const copyItems = useMemo<MenuItem[]>(() => [
+    { kind: 'copy', label: 'Web URL をコピー', value: `${window.location.origin}${dirHref}` },
+    { kind: 'copy', label: 'S3 URL をコピー',  value: `s3://${bucket}/${prefix}` },
+  ], [dirHref, bucket, prefix])
+
   return (
     <nav className="flex flex-wrap items-center gap-1 my-2" aria-label="パンくず">
       <Link
@@ -45,6 +59,11 @@ export function Breadcrumb({
       >
         <span aria-hidden>↑</span>
       </Link>
+      <CopyMenu
+        items={copyItems}
+        trigger="⧉"
+        ariaLabel="このディレクトリの URL をコピー"
+      />
       <Link
         className={`${linkClass} font-sans font-medium`}
         style={{ fontFamily: 'var(--font-sans)' }}

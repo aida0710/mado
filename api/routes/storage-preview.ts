@@ -36,11 +36,23 @@ const IMAGE_MIME: Record<string, string> = {
   gif:  'image/gif',
 }
 
+// front/lib/api/mime.ts の classify() の audio 拡張子集合と対応させること。
+// ここに無い拡張子は audio として classify されても application/octet-stream で
+// 返るため、ブラウザが再生を拒むことがある。
 const AUDIO_MIME: Record<string, string> = {
   mp3:  'audio/mpeg',
   wav:  'audio/wav',
   flac: 'audio/flac',
   ogg:  'audio/ogg',
+  oga:  'audio/ogg',
+  opus: 'audio/ogg',
+  m4a:  'audio/mp4',
+  m4b:  'audio/mp4',
+  aac:  'audio/aac',
+  weba: 'audio/webm',
+  aiff: 'audio/aiff',
+  aif:  'audio/aiff',
+  wma:  'audio/x-ms-wma',
 }
 
 function ext(key: string): string {

@@ -196,6 +196,15 @@ describe('GET /storage/:connId/preview/audio', () => {
     ['a.wav',  'audio/wav'],
     ['a.flac', 'audio/flac'],
     ['a.ogg',  'audio/ogg'],
+    ['a.oga',  'audio/ogg'],
+    ['a.opus', 'audio/ogg'],
+    ['a.m4a',  'audio/mp4'],
+    ['a.m4b',  'audio/mp4'],
+    ['a.aac',  'audio/aac'],
+    ['a.weba', 'audio/webm'],
+    ['a.aiff', 'audio/aiff'],
+    ['a.aif',  'audio/aiff'],
+    ['a.wma',  'audio/x-ms-wma'],
   ])('content-type for %s -> %s', async (key, expected) => {
     storageMock.on(GetObjectCommand).resolves({
       Body: Readable.from(Buffer.from([1])) as never,
