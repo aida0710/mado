@@ -65,4 +65,25 @@ describe('PlayerDeck', () => {
     expect(audios[0].muted).toBe(false)
     expect(audios[1].muted).toBe(true)
   })
+
+  it('折りたたんでも <audio> はアンマウントされない (再生継続)', () => {
+    const { container } = setup()
+    fireEvent.click(screen.getByText('add1'))
+    fireEvent.click(screen.getByText('add2'))
+    expect(container.querySelectorAll('audio')).toHaveLength(2)
+    fireEvent.click(screen.getByText(/同期プレイヤー/))
+    expect(container.querySelectorAll('audio')).toHaveLength(2)
+  })
+
+  it('ソロ中トラックの削除で残りのミュートが解除される (幽霊ソロ防止)', () => {
+    const { container } = setup()
+    fireEvent.click(screen.getByText('add1'))
+    fireEvent.click(screen.getByText('add2'))
+    fireEvent.click(screen.getAllByRole('button', { name: 'ソロ' })[0])
+    expect([...container.querySelectorAll('audio')][1].muted).toBe(true)
+    fireEvent.click(screen.getAllByRole('button', { name: '削除' })[0])
+    const audios = [...container.querySelectorAll('audio')]
+    expect(audios).toHaveLength(1)
+    expect(audios[0].muted).toBe(false)
+  })
 })

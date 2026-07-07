@@ -41,15 +41,22 @@ export function PlayerDeck() {
     return () => clearInterval(timer)
   }, [playing, audios])
 
+  // ソロ対象が削除済みなら「ソロなし」として扱う (削除ハンドラの setSoloId(null)
+  // と二重の防御)。存在しない ID がソロ扱いのまま残ると全トラックが無音になり、
+  // どの S ボタンも太字にならず原因も見えない (幽霊ソロ)。ミュート計算と
+  // S ボタンの太字判定は必ずこちらを使う。
+  const effectiveSoloId =
+    soloId != null && tracks.some(t => t.id === soloId) ? soloId : null
+
   // ミュート / ソロを <audio> に反映。setState は呼ばない (DOM プロパティへの
   // 直接代入のみ) ので react-hooks/set-state-in-effect の対象にはならない。
   useEffect(() => {
     for (const t of tracks) {
       const a = audioRefs.current.get(t.id)
       if (!a) continue
-      a.muted = soloId != null ? t.id !== soloId : muted.has(t.id)
+      a.muted = effectiveSoloId != null ? t.id !== effectiveSoloId : muted.has(t.id)
     }
-  }, [tracks, soloId, muted])
+  }, [tracks, effectiveSoloId, muted])
 
   // 各トラックの波形 (キャッシュ済みが多い想定)。失敗は静かに無視。
   useEffect(() => {
@@ -101,11 +108,37 @@ export function PlayerDeck() {
           <button
             type="button"
             className="ghost text-[11px]"
-            onClick={() => { stopAll(); clear(); setDurations({}) }}
+            onClick={() => {
+              stopAll()
+              clear()
+              setSoloId(null)
+              setMuted(new Set())
+              setDurations({})
+            }}
           >
             クリア
           </button>
         </div>
+        {/* <audio> は折りたたみ状態に関わらず常にマウントする。
+            {!collapsed && ...} の中に置くとたたんだ瞬間にアンマウントされて
+            再生が止まり、再展開で currentTime=0 の新要素になってしまう
+            (playing state だけ true のまま残る UI 矛盾も起きる)。
+            もともと不可視 (controls なし) なので置き場所は UI に影響しない。 */}
+        {tracks.map(t => (
+          <audio
+            key={t.id}
+            ref={el => {
+              if (el) audioRefs.current.set(t.id, el)
+              else audioRefs.current.delete(t.id)
+            }}
+            src={t.src}
+            preload="metadata"
+            onLoadedMetadata={e => {
+              const d = e.currentTarget.duration
+              if (Number.isFinite(d)) setDurations(cur => ({ ...cur, [t.id]: d }))
+            }}
+          />
+        ))}
         {!collapsed && (
           <>
             <ul className="m-0 max-h-48 list-none overflow-y-auto p-0">
@@ -119,18 +152,6 @@ export function PlayerDeck() {
                       height={28}
                     />
                   </div>
-                  <audio
-                    ref={el => {
-                      if (el) audioRefs.current.set(t.id, el)
-                      else audioRefs.current.delete(t.id)
-                    }}
-                    src={t.src}
-                    preload="metadata"
-                    onLoadedMetadata={e => {
-                      const d = e.currentTarget.duration
-                      if (Number.isFinite(d)) setDurations(cur => ({ ...cur, [t.id]: d }))
-                    }}
-                  />
                   <button
                     type="button"
                     className={`ghost text-[11px] ${muted.has(t.id) ? 'opacity-40' : ''}`}
@@ -144,7 +165,7 @@ export function PlayerDeck() {
                   >M</button>
                   <button
                     type="button"
-                    className={`ghost text-[11px] ${soloId === t.id ? 'font-bold' : ''}`}
+                    className={`ghost text-[11px] ${effectiveSoloId === t.id ? 'font-bold' : ''}`}
                     aria-label="ソロ"
                     onClick={() => setSoloId(cur => (cur === t.id ? null : t.id))}
                   >S</button>
@@ -154,6 +175,16 @@ export function PlayerDeck() {
                     aria-label="削除"
                     onClick={() => {
                       removeTrack(t.id)
+                      // 削除トラックに紐づく状態を漏れなく剪定する。soloId は
+                      // effectiveSoloId の導出でも守られるが、明示的に消して
+                      // 「消したトラックの ID が state に残る」余地をなくす。
+                      setSoloId(cur => (cur === t.id ? null : cur))
+                      setMuted(cur => {
+                        if (!cur.has(t.id)) return cur
+                        const next = new Set(cur)
+                        next.delete(t.id)
+                        return next
+                      })
                       setDurations(cur => {
                         if (!(t.id in cur)) return cur
                         const next = { ...cur }
