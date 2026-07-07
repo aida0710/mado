@@ -14,7 +14,6 @@ import {
   ReadmeHistoryList,
   ReadmeHistoryVersion,
   ReadmeSearchResult,
-  ScanStatus,
   StorageList,
   TarPreview,
 } from './types'
@@ -381,33 +380,6 @@ export const api = {
 
   spectrogramUrl: (connId: string, cacheKey: string): string =>
     buildUrl(`${API_BASE}/storage/${encodeURIComponent(connId)}/media/spectrogram`, { cacheKey }),
-
-  scanStart: (connId: string, body: { bucket: string; prefix?: string; tarKey?: string }) =>
-    mutateJson(
-      `${API_BASE}/storage/${encodeURIComponent(connId)}/media/scan`,
-      { method: 'POST', body },
-      // jobId は既存ジョブへの合流に失敗すると undefined/null になりうる
-      // (呼び出し側は jobId を使わない — ここで throw させないことだけが目的)。
-      z.object({ jobId: z.number().nullable().optional() }),
-    ),
-
-  scanStatus: (connId: string, bucket: string, target: { prefix?: string; tarKey?: string }) => {
-    const search = new URLSearchParams({ bucket })
-    if (target.tarKey != null) search.set('tarKey', target.tarKey)
-    else search.set('prefix', target.prefix ?? '')
-    return getJson(
-      `${API_BASE}/storage/${encodeURIComponent(connId)}/media/scan-status?${search.toString()}`,
-      ScanStatus,
-    )
-  },
-
-  scanCancel: async (connId: string, jobId: number): Promise<void> => {
-    await mutateJson(
-      `${API_BASE}/storage/${encodeURIComponent(connId)}/media/scan-cancel`,
-      { method: 'POST', body: { jobId } },
-      z.object({ ok: z.boolean() }),
-    )
-  },
 
   // 任意のキーをそのままダウンロードする URL。バックエンドが
   // Content-Disposition: attachment を付けるためブラウザはファイル保存を促す。

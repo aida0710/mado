@@ -92,7 +92,6 @@ describe('loadEnv', () => {
     })
     expect(env.MEDIA_CONCURRENCY).toBe(3)
     expect(env.MEDIA_ANALYZE_TIMEOUT_SEC).toBe(300)
-    expect(env.MEDIA_SCAN_MAX_FILES).toBe(100000)
     expect(env.MEDIA_CACHE_MAX_AGE_DAYS).toBe(30)
     expect(env.MEDIA_SPECTROGRAM_MAX_WIDTH).toBe(4096)
     expect(env.MEDIA_WORKER_PORT).toBe(3100)

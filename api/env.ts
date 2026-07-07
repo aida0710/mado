@@ -27,7 +27,6 @@ const schema = z.object({
   // 既存デプロイの .env を変更せずに済む。
   MEDIA_CONCURRENCY: z.coerce.number().default(3),
   MEDIA_ANALYZE_TIMEOUT_SEC: z.coerce.number().default(300),
-  MEDIA_SCAN_MAX_FILES: z.coerce.number().default(100000),
   MEDIA_CACHE_MAX_AGE_DAYS: z.coerce.number().default(30),
   MEDIA_SPECTROGRAM_MAX_WIDTH: z.coerce.number().default(4096),
   MEDIA_WORKER_PORT: z.coerce.number().default(3100),

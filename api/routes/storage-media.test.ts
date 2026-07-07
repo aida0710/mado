@@ -42,7 +42,7 @@ function makeApp(): Hono {
 
 beforeEach(async () => {
   workerFetch.mockReset()
-  await pools.rw.query('TRUNCATE media_cache, media_jobs, dataset_stats')
+  await pools.rw.query('TRUNCATE media_cache')
 })
 afterAll(() => closePools(pools))
 
@@ -122,93 +122,5 @@ describe('GET /media/spectrogram', () => {
     expect(res.headers.get('Cache-Control')).toContain('immutable')
     const missing = await makeApp().request('/storage/c1/media/spectrogram?cacheKey=none')
     expect(missing.status).toBe(404)
-  })
-})
-
-describe('scan lifecycle', () => {
-  it('POST scan → 202 / 二重投入は同じジョブに合流 / status で見える / cancel できる', async () => {
-    const app = makeApp()
-    const r1 = await app.request('/storage/c1/media/scan', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ bucket: 'b', prefix: 'ds/' }),
-    })
-    expect(r1.status).toBe(202)
-    const { jobId } = await r1.json()
-    const r2 = await app.request('/storage/c1/media/scan', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ bucket: 'b', prefix: 'ds/' }),
-    })
-    expect((await r2.json()).jobId).toBe(jobId)
-
-    const st = await app.request('/storage/c1/media/scan-status?bucket=b&prefix=ds/')
-    const stBody = await st.json()
-    expect(stBody.job.id).toBe(jobId)
-    expect(stBody.job.status).toBe('queued')
-    expect(stBody.stats).toBeNull()
-
-    const cancel = await app.request('/storage/c1/media/scan-cancel', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ jobId }),
-    })
-    expect(cancel.status).toBe(200)
-    const st2 = await app.request('/storage/c1/media/scan-status?bucket=b&prefix=ds/')
-    expect((await st2.json()).job.status).toBe('canceled')
-  })
-
-  it('別 connId からの scan-cancel は 404 でジョブは queued のまま', async () => {
-    const app = makeApp()
-    const r1 = await app.request('/storage/c1/media/scan', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ bucket: 'b', prefix: 'ds/' }),
-    })
-    const { jobId } = await r1.json()
-
-    const cancel = await app.request('/storage/other/media/scan-cancel', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ jobId }),
-    })
-    expect(cancel.status).toBe(404)
-
-    const st = await app.request('/storage/c1/media/scan-status?bucket=b&prefix=ds/')
-    expect((await st.json()).job.status).toBe('queued')
-  })
-
-  it('存在しない jobId の scan-cancel は 404', async () => {
-    const res = await makeApp().request('/storage/c1/media/scan-cancel', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ jobId: 999999 }),
-    })
-    expect(res.status).toBe(404)
-  })
-
-  it('done 済みジョブが残っていても再投入できる (部分ユニーク)', async () => {
-    await pools.rw.query(
-      `INSERT INTO media_jobs (target_key, payload, status, finished_at)
-       VALUES ($1, '{}', 'done', now())`,
-      ['c1\nb\nds/'],
-    )
-    const res = await makeApp().request('/storage/c1/media/scan', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ bucket: 'b', prefix: 'ds/' }),
-    })
-    expect(res.status).toBe(202)
-  })
-
-  it('dataset_stats があれば scan-status で stats が返る', async () => {
-    await pools.rw.query(
-      `INSERT INTO dataset_stats (target_key, result, scanned_at) VALUES ($1, $2, now())`,
-      ['c1\nb\nds/', JSON.stringify({ fileCount: 5 })],
-    )
-    const res = await makeApp().request('/storage/c1/media/scan-status?bucket=b&prefix=ds/')
-    const body = await res.json()
-    expect(body.stats.fileCount).toBe(5)
-    expect(body.scannedAt).toBeTruthy()
   })
 })

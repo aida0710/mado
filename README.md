@@ -17,7 +17,6 @@
 - **チーム共有ノート** — Mado 全体で 1 つの Markdown メモ (履歴つき)
 - **波形 / スペクトログラム** — 音声ファイルの波形とスペクトログラムをその場で確認 (解析結果はキャッシュ)
 - **同期プレイヤー** — 複数の音声ファイルを並べて同期再生し聴き比べる
-- **データセットスキャン** — ディレクトリ / tar 内の音声をまとめて解析し、長さ・サンプルレートなどの統計を表示
 
 ---
 
@@ -134,7 +133,6 @@ dev の DB パスワードは未設定なら既定値 (`postgres` / `CHANGEME`) 
 | `PREVIEW_TARXZ_BYTE_LIMIT` | no | tar.xz の解凍バイト上限 (default 256MiB) |
 | `MEDIA_CONCURRENCY` | no | media-worker が同時実行する ffmpeg 解析数の上限 (default 3) |
 | `MEDIA_ANALYZE_TIMEOUT_SEC` | no | 音声 1 ファイルあたりの解析タイムアウト秒 (default 300) |
-| `MEDIA_SCAN_MAX_FILES` | no | データセットスキャンで走査する最大ファイル数 (default 100000) |
 | `MEDIA_CACHE_MAX_AGE_DAYS` | no | 解析結果キャッシュ (`media_cache`) の保持日数 (default 30) |
 | `MEDIA_SPECTROGRAM_MAX_WIDTH` | no | スペクトログラム画像の最大幅 (px) (default 4096) |
 

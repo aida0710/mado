@@ -1,6 +1,5 @@
 // api/worker.ts — media-worker コンテナのエントリポイント。
 //   ・内部 HTTP (compose ネットワーク内のみ): POST /analyze で同期解析
-//   ・ジョブループ: media_jobs (ディレクトリ / tar スキャン) を 1 件ずつ
 // api-internal と同じコードベース / .env を共有し、compose で別サービスとして起動。
 import { serve } from '@hono/node-server'
 import { Hono } from 'hono'
@@ -53,32 +52,6 @@ const server = serve({ fetch: app.fetch, port: env.MEDIA_WORKER_PORT }, info => 
   console.log(`media-worker listening on http://localhost:${info.port}`)
 })
 
-// ── ジョブループ ──
-let stopping = false
-async function jobLoop(): Promise<void> {
-  // 起動直後に DB が未到達でも worker を殺さない (5 秒間隔でリトライ)
-  for (;;) {
-    if (stopping) return
-    try {
-      await service.requeueStale()
-      break
-    } catch (e) {
-      console.error('requeueStale error', e)
-      await new Promise(r => setTimeout(r, 5000))
-    }
-  }
-  while (!stopping) {
-    try {
-      const ran = await service.runNextScanJob()
-      if (!ran) await new Promise(r => setTimeout(r, 1000))
-    } catch (e) {
-      console.error('scan job error', e)
-      await new Promise(r => setTimeout(r, 5000))
-    }
-  }
-}
-void jobLoop()
-
 const cleanupTimer = setInterval(() => {
   service.cleanup().catch(e => console.error('cleanup error', e))
 }, 60 * 60 * 1000)
@@ -88,7 +61,6 @@ let shuttingDown = false
 const shutdown = async (): Promise<void> => {
   if (shuttingDown) return
   shuttingDown = true
-  stopping = true
   setTimeout(() => process.exit(1), 10_000).unref()
   await new Promise<void>(resolve => server.close(() => resolve()))
   await storageFactory.close()

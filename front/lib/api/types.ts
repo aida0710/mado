@@ -174,19 +174,3 @@ export const MediaAnalyze = z.object({
   sampleRate: z.number().nullable(),
   hasSpectrogram: z.boolean(),
 })
-
-// データセットスキャンの状態。GET /storage/:connId/media/scan-status
-export const ScanStatus = z.object({
-  job: z.object({
-    id: z.number(),
-    status: z.enum(['queued', 'processing', 'done', 'error', 'canceled']),
-    progress: z.object({
-      filesDone: z.number(),
-      filesTotal: z.number(),
-      currentKey: z.string(),
-    }).nullable(),
-    error: z.string().nullable(),
-  }).nullable(),
-  stats: z.record(z.string(), z.unknown()).nullable(),
-  scannedAt: z.string().nullable(),
-})
