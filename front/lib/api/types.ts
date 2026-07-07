@@ -167,10 +167,22 @@ export const Note = z.union([NoteAbsent, NotePresent])
 export const PutNoteOk = z.object({ ok: z.literal(true) })
 
 // 音声解析 (波形 / スペクトログラム)。GET /storage/:connId/media/analyze
+// meta: ffprobe/ffmpeg の副産物 (コーデック・音量など)。旧 API 互換のため全体が null
+// になり得る (各フィールドも個別に null 許容)。front/lib/audioInfo.ts で表示用に整形する。
 export const MediaAnalyze = z.object({
   cacheKey: z.string(),
   peaks: z.array(z.tuple([z.number(), z.number()])),
   durationSec: z.number().nullable(),
   sampleRate: z.number().nullable(),
   hasSpectrogram: z.boolean(),
+  meta: z.object({
+    codec: z.string().nullable(),
+    container: z.string().nullable(),
+    channels: z.number().nullable(),
+    bitsPerSample: z.number().nullable(),
+    bitRate: z.number().nullable(),
+    sizeBytes: z.number().nullable(),
+    peakDb: z.number().nullable(),
+    rmsDb: z.number().nullable(),
+  }).nullable(),
 })

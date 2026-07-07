@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { z } from 'zod'
 import { api } from '../lib/api/client'
 import type { MediaAnalyze } from '../lib/api/types'
+import { formatAudioInfoLines } from '../lib/audioInfo'
 import { useAudioSrc } from '../lib/useAudioSrc'
 import { Waveform } from './Waveform'
 
@@ -21,7 +22,6 @@ export function PreviewAudio({ connId, bucket, k, entryPath }: Props) {
   const [analyzing, setAnalyzing] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [progress, setProgress] = useState(0)
-  const [showSpec, setShowSpec] = useState(false)
 
   // tar 内エントリは blob 化して取得する (シークバーが現在位置に巻き戻る不具合の
   // 対策)。詳細は useAudioSrc のコメントを参照。
@@ -71,23 +71,20 @@ export function PreviewAudio({ connId, bucket, k, entryPath }: Props) {
         <Waveform peaks={analyze.peaks} progress={progress} onSeek={onSeek} />
       )}
       {analyze?.hasSpectrogram && (
-        <div>
-          <button
-            type="button"
-            className="ghost text-[11px]"
-            onClick={() => setShowSpec(s => !s)}
-          >
-            {showSpec ? 'スペクトログラムを隠す' : 'スペクトログラムを表示'}
-          </button>
-          {showSpec && (
-            <img
-              className="mt-1 w-full"
-              src={api.spectrogramUrl(connId, analyze.cacheKey)}
-              alt="スペクトログラム"
-            />
-          )}
-        </div>
+        <img
+          className="w-full"
+          src={api.spectrogramUrl(connId, analyze.cacheKey)}
+          alt="スペクトログラム"
+        />
       )}
+      {analyze && infoLines(analyze).map(line => (
+        <p key={line} className="m-0 font-mono text-[11px] text-ink-7">{line}</p>
+      ))}
     </div>
   )
+}
+
+// meta が null の場合 (旧 API 互換 / 未解析) は空配列 → 情報行を出さない。
+function infoLines(analyze: Analyze): string[] {
+  return formatAudioInfoLines(analyze.meta, analyze.durationSec, analyze.sampleRate)
 }
