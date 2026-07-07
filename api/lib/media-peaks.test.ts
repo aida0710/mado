@@ -26,6 +26,17 @@ describe('PeakAccumulator', () => {
     expect(peaks.length).toBeLessThanOrEqual(PEAK_BUCKETS)
     expect(Math.min(...peaks.map(p => p[0]))).toBeCloseTo(-1)
     expect(Math.max(...peaks.map(p => p[1]))).toBeCloseTo(1)
+
+    // halve() が機能していれば内部ペア数は maxPairs+1 (=65) 以下に抑えられているので、
+    // 大きな bucketCount で finish しても 65 個以下しか返らない。
+    // halve() が壊れていると生ペア 6400 個がそのまま返り、この assert が落ちる。
+    const big = new PeakAccumulator({ windowSamples: 16, maxPairs: 64 })
+    for (let i = 0; i < 100; i++) big.push(chunk)
+    expect(big.finish(10_000).peaks.length).toBeLessThanOrEqual(65)
+  })
+
+  it('空入力では finish が peaks: [] と totalSamples: 0 を返す', () => {
+    expect(new PeakAccumulator().finish()).toEqual({ peaks: [], totalSamples: 0 })
   })
 
   it('チャンク境界をまたぐ窓が欠落しない (push を細切れにしても同じ結果)', () => {
