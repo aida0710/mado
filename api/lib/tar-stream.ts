@@ -63,6 +63,16 @@ function makeXzDecompressor(): NodeJS.ReadWriteStream {
   }
 }
 
+// kind に応じた解凍ストリームを組み立てる。tar (無圧縮) は PassThrough で
+// そのまま通し、gz は zlib、xz は lzma-native を使う。extractTarEntry /
+// listTarEntries / (他モジュールの) tar-iterate で共通して使うための
+// 唯一の組み立て箇所 — 解凍パイプの実装を一箇所に集約する。
+export function createDecompressor(kind: ArchiveKind): NodeJS.ReadWriteStream {
+  return kind === 'tar' ? new PassThrough()
+    : kind === 'gz' ? createGunzip()
+    : makeXzDecompressor()
+}
+
 export interface TarEntryBody {
   buffer: Buffer
   /** byteLimit を超えてエントリ本体が打ち切られた場合 true。呼び出し元は 413 を返すべき。 */
@@ -118,12 +128,7 @@ export function extractTarEntry(
       stream.resume()
     })
 
-    const decompressor: NodeJS.ReadWriteStream =
-      kind === 'tar' ? new PassThrough()
-      : kind === 'gz' ? createGunzip()
-      : makeXzDecompressor()
-
-    pipeline(source, decompressor, ext, err => {
+    pipeline(source, createDecompressor(kind), ext, err => {
       if (found) return // 本体を取得して既に解決済み
       if (err) rejectP(err)
       else resolveP(null) // エントリを見つけずに自然な EOF に達した
@@ -203,15 +208,10 @@ export function listTarEntries(
       },
     })
 
-    const decompressor: NodeJS.ReadWriteStream =
-      kind === 'tar' ? new PassThrough()
-      : kind === 'gz' ? createGunzip()
-      : makeXzDecompressor()
-
     // node:stream の pipeline() はエラーを転送し、失敗や破棄時にすべての
     // ステージをクリーンアップする。完了コールバックが自然な EOF での解決か
     // エラーでの拒否を行う唯一の場所となる。
-    pipeline(source, decompressor, counter, ext, err => {
+    pipeline(source, createDecompressor(kind), counter, ext, err => {
       if (stopped) return
       if (err) rejectP(err)
       else resolveP({ entries: out, truncated, hasMore })
