@@ -83,7 +83,7 @@ export function TarEntryModal({ connId, bucket, archiveKey, entry, onClose }: Pr
           {kind === 'image'   && <ImageBody url={url} alt={entry.name} />}
           {kind === 'audio'   && (
             <PreviewAudio
-              key={`${archiveKey}|${entry.name}`}
+              key={`${connId}|${bucket}|${archiveKey}|${entry.name}`}
               connId={connId}
               bucket={bucket}
               k={archiveKey}

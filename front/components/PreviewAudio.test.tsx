@@ -34,6 +34,27 @@ describe('PreviewAudio', () => {
     expect(container.querySelector('audio')).not.toBeNull()
   })
 
+  it('key の切替 (remount) で解析 state がリセットされる', async () => {
+    // state リセットは effect 内の同期 setState ではなく呼び出し側の key remount に
+    // 依存している。1 回目は即解決、2 回目は pending のままにして「解析中…」へ
+    // 戻ることを担保する。
+    vi.mocked(api.mediaAnalyze)
+      .mockResolvedValueOnce({
+        cacheKey: 'ck', peaks: [[-1, 1]], durationSec: 3, sampleRate: 16000, hasSpectrogram: false,
+      })
+      .mockImplementationOnce(() => new Promise(() => {}))
+    const { rerender } = render(<PreviewAudio key="a" connId="c" bucket="b" k="a.wav" />)
+    await waitFor(() => expect(screen.getByRole('slider', { name: '再生位置' })).toBeInTheDocument())
+
+    rerender(<PreviewAudio key="b" connId="c" bucket="b" k="b.wav" />)
+    expect(screen.queryByRole('slider', { name: '再生位置' })).not.toBeInTheDocument()
+    expect(screen.getByText('解析中…')).toBeInTheDocument()
+    expect(api.mediaAnalyze).toHaveBeenCalledTimes(2)
+    expect(api.mediaAnalyze).toHaveBeenLastCalledWith(
+      'c', 'b', 'b.wav', expect.objectContaining({ entryPath: undefined }),
+    )
+  })
+
   it('entryPath があれば tar-entry URL を audio src に使い、analyze にも渡す', async () => {
     vi.mocked(api.mediaAnalyze).mockResolvedValue({
       cacheKey: 'ck', peaks: [], durationSec: null, sampleRate: null, hasSpectrogram: false,
