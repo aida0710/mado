@@ -130,6 +130,47 @@ describe('runNextScanJob', () => {
     expect(cacheCount.n).toBe(2)
   })
 
+  it('prefix スキャン: 2 回目はキャッシュ済みファイルをダウンロードせず統計は同じになる', async () => {
+    const keys = {
+      'ds3/u1.wav': Buffer.from('a'),
+      'ds3/u2.wav': Buffer.from('b'),
+    }
+    const storage = stubStorage(keys)
+    const sendSpy = vi.spyOn(storage, 'send')
+    const svc = createMediaService({
+      pools,
+      getStorage: async () => storage,
+      getConnectionConfig: async () => ({ listObjectsVersion: 'v2' } as ConnectionConfig),
+      env,
+    })
+    const runScan = async (): Promise<void> => {
+      await pools.rw.query(
+        `INSERT INTO media_jobs (target_key, payload) VALUES ($1, $2)`,
+        ['c1\nb\nds3/', JSON.stringify({ connId: 'c1', bucket: 'b', prefix: 'ds3/' })],
+      )
+      expect(await svc.runNextScanJob()).toBe(true)
+    }
+
+    await runScan()
+    const stats1 = (await pools.ro.query(
+      'SELECT result FROM dataset_stats WHERE target_key = $1', ['c1\nb\nds3/'],
+    )).rows[0].result
+
+    sendSpy.mockClear()
+    await runScan()
+    const stats2 = (await pools.ro.query(
+      'SELECT result FROM dataset_stats WHERE target_key = $1', ['c1\nb\nds3/'],
+    )).rows[0].result
+    expect(stats2).toEqual(stats1)
+
+    // 2 回目は HeadObject は呼ばれる (etag 確認のため) が、音声本体の
+    // GetObject は一切呼ばれていないはず (キャッシュ命中でスキップ)。
+    const getObjectCalls = sendSpy.mock.calls.filter(
+      ([cmd]) => (cmd as { constructor: { name: string } }).constructor.name === 'GetObjectCommand',
+    )
+    expect(getObjectCalls.length).toBe(0)
+  })
+
   it('queued が無ければ false', async () => {
     const svc = makeService({})
     expect(await svc.runNextScanJob()).toBe(false)
@@ -173,6 +214,33 @@ describe('runNextScanJob', () => {
     expect(await getCachedMedia(pools.ro, k2)).not.toBeNull()
     const cacheCount = (await pools.ro.query('SELECT count(*)::int AS n FROM media_cache')).rows[0]
     expect(cacheCount.n).toBe(2)
+  })
+
+  it('tar スキャン: macOS メタデータ (._*, .DS_Store) は統計に混入しない', async () => {
+    const tarBuf = await makeTar([
+      { name: 'u1.wav', body: Buffer.from('a') },
+      { name: 'u1.txt', body: Buffer.from('hello world') },
+      // AppleDouble の実体はバイナリ (0x00 0x05 0x16 0x07 ...) — u1.wav の音声
+      // として ffmpeg に渡ると失敗し、u1.txt のテキストとして addText に流れると
+      // 語彙/文字統計を汚染する。isMacOsMetadata で弾かれるべき。
+      { name: '._u1.wav', body: Buffer.from([0x00, 0x05, 0x16, 0x07, 0x00, 0x02, 0x00, 0x00]) },
+      { name: '._u1.txt', body: Buffer.from([0x00, 0x05, 0x16, 0x07, 0x00, 0x02, 0x00, 0x00]) },
+      { name: '.DS_Store', body: Buffer.from([0x00, 0x00, 0x00, 0x01]) },
+      { name: 'u2.wav', body: Buffer.from('b') },
+    ])
+    const svc = makeService({ 'shard.tar': tarBuf })
+    await pools.rw.query(
+      `INSERT INTO media_jobs (target_key, payload) VALUES ($1, $2)`,
+      ['c1\nb\nshard.tar', JSON.stringify({ connId: 'c1', bucket: 'b', tarKey: 'shard.tar' })],
+    )
+    expect(await svc.runNextScanJob()).toBe(true)
+    const job = (await pools.ro.query('SELECT status FROM media_jobs')).rows[0]
+    expect(job.status).toBe('done')
+    const stats = (await pools.ro.query('SELECT result FROM dataset_stats WHERE target_key = $1', ['c1\nb\nshard.tar'])).rows[0]
+    expect(stats.result.fileCount).toBe(2)     // u1.wav, u2.wav (._u1.wav は除外)
+    expect(stats.result.textFileCount).toBe(1) // u1.txt (._u1.txt は除外)
+    expect(stats.result.vocabSize).toBe(2)     // hello, world のみ (バイナリ由来のゴミ無し)
+    expect(stats.result.totalDurationSec).toBeCloseTo(5) // 2.5 × 2 (mock)
   })
 
   it('実行中にキャンセルされたら停止し、done に上書きしない', async () => {

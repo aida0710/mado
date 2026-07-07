@@ -129,7 +129,7 @@ export function mountStorageMediaRoutes(app: Hono, deps: StorageMediaDeps): void
       )
       jobId = existing.rows[0]?.id
     }
-    return c.json({ jobId }, 202)
+    return c.json({ jobId: jobId ?? null }, 202)
   })
 
   app.get('/storage/:connId/media/scan-status', async c => {

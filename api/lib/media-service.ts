@@ -29,7 +29,7 @@ import {
   isAudioName,
   pairWebdataset,
 } from './media-stats.js'
-import { extractTarEntry, type ArchiveKind } from './tar-stream.js'
+import { extractTarEntry, isMacOsMetadata, type ArchiveKind } from './tar-stream.js'
 import { iterateTarEntries } from './tar-iterate.js'
 
 export type AnalyzeRequest = MediaRef
@@ -247,6 +247,10 @@ export function createMediaService(deps: MediaServiceDeps): MediaService {
       try {
         await iterateTarEntries(stream, kind, async (header, body) => {
           if (canceled) return
+          // macOS の AppleDouble (`._*`) / `.DS_Store` は実体ファイルではない —
+          // isAudioName に引っかかって ffmpeg に渡ると失敗し fileCount を水増しし、
+          // テキスト分岐に流れるとバイナリが語彙/文字統計を汚染する。
+          if (isMacOsMetadata(header.name)) return
           if (isAudioName(header.name)) {
             await analyzeEntry(
               { connId: payload.connId, bucket: payload.bucket, key: payload.tarKey!, entryPath: header.name, etag },
@@ -275,8 +279,11 @@ export function createMediaService(deps: MediaServiceDeps): MediaService {
     } else {
       // ── prefix スキャン ──
       const prefix = payload.prefix ?? ''
-      const keys = await listAllKeys(storage, payload.connId, payload.bucket, prefix)
-      if (keys.length >= deps.env.MEDIA_SCAN_MAX_FILES) acc.markTruncated()
+      const rawKeys = await listAllKeys(storage, payload.connId, payload.bucket, prefix)
+      if (rawKeys.length >= deps.env.MEDIA_SCAN_MAX_FILES) acc.markTruncated()
+      // macOS の AppleDouble (`._*`) / `.DS_Store` は実体ファイルではないので
+      // ペアリング前に除外する (tar 分岐と同じ理由)。
+      const keys = rawKeys.filter(k => !isMacOsMetadata(k))
       const pairs = pairWebdataset(keys)
       const textKeys = new Set(pairs.map(p => p.text).filter((t): t is string => t != null))
       let filesDone = 0
@@ -286,8 +293,15 @@ export function createMediaService(deps: MediaServiceDeps): MediaService {
         if (await isCanceled(jobId)) return 'canceled'
         const head = await storage.send(new HeadObjectCommand({ Bucket: payload.bucket, Key: pair.audio }))
         const etag = (head.ETag ?? '').replaceAll('"', '')
-        const body = await readAll(await openObjectStream(storage, payload.bucket, pair.audio))
-        await analyzeEntry({ connId: payload.connId, bucket: payload.bucket, key: pair.audio, etag }, body)
+        const ref = { connId: payload.connId, bucket: payload.bucket, key: pair.audio, etag }
+        // 既に解析済み (ETag 一致でキャッシュ命中) ならダウンロードせず統計だけ再利用する。
+        const cached = await getCachedMedia(deps.pools.ro, mediaCacheKey(ref))
+        if (cached) {
+          acc.addAudio(cached.durationSec, cached.sampleRate)
+        } else {
+          const body = await readAll(await openObjectStream(storage, payload.bucket, pair.audio))
+          await analyzeEntry(ref, body)
+        }
         filesDone++
         await setProgress(jobId, { filesDone, filesTotal, currentKey: pair.audio })
       }
@@ -341,7 +355,7 @@ export function createMediaService(deps: MediaServiceDeps): MediaService {
       )
     } catch (e) {
       await deps.pools.rw.query(
-        `UPDATE media_jobs SET status = 'error', error = $2, finished_at = now() WHERE id = $1`,
+        `UPDATE media_jobs SET status = 'error', error = $2, finished_at = now() WHERE id = $1 AND status <> 'canceled'`,
         [job.id, (e as Error).message.slice(0, 2000)],
       )
     }
