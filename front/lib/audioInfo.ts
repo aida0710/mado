@@ -71,9 +71,15 @@ export function formatAudioInfoLines(
     meta.sizeBytes != null ? fmtSize(meta.sizeBytes) : null,
   ].filter((v): v is string => v != null)
 
+  // toFixed(1) は -0.04..0 を "-0.0" にする — フルスケール音源の peak で頻出する
+  // 見た目の粗なので "0.0" に正規化する。
+  const fmtDb = (v: number): string => {
+    const s = v.toFixed(1)
+    return s === '-0.0' ? '0.0' : s
+  }
   const line3 = [
-    meta.peakDb != null ? `peak ${meta.peakDb.toFixed(1)} dBFS` : null,
-    meta.rmsDb != null ? `RMS ${meta.rmsDb.toFixed(1)} dB` : null,
+    meta.peakDb != null ? `peak ${fmtDb(meta.peakDb)} dBFS` : null,
+    meta.rmsDb != null ? `RMS ${fmtDb(meta.rmsDb)} dB` : null,
   ].filter((v): v is string => v != null)
 
   return [line1, line2, line3]

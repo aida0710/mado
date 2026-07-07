@@ -65,8 +65,8 @@ function makeXzDecompressor(): NodeJS.ReadWriteStream {
 
 // kind に応じた解凍ストリームを組み立てる。tar (無圧縮) は PassThrough で
 // そのまま通し、gz は zlib、xz は lzma-native を使う。extractTarEntry /
-// listTarEntries / (他モジュールの) tar-iterate で共通して使うための
-// 唯一の組み立て箇所 — 解凍パイプの実装を一箇所に集約する。
+// listTarEntries で共通して使う唯一の組み立て箇所 — 解凍パイプの実装を
+// 一箇所に集約する。
 export function createDecompressor(kind: ArchiveKind): NodeJS.ReadWriteStream {
   return kind === 'tar' ? new PassThrough()
     : kind === 'gz' ? createGunzip()
