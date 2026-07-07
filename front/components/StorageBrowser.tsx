@@ -2,6 +2,7 @@ import { useCallback, useEffect, useReducer, useRef } from 'react'
 import type { z } from 'zod'
 import { api } from '../lib/api/client'
 import { StorageList } from '../lib/api/types'
+import { DatasetStatsPanel } from './DatasetStatsPanel'
 import { EntryTable } from './storage/EntryTable'
 import { Pager } from './storage/Pager'
 import { SearchBar } from './storage/SearchBar'
@@ -230,6 +231,8 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
         aria-busy={loading}
         className={loading ? 'pointer-events-none opacity-60 transition-opacity' : 'transition-opacity'}
       >
+        <DatasetStatsPanel connId={connId} bucket={bucket} target={{ prefix }} />
+
         <EntryTable
           dirs={dirs}
           files={files}

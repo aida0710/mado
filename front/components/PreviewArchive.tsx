@@ -7,6 +7,7 @@ import { TarPreview } from '../lib/api/types'
 import { fmtSize } from '../lib/format'
 import { TarEntryModal } from './TarEntryModal'
 import { CacheMeta } from './CacheMeta'
+import { DatasetStatsPanel } from './DatasetStatsPanel'
 
 type Resp = z.infer<typeof TarPreview>
 type Entry = Resp['entries'][number]
@@ -232,6 +233,7 @@ export function PreviewArchive({ connId, bucket, k }: { connId: string; bucket: 
   return (
     <div>
       <div className="mb-3 flex items-center justify-between">{sizeSelect}</div>
+      <DatasetStatsPanel connId={connId} bucket={bucket} target={{ tarKey: k }} />
       {data.truncated && (
         <p className="text-[12px] text-ink-7">
           バイト上限に到達しました。これ以降は読み込めません。
