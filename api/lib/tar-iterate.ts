@@ -44,11 +44,16 @@ export async function iterateTarEntries(
       const chunks: Buffer[] = []
       entryStream.on('data', (chunk: Buffer) => chunks.push(chunk))
       entryStream.on('end', () => {
-        onEntry({ name: header.name, size }, Buffer.concat(chunks))
+        // Promise.resolve().then() で包むことで、onEntry が Promise を返す前に
+        // 同期 throw した場合も同じ reject 経路に乗せる (ストリームのイベント
+        // ハンドラ内での uncaught exception にしない)。
+        Promise.resolve()
+          .then(() => onEntry({ name: header.name, size }, Buffer.concat(chunks)))
           .then(() => next())
           .catch((err: Error) => {
-            // extract ストリームを破棄すると pipeline() のコールバックが
-            // このエラーで一度だけ呼ばれ、finish() に到達する。
+            // extract ストリームを破棄すると pipeline() が全ステージ (上流の
+            // ソース含む) を destroy し、コールバックがこのエラーで一度だけ
+            // 呼ばれて finish(err) に到達する。
             ext.destroy(err)
           })
       })
