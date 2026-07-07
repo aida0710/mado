@@ -22,4 +22,28 @@ describe('createSemaphore', () => {
     await p3
     expect(order).toEqual([1, 2, 3])
   })
+
+  it('release の二重呼び出しは冪等で、上限が保たれる', async () => {
+    const sem = createSemaphore(1)
+    const release = await sem.acquire()
+    release()
+    release() // 二重呼び出し — 無視されるべき
+
+    const order: number[] = []
+    const releases: Array<() => void> = []
+    const task = async (n: number): Promise<void> => {
+      const r = await sem.acquire()
+      order.push(n)
+      releases.push(r)
+    }
+    const p1 = task(1)
+    const p2 = task(2)
+    await Promise.resolve()
+    await p1
+    // 1 つ目だけが即時取得でき、2 つ目は待たされる（上限 1 が保たれている）
+    expect(order).toEqual([1])
+    releases[0]()
+    await p2
+    expect(order).toEqual([1, 2])
+  })
 })
