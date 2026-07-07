@@ -56,7 +56,17 @@ const server = serve({ fetch: app.fetch, port: env.MEDIA_WORKER_PORT }, info => 
 // ── ジョブループ ──
 let stopping = false
 async function jobLoop(): Promise<void> {
-  await service.requeueStale()
+  // 起動直後に DB が未到達でも worker を殺さない (5 秒間隔でリトライ)
+  for (;;) {
+    if (stopping) return
+    try {
+      await service.requeueStale()
+      break
+    } catch (e) {
+      console.error('requeueStale error', e)
+      await new Promise(r => setTimeout(r, 5000))
+    }
+  }
   while (!stopping) {
     try {
       const ran = await service.runNextScanJob()
