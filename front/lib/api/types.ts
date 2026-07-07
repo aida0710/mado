@@ -126,6 +126,7 @@ export const Connection = z.object({
   listObjectsVersion: ListObjectsVersion,
   createdAt: z.string(),
   updatedAt: z.string(),
+  isDefault: z.boolean(),
 })
 export type Connection = z.infer<typeof Connection>
 

@@ -151,6 +151,16 @@ export const api = {
   deleteConnection: (id: string) =>
     mutateJson(`${API_BASE}/connections/${encodeURIComponent(id)}`, { method: 'DELETE' }, null),
 
+  // デフォルト接続の切り替え。listConnections はキャッシュ層を通らないため
+  // 呼び出し後の再取得だけで最新が見える。
+  setDefaultConnection: async (id: string): Promise<void> => {
+    await mutateJson(
+      `${API_BASE}/connections/${encodeURIComponent(id)}/default`,
+      { method: 'PUT' },
+      z.object({ ok: z.boolean() }),
+    )
+  },
+
   buckets: (connId: string) =>
     bucketsCache.get(k('buckets', connId), () =>
       getJson(`${API_BASE}/storage/${encodeURIComponent(connId)}/buckets`, ListBuckets),
