@@ -96,6 +96,16 @@ export function extractTarEntry(
     let truncated = false
 
     ext.on('entry', (header, stream, next) => {
+      // 上流 (source) が client 切断等で読み切り前に destroy されると、
+      // node:stream の pipeline() が ERR_STREAM_PREMATURE_CLOSE を生成して
+      // Extract を destroy し、Extract は「現在アクティブなエントリの内部
+      // Source ストリーム」を同じエラーで destroy する。この Source は
+      // streamx 実装の別 EventEmitter で、pipeline() が把握するストリーム
+      // 一覧 (source/decompressor/ext) には含まれないため、ここで 'error'
+      // を拾っておかないと Node がリスナー無しの 'error' を未捕捉例外として
+      // 投げ、プロセスごと落ちる。実際のエラーは pipeline() のコールバック
+      // 経由で下の rejectP(err) に渡るので、ここでは握り潰すだけでよい。
+      stream.on('error', () => {})
       if (header.name !== entryName || found) {
         // パーサーを進めるために一致しないエントリをドレインする。
         stream.on('end', next)
@@ -165,6 +175,18 @@ export function listTarEntries(
     }
 
     ext.on('entry', (header, stream, next) => {
+      // 上流 (source) が client 切断等で読み切り前に destroy されると、
+      // node:stream の pipeline() が ERR_STREAM_PREMATURE_CLOSE を生成して
+      // Extract を destroy し、Extract は「現在アクティブなエントリの内部
+      // Source ストリーム」を同じエラーで destroy する。この Source は
+      // streamx 実装の別 EventEmitter で、pipeline() が把握するストリーム
+      // 一覧 (source/decompressor/counter/ext) には含まれないため、ここで
+      // 'error' を拾っておかないと Node がリスナー無しの 'error' を未捕捉
+      // 例外として投げ、プロセスごと落ちる (これが実際に発生した本番
+      // クラッシュの root cause — tar-stream.test.ts の回帰テスト参照)。
+      // 実際のエラーは pipeline() のコールバック経由で下の rejectP(err) に
+      // 渡るので、ここでは握り潰すだけでよい。
+      stream.on('error', () => {})
       // macOS の AppleDouble (`._*`) や `.DS_Store` 等は listing から除外。
       // offset / entryLimit のカウントにも入れない (見えない方の実体は読まない)。
       if (isMacOsMetadata(header.name)) {
