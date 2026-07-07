@@ -11,6 +11,7 @@ import { explainStorageError } from './lib/storageError.js'
 import { mountStorageListRoutes } from './routes/storage-list.js'
 import { mountStorageReadmeRoutes } from './routes/storage-readme.js'
 import { mountStoragePreviewRoutes } from './routes/storage-preview.js'
+import { mountStorageMediaRoutes } from './routes/storage-media.js'
 import { mountStorageFavoritesRoutes } from './routes/storage-favorites.js'
 import { mountConnectionsRoutes } from './routes/connections.js'
 import { mountNotesRoutes } from './routes/notes.js'
@@ -37,6 +38,11 @@ mountStorageListRoutes(api, {
 })
 mountStorageReadmeRoutes(api, { getStorage: storageFactory.getStorage, pools })
 mountStoragePreviewRoutes(api, { getStorage: storageFactory.getStorage, env })
+mountStorageMediaRoutes(api, {
+  getStorage: storageFactory.getStorage,
+  pools,
+  env,
+})
 mountStorageFavoritesRoutes(api, { pools })
 mountNotesRoutes(api, { pools })
 
