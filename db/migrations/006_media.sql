@@ -40,3 +40,12 @@ CREATE TABLE IF NOT EXISTS dataset_stats (
   result     JSONB NOT NULL,
   scanned_at TIMESTAMPTZ NOT NULL
 );
+
+-- 既存テーブルと同じく rw 所有 + ro SELECT。
+ALTER TABLE    media_cache        OWNER TO dashboard_rw;
+ALTER TABLE    media_jobs         OWNER TO dashboard_rw;
+ALTER SEQUENCE media_jobs_id_seq  OWNER TO dashboard_rw;
+ALTER TABLE    dataset_stats      OWNER TO dashboard_rw;
+GRANT SELECT ON media_cache   TO dashboard_ro;
+GRANT SELECT ON media_jobs    TO dashboard_ro;
+GRANT SELECT ON dataset_stats TO dashboard_ro;
