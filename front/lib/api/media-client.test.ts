@@ -41,4 +41,50 @@ describe('media client', () => {
     const st = await api.scanStatus('c', 'b', { prefix: 'ds/' })
     expect(st.job).toBeNull()
   })
+
+  it('scanStatus: prefix がエンコードされてクエリに乗る', async () => {
+    const spy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      okJson({ job: null, stats: null, scannedAt: null }),
+    )
+    await api.scanStatus('c', 'b', { prefix: 'ds/' })
+    expect(String(spy.mock.calls[0][0])).toContain('prefix=ds%2F')
+  })
+
+  it('scanStatus: バケット直下 (target 空) でも prefix= が送られる', async () => {
+    const spy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      okJson({ job: null, stats: null, scannedAt: null }),
+    )
+    await api.scanStatus('c', 'b', {})
+    // buildUrl は空文字パラメータを落とす — 空でも prefix= が残ることを保証する (回帰防止)。
+    expect(String(spy.mock.calls[0][0])).toContain('prefix=')
+  })
+
+  it('scanStatus: tarKey 指定時は tarKey が乗り prefix は乗らない', async () => {
+    const spy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      okJson({ job: null, stats: null, scannedAt: null }),
+    )
+    await api.scanStatus('c', 'b', { tarKey: 'shard.tar' })
+    const url = String(spy.mock.calls[0][0])
+    expect(url).toContain('tarKey=shard.tar')
+    expect(url).not.toContain('prefix')
+  })
+
+  it('scanStatus: 非 null の job + progress を zod で parse する', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(okJson({
+      job: {
+        id: 1,
+        status: 'processing',
+        progress: { filesDone: 3, filesTotal: 10, currentKey: 'x.wav' },
+        error: null,
+      },
+      stats: null,
+      scannedAt: null,
+    }))
+    const st = await api.scanStatus('c', 'b', { prefix: 'ds/' })
+    expect(st.job).not.toBeNull()
+    expect(st.job!.id).toBe(1)
+    expect(st.job!.status).toBe('processing')
+    expect(st.job!.progress).toEqual({ filesDone: 3, filesTotal: 10, currentKey: 'x.wav' })
+    expect(st.job!.error).toBeNull()
+  })
 })
