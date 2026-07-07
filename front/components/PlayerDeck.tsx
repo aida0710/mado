@@ -90,7 +90,9 @@ export function PlayerDeck() {
     for (const a of audios()) a.currentTime = sec
     setMasterTime(sec)
   }
-  const maxDuration = Math.max(0, ...Object.values(durations))
+  // durations には削除済みトラックの値が残りうる (外部からの removeTrack は
+  // この component の削除ハンドラを通らない) ため、現在の tracks に限定して導出。
+  const maxDuration = Math.max(0, ...tracks.map(t => durations[t.id] ?? 0))
   const fmt = (s: number): string =>
     `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`
 

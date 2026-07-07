@@ -35,13 +35,22 @@ export function PlayerDeckProvider({ children }: { children: ReactNode }) {
   return <Ctx.Provider value={api}>{children}</Ctx.Provider>
 }
 
+// Provider 外で使われたときのフォールバック。throw すると Provider を知らない
+// 文脈 (単体テストや Storybook 的な部分レンダー) で EntryTable 等が丸ごと落ちる
+// ため、「何もしないデッキ」に劣化させる。モジュール定数なので参照は安定し、
+// useMemo の依存に入れても再計算を起こさない。
+const NOOP_DECK: PlayerDeckApi = {
+  tracks: [],
+  addTrack: () => {},
+  removeTrack: () => {},
+  clear: () => {},
+}
+
 // Context + hook を同一ファイルに同居させているため react-refresh/only-export-components が
 // usePlayerDeck (非コンポーネントの named export) を検出する。ファイル分割すると
 // 「playerDeck.tsx から PlayerDeckProvider と usePlayerDeck の両方をエクスポートする」
 // という要件(テストの import 元も単一)と衝突するため、この 1 行のみ抑制する。
 // eslint-disable-next-line react-refresh/only-export-components
 export function usePlayerDeck(): PlayerDeckApi {
-  const ctx = useContext(Ctx)
-  if (!ctx) throw new Error('usePlayerDeck must be used within PlayerDeckProvider')
-  return ctx
+  return useContext(Ctx) ?? NOOP_DECK
 }

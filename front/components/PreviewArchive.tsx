@@ -1,6 +1,8 @@
 import { useEffect, useReducer, useState, type KeyboardEvent } from 'react'
 import { api } from '../lib/api/client'
 import type { z } from 'zod'
+import { classify } from '../lib/api/mime'
+import { usePlayerDeck } from '../lib/playerDeck'
 import { TarPreview } from '../lib/api/types'
 import { fmtSize } from '../lib/format'
 import { TarEntryModal } from './TarEntryModal'
@@ -111,6 +113,7 @@ function reducer(s: State, a: Action): State {
 }
 
 export function PreviewArchive({ connId, bucket, k }: { connId: string; bucket: string; k: string }) {
+  const deck = usePlayerDeck()
   const [openedEntry, setOpenedEntry] = useState<Entry | null>(null)
   const [state, dispatch] = useReducer(reducer, undefined, makeInitial)
   const { data, offset, pageSize, error, loading, progress } = state
@@ -262,7 +265,28 @@ export function PreviewArchive({ connId, bucket, k }: { connId: string; bucket: 
                   className="p-2"
                   style={{ fontFamily: 'var(--font-mono)', fontSize: '12.5px' }}
                 >
-                  {e.name}
+                  <span className="flex items-baseline gap-2">
+                    <span className="min-w-0 flex-1 truncate">{e.name}</span>
+                    {classify(e.name) === 'audio' && (
+                      <button
+                        type="button"
+                        className="ghost text-[11px]"
+                        title="デッキに追加"
+                        aria-label={`${e.name} をデッキに追加`}
+                        // keydown も止める: Enter/Space が行の onKeyDown に
+                        // 伝播すると「デッキ追加 + モーダルも開く」の二重動作になる。
+                        onKeyDown={ev => ev.stopPropagation()}
+                        onClick={ev => {
+                          ev.stopPropagation()
+                          deck.addTrack({
+                            label: e.name,
+                            src: api.tarEntryUrl(connId, bucket, k, e.name),
+                            connId, bucket, key: k, entryPath: e.name,
+                          })
+                        }}
+                      >+デッキ</button>
+                    )}
+                  </span>
                 </td>
                 <td
                   className="w-px whitespace-nowrap p-2 text-right text-ink-7 tabular-nums"

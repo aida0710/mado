@@ -5,6 +5,7 @@ import { copyToClipboard } from '../lib/clipboard'
 export type MenuItem =
   | { kind: 'copy'; label: string; value: string }
   | { kind: 'download'; label: string; href: string; filename: string }
+  | { kind: 'action'; label: string; onSelect: () => void }
 
 interface Props {
   items: MenuItem[]
@@ -142,6 +143,23 @@ export const CopyMenu = memo(function CopyMenu({ items, trigger = '⋯', ariaLab
                 >
                   {it.label}
                 </a>
+              )
+            }
+            if (it.kind === 'action') {
+              return (
+                <button
+                  key={it.label}
+                  role="menuitem"
+                  type="button"
+                  className={
+                    'block w-full cursor-pointer border-0 bg-transparent px-3 py-2 ' +
+                    'text-left text-[13px] text-ink-11 transition-colors hover:bg-ink-1'
+                  }
+                  // 親行 (FileRow) の onClick=preview 抑止のため stopPropagation。
+                  onClick={e => { e.stopPropagation(); it.onSelect(); setOpen(false) }}
+                >
+                  {it.label}
+                </button>
               )
             }
             return (
