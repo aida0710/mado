@@ -1,5 +1,5 @@
 import { render, screen, waitFor } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { PreviewAudio } from './PreviewAudio'
 import { api } from '../lib/api/client'
 
@@ -13,7 +13,18 @@ vi.mock('../lib/api/client', async importOriginal => {
   }
 })
 
-afterEach(() => vi.clearAllMocks())
+// entryPath ありのケースは useAudioSrc が fetch → blob 化する。jsdom には
+// URL.createObjectURL/revokeObjectURL が無いのでスタブする。
+beforeEach(() => {
+  vi.stubGlobal('fetch', vi.fn())
+  URL.createObjectURL = vi.fn(() => 'blob:mock-1')
+  URL.revokeObjectURL = vi.fn()
+})
+
+afterEach(() => {
+  vi.clearAllMocks()
+  vi.unstubAllGlobals()
+})
 
 describe('PreviewAudio', () => {
   it('解析結果で波形が出る / スペクトログラムはトグル', async () => {
@@ -55,18 +66,49 @@ describe('PreviewAudio', () => {
     )
   })
 
-  it('entryPath があれば tar-entry URL を audio src に使い、analyze にも渡す', async () => {
+  it('entryPath ありで blob 取得中は「音声を取得中…」が出て audio 要素に src が無い', () => {
     vi.mocked(api.mediaAnalyze).mockResolvedValue({
       cacheKey: 'ck', peaks: [], durationSec: null, sampleRate: null, hasSpectrogram: false,
     })
+    vi.mocked(fetch).mockReturnValue(new Promise(() => {})) // 未解決のまま保持
     const { container } = render(
       <PreviewAudio connId="c" bucket="b" k="shard.tar" entryPath="u1.wav" />,
     )
+    expect(screen.getByText('音声を取得中…')).toBeInTheDocument()
+    expect(container.querySelector('audio')).toBeNull()
+  })
+
+  it('entryPath ありで blob 解決後に audio.src が blob: URL になり、analyze にも entryPath が渡る', async () => {
+    vi.mocked(api.mediaAnalyze).mockResolvedValue({
+      cacheKey: 'ck', peaks: [], durationSec: null, sampleRate: null, hasSpectrogram: false,
+    })
+    vi.mocked(fetch).mockResolvedValue({
+      ok: true,
+      blob: () => Promise.resolve(new Blob(['data'])),
+    } as unknown as Response)
+    const { container } = render(
+      <PreviewAudio connId="c" bucket="b" k="shard.tar" entryPath="u1.wav" />,
+    )
+    await waitFor(() => expect(container.querySelector('audio')).not.toBeNull())
     const audio = container.querySelector('audio')!
-    expect(audio.src).toContain('/preview/tar-entry')
-    expect(audio.src).toContain('entry=u1.wav')
+    expect(audio.src).toContain('blob:')
+    expect(screen.queryByText('音声を取得中…')).not.toBeInTheDocument()
     await waitFor(() => expect(api.mediaAnalyze).toHaveBeenCalledWith(
       'c', 'b', 'shard.tar', expect.objectContaining({ entryPath: 'u1.wav' }),
     ))
+  })
+
+  it('entryPath ありで blob 取得失敗は小さくエラー表示される', async () => {
+    vi.mocked(api.mediaAnalyze).mockResolvedValue({
+      cacheKey: 'ck', peaks: [], durationSec: null, sampleRate: null, hasSpectrogram: false,
+    })
+    vi.mocked(fetch).mockResolvedValue({
+      ok: false,
+      statusText: 'Not Found',
+      json: () => Promise.resolve({ error: 'entry not found' }),
+    } as unknown as Response)
+    render(<PreviewAudio connId="c" bucket="b" k="shard.tar" entryPath="u1.wav" />)
+    await waitFor(() => expect(screen.getByText(/音声を取得できません/)).toBeInTheDocument())
+    expect(screen.getByText(/entry not found/)).toBeInTheDocument()
   })
 })

@@ -1,5 +1,5 @@
-import { fireEvent, render, screen } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { PlayerDeckProvider, usePlayerDeck } from '../lib/playerDeck'
 import { PlayerDeck } from './PlayerDeck'
 
@@ -9,13 +9,26 @@ beforeEach(() => {
   window.HTMLMediaElement.prototype.pause = vi.fn()
 })
 
+afterEach(() => vi.unstubAllGlobals())
+
 function AddButton({ n }: { n: number }) {
   const deck = usePlayerDeck()
   return (
     <button onClick={() => deck.addTrack({
-      label: `ch${n}`, src: `/audio/ch${n}.wav`, connId: 'c', bucket: 'b', key: `ch${n}.wav`,
+      label: `ch${n}`, connId: 'c', bucket: 'b', key: `ch${n}.wav`,
     })}>
       add{n}
+    </button>
+  )
+}
+
+function AddTarButton() {
+  const deck = usePlayerDeck()
+  return (
+    <button onClick={() => deck.addTrack({
+      label: 'tar-entry', connId: 'c', bucket: 'b', key: 'shard.tar', entryPath: 'u1.wav',
+    })}>
+      addTar
     </button>
   )
 }
@@ -85,5 +98,24 @@ describe('PlayerDeck', () => {
     const audios = [...container.querySelectorAll('audio')]
     expect(audios).toHaveLength(1)
     expect(audios[0].muted).toBe(false)
+  })
+
+  it('tar 内エントリのトラックは blob 解決後に <audio src> が blob: URL になる (デッキでもシーク不具合対策を適用)', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      blob: () => Promise.resolve(new Blob(['data'])),
+    } as unknown as Response))
+    URL.createObjectURL = vi.fn(() => 'blob:mock-1')
+    URL.revokeObjectURL = vi.fn()
+
+    const { container } = render(
+      <PlayerDeckProvider>
+        <AddTarButton />
+        <PlayerDeck />
+      </PlayerDeckProvider>,
+    )
+    fireEvent.click(screen.getByText('addTar'))
+    await waitFor(() => expect(container.querySelectorAll('audio')).toHaveLength(1))
+    expect(container.querySelector('audio')!.src).toContain('blob:')
   })
 })

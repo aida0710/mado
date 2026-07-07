@@ -1,8 +1,37 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { computeDriftAdjustments } from '../lib/driftSync'
-import { usePlayerDeck } from '../lib/playerDeck'
+import { usePlayerDeck, type DeckTrack } from '../lib/playerDeck'
+import { useAudioSrc } from '../lib/useAudioSrc'
 import { Waveform } from './Waveform'
 import { api } from '../lib/api/client'
+
+// トラック 1 本分の <audio>。tar 内エントリは useAudioSrc が blob 化するため、
+// blob 取得が終わる (src が非 null になる) までは何もマウントしない — サーバー
+// 直リンクを src に使うと Range 非対応でシークが現在位置に巻き戻る不具合の対象に
+// なるため (PreviewAudio と同じ対策)。
+function DeckAudio({
+  track,
+  register,
+  onDuration,
+}: {
+  track: DeckTrack
+  register: (id: string, el: HTMLAudioElement | null) => void
+  onDuration: (id: string, durationSec: number) => void
+}) {
+  const { src } = useAudioSrc(track.connId, track.bucket, track.key, track.entryPath)
+  if (!src) return null
+  return (
+    <audio
+      ref={el => register(track.id, el)}
+      src={src}
+      preload="metadata"
+      onLoadedMetadata={e => {
+        const d = e.currentTarget.duration
+        if (Number.isFinite(d)) onDuration(track.id, d)
+      }}
+    />
+  )
+}
 
 // マルチチャンネル録音のチャンネル別ファイルを頭出しを揃えて同時再生する
 // 画面下部ドック。<audio> ベース + 1 秒ごとのドリフト補正 (サンプル精度ではない)。
@@ -127,18 +156,14 @@ export function PlayerDeck() {
             (playing state だけ true のまま残る UI 矛盾も起きる)。
             もともと不可視 (controls なし) なので置き場所は UI に影響しない。 */}
         {tracks.map(t => (
-          <audio
+          <DeckAudio
             key={t.id}
-            ref={el => {
-              if (el) audioRefs.current.set(t.id, el)
-              else audioRefs.current.delete(t.id)
+            track={t}
+            register={(id, el) => {
+              if (el) audioRefs.current.set(id, el)
+              else audioRefs.current.delete(id)
             }}
-            src={t.src}
-            preload="metadata"
-            onLoadedMetadata={e => {
-              const d = e.currentTarget.duration
-              if (Number.isFinite(d)) setDurations(cur => ({ ...cur, [t.id]: d }))
-            }}
+            onDuration={(id, d) => setDurations(cur => ({ ...cur, [id]: d }))}
           />
         ))}
         {!collapsed && (

@@ -123,8 +123,7 @@ const FileRow = memo(function FileRow({
       kind: 'action' as const,
       label: 'デッキに追加',
       onSelect: () => deck.addTrack({
-        label: filename, src: api.audioUrl(connId, bucket, f.key),
-        connId, bucket, key: f.key,
+        label: filename, connId, bucket, key: f.key,
       }),
     }] : []),
     { kind: 'download', label: 'このファイルをダウンロード', href: downloadUrl, filename },
@@ -228,8 +227,7 @@ const FileCard = memo(function FileCard({
       kind: 'action' as const,
       label: 'デッキに追加',
       onSelect: () => deck.addTrack({
-        label: filename, src: api.audioUrl(connId, bucket, f.key),
-        connId, bucket, key: f.key,
+        label: filename, connId, bucket, key: f.key,
       }),
     }] : []),
     { kind: 'download', label: 'このファイルをダウンロード', href: downloadUrl, filename },

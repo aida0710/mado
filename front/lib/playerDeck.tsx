@@ -3,7 +3,6 @@ import { createContext, useCallback, useContext, useMemo, useState, type ReactNo
 export interface DeckTrack {
   id: string
   label: string
-  src: string
   connId: string
   bucket: string
   key: string

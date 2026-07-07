@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { z } from 'zod'
 import { api } from '../lib/api/client'
 import type { MediaAnalyze } from '../lib/api/types'
+import { useAudioSrc } from '../lib/useAudioSrc'
 import { Waveform } from './Waveform'
 
 type Analyze = z.infer<typeof MediaAnalyze>
@@ -22,9 +23,9 @@ export function PreviewAudio({ connId, bucket, k, entryPath }: Props) {
   const [progress, setProgress] = useState(0)
   const [showSpec, setShowSpec] = useState(false)
 
-  const src = entryPath
-    ? api.tarEntryUrl(connId, bucket, k, entryPath)
-    : api.audioUrl(connId, bucket, k)
+  // tar 内エントリは blob 化して取得する (シークバーが現在位置に巻き戻る不具合の
+  // 対策)。詳細は useAudioSrc のコメントを参照。
+  const { src, loading: srcLoading, error: srcError } = useAudioSrc(connId, bucket, k, entryPath)
 
   // 解析はサーバー側キャッシュがあるので毎マウントで呼んでよい。ファイル切替時の
   // state リセットは呼び出し側 (key で再マウント) に任せ、ここでは同期 setState
@@ -61,7 +62,9 @@ export function PreviewAudio({ connId, bucket, k, entryPath }: Props) {
 
   return (
     <div className="flex flex-col gap-2">
-      <audio ref={audioRef} className="w-full" src={src} controls preload="metadata" />
+      {srcLoading && <p className="m-0 text-[12px] text-ink-7">音声を取得中…</p>}
+      {srcError && <p className="m-0 text-[12px] text-ink-7">音声を取得できません: {srcError}</p>}
+      {src && <audio ref={audioRef} className="w-full" src={src} controls preload="metadata" />}
       {analyzing && <p className="m-0 text-[12px] text-ink-7">解析中…</p>}
       {error && <p className="m-0 text-[12px] text-ink-7">波形を表示できません: {error}</p>}
       {analyze && analyze.peaks.length > 0 && (

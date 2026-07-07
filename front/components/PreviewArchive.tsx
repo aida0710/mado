@@ -282,7 +282,6 @@ export function PreviewArchive({ connId, bucket, k }: { connId: string; bucket: 
                           ev.stopPropagation()
                           deck.addTrack({
                             label: e.name,
-                            src: api.tarEntryUrl(connId, bucket, k, e.name),
                             connId, bucket, key: k, entryPath: e.name,
                           })
                         }}
