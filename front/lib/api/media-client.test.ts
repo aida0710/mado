@@ -42,6 +42,14 @@ describe('media client', () => {
     expect(st.job).toBeNull()
   })
 
+  it('scanStart: jobId が null でも zod が throw しない', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ jobId: null }), { status: 202 }),
+    )
+    const started = await api.scanStart('c', { bucket: 'b', prefix: 'ds/' })
+    expect(started.jobId).toBeNull()
+  })
+
   it('scanStatus: prefix がエンコードされてクエリに乗る', async () => {
     const spy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       okJson({ job: null, stats: null, scannedAt: null }),

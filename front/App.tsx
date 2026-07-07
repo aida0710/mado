@@ -1,10 +1,10 @@
-import { lazy, Suspense } from 'react'
+import { lazy, Suspense, type ReactNode } from 'react'
 import { Link, Route, Routes, useLocation, useParams } from 'react-router-dom'
 import HomePage from './pages/HomePage'
 import StoragePage from './pages/StoragePage'
 import StorageLanding from './pages/StorageLanding'
 import ConnectionsPage from './pages/ConnectionsPage'
-import { PlayerDeckProvider } from './lib/playerDeck'
+import { PlayerDeckProvider, usePlayerDeck } from './lib/playerDeck'
 import { PlayerDeck } from './components/PlayerDeck'
 import './App.css'
 
@@ -52,6 +52,19 @@ function Tabs() {
   )
 }
 
+// PlayerDeck は画面下部に fixed でドックされるため、デッキにトラックがある間は
+// 本文の下端がドックに隠れないよう pb を広げる。usePlayerDeck() は
+// PlayerDeckProvider の内側でしか使えないので、Provider に包まれるこの
+// 小さなラッパーで読む (App 本体は children を渡すだけで Provider の外側のまま)。
+function MainContent({ children }: { children: ReactNode }) {
+  const { tracks } = usePlayerDeck()
+  return (
+    <main className={`mado-page-in pt-6 ${tracks.length > 0 ? 'pb-64' : 'pb-12'}`}>
+      {children}
+    </main>
+  )
+}
+
 export default function App() {
   return (
     <PlayerDeckProvider>
@@ -89,7 +102,7 @@ export default function App() {
           <Tabs />
         </header>
 
-        <main className="mado-page-in pt-6 pb-12">
+        <MainContent>
           <Suspense fallback={<p className="text-[13px] text-ink-7">読み込み中…</p>}>
             <Routes>
               <Route path="/"                  element={<HomePage />} />
@@ -99,7 +112,7 @@ export default function App() {
               <Route path="/storage/:connId/*" element={<StoragePageWithKey />} />
             </Routes>
           </Suspense>
-        </main>
+        </MainContent>
         <PlayerDeck />
       </div>
     </PlayerDeckProvider>

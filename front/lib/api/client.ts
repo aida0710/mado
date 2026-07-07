@@ -376,7 +376,9 @@ export const api = {
     mutateJson(
       `${API_BASE}/storage/${encodeURIComponent(connId)}/media/scan`,
       { method: 'POST', body },
-      z.object({ jobId: z.number() }),
+      // jobId は既存ジョブへの合流に失敗すると undefined/null になりうる
+      // (呼び出し側は jobId を使わない — ここで throw させないことだけが目的)。
+      z.object({ jobId: z.number().nullable().optional() }),
     ),
 
   scanStatus: (connId: string, bucket: string, target: { prefix?: string; tarKey?: string }) => {
