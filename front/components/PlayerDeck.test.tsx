@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { PlayerDeckProvider, usePlayerDeck } from '../lib/playerDeck'
 import { PlayerDeck } from './PlayerDeck'
@@ -117,5 +117,42 @@ describe('PlayerDeck', () => {
     fireEvent.click(screen.getByText('addTar'))
     await waitFor(() => expect(container.querySelectorAll('audio')).toHaveLength(1))
     expect(container.querySelector('audio')!.src).toContain('blob:')
+  })
+
+  it('blob 取得中に一括再生しても、解決後に後着トラックへ play() が呼ばれる (取得中は「取得中…」表示)', async () => {
+    let resolveFetch!: (v: Response) => void
+    vi.stubGlobal('fetch', vi.fn().mockReturnValue(
+      new Promise<Response>(resolve => { resolveFetch = resolve }),
+    ))
+    URL.createObjectURL = vi.fn(() => 'blob:mock-1')
+    URL.revokeObjectURL = vi.fn()
+
+    const { container } = render(
+      <PlayerDeckProvider>
+        <AddButton n={1} />
+        <AddTarButton />
+        <PlayerDeck />
+      </PlayerDeckProvider>,
+    )
+    fireEvent.click(screen.getByText('add1'))
+    fireEvent.click(screen.getByText('addTar'))
+    // 取得中: tar トラックの <audio> はまだ無く、行に「取得中…」が出る
+    expect(container.querySelectorAll('audio')).toHaveLength(1)
+    expect(screen.getByText('取得中…')).toBeInTheDocument()
+
+    // 取得中に一括再生 → マウント済みの 1 本だけ play される
+    fireEvent.click(screen.getByRole('button', { name: '一括再生' }))
+    expect(window.HTMLMediaElement.prototype.play).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      resolveFetch({
+        ok: true,
+        blob: () => Promise.resolve(new Blob(['data'])),
+      } as unknown as Response)
+    })
+    // blob 解決後: 後着トラックがマウントされ、再生中なので play() が追加で呼ばれる
+    await waitFor(() => expect(container.querySelectorAll('audio')).toHaveLength(2))
+    expect(window.HTMLMediaElement.prototype.play).toHaveBeenCalledTimes(2)
+    expect(screen.queryByText('取得中…')).not.toBeInTheDocument()
   })
 })

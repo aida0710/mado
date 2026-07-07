@@ -13,16 +13,29 @@ function DeckAudio({
   track,
   register,
   onDuration,
+  onArrive,
 }: {
   track: DeckTrack
   register: (id: string, el: HTMLAudioElement | null) => void
   onDuration: (id: string, durationSec: number) => void
+  onArrive: (id: string, el: HTMLAudioElement) => void
 }) {
   const { src } = useAudioSrc(track.connId, track.bucket, track.key, track.entryPath)
+  // onArrive は「このトラックに <audio> が初めて現れた」1 回だけ通知する。
+  // inline の ref callback は再レンダーごとに detach/attach (null → el) される
+  // ため、ref の発火回数ではなくこのフラグで 1 回に絞る。register を先に呼び、
+  // onArrive 側から audioRefs 経由でも自分が見えるようにしておく。
+  const arrivedRef = useRef(false)
   if (!src) return null
   return (
     <audio
-      ref={el => register(track.id, el)}
+      ref={el => {
+        register(track.id, el)
+        if (el && !arrivedRef.current) {
+          arrivedRef.current = true
+          onArrive(track.id, el)
+        }
+      }}
       src={src}
       preload="metadata"
       onLoadedMetadata={e => {
@@ -48,6 +61,10 @@ export function PlayerDeck() {
   // (audios() = ref 経由の読み出しなので render 中に直接呼ぶと react-hooks/refs
   // に引っかかる。onLoadedMetadata というイベントハンドラで拾って state 化する)。
   const [durations, setDurations] = useState<Record<string, number>>({})
+  // <audio> がマウント済み (= src 解決済み) のトラック ID。tar 内エントリは
+  // blob 取得が終わるまで <audio> が存在しないため、行の「取得中…」表示は
+  // この集合の否定で導出する (単体ファイルはマウント直後に入る)。
+  const [readyIds, setReadyIds] = useState<Set<string>>(new Set())
 
   const audios = useCallback(
     () => tracks.map(t => audioRefs.current.get(t.id)).filter((a): a is HTMLAudioElement => a != null),
@@ -119,6 +136,22 @@ export function PlayerDeck() {
     for (const a of audios()) a.currentTime = sec
     setMasterTime(sec)
   }
+  // <audio> が後から現れたトラックへの追従 (DeckAudio が 1 マウント 1 回だけ呼ぶ)。
+  // blob 取得中のトラックは playAll 時点で <audio> が存在せず play 対象から漏れる
+  // ため、再生中ならマスター時刻へシークして再生を開始する — これが無いと
+  // 「▶ は押せたのにそのトラックだけ永久に無音」のまま取り残される。
+  const onTrackArrive = (id: string, el: HTMLAudioElement): void => {
+    setReadyIds(cur => {
+      if (cur.has(id)) return cur
+      const next = new Set(cur)
+      next.add(id)
+      return next
+    })
+    if (!playing) return
+    const master = audios()[0]
+    if (master && master !== el) el.currentTime = master.currentTime
+    void el.play()
+  }
   // durations には削除済みトラックの値が残りうる (外部からの removeTrack は
   // この component の削除ハンドラを通らない) ため、現在の tracks に限定して導出。
   const maxDuration = Math.max(0, ...tracks.map(t => durations[t.id] ?? 0))
@@ -145,6 +178,7 @@ export function PlayerDeck() {
               setSoloId(null)
               setMuted(new Set())
               setDurations({})
+              setReadyIds(new Set())
             }}
           >
             クリア
@@ -164,6 +198,7 @@ export function PlayerDeck() {
               else audioRefs.current.delete(id)
             }}
             onDuration={(id, d) => setDurations(cur => ({ ...cur, [id]: d }))}
+            onArrive={onTrackArrive}
           />
         ))}
         {!collapsed && (
@@ -172,6 +207,11 @@ export function PlayerDeck() {
               {tracks.map(t => (
                 <li key={t.id} className="flex items-center gap-2 py-1" style={{ borderTop: '1px solid var(--rule)' }}>
                   <span className="w-40 truncate text-[12px] text-ink-11" title={t.label}>{t.label}</span>
+                  {/* tar 内エントリは blob 取得が終わるまで再生できない。無表示だと
+                      ▶ を押しても鳴らない理由が見えないので、取得中を明示する。 */}
+                  {t.entryPath != null && !readyIds.has(t.id) && (
+                    <span className="shrink-0 text-[11px] text-ink-7">取得中…</span>
+                  )}
                   <div className="min-w-0 flex-1">
                     <Waveform
                       peaks={peaksById[t.id] ?? []}
@@ -216,6 +256,12 @@ export function PlayerDeck() {
                         if (!(t.id in cur)) return cur
                         const next = { ...cur }
                         delete next[t.id]
+                        return next
+                      })
+                      setReadyIds(cur => {
+                        if (!cur.has(t.id)) return cur
+                        const next = new Set(cur)
+                        next.delete(t.id)
                         return next
                       })
                     }}
