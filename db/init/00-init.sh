@@ -36,6 +36,9 @@ for db in dashboard dashboard_test; do
     ALTER TABLE    storage_readme_meta                  OWNER TO dashboard_rw;
     ALTER TABLE    storage_favorite_buckets             OWNER TO dashboard_rw;
     ALTER TABLE    notes                                OWNER TO dashboard_rw;
+    ALTER TABLE    media_cache                          OWNER TO dashboard_rw;
+    ALTER TABLE    media_jobs                           OWNER TO dashboard_rw;
+    ALTER TABLE    dataset_stats                        OWNER TO dashboard_rw;
 
     GRANT USAGE  ON SCHEMA public                  TO dashboard_ro;
     GRANT SELECT ON ALL TABLES IN SCHEMA public    TO dashboard_ro;
