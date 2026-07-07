@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { PeakAccumulator, PEAK_BUCKETS } from './media-peaks.js'
+import { LoudnessAccumulator, PeakAccumulator, PEAK_BUCKETS } from './media-peaks.js'
 
 describe('PeakAccumulator', () => {
   it('少サンプルでも finish で指定バケット数以下の peaks を返す', () => {
@@ -46,5 +46,37 @@ describe('PeakAccumulator', () => {
     const b = new PeakAccumulator({ windowSamples: 64 })
     for (let i = 0; i < data.length; i += 7) b.push(data.subarray(i, Math.min(i + 7, data.length)))
     expect(b.finish(100)).toEqual(a.finish(100))
+  })
+})
+
+describe('LoudnessAccumulator', () => {
+  it('フルスケールサイン波 → peak ≈ 0 dBFS / RMS ≈ -3.01 dB', () => {
+    const n = 16000
+    const samples = new Float32Array(n)
+    for (let i = 0; i < n; i++) samples[i] = Math.sin((2 * Math.PI * 440 * i) / n)
+    const acc = new LoudnessAccumulator()
+    acc.push(samples)
+    const { peakDb, rmsDb } = acc.finish()
+    expect(peakDb).toBeCloseTo(0, 1)
+    expect(rmsDb).toBeCloseTo(-3.01, 1)
+  })
+
+  it('無音 (全サンプル 0) → peakDb / rmsDb ともに null', () => {
+    const acc = new LoudnessAccumulator()
+    acc.push(new Float32Array(1000))
+    expect(acc.finish()).toEqual({ peakDb: null, rmsDb: null })
+  })
+
+  it('サンプルが 1 件も無い場合も null', () => {
+    expect(new LoudnessAccumulator().finish()).toEqual({ peakDb: null, rmsDb: null })
+  })
+
+  it('チャンクを分けて push しても結果は変わらない', () => {
+    const data = new Float32Array(1000).map(() => Math.random() * 2 - 1)
+    const a = new LoudnessAccumulator()
+    a.push(data)
+    const b = new LoudnessAccumulator()
+    for (let i = 0; i < data.length; i += 7) b.push(data.subarray(i, Math.min(i + 7, data.length)))
+    expect(b.finish()).toEqual(a.finish())
   })
 })

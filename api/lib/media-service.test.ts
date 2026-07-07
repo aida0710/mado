@@ -9,12 +9,34 @@ vi.mock('./media-analyze.js', async importOriginal => {
   const mod = await importOriginal<typeof import('./media-analyze.js')>()
   return {
     ...mod,
-    analyzeAudio: vi.fn(async () => ({
-      peaks: [[-0.1, 0.1]] as Array<[number, number]>,
-      durationSec: 2.5,
-      sampleRate: 16000,
-      spectrogramPng: Buffer.from([0x89, 0x50]),
-    })),
+    // getSizeBytes() の戻り値を meta.sizeBytes に乗せて返す — media-service.ts が
+    // GetObject の ContentLength / tar 抽出後の buffer.length を正しく捕捉して
+    // AnalyzeOpts に渡していることを検証できるようにする (実際の meta 組み立ては
+    // media-analyze.ts の責務なのでここではモックで代替する)。
+    // 実装同様、openStream() を呼んでから getSizeBytes() を読む (単体ファイルの
+    // ContentLength は openStream 実行時に初めて捕捉されるため)。
+    analyzeAudio: vi.fn(async (opts: {
+      openStream?: () => Promise<unknown>
+      getSizeBytes?: () => number | null
+    }) => {
+      if (opts.openStream) await opts.openStream()
+      return {
+        peaks: [[-0.1, 0.1]] as Array<[number, number]>,
+        durationSec: 2.5,
+        sampleRate: 16000,
+        spectrogramPng: Buffer.from([0x89, 0x50]),
+        meta: {
+          codec: null,
+          container: null,
+          channels: null,
+          bitsPerSample: null,
+          bitRate: null,
+          sizeBytes: opts.getSizeBytes ? opts.getSizeBytes() : null,
+          peakDb: null,
+          rmsDb: null,
+        },
+      }
+    }),
   }
 })
 const { createMediaService } = await import('./media-service.js')
@@ -84,6 +106,8 @@ describe('analyzeOne', () => {
     expect(r1.durationSec).toBe(2.5)
     expect(r1.hasSpectrogram).toBe(true)
     expect(r1.cacheKey).toBe(mediaCacheKey(req))
+    // GetObject の ContentLength (=stub の body.length) が meta.sizeBytes に渡っている
+    expect(r1.meta?.sizeBytes).toBe(Buffer.from('fake').length)
     const cached = await getCachedMedia(pools.ro, r1.cacheKey)
     expect(cached?.durationSec).toBe(2.5)
     // 2 回目 — analyzeAudio は追加で呼ばれない
@@ -92,5 +116,17 @@ describe('analyzeOne', () => {
     const r2 = await svc.analyzeOne(req)
     expect(r2).toEqual(r1)
     expect((analyzeAudio as ReturnType<typeof vi.fn>).mock.calls.length).toBe(calls)
+  })
+
+  it('tar エントリ抽出後の buffer.length が meta.sizeBytes として渡る', async () => {
+    const { readFileSync } = await import('node:fs')
+    const tarBuf = readFileSync(new URL('./test-fixtures/sample.tar', import.meta.url))
+    const svc = makeService({ 'archive.tar': tarBuf })
+    const req = {
+      connId: 'c1', bucket: 'b', key: 'archive.tar', entryPath: 'd/a.txt', etag: 'stub-etag',
+    }
+    const r = await svc.analyzeOne(req)
+    // d/a.txt (sample.tar 内) は 6 バイト
+    expect(r.meta?.sizeBytes).toBe(6)
   })
 })

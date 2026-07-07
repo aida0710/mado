@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import type { Pool } from 'pg'
-import type { AnalyzeResult } from './media-analyze.js'
+import type { AnalyzeResult, MediaMeta } from './media-analyze.js'
 
 export interface MediaRef {
   connId: string
@@ -24,6 +24,7 @@ export interface CachedMedia {
   durationSec: number | null
   sampleRate: number | null
   hasSpectrogram: boolean
+  meta: MediaMeta | null
 }
 
 export async function getCachedMedia(pool: Pool, cacheKey: string): Promise<CachedMedia | null> {
@@ -32,9 +33,10 @@ export async function getCachedMedia(pool: Pool, cacheKey: string): Promise<Cach
     duration_sec: number | null
     sample_rate: number | null
     has_spec: boolean
+    meta: MediaMeta | null
   }>(
-    `SELECT peaks, duration_sec, sample_rate, (spectrogram IS NOT NULL) AS has_spec
-       FROM media_cache WHERE cache_key = $1`,
+    `SELECT peaks, duration_sec, sample_rate, meta, (spectrogram IS NOT NULL) AS has_spec
+       FROM media_cache WHERE cache_key = $1 AND meta IS NOT NULL`,
     [cacheKey],
   )
   const row = r.rows[0]
@@ -45,6 +47,7 @@ export async function getCachedMedia(pool: Pool, cacheKey: string): Promise<Cach
     durationSec: row.duration_sec,
     sampleRate: row.sample_rate,
     hasSpectrogram: row.has_spec,
+    meta: row.meta,
   }
 }
 
@@ -62,13 +65,14 @@ export async function upsertMediaCache(
   result: AnalyzeResult & { durationSec: number | null },
 ): Promise<void> {
   await pool.query(
-    `INSERT INTO media_cache (cache_key, peaks, spectrogram, duration_sec, sample_rate)
-     VALUES ($1, $2, $3, $4, $5)
+    `INSERT INTO media_cache (cache_key, peaks, spectrogram, duration_sec, sample_rate, meta)
+     VALUES ($1, $2, $3, $4, $5, $6)
      ON CONFLICT (cache_key) DO UPDATE SET
        peaks = EXCLUDED.peaks,
        spectrogram = EXCLUDED.spectrogram,
        duration_sec = EXCLUDED.duration_sec,
        sample_rate = EXCLUDED.sample_rate,
+       meta = EXCLUDED.meta,
        created_at = now()`,
     [
       cacheKey,
@@ -76,6 +80,7 @@ export async function upsertMediaCache(
       result.spectrogramPng,
       result.durationSec,
       result.sampleRate,
+      JSON.stringify(result.meta),
     ],
   )
 }

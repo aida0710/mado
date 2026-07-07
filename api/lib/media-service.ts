@@ -74,7 +74,7 @@ export function createMediaService(deps: MediaServiceDeps): MediaService {
   }
 
   // Buffer から解析する (tar エントリ / スキャン内)。openStream は 2 回呼ばれても
-  // Buffer なので追加 I/O なし。
+  // Buffer なので追加 I/O なし。buffer 自体の長さが sizeBytes (抽出済みなので既知)。
   function analyzeBuffer(buf: Buffer, signal?: AbortSignal): Promise<AnalyzeResult> {
     return analyzeAudio({
       openStream: async () => ReadableCtor.from(buf) as NodeJS.ReadableStream,
@@ -82,6 +82,7 @@ export function createMediaService(deps: MediaServiceDeps): MediaService {
       timeoutMs,
       maxSpectrogramWidth: deps.env.MEDIA_SPECTROGRAM_MAX_WIDTH,
       signal,
+      getSizeBytes: () => buf.length,
     })
   }
 
@@ -100,6 +101,7 @@ export function createMediaService(deps: MediaServiceDeps): MediaService {
       durationSec: result.durationSec,
       sampleRate: result.sampleRate,
       hasSpectrogram: result.spectrogramPng != null,
+      meta: result.meta,
     }
   }
 
@@ -120,18 +122,32 @@ export function createMediaService(deps: MediaServiceDeps): MediaService {
           return analyzeBuffer(extracted.buffer, signal)
         })
       }
-      return await analyzeAndCache(req, () => analyzeAudio({
-        openStream: () => openObjectStream(storage, req.bucket, req.key, undefined, signal),
-        probeHead: async () => {
-          const head = await openObjectStream(
-            storage, req.bucket, req.key, `bytes=0-${PROBE_HEAD_BYTES - 1}`, signal,
-          )
-          return readAll(head)
-        },
-        timeoutMs,
-        maxSpectrogramWidth: deps.env.MEDIA_SPECTROGRAM_MAX_WIDTH,
-        signal,
-      }))
+      return await analyzeAndCache(req, () => {
+        // GetObject の ContentLength (= 全体サイズ) を openStream 呼び出し時に捕捉する。
+        // ピーク/スペクトログラムの各パスで openStream() が呼ばれるが、同一オブジェクト
+        // (同一 etag) を範囲指定なしで取得するので値は毎回同じになる。
+        let sizeBytes: number | null = null
+        return analyzeAudio({
+          openStream: async () => {
+            const r = await storage.send(
+              new GetObjectCommand({ Bucket: req.bucket, Key: req.key }),
+              { abortSignal: signal },
+            )
+            sizeBytes = r.ContentLength ?? null
+            return r.Body as unknown as Readable
+          },
+          probeHead: async () => {
+            const head = await openObjectStream(
+              storage, req.bucket, req.key, `bytes=0-${PROBE_HEAD_BYTES - 1}`, signal,
+            )
+            return readAll(head)
+          },
+          timeoutMs,
+          maxSpectrogramWidth: deps.env.MEDIA_SPECTROGRAM_MAX_WIDTH,
+          signal,
+          getSizeBytes: () => sizeBytes,
+        })
+      })
     } finally {
       release()
     }

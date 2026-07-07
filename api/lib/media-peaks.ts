@@ -83,3 +83,31 @@ export class PeakAccumulator {
     return { peaks, totalSamples: this.total }
   }
 }
+
+// PeakAccumulator と並走させる小さなアキュムレータ。窓分割は不要 (全体の
+// max|s| と Σs² だけで足りる) なので、ピーク検出とは別の単純な累積にする。
+// peak = 20·log10(max|s|)、RMS = 20·log10(√(Σs²/N))。無音 (max=0) は両方 null。
+export class LoudnessAccumulator {
+  private maxAbs = 0
+  private sumSquares = 0
+  private total = 0
+
+  push(samples: Float32Array): void {
+    for (let i = 0; i < samples.length; i++) {
+      const v = samples[i]
+      const a = Math.abs(v)
+      if (a > this.maxAbs) this.maxAbs = a
+      this.sumSquares += v * v
+      this.total++
+    }
+  }
+
+  finish(): { peakDb: number | null; rmsDb: number | null } {
+    if (this.maxAbs === 0 || this.total === 0) return { peakDb: null, rmsDb: null }
+    const rms = Math.sqrt(this.sumSquares / this.total)
+    return {
+      peakDb: 20 * Math.log10(this.maxAbs),
+      rmsDb: 20 * Math.log10(rms),
+    }
+  }
+}

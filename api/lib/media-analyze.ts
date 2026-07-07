@@ -7,7 +7,7 @@
 //   3. ffmpeg showspectrumpic   : スペクトログラム PNG (duration から幅を決める)
 
 import { spawn } from 'node:child_process'
-import { PeakAccumulator } from './media-peaks.js'
+import { LoudnessAccumulator, PeakAccumulator } from './media-peaks.js'
 
 export class MediaAnalyzeError extends Error {
   constructor(message: string, public stderrSummary: string) {
@@ -15,11 +15,25 @@ export class MediaAnalyzeError extends Error {
   }
 }
 
+// media_cache.meta にそのまま保存され、analyze レスポンスにも乗る。
+// 取れない項目は null (mp3 の bit 深度等)。
+export interface MediaMeta {
+  codec: string | null
+  container: string | null
+  channels: number | null
+  bitsPerSample: number | null
+  bitRate: number | null
+  sizeBytes: number | null
+  peakDb: number | null
+  rmsDb: number | null
+}
+
 export interface AnalyzeResult {
   peaks: Array<[number, number]>
   durationSec: number
   sampleRate: number | null
   spectrogramPng: Buffer | null
+  meta: MediaMeta
 }
 
 export interface AnalyzeOpts {
@@ -28,6 +42,23 @@ export interface AnalyzeOpts {
   timeoutMs: number
   maxSpectrogramWidth: number
   signal?: AbortSignal
+  // 単体ファイル: GetObject の ContentLength を openStream 呼び出し時に捕捉して返す。
+  // tar エントリ: 抽出済み buffer.length を返す。呼べない/無ければ null 扱い。
+  getSizeBytes?: () => number | null
+}
+
+// bitRate の決定順: stream の bit_rate → format の bit_rate → 計算値
+// (sizeBytes*8/durationSec)。どれも無ければ null。
+export function resolveBitRate(
+  streamBitRate: number | null,
+  formatBitRate: number | null,
+  sizeBytes: number | null,
+  durationSec: number,
+): number | null {
+  if (streamBitRate != null) return streamBitRate
+  if (formatBitRate != null) return formatBitRate
+  if (sizeBytes != null && durationSec > 0) return Math.round((sizeBytes * 8) / durationSec)
+  return null
 }
 
 const PEAK_SAMPLE_RATE = 16000
@@ -113,38 +144,81 @@ function run(
   })
 }
 
-async function probeSampleRate(head: Buffer, opts: AnalyzeOpts): Promise<number | null> {
+interface ProbeMetadata {
+  sampleRate: number | null
+  codec: string | null
+  container: string | null
+  channels: number | null
+  bitsPerSample: number | null
+  streamBitRate: number | null
+  formatBitRate: number | null
+}
+
+const EMPTY_PROBE: ProbeMetadata = {
+  sampleRate: null,
+  codec: null,
+  container: null,
+  channels: null,
+  bitsPerSample: null,
+  streamBitRate: null,
+  formatBitRate: null,
+}
+
+async function probeMetadata(head: Buffer, opts: AnalyzeOpts): Promise<ProbeMetadata> {
   let r: RunResult
   try {
     r = await run('ffprobe', [
       '-v', 'error',
       '-select_streams', 'a:0',
-      '-show_entries', 'stream=sample_rate',
+      '-show_entries',
+      'stream=codec_name,channels,sample_rate,bits_per_raw_sample,bits_per_sample,bit_rate',
+      '-show_entries', 'format=format_name,bit_rate',
       '-of', 'json',
       'pipe:0',
     ], head, { timeoutMs: opts.timeoutMs, signal: opts.signal })
   } catch (e) {
-    // probe 失敗は致命ではない (sampleRate: null で続行)。abort だけは伝播させる。
+    // probe 失敗は致命ではない (メタは全項目 null で続行)。abort だけは伝播させる。
     if (opts.signal?.aborted) throw e
-    return null
+    return EMPTY_PROBE
   }
   try {
     const parsed = JSON.parse(r.stdout.toString()) as {
-      streams?: Array<{ sample_rate?: string }>
+      streams?: Array<{
+        codec_name?: string
+        channels?: number
+        sample_rate?: string
+        bits_per_raw_sample?: number | string
+        bits_per_sample?: number | string
+        bit_rate?: string
+      }>
+      format?: { format_name?: string; bit_rate?: string }
     }
-    const sr = parsed.streams?.[0]?.sample_rate
-    return sr ? Number(sr) : null
+    const s = parsed.streams?.[0]
+    const f = parsed.format
+    // bits_per_raw_sample (flac 等の可逆コーデック) を優先し、無ければ bits_per_sample。
+    // どちらも無ければ null (mp3 等)。
+    const bits = s?.bits_per_raw_sample ?? s?.bits_per_sample
+    return {
+      sampleRate: s?.sample_rate ? Number(s.sample_rate) : null,
+      codec: s?.codec_name ?? null,
+      container: f?.format_name ?? null,
+      channels: s?.channels ?? null,
+      bitsPerSample: bits != null ? Number(bits) : null,
+      streamBitRate: s?.bit_rate ? Number(s.bit_rate) : null,
+      formatBitRate: f?.bit_rate ? Number(f.bit_rate) : null,
+    }
   } catch {
-    return null
+    return EMPTY_PROBE
   }
 }
 
 export async function analyzeAudio(opts: AnalyzeOpts): Promise<AnalyzeResult> {
   // パス 1: ffprobe (先頭バイトのみ)
-  const sampleRate = await probeSampleRate(await opts.probeHead(), opts)
+  const probe = await probeMetadata(await opts.probeHead(), opts)
 
-  // パス 2: ピーク + duration
+  // パス 2: ピーク + 音量 + duration
   const acc = new PeakAccumulator()
+  const loudness = new LoudnessAccumulator()
   let carry: Buffer = Buffer.alloc(0)
   const peakRun = await run('ffmpeg', [
     '-hide_banner', '-loglevel', 'error',
@@ -162,7 +236,9 @@ export async function analyzeAudio(opts: AnalyzeOpts): Promise<AnalyzeResult> {
       if (usable === 0) return
       const aligned = new Uint8Array(usable)
       aligned.set(buf.subarray(0, usable))
-      acc.push(new Float32Array(aligned.buffer, 0, usable / 4))
+      const floats = new Float32Array(aligned.buffer, 0, usable / 4)
+      acc.push(floats)
+      loudness.push(floats)
     },
   })
   const { peaks, totalSamples } = acc.finish()
@@ -173,6 +249,7 @@ export async function analyzeAudio(opts: AnalyzeOpts): Promise<AnalyzeResult> {
     )
   }
   const durationSec = totalSamples / PEAK_SAMPLE_RATE
+  const { peakDb, rmsDb } = loudness.finish()
 
   // パス 3: スペクトログラム PNG
   const width = Math.min(
@@ -196,5 +273,23 @@ export async function analyzeAudio(opts: AnalyzeOpts): Promise<AnalyzeResult> {
     if (opts.signal?.aborted) throw e
   }
 
-  return { peaks, durationSec, sampleRate, spectrogramPng }
+  const sizeBytes = opts.getSizeBytes ? opts.getSizeBytes() : null
+  const bitRate = resolveBitRate(probe.streamBitRate, probe.formatBitRate, sizeBytes, durationSec)
+
+  return {
+    peaks,
+    durationSec,
+    sampleRate: probe.sampleRate,
+    spectrogramPng,
+    meta: {
+      codec: probe.codec,
+      container: probe.container,
+      channels: probe.channels,
+      bitsPerSample: probe.bitsPerSample,
+      bitRate,
+      sizeBytes,
+      peakDb,
+      rmsDb,
+    },
+  }
 }

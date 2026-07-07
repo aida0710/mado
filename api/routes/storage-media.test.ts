@@ -48,11 +48,26 @@ afterAll(() => closePools(pools))
 
 const REF = { connId: 'c1', bucket: 'b', key: 'a.wav', etag: 'etag1' }
 
+const META = {
+  codec: 'pcm_s16le',
+  container: 'wav',
+  channels: 1,
+  bitsPerSample: 16,
+  bitRate: 256000,
+  sizeBytes: 32044,
+  peakDb: -0.1,
+  rmsDb: -3.2,
+}
+
 describe('GET /media/analyze', () => {
-  it('キャッシュ命中なら worker を呼ばず 200', async () => {
+  it('キャッシュ命中なら worker を呼ばず 200、meta も乗る', async () => {
     const cacheKey = mediaCacheKey(REF)
     await upsertMediaCache(pools.rw, cacheKey, {
-      peaks: [[-1, 1]], durationSec: 3, sampleRate: 16000, spectrogramPng: Buffer.from([1]),
+      peaks: [[-1, 1]],
+      durationSec: 3,
+      sampleRate: 16000,
+      spectrogramPng: Buffer.from([1]),
+      meta: META,
     })
     const res = await makeApp().request('/storage/c1/media/analyze?bucket=b&key=a.wav')
     expect(res.status).toBe(200)
@@ -60,16 +75,24 @@ describe('GET /media/analyze', () => {
     expect(body.cacheKey).toBe(cacheKey)
     expect(body.durationSec).toBe(3)
     expect(body.hasSpectrogram).toBe(true)
+    expect(body.meta).toEqual(META)
     expect(workerFetch).not.toHaveBeenCalled()
   })
 
-  it('未計算なら worker に proxy してそのまま返す', async () => {
+  it('未計算なら worker に proxy してそのまま返す (meta 込み)', async () => {
     workerFetch.mockResolvedValue(new Response(JSON.stringify({
-      cacheKey: 'k', peaks: [[0, 0]], durationSec: 1, sampleRate: null, hasSpectrogram: false,
+      cacheKey: 'k',
+      peaks: [[0, 0]],
+      durationSec: 1,
+      sampleRate: null,
+      hasSpectrogram: false,
+      meta: META,
     }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
     const res = await makeApp().request('/storage/c1/media/analyze?bucket=b&key=a.wav')
     expect(res.status).toBe(200)
-    expect((await res.json()).cacheKey).toBe('k')
+    const body = await res.json()
+    expect(body.cacheKey).toBe('k')
+    expect(body.meta).toEqual(META)
     // worker へは etag 込みで POST される
     const [url, init] = workerFetch.mock.calls[0] as [string, RequestInit]
     expect(url).toBe(`${env.MEDIA_WORKER_URL}/analyze`)
@@ -114,7 +137,7 @@ describe('GET /media/spectrogram', () => {
   it('PNG を immutable Cache-Control 付きで返す / 無ければ 404', async () => {
     const cacheKey = mediaCacheKey(REF)
     await upsertMediaCache(pools.rw, cacheKey, {
-      peaks: [], durationSec: 1, sampleRate: null, spectrogramPng: Buffer.from([0x89, 0x50]),
+      peaks: [], durationSec: 1, sampleRate: null, spectrogramPng: Buffer.from([0x89, 0x50]), meta: META,
     })
     const res = await makeApp().request(`/storage/c1/media/spectrogram?cacheKey=${cacheKey}`)
     expect(res.status).toBe(200)
