@@ -82,4 +82,20 @@ describe('loadEnv', () => {
       ALLOWED_ORIGINS: 'http://localhost:5173',
     })).toThrow(/ENCRYPTION_KEY/)
   })
+
+  it('MEDIA_* は default 値で読める', () => {
+    const env = loadEnv({
+      DATABASE_URL_RW: 'postgres://x',
+      DATABASE_URL_RO: 'postgres://x',
+      ENCRYPTION_KEY: '0'.repeat(64),
+      ALLOWED_ORIGINS: 'http://localhost:5173',
+    })
+    expect(env.MEDIA_CONCURRENCY).toBe(3)
+    expect(env.MEDIA_ANALYZE_TIMEOUT_SEC).toBe(300)
+    expect(env.MEDIA_SCAN_MAX_FILES).toBe(100000)
+    expect(env.MEDIA_CACHE_MAX_AGE_DAYS).toBe(30)
+    expect(env.MEDIA_SPECTROGRAM_MAX_WIDTH).toBe(4096)
+    expect(env.MEDIA_WORKER_PORT).toBe(3100)
+    expect(env.MEDIA_WORKER_URL).toBe('http://media-worker:3100')
+  })
 })

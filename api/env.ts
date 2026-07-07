@@ -23,6 +23,15 @@ const schema = z.object({
   PREVIEW_TEXT_LIMIT: z.coerce.number().default(65536),
   PREVIEW_TAR_ENTRY_LIMIT: z.coerce.number().default(200),
   PREVIEW_TARXZ_BYTE_LIMIT: z.coerce.number().default(268435456),
+  // media-worker (波形/スペクトログラム解析) 関連。全て default 付きで
+  // 既存デプロイの .env を変更せずに済む。
+  MEDIA_CONCURRENCY: z.coerce.number().default(3),
+  MEDIA_ANALYZE_TIMEOUT_SEC: z.coerce.number().default(300),
+  MEDIA_SCAN_MAX_FILES: z.coerce.number().default(100000),
+  MEDIA_CACHE_MAX_AGE_DAYS: z.coerce.number().default(30),
+  MEDIA_SPECTROGRAM_MAX_WIDTH: z.coerce.number().default(4096),
+  MEDIA_WORKER_PORT: z.coerce.number().default(3100),
+  MEDIA_WORKER_URL: z.string().default('http://media-worker:3100'),
 })
 
 export type Env = z.infer<typeof schema>
