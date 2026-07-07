@@ -1,6 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { S3Client } from '@aws-sdk/client-s3'
 import { Readable } from 'node:stream'
+import { pack } from 'tar-stream'
 import { createPools, closePools } from '../db.js'
 import { loadEnv } from '../env.js'
 import type { ConnectionConfig } from '../storage.js'
@@ -60,6 +61,16 @@ function stubStorage(keys: Record<string, Buffer>): S3Client {
       throw new Error(`unexpected command ${name}`)
     },
   } as unknown as S3Client
+}
+
+// tar-stream の pack() でメモリ上に tar Buffer を組み立てる (tar スキャンテスト用)。
+async function makeTar(entries: Array<{ name: string; body: Buffer }>): Promise<Buffer> {
+  const p = pack()
+  for (const e of entries) p.entry({ name: e.name }, e.body)
+  p.finalize()
+  const chunks: Buffer[] = []
+  for await (const c of p) chunks.push(c as Buffer)
+  return Buffer.concat(chunks)
 }
 
 function makeService(keys: Record<string, Buffer>) {
@@ -135,6 +146,67 @@ describe('runNextScanJob', () => {
     expect(await svc.runNextScanJob()).toBe(false) // queued が無いので拾わない
     const stats = await pools.ro.query('SELECT count(*)::int AS n FROM dataset_stats')
     expect(stats.rows[0].n).toBe(0)
+  })
+
+  it('tar スキャン: エントリを解析して dataset_stats を書き、キャッシュも温める', async () => {
+    const tarBuf = await makeTar([
+      { name: 'u1.wav', body: Buffer.from('a') },
+      { name: 'u1.txt', body: Buffer.from('hello world') },
+      { name: 'u2.wav', body: Buffer.from('b') },
+    ])
+    const svc = makeService({ 'shard.tar': tarBuf })
+    await pools.rw.query(
+      `INSERT INTO media_jobs (target_key, payload) VALUES ($1, $2)`,
+      ['c1\nb\nshard.tar', JSON.stringify({ connId: 'c1', bucket: 'b', tarKey: 'shard.tar' })],
+    )
+    expect(await svc.runNextScanJob()).toBe(true)
+    const job = (await pools.ro.query('SELECT status FROM media_jobs')).rows[0]
+    expect(job.status).toBe('done')
+    const stats = (await pools.ro.query('SELECT result FROM dataset_stats WHERE target_key = $1', ['c1\nb\nshard.tar'])).rows[0]
+    expect(stats.result.fileCount).toBe(2)          // u1.wav, u2.wav
+    expect(stats.result.textFileCount).toBe(1)      // u1.txt
+    expect(stats.result.totalDurationSec).toBeCloseTo(5) // 2.5 × 2 (mock)
+    // キャッシュは entryPath 込みのキーで 2 件
+    const k1 = mediaCacheKey({ connId: 'c1', bucket: 'b', key: 'shard.tar', entryPath: 'u1.wav', etag: 'stub-etag' })
+    const k2 = mediaCacheKey({ connId: 'c1', bucket: 'b', key: 'shard.tar', entryPath: 'u2.wav', etag: 'stub-etag' })
+    expect(await getCachedMedia(pools.ro, k1)).not.toBeNull()
+    expect(await getCachedMedia(pools.ro, k2)).not.toBeNull()
+    const cacheCount = (await pools.ro.query('SELECT count(*)::int AS n FROM media_cache')).rows[0]
+    expect(cacheCount.n).toBe(2)
+  })
+
+  it('実行中にキャンセルされたら停止し、done に上書きしない', async () => {
+    const svc = makeService({ 'ds/u1.wav': Buffer.from('a'), 'ds/u2.wav': Buffer.from('b') })
+    const ins = await pools.rw.query(
+      `INSERT INTO media_jobs (target_key, payload) VALUES ($1, $2) RETURNING id`,
+      ['c1\nb\nds/', JSON.stringify({ connId: 'c1', bucket: 'b', prefix: 'ds/' })],
+    )
+    const jobId = ins.rows[0].id as number
+    const { analyzeAudio } = await import('./media-analyze.js')
+    const mockFn = analyzeAudio as ReturnType<typeof vi.fn>
+    const callsBefore = mockFn.mock.calls.length
+    // 1 ファイル目の解析中に cancel API と同じ形でキャンセルを刻む
+    mockFn.mockImplementationOnce(async () => {
+      await pools.rw.query(
+        `UPDATE media_jobs SET status='canceled', finished_at=now() WHERE id=$1`, [jobId],
+      )
+      return {
+        peaks: [[-0.1, 0.1]] as Array<[number, number]>,
+        durationSec: 2.5,
+        sampleRate: 16000,
+        spectrogramPng: Buffer.from([0x89, 0x50]),
+      }
+    })
+    expect(await svc.runNextScanJob()).toBe(true) // ジョブは 1 件処理した
+    const job = (await pools.ro.query(
+      'SELECT status, finished_at FROM media_jobs WHERE id = $1', [jobId],
+    )).rows[0]
+    expect(job.status).toBe('canceled') // 'done' に上書きされない
+    expect(job.finished_at).not.toBeNull()
+    const stats = await pools.ro.query('SELECT count(*)::int AS n FROM dataset_stats')
+    expect(stats.rows[0].n).toBe(0) // dataset_stats は書かれない
+    // 2 ファイル目 (ds/u2.wav) は解析されない
+    expect(mockFn.mock.calls.length).toBe(callsBefore + 1)
   })
 })
 

@@ -244,20 +244,33 @@ export function createMediaService(deps: MediaServiceDeps): MediaService {
       let filesDone = 0
       const stream = await openObjectStream(storage, payload.bucket, payload.tarKey)
       let canceled = false
-      await iterateTarEntries(stream, kind, async (header, body) => {
-        if (canceled) return
-        if (isAudioName(header.name)) {
-          await analyzeEntry(
-            { connId: payload.connId, bucket: payload.bucket, key: payload.tarKey!, entryPath: header.name, etag },
-            body,
-          )
-          filesDone++
-          await setProgress(jobId, { filesDone, filesTotal: -1, currentKey: header.name })
-          if (await isCanceled(jobId)) canceled = true
-        } else if (/\.(txt|json)$/i.test(header.name)) {
-          acc.addText(readText(body, header.name))
-        }
-      }, { entryMaxBytes: ENTRY_MAX_BYTES })
+      try {
+        await iterateTarEntries(stream, kind, async (header, body) => {
+          if (canceled) return
+          if (isAudioName(header.name)) {
+            await analyzeEntry(
+              { connId: payload.connId, bucket: payload.bucket, key: payload.tarKey!, entryPath: header.name, etag },
+              body,
+            )
+            filesDone++
+            await setProgress(jobId, { filesDone, filesTotal: -1, currentKey: header.name })
+            if (await isCanceled(jobId)) {
+              canceled = true
+              // ダウンロードを即座に止める。ソースを destroy すると pipeline() が
+              // 全ステージを破棄して iterateTarEntries が reject する — EOF まで
+              // 読み続けて巨大 tar のダウンロードが完走するのを防ぐ。
+              ;(stream as NodeJS.ReadableStream & { destroy?: (err?: Error) => void })
+                .destroy?.(new Error('scan canceled'))
+            }
+          } else if (/\.(txt|json)$/i.test(header.name)) {
+            acc.addText(readText(body, header.name))
+          }
+        }, { entryMaxBytes: ENTRY_MAX_BYTES })
+      } catch (e) {
+        // canceled フラグ後の reject は stream.destroy 起因 — キャンセル扱い。
+        // それ以外の例外は今まで通り伝播させる (呼び出し元で 'error' になる)。
+        if (!canceled) throw e
+      }
       if (canceled) return 'canceled'
     } else {
       // ── prefix スキャン ──
