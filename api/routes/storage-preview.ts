@@ -338,6 +338,14 @@ export function mountStoragePreviewRoutes(app: Hono, deps: StoragePreviewDeps): 
                 new GetObjectCommand({ Bucket: bucket, Key: key }),
               )
               objStream = r.Body as unknown as NodeJS.ReadableStream
+              // cancel() が storage.send の await 中 (objStream 未代入) に発火した
+              // 場合、cancel() 側の destroy は届かない。代入直後に再チェックして
+              // ダウンロードを確実に止める (この競合窓はタイミング依存のため
+              // テストで決定的に踏むのは困難 — コードで塞ぐ)。
+              if (closed) {
+                ;(objStream as { destroy?: () => void }).destroy?.()
+                return
+              }
             } catch (e) {
               if (e instanceof NoSuchKey) {
                 write({ error: 'not found' })
