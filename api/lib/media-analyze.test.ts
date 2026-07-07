@@ -5,6 +5,9 @@ import { describe, expect, it } from 'vitest'
 import { analyzeAudio, MediaAnalyzeError, resolveBitRate } from './media-analyze.js'
 
 const FIXTURE = new URL('./test-fixtures/tone.wav', import.meta.url).pathname
+// tone.wav を libmp3lame 32kbps でエンコードしたもの。ffprobe が
+// bits_per_sample: 0 (欠落ではなく数値 0) を返す非可逆コーデックの代表。
+const FIXTURE_MP3 = new URL('./test-fixtures/tone.mp3', import.meta.url).pathname
 
 // ffmpeg が無い環境ではスキップ (CI は media-worker コンテナ内で実行する前提)
 const hasFfmpeg = await (async () => {
@@ -54,6 +57,20 @@ describe.skipIf(!hasFfmpeg)('analyzeAudio', () => {
   it('getSizeBytes 未指定なら meta.sizeBytes は null', async () => {
     const r = await analyzeAudio(opts())
     expect(r.meta.sizeBytes).toBeNull()
+  }, 60_000)
+
+  it('mp3 (bits_per_sample: 0) は bitsPerSample null になる', async () => {
+    const r = await analyzeAudio({
+      openStream: async () => createReadStream(FIXTURE_MP3) as NodeJS.ReadableStream,
+      probeHead: async () => (await readFile(FIXTURE_MP3)).subarray(0, 256 * 1024) as Buffer,
+      timeoutMs: 30_000,
+      maxSpectrogramWidth: 4096,
+    })
+    expect(r.meta.codec).toBe('mp3')
+    // ffprobe は mp3 で bits_per_sample: 0 (数値 0、欠落ではない) を返す —
+    // 0 を素通しせず「無し」= null として扱う。
+    expect(r.meta.bitsPerSample).toBeNull()
+    expect(r.meta.bitRate).toBe(32000)
   }, 60_000)
 
   it('非音声データは MediaAnalyzeError', async () => {

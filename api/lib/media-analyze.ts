@@ -195,15 +195,17 @@ async function probeMetadata(head: Buffer, opts: AnalyzeOpts): Promise<ProbeMeta
     }
     const s = parsed.streams?.[0]
     const f = parsed.format
-    // bits_per_raw_sample (flac 等の可逆コーデック) を優先し、無ければ bits_per_sample。
-    // どちらも無ければ null (mp3 等)。
-    const bits = s?.bits_per_raw_sample ?? s?.bits_per_sample
+    // bits_per_raw_sample (flac 等の可逆コーデック。string で来ることがある: "16")
+    // を優先し、無ければ bits_per_sample。ffprobe は mp3/aac 等で bits_per_sample: 0
+    // (数値 0、欠落ではない) を返すため、0 も「無し」= null として扱う。
+    // Number(undefined) は NaN (falsy) なので欠落と 0 を同じ分岐で処理できる。
+    const bits = Number(s?.bits_per_raw_sample) || Number(s?.bits_per_sample) || null
     return {
       sampleRate: s?.sample_rate ? Number(s.sample_rate) : null,
       codec: s?.codec_name ?? null,
       container: f?.format_name ?? null,
       channels: s?.channels ?? null,
-      bitsPerSample: bits != null ? Number(bits) : null,
+      bitsPerSample: bits,
       streamBitRate: s?.bit_rate ? Number(s.bit_rate) : null,
       formatBitRate: f?.bit_rate ? Number(f.bit_rate) : null,
     }
