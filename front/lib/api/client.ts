@@ -4,6 +4,7 @@ import {
   ConnectionList,
   FavoriteBuckets,
   ListBuckets,
+  MediaAnalyze,
   Note,
   NoteHistoryList,
   NoteHistoryVersion,
@@ -13,6 +14,7 @@ import {
   ReadmeHistoryList,
   ReadmeHistoryVersion,
   ReadmeSearchResult,
+  ScanStatus,
   StorageList,
   TarPreview,
 } from './types'
@@ -339,6 +341,61 @@ export const api = {
 
   audioUrl: (connId: string, bucket: string, key: string): string =>
     buildUrl(`${API_BASE}/storage/${encodeURIComponent(connId)}/preview/audio`, { bucket, key }),
+
+  // 音声解析 (波形ピーク + スペクトログラム有無)。サーバー側でキャッシュされる
+  // ため TTLCache には入れない。長尺ファイルはレスポンスまで数十秒かかりうる —
+  // 呼び出し側は AbortSignal でアンマウント時に中断すること。
+  mediaAnalyze: async (
+    connId: string,
+    bucket: string,
+    key: string,
+    opts: { entryPath?: string; signal?: AbortSignal } = {},
+  ) => {
+    const url = buildUrl(`${API_BASE}/storage/${encodeURIComponent(connId)}/media/analyze`, {
+      bucket, key, entryPath: opts.entryPath,
+    })
+    const res = await fetch(url, {
+      headers: { Accept: 'application/json' },
+      signal: opts.signal,
+    })
+    if (!res.ok) {
+      let msg = res.statusText
+      try {
+        const body = (await res.json()) as { error?: string }
+        if (body.error) msg = body.error
+      } catch { /* statusText をそのまま使う */ }
+      throw new Error(msg)
+    }
+    return MediaAnalyze.parse(await res.json())
+  },
+
+  spectrogramUrl: (connId: string, cacheKey: string): string =>
+    buildUrl(`${API_BASE}/storage/${encodeURIComponent(connId)}/media/spectrogram`, { cacheKey }),
+
+  scanStart: (connId: string, body: { bucket: string; prefix?: string; tarKey?: string }) =>
+    mutateJson(
+      `${API_BASE}/storage/${encodeURIComponent(connId)}/media/scan`,
+      { method: 'POST', body },
+      z.object({ jobId: z.number() }),
+    ),
+
+  scanStatus: (connId: string, bucket: string, target: { prefix?: string; tarKey?: string }) => {
+    const search = new URLSearchParams({ bucket })
+    if (target.tarKey != null) search.set('tarKey', target.tarKey)
+    else search.set('prefix', target.prefix ?? '')
+    return getJson(
+      `${API_BASE}/storage/${encodeURIComponent(connId)}/media/scan-status?${search.toString()}`,
+      ScanStatus,
+    )
+  },
+
+  scanCancel: async (connId: string, jobId: number): Promise<void> => {
+    await mutateJson(
+      `${API_BASE}/storage/${encodeURIComponent(connId)}/media/scan-cancel`,
+      { method: 'POST', body: { jobId } },
+      z.object({ ok: z.boolean() }),
+    )
+  },
 
   // 任意のキーをそのままダウンロードする URL。バックエンドが
   // Content-Disposition: attachment を付けるためブラウザはファイル保存を促す。

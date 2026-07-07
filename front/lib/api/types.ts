@@ -164,3 +164,28 @@ export const NotePresent = z.object({
 export const Note = z.union([NoteAbsent, NotePresent])
 
 export const PutNoteOk = z.object({ ok: z.literal(true) })
+
+// 音声解析 (波形 / スペクトログラム)。GET /storage/:connId/media/analyze
+export const MediaAnalyze = z.object({
+  cacheKey: z.string(),
+  peaks: z.array(z.tuple([z.number(), z.number()])),
+  durationSec: z.number().nullable(),
+  sampleRate: z.number().nullable(),
+  hasSpectrogram: z.boolean(),
+})
+
+// データセットスキャンの状態。GET /storage/:connId/media/scan-status
+export const ScanStatus = z.object({
+  job: z.object({
+    id: z.number(),
+    status: z.enum(['queued', 'processing', 'done', 'error', 'canceled']),
+    progress: z.object({
+      filesDone: z.number(),
+      filesTotal: z.number(),
+      currentKey: z.string(),
+    }).nullable(),
+    error: z.string().nullable(),
+  }).nullable(),
+  stats: z.record(z.string(), z.unknown()).nullable(),
+  scannedAt: z.string().nullable(),
+})
