@@ -4,6 +4,8 @@ import HomePage from './pages/HomePage'
 import StoragePage from './pages/StoragePage'
 import StorageLanding from './pages/StorageLanding'
 import ConnectionsPage from './pages/ConnectionsPage'
+import { PlayerDeckProvider } from './lib/playerDeck'
+import { PlayerDeck } from './components/PlayerDeck'
 import './App.css'
 
 // NoteEditPage は Monaco エディタを抱える重量級ページ (~1MB)。
@@ -52,51 +54,54 @@ function Tabs() {
 
 export default function App() {
   return (
-    <div className="mx-auto max-w-[1180px] px-4 sm:px-6">
-      {/* ── Masthead ─────────────────────────────────────────────────
-          newspaper の刊頭 (masthead) を意識:
-          ・左 = upright serif で "mado." (ピリオドはタイポ的アクセント)
-          ・右 = small-cap タブ
-          ・下に hairline rule (border-color はトークンの --color-rule)
-          を thin に置く。                                             */}
-      <header
-        className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 pt-6 pb-4 sm:pt-7"
-        style={{ borderBottom: '1px solid var(--rule)' }}
-      >
-        <Link
-          to="/"
-          className="group flex items-baseline gap-3 self-end text-ink-12 no-underline"
-          aria-label="mado ホームへ"
+    <PlayerDeckProvider>
+      <div className="mx-auto max-w-[1180px] px-4 sm:px-6">
+        {/* ── Masthead ─────────────────────────────────────────────────
+            newspaper の刊頭 (masthead) を意識:
+            ・左 = upright serif で "mado." (ピリオドはタイポ的アクセント)
+            ・右 = small-cap タブ
+            ・下に hairline rule (border-color はトークンの --color-rule)
+            を thin に置く。                                             */}
+        <header
+          className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 pt-6 pb-4 sm:pt-7"
+          style={{ borderBottom: '1px solid var(--rule)' }}
         >
-          <img
-            src="/mado-icon.png"
-            alt=""
-            width={18}
-            height={18}
-            className="-mb-0.5 self-center opacity-80 transition-opacity group-hover:opacity-100"
-          />
-          <h1
-            className="m-0 font-serif font-medium text-[26px] leading-none tracking-[-0.02em] text-ink-12"
-            style={{ fontVariationSettings: "'opsz' 28" }}
+          <Link
+            to="/"
+            className="group flex items-baseline gap-3 self-end text-ink-12 no-underline"
+            aria-label="mado ホームへ"
           >
-            <span>mado</span>
-            <span className="text-ink-9">.</span>
-          </h1>
-        </Link>
-        <Tabs />
-      </header>
+            <img
+              src="/mado-icon.png"
+              alt=""
+              width={18}
+              height={18}
+              className="-mb-0.5 self-center opacity-80 transition-opacity group-hover:opacity-100"
+            />
+            <h1
+              className="m-0 font-serif font-medium text-[26px] leading-none tracking-[-0.02em] text-ink-12"
+              style={{ fontVariationSettings: "'opsz' 28" }}
+            >
+              <span>mado</span>
+              <span className="text-ink-9">.</span>
+            </h1>
+          </Link>
+          <Tabs />
+        </header>
 
-      <main className="mado-page-in pt-6 pb-12">
-        <Suspense fallback={<p className="text-[13px] text-ink-7">読み込み中…</p>}>
-          <Routes>
-            <Route path="/"                  element={<HomePage />} />
-            <Route path="/edit-note"         element={<NoteEditPage />} />
-            <Route path="/connections"       element={<ConnectionsPage />} />
-            <Route path="/storage"           element={<StorageLanding />} />
-            <Route path="/storage/:connId/*" element={<StoragePageWithKey />} />
-          </Routes>
-        </Suspense>
-      </main>
-    </div>
+        <main className="mado-page-in pt-6 pb-12">
+          <Suspense fallback={<p className="text-[13px] text-ink-7">読み込み中…</p>}>
+            <Routes>
+              <Route path="/"                  element={<HomePage />} />
+              <Route path="/edit-note"         element={<NoteEditPage />} />
+              <Route path="/connections"       element={<ConnectionsPage />} />
+              <Route path="/storage"           element={<StorageLanding />} />
+              <Route path="/storage/:connId/*" element={<StoragePageWithKey />} />
+            </Routes>
+          </Suspense>
+        </main>
+        <PlayerDeck />
+      </div>
+    </PlayerDeckProvider>
   )
 }
