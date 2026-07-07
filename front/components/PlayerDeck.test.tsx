@@ -77,6 +77,9 @@ describe('PlayerDeck', () => {
     const audios = [...container.querySelectorAll('audio')]
     expect(audios[0].muted).toBe(false)
     expect(audios[1].muted).toBe(true)
+    // 押下状態は aria-pressed で明示される (反転チップ表示の判定と同じソース)
+    expect(screen.getAllByRole('button', { name: 'ソロ' })[0]).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getAllByRole('button', { name: 'ソロ' })[1]).toHaveAttribute('aria-pressed', 'false')
   })
 
   it('折りたたんでも <audio> はアンマウントされない (再生継続)', () => {

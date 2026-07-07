@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
 import { computeDriftAdjustments } from '../lib/driftSync'
 import { usePlayerDeck, type DeckTrack } from '../lib/playerDeck'
 import { useAudioSrc } from '../lib/useAudioSrc'
@@ -89,8 +89,8 @@ export function PlayerDeck() {
 
   // ソロ対象が削除済みなら「ソロなし」として扱う (削除ハンドラの setSoloId(null)
   // と二重の防御)。存在しない ID がソロ扱いのまま残ると全トラックが無音になり、
-  // どの S ボタンも太字にならず原因も見えない (幽霊ソロ)。ミュート計算と
-  // S ボタンの太字判定は必ずこちらを使う。
+  // どの S ボタンもアクティブ表示にならず原因も見えない (幽霊ソロ)。ミュート計算と
+  // S ボタンの押下表示 (反転チップ / aria-pressed) は必ずこちらを使う。
   const effectiveSoloId =
     soloId != null && tracks.some(t => t.id === soloId) ? soloId : null
 
@@ -160,6 +160,12 @@ export function PlayerDeck() {
   const maxDuration = Math.max(0, ...tracks.map(t => durations[t.id] ?? 0))
   const fmt = (s: number): string =>
     `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`
+  // S(ソロ)/M(ミュート) のアクティブ状態は反転チップ (黒背景 + 紙色文字) で
+  // 明示する — font-bold / opacity だけでは押されているか視認しにくい。
+  const toggleBtnStyle = (active: boolean): CSSProperties | undefined =>
+    active
+      ? { background: 'var(--color-ink-12)', color: 'var(--paper)', borderRadius: 2 }
+      : undefined
 
   return (
     <div
@@ -224,7 +230,9 @@ export function PlayerDeck() {
                   </div>
                   <button
                     type="button"
-                    className={`ghost text-[11px] ${muted.has(t.id) ? 'opacity-40' : ''}`}
+                    className="ghost text-[11px]"
+                    style={toggleBtnStyle(muted.has(t.id))}
+                    aria-pressed={muted.has(t.id)}
                     aria-label="ミュート"
                     onClick={() => setMuted(cur => {
                       const next = new Set(cur)
@@ -235,7 +243,9 @@ export function PlayerDeck() {
                   >M</button>
                   <button
                     type="button"
-                    className={`ghost text-[11px] ${effectiveSoloId === t.id ? 'font-bold' : ''}`}
+                    className="ghost text-[11px]"
+                    style={toggleBtnStyle(effectiveSoloId === t.id)}
+                    aria-pressed={effectiveSoloId === t.id}
                     aria-label="ソロ"
                     onClick={() => setSoloId(cur => (cur === t.id ? null : t.id))}
                   >S</button>
