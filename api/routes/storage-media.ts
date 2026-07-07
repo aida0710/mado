@@ -44,8 +44,19 @@ export function mountStorageMediaRoutes(app: Hono, deps: StorageMediaDeps): void
     try {
       const head = await storage.send(new HeadObjectCommand({ Bucket: bucket, Key: key }))
       etag = (head.ETag ?? '').replaceAll('"', '')
-    } catch {
-      return c.json({ error: 'not found' }, 404)
+    } catch (e) {
+      // 「存在しない」だけを 404 に翻訳する。AccessDenied や 5xx を 404 に
+      // 潰さない — それ以外は rethrow して internal.ts の onError
+      // (explainStorageError) に翻訳させる。
+      const err = e as { name?: string; $metadata?: { httpStatusCode?: number } }
+      if (
+        err.name === 'NotFound' ||
+        err.name === 'NoSuchKey' ||
+        err.$metadata?.httpStatusCode === 404
+      ) {
+        return c.json({ error: 'not found' }, 404)
+      }
+      throw e
     }
 
     const ref = { connId, bucket, key, entryPath, etag }
@@ -152,13 +163,21 @@ export function mountStorageMediaRoutes(app: Hono, deps: StorageMediaDeps): void
   })
 
   app.post('/storage/:connId/media/scan-cancel', async c => {
+    const connId = c.req.param('connId')
     const body = (await c.req.json()) as { jobId?: number }
     if (body.jobId == null) return c.json({ error: 'jobId required' }, 400)
-    await deps.pools.rw.query(
+    // target_key の第1要素 (= connId) で必ずスコープし、他接続のジョブを
+    // キャンセルできないようにする。split_part の等値比較なので connId 内の
+    // 特殊文字 (LIKE メタ文字等) の影響を受けない。
+    const r = await deps.pools.rw.query(
       `UPDATE media_jobs SET status = 'canceled', finished_at = now()
-        WHERE id = $1 AND status IN ('queued','processing')`,
-      [body.jobId],
+        WHERE id = $1
+          AND split_part(target_key, E'\\n', 1) = $2
+          AND status IN ('queued','processing')`,
+      [body.jobId, connId],
     )
+    // 存在しない / 他接続 / 既に終了済み — いずれも区別せず 404。
+    if (r.rowCount === 0) return c.json({ error: 'job not found' }, 404)
     return c.json({ ok: true })
   })
 }

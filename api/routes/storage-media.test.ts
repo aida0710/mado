@@ -87,6 +87,27 @@ describe('GET /media/analyze', () => {
     const res = await makeApp().request('/storage/c1/media/analyze?bucket=b&key=a.wav')
     expect(res.status).toBe(422)
   })
+
+  it('HeadObject の AccessDenied は 404 に潰されず rethrow される', async () => {
+    const denyStorage = {
+      send: async () => {
+        throw Object.assign(new Error('access denied'), { name: 'AccessDenied' })
+      },
+    } as unknown as S3Client
+    const app = new Hono()
+    mountStorageMediaRoutes(app, {
+      getStorage: async () => denyStorage,
+      pools,
+      env,
+      workerFetch: workerFetch as unknown as typeof fetch,
+    })
+    const res = await app.request('/storage/c1/media/analyze?bucket=b&key=a.wav')
+    // onError 未搭載のテスト app では rethrow は Hono 既定の 500 になる。
+    // 重要なのは「404 ではない」こと (internal.ts では explainStorageError が翻訳する)。
+    expect(res.status).not.toBe(404)
+    expect(res.status).toBe(500)
+    expect(workerFetch).not.toHaveBeenCalled()
+  })
 })
 
 describe('GET /media/spectrogram', () => {
@@ -135,6 +156,35 @@ describe('scan lifecycle', () => {
     expect(cancel.status).toBe(200)
     const st2 = await app.request('/storage/c1/media/scan-status?bucket=b&prefix=ds/')
     expect((await st2.json()).job.status).toBe('canceled')
+  })
+
+  it('別 connId からの scan-cancel は 404 でジョブは queued のまま', async () => {
+    const app = makeApp()
+    const r1 = await app.request('/storage/c1/media/scan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ bucket: 'b', prefix: 'ds/' }),
+    })
+    const { jobId } = await r1.json()
+
+    const cancel = await app.request('/storage/other/media/scan-cancel', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jobId }),
+    })
+    expect(cancel.status).toBe(404)
+
+    const st = await app.request('/storage/c1/media/scan-status?bucket=b&prefix=ds/')
+    expect((await st.json()).job.status).toBe('queued')
+  })
+
+  it('存在しない jobId の scan-cancel は 404', async () => {
+    const res = await makeApp().request('/storage/c1/media/scan-cancel', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jobId: 999999 }),
+    })
+    expect(res.status).toBe(404)
   })
 
   it('done 済みジョブが残っていても再投入できる (部分ユニーク)', async () => {
