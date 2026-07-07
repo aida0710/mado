@@ -42,6 +42,19 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  media-worker:
+    build:
+      context: ./api
+      dockerfile: Dockerfile.worker
+    container_name: mado-prod-media-worker
+    command: ["sh", "-c", "npm run build && node dist/worker.js"]
+    env_file:
+      - .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
   nginx:
     build:
       context: .
