@@ -281,10 +281,22 @@ export function mountStoragePreviewRoutes(app: Hono, deps: StoragePreviewDeps): 
     //   {"done":{truncated,hasMore,offset,limit}}
     //   {"error":"…"}
     const enc = new TextEncoder()
+    // クライアント切断 (ReadableStream の cancel()) は S3 オブジェクトストリームの
+    // 'data' イベント発火と非同期に競合し得る。closed フラグと objStream は
+    // start() と cancel() の双方から参照できるよう外側 (route ハンドラ) スコープに置く。
+    let closed = false
+    let objStream: NodeJS.ReadableStream | undefined
     const body = new ReadableStream<Uint8Array>({
       async start(controller) {
         const write = (obj: unknown): void => {
-          controller.enqueue(enc.encode(JSON.stringify(obj) + '\n'))
+          if (closed) return
+          try {
+            controller.enqueue(enc.encode(JSON.stringify(obj) + '\n'))
+          } catch {
+            // controller が (cancel 等で) 既に閉じている場合。enqueue の同期 throw が
+            // 'data' イベントハンドラの中で起きるとプロセスごと落ちるため、ここで握り潰す。
+            closed = true
+          }
         }
 
         try {
@@ -321,7 +333,6 @@ export function mountStoragePreviewRoutes(app: Hono, deps: StoragePreviewDeps): 
             // 圧縮: 全バイトを順次読む必要があるため、オブジェクト本体を
             // gunzip / lzma -> tar-stream にパイプし、パース済みのエントリを
             // 都度出力する。定期的にバイト進捗も出力する。
-            let objStream: NodeJS.ReadableStream
             try {
               const r = await storage.send(
                 new GetObjectCommand({ Bucket: bucket, Key: key }),
@@ -367,8 +378,23 @@ export function mountStoragePreviewRoutes(app: Hono, deps: StoragePreviewDeps): 
         } catch (e) {
           write({ error: (e as Error).message })
         } finally {
-          controller.close()
+          // cancel() で既に closed 済みなら二重 close しない。
+          if (!closed) {
+            closed = true
+            try {
+              controller.close()
+            } catch {
+              // 既に閉じている場合は無視。
+            }
+          }
         }
+      },
+      cancel() {
+        // クライアント切断。write() を以後 no-op にし、stream モードで進行中の
+        // S3 オブジェクトダウンロードを止める (range モードは 1 リクエストずつ
+        // await するため巻き添え死はなく、objStream も存在しない)。
+        closed = true
+        ;(objStream as (NodeJS.ReadableStream & { destroy?: () => void }) | undefined)?.destroy?.()
       },
     })
     return new Response(body, {
