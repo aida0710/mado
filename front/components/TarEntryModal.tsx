@@ -3,6 +3,7 @@ import { api } from '../lib/api/client'
 import { classifyEntry } from '../lib/api/mime'
 import { fmtSize } from '../lib/format'
 import { copyToClipboard } from '../lib/clipboard'
+import { PreviewAudio } from './PreviewAudio'
 
 interface Props {
   connId: string
@@ -80,7 +81,15 @@ export function TarEntryModal({ connId, bucket, archiveKey, entry, onClose }: Pr
         </header>
         <div className="overflow-auto">
           {kind === 'image'   && <ImageBody url={url} alt={entry.name} />}
-          {kind === 'audio'   && <AudioBody url={url} />}
+          {kind === 'audio'   && (
+            <PreviewAudio
+              key={`${archiveKey}|${entry.name}`}
+              connId={connId}
+              bucket={bucket}
+              k={archiveKey}
+              entryPath={entry.name}
+            />
+          )}
           {kind === 'text'    && <TextBody connId={connId} bucket={bucket} archiveKey={archiveKey} entry={entry.name} />}
           {kind === 'unknown' && <UnknownBody />}
         </div>
@@ -102,10 +111,6 @@ function ImageBody({ url, alt }: { url: string; alt: string }) {
       alt={alt}
     />
   )
-}
-
-function AudioBody({ url }: { url: string }) {
-  return <audio className="w-full" src={url} controls preload="metadata" />
 }
 
 function TextBody({

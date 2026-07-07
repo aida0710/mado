@@ -79,7 +79,9 @@ export function PreviewDrawer({
           <PreviewText key={`${connId}|${bucket}|${k}`} connId={connId} bucket={bucket} k={k} />
         )}
         {kind === 'image' && <PreviewImage connId={connId} bucket={bucket} k={k} />}
-        {kind === 'audio' && <PreviewAudio connId={connId} bucket={bucket} k={k} />}
+        {kind === 'audio' && (
+          <PreviewAudio key={`${connId}|${bucket}|${k}`} connId={connId} bucket={bucket} k={k} />
+        )}
         {kind === 'archive' && (
           <PreviewArchive
             // ファイル切替時に内部 state (offset / pageSize) を一括リセットする。
