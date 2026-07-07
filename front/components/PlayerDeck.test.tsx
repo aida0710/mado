@@ -155,4 +155,42 @@ describe('PlayerDeck', () => {
     expect(window.HTMLMediaElement.prototype.play).toHaveBeenCalledTimes(2)
     expect(screen.queryByText('取得中…')).not.toBeInTheDocument()
   })
+
+  it('後着トラックが tracks 先頭でも、自分以外のマスターに合わせる (合奏の 0 秒巻き戻り防止)', async () => {
+    let resolveFetch!: (v: Response) => void
+    vi.stubGlobal('fetch', vi.fn().mockReturnValue(
+      new Promise<Response>(resolve => { resolveFetch = resolve }),
+    ))
+    URL.createObjectURL = vi.fn(() => 'blob:mock-1')
+    URL.revokeObjectURL = vi.fn()
+
+    const { container } = render(
+      <PlayerDeckProvider>
+        <AddButton n={1} />
+        <AddTarButton />
+        <PlayerDeck />
+      </PlayerDeckProvider>,
+    )
+    // tar (fetch pending) を先に追加 → tracks の先頭スロットが後着になる並び
+    fireEvent.click(screen.getByText('addTar'))
+    fireEvent.click(screen.getByText('add1'))
+    fireEvent.click(screen.getByRole('button', { name: '一括再生' }))
+
+    // wav が 30 秒まで再生済みの状態を再現
+    const wav = container.querySelector('audio')!
+    wav.currentTime = 30
+
+    await act(async () => {
+      resolveFetch({
+        ok: true,
+        blob: () => Promise.resolve(new Blob(['data'])),
+      } as unknown as Response)
+    })
+    await waitFor(() => expect(container.querySelectorAll('audio')).toHaveLength(2))
+    const tar = [...container.querySelectorAll('audio')].find(a => a.src.startsWith('blob:'))!
+    // 後着 tar は再生中の wav (自分以外のマスター) の時刻に合う。自分をマスターに
+    // 選ぶと 0 秒スタート + ドリフト補正が wav を 0 秒へ巻き戻す回帰になる。
+    expect(tar.currentTime).toBe(30)
+    expect(wav.currentTime).toBe(30)
+  })
 })

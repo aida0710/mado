@@ -148,8 +148,11 @@ export function PlayerDeck() {
       return next
     })
     if (!playing) return
-    const master = audios()[0]
-    if (master && master !== el) el.currentTime = master.currentTime
+    // マスターは必ず自分以外から選ぶ。後着が tracks の先頭スロットだと
+    // audios()[0] は自分自身になり、シークがスキップされて 0 秒スタート →
+    // ドリフト補正 (マスター = 先頭 = 0 秒) が他トラックまで 0 秒へ巻き戻す。
+    const master = audios().find(a => a !== el)
+    if (master) el.currentTime = master.currentTime
     void el.play()
   }
   // durations には削除済みトラックの値が残りうる (外部からの removeTrack は
