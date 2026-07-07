@@ -137,6 +137,10 @@ export function mountConnectionsRoutes(app: Hono, deps: ConnectionsDeps): void {
     const client = await deps.pools.rw.connect()
     try {
       await client.query('BEGIN')
+      // 並行 PUT を直列化する (spec: 後勝ちで直列化)。read committed では
+      // 全解除 UPDATE が並行コミットされた新デフォルト行を見えないため、
+      // ロック無しだと部分ユニークインデックス違反で 500 になりうる。
+      await client.query("SELECT pg_advisory_xact_lock(hashtext('storage_connections_default'))")
       await client.query('UPDATE storage_connections SET is_default = false WHERE is_default')
       const r = await client.query(
         'UPDATE storage_connections SET is_default = true WHERE id = $1',
