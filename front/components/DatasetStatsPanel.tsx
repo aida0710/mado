@@ -35,36 +35,38 @@ export function DatasetStatsPanel({ connId, bucket, target }: Props) {
   const [error, setError] = useState<string | null>(null)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  const refresh = useCallback(async () => {
-    try {
-      setStatus(await api.scanStatus(connId, bucket, target))
-      setError(null)
-    } catch (e) {
-      setError((e as Error).message)
-    }
+  // stale レスポンス防御用の世代カウンタ。StorageBrowser 内でこのパネルは
+  // prefix 切替でも remount されないため、旧 target 向けの in-flight 応答が
+  // 後着で新 target の state を上書きしないよう、応答適用時に世代を照合する。
+  // (アンマウント後の応答は React 18+ では setState が no-op なので世代照合不要。)
+  const generation = useRef(0)
+  useEffect(() => {
+    generation.current++
+    // target はオブジェクトなので中身 (prefix / tarKey) で依存させる
+  }, [connId, bucket, target.prefix, target.tarKey])
+
+  // async/await ではなく .then/.catch チェーンにする: await 後の setState は
+  // effect から呼んだとき react-hooks/set-state-in-effect に静的解析で抵触するが、
+  // promise コールバック内の setState は抵触しない。返す Promise は reject しない。
+  const refresh = useCallback((): Promise<void> => {
+    const gen = generation.current
+    return api.scanStatus(connId, bucket, target)
+      .then(s => {
+        if (gen !== generation.current) return
+        setStatus(s)
+        setError(null)
+      })
+      .catch((e: unknown) => {
+        if (gen === generation.current) setError((e as Error).message)
+      })
     // target はオブジェクトなので中身で依存させる
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [connId, bucket, target.prefix, target.tarKey])
 
-  // open になったら取得する。PreviewText 等と同様に .then/.catch を
-  // effect 本体に直接書く (refresh() を直接呼ぶと、setState が effect 内で
-  // 同期的に呼ばれたとみなされ react-hooks/set-state-in-effect に抵触するため)。
+  // open になったら取得する。stale 応答は refresh 内の世代照合で破棄される。
   useEffect(() => {
-    if (!open) return
-    let cancelled = false
-    api.scanStatus(connId, bucket, target)
-      .then(s => {
-        if (cancelled) return
-        setStatus(s)
-        setError(null)
-      })
-      .catch((e: Error) => {
-        if (!cancelled) setError(e.message)
-      })
-    return () => { cancelled = true }
-    // target はオブジェクトなので中身で依存させる
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, connId, bucket, target.prefix, target.tarKey])
+    if (open) void refresh()
+  }, [open, refresh])
 
   // 実行中だけ 1 秒ポーリング
   const running = status?.job != null
@@ -77,9 +79,15 @@ export function DatasetStatsPanel({ connId, bucket, target }: Props) {
     }
   }, [open, running, refresh])
 
+  // scanStart 失敗時は未処理 rejection にせず既存の error state に流して表示する
+  // (refresh は reject しないので、この catch が拾うのは scanStart の失敗のみ)。
   const start = async (): Promise<void> => {
-    await api.scanStart(connId, { bucket, ...target })
-    await refresh()
+    try {
+      await api.scanStart(connId, { bucket, ...target })
+      await refresh()
+    } catch (e) {
+      setError((e as Error).message)
+    }
   }
   const cancel = async (): Promise<void> => {
     if (status?.job) {
