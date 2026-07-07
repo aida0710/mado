@@ -71,6 +71,7 @@ interface ConnectionRow {
   access_key_id_masked: string
   force_path_style: boolean
   list_objects_version: 'v1' | 'v2'
+  is_default: boolean
   created_at: Date
   updated_at: Date
 }
@@ -84,6 +85,7 @@ function toMasked(row: ConnectionRow) {
     accessKeyIdMasked: row.access_key_id_masked,
     forcePathStyle: row.force_path_style,
     listObjectsVersion: row.list_objects_version,
+    isDefault: row.is_default,
     createdAt: row.created_at.toISOString(),
     updatedAt: row.updated_at.toISOString(),
   }
@@ -92,7 +94,7 @@ function toMasked(row: ConnectionRow) {
 export function mountConnectionsRoutes(app: Hono, deps: ConnectionsDeps): void {
   app.get('/connections', async c => {
     const r = await deps.pools.ro.query<ConnectionRow>(
-      `SELECT id, name, endpoint, region, access_key_id_masked, force_path_style, list_objects_version, created_at, updated_at
+      `SELECT id, name, endpoint, region, access_key_id_masked, force_path_style, list_objects_version, is_default, created_at, updated_at
          FROM storage_connections ORDER BY name`,
     )
     return c.json(r.rows.map(toMasked))
@@ -108,7 +110,7 @@ export function mountConnectionsRoutes(app: Hono, deps: ConnectionsDeps): void {
         `INSERT INTO storage_connections
            (id, name, endpoint, region, access_key_id_enc, secret_access_key_enc, access_key_id_masked, force_path_style, list_objects_version)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-         RETURNING id, name, endpoint, region, access_key_id_masked, force_path_style, list_objects_version, created_at, updated_at`,
+         RETURNING id, name, endpoint, region, access_key_id_masked, force_path_style, list_objects_version, is_default, created_at, updated_at`,
         [
           id, name, endpoint, region,
           deps.crypto.encrypt(accessKeyId),
@@ -126,6 +128,32 @@ export function mountConnectionsRoutes(app: Hono, deps: ConnectionsDeps): void {
       }
       throw e
     }
+  })
+
+  // デフォルト接続の切り替え。トランザクションで「全解除 → 対象を設定」し、
+  // 部分ユニークインデックス (storage_connections_default) が 1 件以下を保証する。
+  app.put('/connections/:id/default', async c => {
+    const id = c.req.param('id')
+    const client = await deps.pools.rw.connect()
+    try {
+      await client.query('BEGIN')
+      await client.query('UPDATE storage_connections SET is_default = false WHERE is_default')
+      const r = await client.query(
+        'UPDATE storage_connections SET is_default = true WHERE id = $1',
+        [id],
+      )
+      if (r.rowCount === 0) {
+        await client.query('ROLLBACK')
+        return c.json({ error: 'connection not found' }, 404)
+      }
+      await client.query('COMMIT')
+    } catch (e) {
+      await client.query('ROLLBACK')
+      throw e
+    } finally {
+      client.release()
+    }
+    return c.json({ ok: true })
   })
 
   app.put('/connections/:id', async c => {
@@ -156,7 +184,7 @@ export function mountConnectionsRoutes(app: Hono, deps: ConnectionsDeps): void {
     if (sets.length === 0) {
       // 更新するフィールドがない — 現在の行をそのまま返す。
       const r = await deps.pools.ro.query<ConnectionRow>(
-        `SELECT id, name, endpoint, region, access_key_id_masked, force_path_style, list_objects_version, created_at, updated_at
+        `SELECT id, name, endpoint, region, access_key_id_masked, force_path_style, list_objects_version, is_default, created_at, updated_at
            FROM storage_connections WHERE id = $1`,
         [id],
       )
@@ -167,7 +195,7 @@ export function mountConnectionsRoutes(app: Hono, deps: ConnectionsDeps): void {
     try {
       const r = await deps.pools.rw.query<ConnectionRow>(
         `UPDATE storage_connections SET ${sets.join(', ')} WHERE id = $${i}
-         RETURNING id, name, endpoint, region, access_key_id_masked, force_path_style, list_objects_version, created_at, updated_at`,
+         RETURNING id, name, endpoint, region, access_key_id_masked, force_path_style, list_objects_version, is_default, created_at, updated_at`,
         values,
       )
       if (!r.rows[0]) return c.json({ error: 'not found' }, 404)
