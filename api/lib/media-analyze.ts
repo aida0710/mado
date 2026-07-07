@@ -49,6 +49,10 @@ function run(
   input: NodeJS.ReadableStream | Buffer,
   opts: { timeoutMs: number; signal?: AbortSignal; onStdout?: (chunk: Buffer) => void },
 ): Promise<RunResult> {
+  // 既に abort 済みの signal には addEventListener が反応しないため、spawn 前に確認する。
+  if (opts.signal?.aborted) {
+    return Promise.reject(new MediaAnalyzeError('aborted', ''))
+  }
   return new Promise((resolve, reject) => {
     const child = spawn(cmd, args, { stdio: ['pipe', 'pipe', 'pipe'] })
     const stdoutChunks: Buffer[] = []
@@ -97,19 +101,33 @@ function run(
       child.stdin.end(input)
     } else {
       input.pipe(child.stdin)
-      input.on('error', () => child.stdin.end())
+      // 入力側 (S3 ストリーム等) のエラーは黙殺しない — 途中で切れた入力を
+      // ffmpeg が exit 0 で終えると「成功だが不完全」な結果になってしまう。
+      input.on('error', e => {
+        fail(new MediaAnalyzeError(
+          `${cmd} input stream error`,
+          e instanceof Error ? e.message : String(e),
+        ))
+      })
     }
   })
 }
 
 async function probeSampleRate(head: Buffer, opts: AnalyzeOpts): Promise<number | null> {
-  const r = await run('ffprobe', [
-    '-v', 'error',
-    '-select_streams', 'a:0',
-    '-show_entries', 'stream=sample_rate',
-    '-of', 'json',
-    'pipe:0',
-  ], head, { timeoutMs: opts.timeoutMs, signal: opts.signal })
+  let r: RunResult
+  try {
+    r = await run('ffprobe', [
+      '-v', 'error',
+      '-select_streams', 'a:0',
+      '-show_entries', 'stream=sample_rate',
+      '-of', 'json',
+      'pipe:0',
+    ], head, { timeoutMs: opts.timeoutMs, signal: opts.signal })
+  } catch (e) {
+    // probe 失敗は致命ではない (sampleRate: null で続行)。abort だけは伝播させる。
+    if (opts.signal?.aborted) throw e
+    return null
+  }
   try {
     const parsed = JSON.parse(r.stdout.toString()) as {
       streams?: Array<{ sample_rate?: string }>
@@ -161,17 +179,22 @@ export async function analyzeAudio(opts: AnalyzeOpts): Promise<AnalyzeResult> {
     opts.maxSpectrogramWidth,
     Math.max(SPECTROGRAM_MIN_WIDTH, Math.round(durationSec * SPECTROGRAM_PX_PER_SEC)),
   )
-  const specRun = await run('ffmpeg', [
-    '-hide_banner', '-loglevel', 'error',
-    '-i', 'pipe:0',
-    '-lavfi', `showspectrumpic=s=${width}x${SPECTROGRAM_HEIGHT}:legend=0`,
-    '-frames:v', '1',
-    '-f', 'image2pipe', '-vcodec', 'png', 'pipe:1',
-  ], await opts.openStream(), { timeoutMs: opts.timeoutMs, signal: opts.signal })
-  // スペクトログラム失敗は致命ではない (ピークだけでも返す)
-  const spectrogramPng = specRun.code === 0 && specRun.stdout.length > 0
-    ? specRun.stdout
-    : null
+  let spectrogramPng: Buffer | null = null
+  try {
+    const specRun = await run('ffmpeg', [
+      '-hide_banner', '-loglevel', 'error',
+      '-i', 'pipe:0',
+      '-lavfi', `showspectrumpic=s=${width}x${SPECTROGRAM_HEIGHT}:legend=0`,
+      '-frames:v', '1',
+      '-f', 'image2pipe', '-vcodec', 'png', 'pipe:1',
+    ], await opts.openStream(), { timeoutMs: opts.timeoutMs, signal: opts.signal })
+    if (specRun.code === 0 && specRun.stdout.length > 0) {
+      spectrogramPng = specRun.stdout
+    }
+  } catch (e) {
+    // スペクトログラム失敗は致命ではない (ピークだけでも返す)。abort だけは伝播させる。
+    if (opts.signal?.aborted) throw e
+  }
 
   return { peaks, durationSec, sampleRate, spectrogramPng }
 }

@@ -44,4 +44,30 @@ describe.skipIf(!hasFfmpeg)('analyzeAudio', () => {
       maxSpectrogramWidth: 4096,
     })).rejects.toBeInstanceOf(MediaAnalyzeError)
   }, 60_000)
+
+  it('事前に abort 済みの signal を渡すと即座に MediaAnalyzeError で reject する', async () => {
+    const ctrl = new AbortController()
+    ctrl.abort()
+    const start = Date.now()
+    await expect(analyzeAudio({ ...opts(), signal: ctrl.signal }))
+      .rejects.toBeInstanceOf(MediaAnalyzeError)
+    expect(Date.now() - start).toBeLessThan(500)
+  }, 60_000)
+
+  it('入力ストリームが途中で error を出すと MediaAnalyzeError で reject する', async () => {
+    const err = await analyzeAudio({
+      openStream: async () => new Readable({
+        read() {
+          this.push(Buffer.alloc(1024))
+          this.destroy(new Error('upstream failed'))
+        },
+      }) as NodeJS.ReadableStream,
+      probeHead: async () => (await readFile(FIXTURE)).subarray(0, 256 * 1024) as Buffer,
+      timeoutMs: 30_000,
+      maxSpectrogramWidth: 4096,
+    }).then(() => null, (e: unknown) => e)
+    expect(err).toBeInstanceOf(MediaAnalyzeError)
+    expect((err as MediaAnalyzeError).message).toMatch(/input stream/)
+    expect((err as MediaAnalyzeError).stderrSummary).toContain('upstream failed')
+  }, 60_000)
 })
