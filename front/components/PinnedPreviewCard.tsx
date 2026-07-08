@@ -14,8 +14,9 @@ const unsupportedMessage = (
 
 // ピンカード内のテキスト/JSON 表示。単体ファイルは api.textPreview、tar エントリは
 // api.tarEntryText を load に渡す。minify された 1 行 JSON でも潰れないよう固定高さ
-// (音声カードのスペクトログラム相当) にして縦横スクロールで読ませる。
-function PinnedTextBody({ load }: { load: () => Promise<string> }) {
+// (音声カードのスペクトログラム相当) にして縦横スクロールで読ませる。name は拡張子
+// 判定用のファイル名 (単体は key、tar エントリは entryPath)。
+function PinnedTextBody({ name, load }: { name: string; load: () => Promise<string> }) {
   const [text, setText] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   useEffect(() => {
@@ -31,6 +32,19 @@ function PinnedTextBody({ load }: { load: () => Promise<string> }) {
 
   if (error) return <p className="error">{error}</p>
   if (text === null) return <p className="text-[13px] text-ink-7">loading…</p>
+
+  // .json (単一ドキュメント) はプリティプリントする。.jsonl / .ndjson は 1 行 1 JSON 値
+  // の形式なのでそのまま。TarEntryModal の TextBody と同じ整形をピンカードでも行い、
+  // minify された 1 行 JSON が固定高さの箱で 1 行に潰れて見えないようにする。
+  let display = text
+  const lower = name.toLowerCase()
+  if (lower.endsWith('.json') && !lower.endsWith('.jsonl')) {
+    try {
+      display = JSON.stringify(JSON.parse(text), null, 2)
+    } catch {
+      /* そのまま表示 */
+    }
+  }
   return (
     <pre
       className="m-0 h-[280px] overflow-auto whitespace-pre p-3 text-[12px] leading-snug"
@@ -42,7 +56,7 @@ function PinnedTextBody({ load }: { load: () => Promise<string> }) {
         color: 'var(--ink-11)',
       }}
     >
-      {text}
+      {display}
     </pre>
   )
 }
@@ -75,12 +89,12 @@ function PinnedPreviewBody({ item }: { item: PinnedItem }) {
       return <PinnedEntryImage connId={connId} bucket={bucket} archiveKey={key} entry={entryPath} />
     }
     if (kind === 'text') {
-      return <PinnedTextBody load={() => api.tarEntryText(connId, bucket, key, entryPath)} />
+      return <PinnedTextBody name={entryPath} load={() => api.tarEntryText(connId, bucket, key, entryPath)} />
     }
     return unsupportedMessage
   }
   const kind = classify(key)
-  if (kind === 'text')    return <PinnedTextBody load={() => api.textPreview(connId, bucket, key)} />
+  if (kind === 'text')    return <PinnedTextBody name={key} load={() => api.textPreview(connId, bucket, key)} />
   if (kind === 'image')   return <PreviewImage connId={connId} bucket={bucket} k={key} />
   if (kind === 'audio')   return <PreviewAudio connId={connId} bucket={bucket} k={key} />
   if (kind === 'archive') return <PreviewArchive connId={connId} bucket={bucket} k={key} />

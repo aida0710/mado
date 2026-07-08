@@ -70,9 +70,9 @@ describe('PinnedPreviewCard - kind branching', () => {
   })
 
   it('単体テキストファイルのピンは固定高さの pre で表示される', async () => {
-    vi.mocked(api.textPreview).mockResolvedValue('{"a":1}')
-    render(<PinnedPreviewCard item={{ id: 'i1', connId: 'c', bucket: 'b', key: 'x.json' }} />)
-    const pre = await screen.findByText('{"a":1}')
+    vi.mocked(api.textPreview).mockResolvedValue('plain body')
+    render(<PinnedPreviewCard item={{ id: 'i1', connId: 'c', bucket: 'b', key: 'x.txt' }} />)
+    const pre = await screen.findByText('plain body')
     expect(pre.tagName).toBe('PRE')
     expect(pre.className).toContain('h-[280px]')
   })
@@ -83,6 +83,42 @@ describe('PinnedPreviewCard - kind branching', () => {
     const pre = await screen.findByText('hello')
     expect(pre.tagName).toBe('PRE')
     expect(pre.className).toContain('h-[280px]')
+  })
+
+  it('単体 .json のピンは minify されていてもプリティプリントされる', async () => {
+    vi.mocked(api.textPreview).mockResolvedValue('{"a":1,"b":2}')
+    const { container } = render(
+      <PinnedPreviewCard item={{ id: 'j1', connId: 'c', bucket: 'b', key: 'x.json' }} />,
+    )
+    await screen.findByText(/"a": 1/)
+    expect(container.querySelector('pre')?.textContent).toBe('{\n  "a": 1,\n  "b": 2\n}')
+  })
+
+  it('tar エントリの .json もプリティプリントされる', async () => {
+    vi.mocked(api.tarEntryText).mockResolvedValue('{"x":true}')
+    const { container } = render(
+      <PinnedPreviewCard item={{ id: 'j2', connId: 'c', bucket: 'b', key: 's.tar', entryPath: 'meta.json' }} />,
+    )
+    await screen.findByText(/"x": true/)
+    expect(container.querySelector('pre')?.textContent).toBe('{\n  "x": true\n}')
+  })
+
+  it('不正な JSON の .json はそのまま表示される (整形は try/catch でフォールバック)', async () => {
+    vi.mocked(api.textPreview).mockResolvedValue('{oops not json')
+    const { container } = render(
+      <PinnedPreviewCard item={{ id: 'j3', connId: 'c', bucket: 'b', key: 'bad.json' }} />,
+    )
+    await screen.findByText('{oops not json')
+    expect(container.querySelector('pre')?.textContent).toBe('{oops not json')
+  })
+
+  it('.jsonl は1行1値なので整形せずそのまま表示される', async () => {
+    vi.mocked(api.textPreview).mockResolvedValue('{"a":1}\n{"b":2}')
+    const { container } = render(
+      <PinnedPreviewCard item={{ id: 'j4', connId: 'c', bucket: 'b', key: 'data.jsonl' }} />,
+    )
+    await screen.findByText(/"a":1/)
+    expect(container.querySelector('pre')?.textContent).toBe('{"a":1}\n{"b":2}')
   })
 })
 
