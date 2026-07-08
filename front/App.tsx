@@ -5,8 +5,8 @@ import StoragePage from './pages/StoragePage'
 import StorageLanding from './pages/StorageLanding'
 import ConnectionsPage from './pages/ConnectionsPage'
 import { PlayerDeckProvider, usePlayerDeck } from './lib/playerDeck'
-import { PinnedPreviewsProvider } from './lib/pinnedPreviews'
-import { PlayerDeck } from './components/PlayerDeck'
+import { PinnedPreviewsProvider, usePinnedPreviews } from './lib/pinnedPreviews'
+import { BottomDock } from './components/BottomDock'
 import './App.css'
 
 // NoteEditPage は Monaco エディタを抱える重量級ページ (~1MB)。
@@ -53,14 +53,16 @@ function Tabs() {
   )
 }
 
-// PlayerDeck は画面下部に fixed でドックされるため、デッキにトラックがある間は
-// 本文の下端がドックに隠れないよう pb を広げる。usePlayerDeck() は
-// PlayerDeckProvider の内側でしか使えないので、Provider に包まれるこの
-// 小さなラッパーで読む (App 本体は children を渡すだけで Provider の外側のまま)。
+// BottomDock (同期プレイヤー + ピン留め) は画面下部に fixed でドックされるため、
+// デッキにトラックがある / ピンがある間は本文の下端がドックに隠れないよう pb を
+// 広げる。usePlayerDeck()/usePinnedPreviews() は各 Provider の内側でしか使えない
+// ので、Provider に包まれるこの小さなラッパーで読む。
 function MainContent({ children }: { children: ReactNode }) {
   const { tracks } = usePlayerDeck()
+  const { pins } = usePinnedPreviews()
+  const docked = tracks.length > 0 || pins.length > 0
   return (
-    <main className={`mado-page-in pt-6 ${tracks.length > 0 ? 'pb-64' : 'pb-12'}`}>
+    <main className={`mado-page-in pt-6 ${docked ? 'pb-64' : 'pb-12'}`}>
       {children}
     </main>
   )
@@ -115,7 +117,7 @@ export default function App() {
               </Routes>
             </Suspense>
           </MainContent>
-          <PlayerDeck />
+          <BottomDock />
         </div>
       </PinnedPreviewsProvider>
     </PlayerDeckProvider>

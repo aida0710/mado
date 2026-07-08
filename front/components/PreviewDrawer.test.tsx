@@ -60,8 +60,10 @@ function Wrapper({
   )
 }
 
-describe('PreviewDrawer - pinned previews', () => {
-  it('renders nothing when both k is null and there are no pins', () => {
+describe('PreviewDrawer - pin button', () => {
+  // ピン留めしたカードの表示は BottomDock が担う。ここではドロワーの 📌 が
+  // 現在ファイルを Context に積み、積んだら無効化されることだけを検証する。
+  it('renders nothing when k is null', () => {
     const { container } = render(<Wrapper k={null} />)
     expect(container).toBeEmptyDOMElement()
   })
@@ -71,45 +73,14 @@ describe('PreviewDrawer - pinned previews', () => {
     const pinBtn = screen.getByRole('button', { name: 'ピン留め' })
     expect(pinBtn).toBeEnabled()
     fireEvent.click(pinBtn)
-    expect(screen.getByText('ピン留め (1)')).toBeInTheDocument()
+    // 積んだら同じ k に対しては無効化される (Context 更新で再レンダ)。
     expect(screen.getByRole('button', { name: 'ピン留め済み' })).toBeDisabled()
   })
 
-  it('shows only the pinned section (current preview hidden) once k becomes null but a pin remains', () => {
-    const { rerender } = render(<Wrapper k="file.xyz" />)
-    fireEvent.click(screen.getByRole('button', { name: 'ピン留め' }))
-    rerender(<Wrapper k={null} />)
-    expect(screen.getByText('ピン留め (1)')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Close preview' })).not.toBeInTheDocument()
-  })
-
-  it('closing the current preview (✕) fires onClose but does not remove pins', () => {
+  it('closing the current preview (✕) fires onClose', () => {
     const onClose = vi.fn()
     render(<Wrapper k="file.xyz" onClose={onClose} />)
-    fireEvent.click(screen.getByRole('button', { name: 'ピン留め' }))
     fireEvent.click(screen.getByRole('button', { name: 'Close preview' }))
     expect(onClose).toHaveBeenCalledOnce()
-    expect(screen.getByText('ピン留め (1)')).toBeInTheDocument()
-  })
-
-  it('"全部外す" clears every pin', () => {
-    render(<Wrapper k="file.xyz" />)
-    fireEvent.click(screen.getByRole('button', { name: 'ピン留め' }))
-    expect(screen.getByText('ピン留め (1)')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '全部外す' }))
-    expect(screen.queryByText(/ピン留め \(/)).not.toBeInTheDocument()
-  })
-
-  it('keeps the width reset button reachable when only pins remain (k=null, customized width)', () => {
-    // 幅カスタマイズ済みで現在プレビューを閉じピンだけになっても、リサイズは
-    // 効き続ける (ハンドルは k に依らない) ので、既定に戻す手段も残っていること。
-    const onResetWidth = vi.fn()
-    const props = { widthCustomized: true, onResetWidth, onResizeStart: () => {} }
-    const { rerender } = render(<Wrapper k="file.xyz" {...props} />)
-    fireEvent.click(screen.getByRole('button', { name: 'ピン留め' }))
-    rerender(<Wrapper k={null} {...props} />)
-    expect(screen.getByText('ピン留め (1)')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: RESET }))
-    expect(onResetWidth).toHaveBeenCalledOnce()
   })
 })

@@ -47,7 +47,9 @@ function DeckAudio({
 }
 
 // マルチチャンネル録音のチャンネル別ファイルを頭出しを揃えて同時再生する
-// 画面下部ドック。<audio> ベース + 1 秒ごとのドリフト補正 (サンプル精度ではない)。
+// セクション。<audio> ベース + 1 秒ごとのドリフト補正 (サンプル精度ではない)。
+// fixed の外枠は BottomDock が持つ (ピン留めセクションと単一コンテナに同居させる
+// ため、ここでは fixed を張らない)。トラック 0 件では何も描画しない。
 export function PlayerDeck() {
   const { tracks, removeTrack, clear } = usePlayerDeck()
   const audioRefs = useRef(new Map<string, HTMLAudioElement>())
@@ -168,142 +170,137 @@ export function PlayerDeck() {
       : undefined
 
   return (
-    <div
-      className="fixed inset-x-0 bottom-0 z-40 border-t"
-      style={{ borderColor: 'var(--color-rule-strong)', background: 'var(--paper)' }}
-    >
-      <div className="mx-auto max-w-[1180px] px-4 py-2 sm:px-6">
-        <div className="flex items-center gap-3">
-          <button type="button" className="ghost text-[11px]" onClick={() => setCollapsed(c => !c)}>
-            {collapsed ? '▲' : '▼'} 同期プレイヤー ({tracks.length})
-          </button>
-          <div className="flex-1" />
-          <button
-            type="button"
-            className="ghost text-[11px]"
-            onClick={() => {
-              stopAll()
-              clear()
-              setSoloId(null)
-              setMuted(new Set())
-              setDurations({})
-              setReadyIds(new Set())
-            }}
-          >
-            クリア
-          </button>
-        </div>
-        {/* <audio> は折りたたみ状態に関わらず常にマウントする。
-            {!collapsed && ...} の中に置くとたたんだ瞬間にアンマウントされて
-            再生が止まり、再展開で currentTime=0 の新要素になってしまう
-            (playing state だけ true のまま残る UI 矛盾も起きる)。
-            もともと不可視 (controls なし) なので置き場所は UI に影響しない。 */}
-        {tracks.map(t => (
-          <DeckAudio
-            key={t.id}
-            track={t}
-            register={(id, el) => {
-              if (el) audioRefs.current.set(id, el)
-              else audioRefs.current.delete(id)
-            }}
-            onDuration={(id, d) => setDurations(cur => ({ ...cur, [id]: d }))}
-            onArrive={onTrackArrive}
-          />
-        ))}
-        {!collapsed && (
-          <>
-            <ul className="m-0 max-h-48 list-none overflow-y-auto p-0">
-              {tracks.map(t => (
-                <li key={t.id} className="flex items-center gap-2 py-1" style={{ borderTop: '1px solid var(--rule)' }}>
-                  <span className="w-40 truncate text-[12px] text-ink-11" title={t.label}>{t.label}</span>
-                  {/* tar 内エントリは blob 取得が終わるまで再生できない。無表示だと
-                      ▶ を押しても鳴らない理由が見えないので、取得中を明示する。 */}
-                  {t.entryPath != null && !readyIds.has(t.id) && (
-                    <span className="shrink-0 text-[11px] text-ink-7">取得中…</span>
-                  )}
-                  <div className="min-w-0 flex-1">
-                    <Waveform
-                      peaks={peaksById[t.id] ?? []}
-                      progress={maxDuration > 0 ? masterTime / maxDuration : 0}
-                      height={28}
-                    />
-                  </div>
-                  <button
-                    type="button"
-                    className="ghost text-[11px]"
-                    style={toggleBtnStyle(muted.has(t.id))}
-                    aria-pressed={muted.has(t.id)}
-                    aria-label="ミュート"
-                    onClick={() => setMuted(cur => {
-                      const next = new Set(cur)
-                      if (next.has(t.id)) next.delete(t.id)
-                      else next.add(t.id)
-                      return next
-                    })}
-                  >M</button>
-                  <button
-                    type="button"
-                    className="ghost text-[11px]"
-                    style={toggleBtnStyle(effectiveSoloId === t.id)}
-                    aria-pressed={effectiveSoloId === t.id}
-                    aria-label="ソロ"
-                    onClick={() => setSoloId(cur => (cur === t.id ? null : t.id))}
-                  >S</button>
-                  <button
-                    type="button"
-                    className="ghost text-[11px]"
-                    aria-label="削除"
-                    onClick={() => {
-                      removeTrack(t.id)
-                      // 削除トラックに紐づく状態を漏れなく剪定する。soloId は
-                      // effectiveSoloId の導出でも守られるが、明示的に消して
-                      // 「消したトラックの ID が state に残る」余地をなくす。
-                      setSoloId(cur => (cur === t.id ? null : cur))
-                      setMuted(cur => {
-                        if (!cur.has(t.id)) return cur
-                        const next = new Set(cur)
-                        next.delete(t.id)
-                        return next
-                      })
-                      setDurations(cur => {
-                        if (!(t.id in cur)) return cur
-                        const next = { ...cur }
-                        delete next[t.id]
-                        return next
-                      })
-                      setReadyIds(cur => {
-                        if (!cur.has(t.id)) return cur
-                        const next = new Set(cur)
-                        next.delete(t.id)
-                        return next
-                      })
-                    }}
-                  >✕</button>
-                </li>
-              ))}
-            </ul>
-            <div className="flex items-center gap-3 pt-1" style={{ borderTop: '1px solid var(--rule)' }}>
-              {playing ? (
-                <button type="button" className="ghost" aria-label="一時停止" onClick={pauseAll}>⏸</button>
-              ) : (
-                <button type="button" className="ghost" aria-label="一括再生" onClick={playAll}>▶</button>
-              )}
-              <button type="button" className="ghost" aria-label="停止" onClick={stopAll}>■</button>
-              <span className="text-[11px] tabular-nums text-ink-7">{fmt(masterTime)} / {fmt(maxDuration)}</span>
-              <input
-                type="range"
-                className="flex-1"
-                min={0}
-                max={maxDuration || 0}
-                step={0.1}
-                value={masterTime}
-                aria-label="マスターシーク"
-                onChange={e => seekAll(Number(e.target.value))}
-              />
-            </div>
-          </>
-        )}
+    <section>
+      <div className="flex items-center gap-3">
+        <button type="button" className="ghost text-[11px]" onClick={() => setCollapsed(c => !c)}>
+          {collapsed ? '▲' : '▼'} 同期プレイヤー ({tracks.length})
+        </button>
+        <div className="flex-1" />
+        <button
+          type="button"
+          className="ghost text-[11px]"
+          onClick={() => {
+            stopAll()
+            clear()
+            setSoloId(null)
+            setMuted(new Set())
+            setDurations({})
+            setReadyIds(new Set())
+          }}
+        >
+          クリア
+        </button>
       </div>
-    </div>
+      {/* <audio> は折りたたみ状態に関わらず常にマウントする。
+          {!collapsed && ...} の中に置くとたたんだ瞬間にアンマウントされて
+          再生が止まり、再展開で currentTime=0 の新要素になってしまう
+          (playing state だけ true のまま残る UI 矛盾も起きる)。
+          もともと不可視 (controls なし) なので置き場所は UI に影響しない。 */}
+      {tracks.map(t => (
+        <DeckAudio
+          key={t.id}
+          track={t}
+          register={(id, el) => {
+            if (el) audioRefs.current.set(id, el)
+            else audioRefs.current.delete(id)
+          }}
+          onDuration={(id, d) => setDurations(cur => ({ ...cur, [id]: d }))}
+          onArrive={onTrackArrive}
+        />
+      ))}
+      {!collapsed && (
+        <>
+          <ul className="m-0 max-h-48 list-none overflow-y-auto p-0">
+            {tracks.map(t => (
+              <li key={t.id} className="flex items-center gap-2 py-1" style={{ borderTop: '1px solid var(--rule)' }}>
+                <span className="w-40 truncate text-[12px] text-ink-11" title={t.label}>{t.label}</span>
+                {/* tar 内エントリは blob 取得が終わるまで再生できない。無表示だと
+                    ▶ を押しても鳴らない理由が見えないので、取得中を明示する。 */}
+                {t.entryPath != null && !readyIds.has(t.id) && (
+                  <span className="shrink-0 text-[11px] text-ink-7">取得中…</span>
+                )}
+                <div className="min-w-0 flex-1">
+                  <Waveform
+                    peaks={peaksById[t.id] ?? []}
+                    progress={maxDuration > 0 ? masterTime / maxDuration : 0}
+                    height={28}
+                  />
+                </div>
+                <button
+                  type="button"
+                  className="ghost text-[11px]"
+                  style={toggleBtnStyle(muted.has(t.id))}
+                  aria-pressed={muted.has(t.id)}
+                  aria-label="ミュート"
+                  onClick={() => setMuted(cur => {
+                    const next = new Set(cur)
+                    if (next.has(t.id)) next.delete(t.id)
+                    else next.add(t.id)
+                    return next
+                  })}
+                >M</button>
+                <button
+                  type="button"
+                  className="ghost text-[11px]"
+                  style={toggleBtnStyle(effectiveSoloId === t.id)}
+                  aria-pressed={effectiveSoloId === t.id}
+                  aria-label="ソロ"
+                  onClick={() => setSoloId(cur => (cur === t.id ? null : t.id))}
+                >S</button>
+                <button
+                  type="button"
+                  className="ghost text-[11px]"
+                  aria-label="削除"
+                  onClick={() => {
+                    removeTrack(t.id)
+                    // 削除トラックに紐づく状態を漏れなく剪定する。soloId は
+                    // effectiveSoloId の導出でも守られるが、明示的に消して
+                    // 「消したトラックの ID が state に残る」余地をなくす。
+                    setSoloId(cur => (cur === t.id ? null : cur))
+                    setMuted(cur => {
+                      if (!cur.has(t.id)) return cur
+                      const next = new Set(cur)
+                      next.delete(t.id)
+                      return next
+                    })
+                    setDurations(cur => {
+                      if (!(t.id in cur)) return cur
+                      const next = { ...cur }
+                      delete next[t.id]
+                      return next
+                    })
+                    setReadyIds(cur => {
+                      if (!cur.has(t.id)) return cur
+                      const next = new Set(cur)
+                      next.delete(t.id)
+                      return next
+                    })
+                  }}
+                >✕</button>
+              </li>
+            ))}
+          </ul>
+          <div className="flex items-center gap-3 pt-1" style={{ borderTop: '1px solid var(--rule)' }}>
+            {playing ? (
+              <button type="button" className="ghost" aria-label="一時停止" onClick={pauseAll}>⏸</button>
+            ) : (
+              <button type="button" className="ghost" aria-label="一括再生" onClick={playAll}>▶</button>
+            )}
+            <button type="button" className="ghost" aria-label="停止" onClick={stopAll}>■</button>
+            <span className="text-[11px] tabular-nums text-ink-7">{fmt(masterTime)} / {fmt(maxDuration)}</span>
+            <input
+              type="range"
+              className="flex-1"
+              min={0}
+              max={maxDuration || 0}
+              step={0.1}
+              value={masterTime}
+              aria-label="マスターシーク"
+              onChange={e => seekAll(Number(e.target.value))}
+            />
+          </div>
+        </>
+      )}
+    </section>
   )
 }

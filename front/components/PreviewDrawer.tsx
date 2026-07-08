@@ -6,7 +6,6 @@ import { PreviewText } from './PreviewText'
 import { PreviewImage } from './PreviewImage'
 import { PreviewAudio } from './PreviewAudio'
 import { PreviewArchive } from './PreviewArchive'
-import { PinnedPreviewCard } from './PinnedPreviewCard'
 
 interface Props {
   connId: string
@@ -27,31 +26,14 @@ export function PreviewDrawer({
   connId, bucket, k, onClose,
   onResizeStart, onResizeKeyDown, onResetWidth, widthCustomized,
 }: Props) {
-  const { pins, addPin, clearPins } = usePinnedPreviews()
-  // 現在プレビュー (k) が無くても、ピンが残っていればドロワー自体は表示し続ける。
-  // 従来は `k` の有無だけで判定していたが、ピンは行クリック/現在プレビューの
-  // クローズを跨いで生き残るので条件を拡張する。
-  if (!k && pins.length === 0) return null
-  const kind = k ? classify(k) : null
-  const filename = k ? (k.split('/').pop() ?? 'file') : ''
+  const { pins, addPin } = usePinnedPreviews()
+  if (!k) return null
+  const kind = classify(k)
+  const filename = k.split('/').pop() ?? 'file'
   // ドロワーの 📌 は「今開いている k」だけを対象にする (tar 内エントリは扱わない
   // — それは TarEntryModal 側の 📌 が担当する) ので entryPath なしで比較する。
-  const alreadyPinned = k != null && pins.some(
+  const alreadyPinned = pins.some(
     p => p.connId === connId && p.bucket === bucket && p.key === k && p.entryPath === undefined,
-  )
-  // 幅リセットボタン。通常は現在プレビューのヘッダ内だが、ピンのみ表示 (k=null) でも
-  // リサイズハンドルは効き続けるため、幅カスタマイズ済みなら「既定に戻す」手段を
-  // 失わないようこのボタンだけの軽量ヘッダを出す (下の !k 分岐)。
-  const resetButton = onResetWidth && widthCustomized && (
-    <button
-      type="button"
-      className="ghost drawer__reset"
-      onClick={onResetWidth}
-      aria-label="プレビュー幅を既定に戻す"
-      title="プレビュー幅を既定に戻す"
-    >
-      <span aria-hidden>↔</span>
-    </button>
   )
   return (
     <aside className="drawer">
@@ -66,18 +48,19 @@ export function PreviewDrawer({
           onKeyDown={onResizeKeyDown}
         />
       )}
-      {/* ピンのみ表示時の軽量ヘッダ (📌 / DL / ✕ は現在プレビュー専用のため出さない)。
-          リセットボタンが不要な状態 (未カスタマイズ等) では何も出さない。 */}
-      {!k && resetButton && (
-        <header className="drawer__head">
-          <p className="drawer__title" />
-          {resetButton}
-        </header>
-      )}
-      {k && (
-        <header className="drawer__head">
+      <header className="drawer__head">
           <p className="drawer__title">{k}</p>
-          {resetButton}
+          {onResetWidth && widthCustomized && (
+            <button
+              type="button"
+              className="ghost drawer__reset"
+              onClick={onResetWidth}
+              aria-label="プレビュー幅を既定に戻す"
+              title="プレビュー幅を既定に戻す"
+            >
+              <span aria-hidden>↔</span>
+            </button>
+          )}
           <button
             type="button"
             className="ghost"
@@ -107,48 +90,28 @@ export function PreviewDrawer({
             <span aria-hidden>✕</span>
           </button>
         </header>
-      )}
       <div className="drawer__body">
-        {k && (
-          <div>
-            {/* ファイル切替で内部 state (本文/コピー表示) をリセットするため key で再マウント。 */}
-            {kind === 'text' && (
-              <PreviewText key={`${connId}|${bucket}|${k}`} connId={connId} bucket={bucket} k={k} />
-            )}
-            {kind === 'image' && <PreviewImage connId={connId} bucket={bucket} k={k} />}
-            {kind === 'audio' && (
-              <PreviewAudio key={`${connId}|${bucket}|${k}`} connId={connId} bucket={bucket} k={k} />
-            )}
-            {kind === 'archive' && (
-              <PreviewArchive
-                // ファイル切替時に内部 state (offset / pageSize) を一括リセットする。
-                key={`${connId}|${bucket}|${k}`}
-                connId={connId}
-                bucket={bucket}
-                k={k}
-              />
-            )}
-            {kind === 'unknown' && (
-              <p className="text-[13px] text-ink-7">
-                プレビュー非対応のファイル種別です。上の DL ボタンからダウンロードできます。
-              </p>
-            )}
-          </div>
+        {/* ファイル切替で内部 state (本文/コピー表示) をリセットするため key で再マウント。 */}
+        {kind === 'text' && (
+          <PreviewText key={`${connId}|${bucket}|${k}`} connId={connId} bucket={bucket} k={k} />
         )}
-        {pins.length > 0 && (
-          <section className={k ? 'mt-5 pt-4' : ''} style={k ? { borderTop: '1px solid var(--rule)' } : undefined}>
-            <header className="flex items-center justify-between gap-2 pb-3">
-              <p className="m-0 text-[10.5px] font-semibold uppercase tracking-[0.22em] text-ink-7">
-                ピン留め ({pins.length})
-              </p>
-              <button type="button" className="ghost text-[11px]" onClick={clearPins}>
-                全部外す
-              </button>
-            </header>
-            <div className="flex flex-col gap-3">
-              {pins.map(item => <PinnedPreviewCard key={item.id} item={item} />)}
-            </div>
-          </section>
+        {kind === 'image' && <PreviewImage connId={connId} bucket={bucket} k={k} />}
+        {kind === 'audio' && (
+          <PreviewAudio key={`${connId}|${bucket}|${k}`} connId={connId} bucket={bucket} k={k} />
+        )}
+        {kind === 'archive' && (
+          <PreviewArchive
+            // ファイル切替時に内部 state (offset / pageSize) を一括リセットする。
+            key={`${connId}|${bucket}|${k}`}
+            connId={connId}
+            bucket={bucket}
+            k={k}
+          />
+        )}
+        {kind === 'unknown' && (
+          <p className="text-[13px] text-ink-7">
+            プレビュー非対応のファイル種別です。上の DL ボタンからダウンロードできます。
+          </p>
         )}
       </div>
     </aside>
