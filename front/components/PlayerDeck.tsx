@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
-import { computeDriftAdjustments } from '../lib/driftSync'
+import { computeDriftAdjustments, masterTimeOf } from '../lib/driftSync'
 import { usePlayerDeck, type DeckTrack } from '../lib/playerDeck'
 import { useAudioSrc } from '../lib/useAudioSrc'
 import { Waveform } from './Waveform'
@@ -73,21 +73,45 @@ export function PlayerDeck() {
     [tracks],
   )
 
-  // マスター時刻 = 最初のトラックの currentTime。1 秒ごとにドリフト補正。
+  // maxDuration は下で render 用にも計算するが、interval effect からも参照するため
+  // ref にミラーする (render 内の変数を effect が直接読むと stale 値を掴む)。
+  const maxDurationRef = useRef(0)
+  useEffect(() => {
+    maxDurationRef.current = Math.max(0, ...tracks.map(t => durations[t.id] ?? 0))
+  }, [tracks, durations])
+
+  // マスター時刻 = 非終了トラックの currentTime の最大値。1 秒ごとにドリフト補正。
+  // 先頭トラック基準だと最短トラックが終わった瞬間に時計が止まり、補正が長い
+  // トラックをその終端へ巻き戻してしまう。max ベースなら短いトラックが終わっても
+  // 長いトラックが最後まで進み、短いトラックの終端以降は無音 (0 パディング) になる。
   useEffect(() => {
     if (!playing) return
     const timer = setInterval(() => {
-      const list = audios()
-      const master = list[0]
-      if (!master) return
-      setMasterTime(master.currentTime)
-      const secs = list.map(a => (a.ended ? null : a.currentTime))
-      for (const adj of computeDriftAdjustments(master.currentTime, secs)) {
-        list[adj.index].currentTime = adj.to
+      // track と audio をペアで保持する。audios() の filter(null 除外) で
+      // インデックスがずれる (blob 取得中トラックは <audio> 未マウント) のを避け、
+      // computeDriftAdjustments の index から track の長さを正しく引くため。
+      const entries = tracks
+        .map(t => ({ t, a: audioRefs.current.get(t.id) }))
+        .filter((e): e is { t: typeof e.t; a: HTMLAudioElement } => e.a != null)
+      if (entries.length === 0) return
+      const secs = entries.map(e => (e.a.ended ? null : e.a.currentTime))
+      const master = masterTimeOf(secs)
+      if (master == null) {
+        // 全トラック終了 → 停止し、頭出しに戻れる状態にする。
+        setPlaying(false)
+        setMasterTime(maxDurationRef.current)
+        return
+      }
+      setMasterTime(master)
+      for (const adj of computeDriftAdjustments(master, secs)) {
+        const e = entries[adj.index]
+        const dur = durations[e.t.id] ?? Infinity
+        // 自分の長さを超える位置へは飛ばさない (終端で自然に無音 = 0 パディング)。
+        if (adj.to < dur) e.a.currentTime = adj.to
       }
     }, 1000)
     return () => clearInterval(timer)
-  }, [playing, audios])
+  }, [playing, tracks, durations])
 
   // ソロ対象が削除済みなら「ソロなし」として扱う (削除ハンドラの setSoloId(null)
   // と二重の防御)。存在しない ID がソロ扱いのまま残ると全トラックが無音になり、
@@ -119,6 +143,11 @@ export function PlayerDeck() {
   if (tracks.length === 0) return null
 
   const playAll = (): void => {
+    // 全トラック終了状態から ▶ を押したら頭から再生し直す。
+    if (maxDuration > 0 && masterTime >= maxDuration) {
+      for (const a of audios()) a.currentTime = 0
+      setMasterTime(0)
+    }
     for (const a of audios()) void a.play()
     setPlaying(true)
   }
@@ -135,7 +164,14 @@ export function PlayerDeck() {
     setMasterTime(0)
   }
   const seekAll = (sec: number): void => {
-    for (const a of audios()) a.currentTime = sec
+    for (const t of tracks) {
+      const a = audioRefs.current.get(t.id)
+      if (!a) continue
+      const dur = durations[t.id] ?? Infinity
+      // 自分の長さ以内ならその位置へ。超える場合は終端 (無音 = 0 パディング)。
+      a.currentTime = Math.min(sec, dur)
+      if (playing && sec < dur) void a.play()
+    }
     setMasterTime(sec)
   }
   // <audio> が後から現れたトラックへの追従 (DeckAudio が 1 マウント 1 回だけ呼ぶ)。
@@ -223,6 +259,7 @@ export function PlayerDeck() {
                   <Waveform
                     peaks={peaksById[t.id] ?? []}
                     progress={maxDuration > 0 ? masterTime / maxDuration : 0}
+                    durationRatio={maxDuration > 0 ? (durations[t.id] ?? 0) / maxDuration : 1}
                     height={28}
                   />
                 </div>

@@ -196,4 +196,39 @@ describe('PlayerDeck', () => {
     expect(tar.currentTime).toBe(30)
     expect(wav.currentTime).toBe(30)
   })
+
+  it('短いトラックが終了しても masterTime が長いトラックに追従して進む', () => {
+    vi.useFakeTimers()
+    try {
+      const { container } = setup()
+      fireEvent.click(screen.getByText('add1'))
+      fireEvent.click(screen.getByText('add2'))
+      const [a, b] = [...container.querySelectorAll('audio')]
+
+      // a: 長さ1 (先に終わる), b: 長さ3。onLoadedMetadata 経由で durations を埋める。
+      Object.defineProperty(a, 'duration', { value: 1, configurable: true })
+      Object.defineProperty(b, 'duration', { value: 3, configurable: true })
+      fireEvent.loadedMetadata(a)
+      fireEvent.loadedMetadata(b)
+
+      fireEvent.click(screen.getByRole('button', { name: '一括再生' }))
+
+      // a は再生し終えて ended、currentTime はその終端 (1) のまま。
+      // b はまだ再生中で currentTime=2 まで進んでいる。
+      Object.defineProperty(a, 'ended', { value: true, configurable: true })
+      a.currentTime = 1
+      b.currentTime = 2
+
+      act(() => {
+        vi.advanceTimersByTime(1000)
+      })
+
+      // masterTime は b (長い方) の 2 秒に追従し、a の終端 (1 秒) には引きずられない。
+      expect(screen.getByText('0:02 / 0:03')).toBeInTheDocument()
+      // a は無音の 0 パディングとして終端に留まり、0 秒へ巻き戻されない。
+      expect(a.currentTime).toBe(1)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })
