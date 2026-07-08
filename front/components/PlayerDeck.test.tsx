@@ -227,6 +227,71 @@ describe('PlayerDeck', () => {
       expect(screen.getByText('0:02 / 0:03')).toBeInTheDocument()
       // a は無音の 0 パディングとして終端に留まり、0 秒へ巻き戻されない。
       expect(a.currentTime).toBe(1)
+      // 本命の回帰ガード: 旧実装は master=a=1 とし computeDriftAdjustments が
+      // 長い b を 1 へ引き戻していた。max マスターなら b は自分の 2 秒のまま。
+      expect(b.currentTime).toBe(2)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('マスターシークは各トラックを自分の長さでクランプする (終端 = 0 パディング)', () => {
+    const { container } = setup()
+    fireEvent.click(screen.getByText('add1'))
+    fireEvent.click(screen.getByText('add2'))
+    const [a, b] = [...container.querySelectorAll('audio')]
+
+    // a: 長さ1, b: 長さ3 → maxDuration=3。onLoadedMetadata 経由で durations を埋める。
+    Object.defineProperty(a, 'duration', { value: 1, configurable: true })
+    Object.defineProperty(b, 'duration', { value: 3, configurable: true })
+    fireEvent.loadedMetadata(a)
+    fireEvent.loadedMetadata(b)
+
+    // マスターシークを 2 秒へ。a は自分の長さ (1) を超えるので終端でクランプ、
+    // b は長さ内なので 2 秒へ。
+    fireEvent.change(screen.getByLabelText('マスターシーク'), { target: { value: '2' } })
+
+    expect(a.currentTime).toBe(1)
+    expect(b.currentTime).toBe(2)
+  })
+
+  it('全トラック終了後に ▶ を押すと頭出し (currentTime=0) してから再生し直す', () => {
+    vi.useFakeTimers()
+    try {
+      const { container } = setup()
+      fireEvent.click(screen.getByText('add1'))
+      fireEvent.click(screen.getByText('add2'))
+      const [a, b] = [...container.querySelectorAll('audio')]
+
+      Object.defineProperty(a, 'duration', { value: 1, configurable: true })
+      Object.defineProperty(b, 'duration', { value: 3, configurable: true })
+      fireEvent.loadedMetadata(a)
+      fireEvent.loadedMetadata(b)
+
+      fireEvent.click(screen.getByRole('button', { name: '一括再生' }))
+
+      // 両トラックとも終端で終了。
+      Object.defineProperty(a, 'ended', { value: true, configurable: true })
+      Object.defineProperty(b, 'ended', { value: true, configurable: true })
+      a.currentTime = 1
+      b.currentTime = 3
+
+      act(() => {
+        vi.advanceTimersByTime(1000)
+      })
+
+      // 全終了 → 停止し、マスター時刻は maxDuration(3) に張り付き ▶ に戻る。
+      expect(screen.getByText('0:03 / 0:03')).toBeInTheDocument()
+      const playBtn = screen.getByRole('button', { name: '一括再生' })
+
+      const play = window.HTMLMediaElement.prototype.play as ReturnType<typeof vi.fn>
+      play.mockClear()
+
+      // 全終了状態から ▶ → 両トラックが 0 へ頭出しされてから play が呼ばれる。
+      fireEvent.click(playBtn)
+      expect(a.currentTime).toBe(0)
+      expect(b.currentTime).toBe(0)
+      expect(play).toHaveBeenCalledTimes(2)
     } finally {
       vi.useRealTimers()
     }
