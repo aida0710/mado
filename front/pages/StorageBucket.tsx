@@ -7,6 +7,7 @@ import { ReadmeView } from '../components/ReadmeView'
 import { PreviewDrawer } from '../components/PreviewDrawer'
 import { fileLinkToDirRedirect } from '../lib/route'
 import { useDrawerResize } from '../lib/useDrawerResize'
+import { usePinnedPreviews } from '../lib/pinnedPreviews'
 
 interface Props { connId: string }
 
@@ -34,8 +35,11 @@ export default function StorageBucket({ connId }: Props) {
   }, [setSearchParams])
 
   // preview drawer の幅をリサイズ可能にする (≥1024px のみ実効。CSS 側で gate)。
+  // ドロワー自体は「現在プレビュー (selected) が無くてもピンが残っていれば表示」
+  // なので、リサイズの有効化条件も同じ判定に揃える (PreviewDrawer の表示条件と同期)。
+  const { pins } = usePinnedPreviews()
   const { containerRef, onResizeStart, onResizeKeyDown, resetWidth, widthCustomized } =
-    useDrawerResize(selected != null)
+    useDrawerResize(selected != null || pins.length > 0)
 
   // ファイル直リンク (末尾が `/` でない URL) なら、親ディレクトリのリスト +
   // `?preview=<key>` にリダイレクトする。README に貼った Markdown リンクや
