@@ -1,8 +1,9 @@
 import { useEffect, useReducer, useState, type KeyboardEvent } from 'react'
 import { api } from '../lib/api/client'
 import type { z } from 'zod'
-import { classify } from '../lib/api/mime'
+import { classify, classifyEntry } from '../lib/api/mime'
 import { usePlayerDeck } from '../lib/playerDeck'
+import { usePinnedPreviews } from '../lib/pinnedPreviews'
 import { TarPreview } from '../lib/api/types'
 import { fmtSize } from '../lib/format'
 import { TarEntryModal } from './TarEntryModal'
@@ -114,6 +115,7 @@ function reducer(s: State, a: Action): State {
 
 export function PreviewArchive({ connId, bucket, k }: { connId: string; bucket: string; k: string }) {
   const deck = usePlayerDeck()
+  const { addPin } = usePinnedPreviews()
   const [openedEntry, setOpenedEntry] = useState<Entry | null>(null)
   const [state, dispatch] = useReducer(reducer, undefined, makeInitial)
   const { data, offset, pageSize, error, loading, progress } = state
@@ -284,6 +286,21 @@ export function PreviewArchive({ connId, bucket, k }: { connId: string; bucket: 
                           })
                         }}
                       >+デッキ</button>
+                    )}
+                    {classifyEntry(e.name) !== 'unknown' && (
+                      <button
+                        type="button"
+                        className="ghost text-[11px]"
+                        title="ピン留め"
+                        aria-label={`${e.name} をピン留め`}
+                        // +デッキ と同様、keydown を止めないと Enter/Space が行の
+                        // onKeyDown に伝播し「ピン留め + モーダルも開く」の二重動作になる。
+                        onKeyDown={ev => ev.stopPropagation()}
+                        onClick={ev => {
+                          ev.stopPropagation()
+                          addPin({ connId, bucket, key: k, entryPath: e.name })
+                        }}
+                      ><span aria-hidden>📌</span></button>
                     )}
                   </span>
                 </td>
