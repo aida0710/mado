@@ -106,4 +106,23 @@ describe('PreviewArchive - 行の ⋯ アクションメニュー', () => {
     // ⋯ トリガーをクリックしただけでは出現しない。
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
+
+  it('⋯ トリガーに focus して Enter を押しても行のモーダルは開かない', async () => {
+    render(
+      <PinnedPreviewsProvider>
+        <PreviewArchive connId="c" bucket="b" k="a.tar" />
+      </PinnedPreviewsProvider>,
+    )
+    const nameCell = await screen.findByText('notes.json')
+    const row = nameCell.closest('tr')
+    if (!row) throw new Error('row not found')
+    const trigger = within(row).getByRole('button', { name: 'アクション' })
+    trigger.focus()
+    // 行 (<tr>) の onKeyDown は Enter で setOpenedEntry する。⋯ の keydown が
+    // 伝播すると誤ってモーダルが開くので、伝播しないこと (dialog 非出現) を検証。
+    await userEvent.keyboard('{Enter}')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    // Enter でメニュー自体は開く (native button の click が発火する)。
+    expect(screen.getByRole('menuitem', { name: 'このエントリをダウンロード' })).toBeInTheDocument()
+  })
 })
