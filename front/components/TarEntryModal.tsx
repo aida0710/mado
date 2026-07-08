@@ -3,6 +3,7 @@ import { api } from '../lib/api/client'
 import { classifyEntry } from '../lib/api/mime'
 import { fmtSize } from '../lib/format'
 import { copyToClipboard } from '../lib/clipboard'
+import { usePinnedPreviews } from '../lib/pinnedPreviews'
 import { PreviewAudio } from './PreviewAudio'
 
 interface Props {
@@ -16,6 +17,7 @@ interface Props {
 export function TarEntryModal({ connId, bucket, archiveKey, entry, onClose }: Props) {
   const kind = classifyEntry(entry.name)
   const url = api.tarEntryUrl(connId, bucket, archiveKey, entry.name)
+  const { addPin } = usePinnedPreviews()
 
   // Escape で閉じる。
   useEffect(() => {
@@ -60,6 +62,15 @@ export function TarEntryModal({ connId, bucket, archiveKey, entry, onClose }: Pr
           >
             {fmtSize(entry.size)}
           </span>
+          <button
+            type="button"
+            className="ghost"
+            onClick={() => addPin({ connId, bucket, key: archiveKey, entryPath: entry.name })}
+            aria-label="ピン留め"
+            title="ピン留め"
+          >
+            <span aria-hidden>📌</span>
+          </button>
           <a
             className="ghost no-underline"
             href={url}
