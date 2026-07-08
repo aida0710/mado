@@ -34,6 +34,28 @@ describe('CopyMenu - download item alignment', () => {
   })
 })
 
+describe('CopyMenu - keyboard close', () => {
+  const items: MenuItem[] = [
+    { kind: 'copy', label: 'A', value: 'a' },
+    { kind: 'copy', label: 'B', value: 'b' },
+  ]
+
+  // トリガーの onKeyDown は Enter/Space だけ止める (行の誤発火防止)。Escape は
+  // 止めないので、開いた直後にトリガーへフォーカスが残った状態でも document の
+  // keydown リスナに届き、メニューを閉じられる。
+  it('closes on Escape while the trigger still has focus', async () => {
+    const user = userEvent.setup()
+    render(<CopyMenu items={items} />)
+    const trigger = screen.getByRole('button', { name: 'アクション' })
+    await user.click(trigger)
+    expect(screen.getByRole('menu')).toBeInTheDocument()
+    // click 後もトリガーがフォーカスを保持している。そのまま Escape で閉じる。
+    expect(trigger).toHaveFocus()
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+  })
+})
+
 describe('CopyMenu - open direction (portal + fixed)', () => {
   const items: MenuItem[] = [
     { kind: 'copy', label: 'A', value: 'a' },

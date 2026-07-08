@@ -106,11 +106,12 @@ export const CopyMenu = memo(function CopyMenu({ items, trigger = '⋯', ariaLab
         aria-label={ariaLabel}
         // 親行 (FileRow) の onClick=preview を抑止しつつメニューを開く。
         onClick={e => { e.stopPropagation(); setOpen(o => !o) }}
-        // keydown も止める: 親行 (<tr>) の onKeyDown は Enter/Space で無条件に
-        // 行アクション (preview / モーダル) を発火するため、⋯ にフォーカスして
-        // Enter を押すと伝播して誤発火してしまう。native button の click は
-        // ここで止めても発生するのでメニュー開閉は壊れない。
-        onKeyDown={e => e.stopPropagation()}
+        // 行 (<tr>) の onKeyDown は Enter/Space で無条件に行アクション
+        // (preview / モーダル) を発火するため、⋯ にフォーカスして Enter/Space を
+        // 押すと伝播して誤発火する。その2キーだけ止める。native button の click は
+        // ここで止めても発生するのでメニュー開閉は壊れない。Escape 等は止めない
+        // ので、開いた直後に Escape で閉じる (document リスナ) が効いたまま。
+        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') e.stopPropagation() }}
         title={ariaLabel}
       >
         {feedback ?? trigger}
