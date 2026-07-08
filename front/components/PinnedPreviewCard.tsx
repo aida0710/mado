@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import { api } from '../lib/api/client'
 import { classify, classifyEntry } from '../lib/api/mime'
 import { usePinnedPreviews, type PinnedItem } from '../lib/pinnedPreviews'
-import { PreviewText } from './PreviewText'
 import { PreviewImage } from './PreviewImage'
 import { PreviewAudio } from './PreviewAudio'
 import { PreviewArchive } from './PreviewArchive'
@@ -13,27 +12,28 @@ const unsupportedMessage = (
   </p>
 )
 
-// tar 内エントリの text/json 向け軽量表示。TarEntryModal の本体表示 (TextBody) から
-// コピー / JSON pretty-print を省いた最小版 — ピン留めは複数枚同時に並ぶため、
-// 各カードは要点 (中身が読めること) だけに絞る。
-function PinnedEntryText({
-  connId, bucket, archiveKey, entry,
-}: { connId: string; bucket: string; archiveKey: string; entry: string }) {
+// ピンカード内のテキスト/JSON 表示。単体ファイルは api.textPreview、tar エントリは
+// api.tarEntryText を load に渡す。minify された 1 行 JSON でも潰れないよう固定高さ
+// (音声カードのスペクトログラム相当) にして縦横スクロールで読ませる。
+function PinnedTextBody({ load }: { load: () => Promise<string> }) {
   const [text, setText] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   useEffect(() => {
     let cancelled = false
-    api.tarEntryText(connId, bucket, archiveKey, entry)
+    load()
       .then(t => { if (!cancelled) setText(t) })
       .catch((e: Error) => { if (!cancelled) setError(e.message) })
     return () => { cancelled = true }
-  }, [connId, bucket, archiveKey, entry])
+    // load は呼び出しごとに新しい関数だが、item 由来で安定しているため deps は空でよい
+    // (呼び出し側は key={item.id} でカードごと再マウントされる)。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   if (error) return <p className="error">{error}</p>
   if (text === null) return <p className="text-[13px] text-ink-7">loading…</p>
   return (
     <pre
-      className="m-0 max-h-[40vh] overflow-auto whitespace-pre p-3 text-[12px] leading-snug"
+      className="m-0 h-[280px] overflow-auto whitespace-pre p-3 text-[12px] leading-snug"
       style={{
         fontFamily: 'var(--font-mono)',
         background: 'var(--ink-0)',
@@ -75,12 +75,12 @@ function PinnedPreviewBody({ item }: { item: PinnedItem }) {
       return <PinnedEntryImage connId={connId} bucket={bucket} archiveKey={key} entry={entryPath} />
     }
     if (kind === 'text') {
-      return <PinnedEntryText connId={connId} bucket={bucket} archiveKey={key} entry={entryPath} />
+      return <PinnedTextBody load={() => api.tarEntryText(connId, bucket, key, entryPath)} />
     }
     return unsupportedMessage
   }
   const kind = classify(key)
-  if (kind === 'text')    return <PreviewText connId={connId} bucket={bucket} k={key} />
+  if (kind === 'text')    return <PinnedTextBody load={() => api.textPreview(connId, bucket, key)} />
   if (kind === 'image')   return <PreviewImage connId={connId} bucket={bucket} k={key} />
   if (kind === 'audio')   return <PreviewAudio connId={connId} bucket={bucket} k={key} />
   if (kind === 'archive') return <PreviewArchive connId={connId} bucket={bucket} k={key} />

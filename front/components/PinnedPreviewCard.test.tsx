@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { PinnedPreviewCard } from './PinnedPreviewCard'
 import { PinnedPreviewsProvider, usePinnedPreviews, type PinnedItem } from '../lib/pinnedPreviews'
+import { api } from '../lib/api/client'
 
 vi.mock('../lib/api/client', () => ({
   api: {
@@ -66,6 +67,22 @@ describe('PinnedPreviewCard - kind branching', () => {
   it('shows the unsupported-kind fallback message for an unknown extension', () => {
     render(<PinnedPreviewCard item={item({ key: 'weird.xyz' })} />)
     expect(screen.getByText(/プレビュー非対応/)).toBeInTheDocument()
+  })
+
+  it('単体テキストファイルのピンは固定高さの pre で表示される', async () => {
+    vi.mocked(api.textPreview).mockResolvedValue('{"a":1}')
+    render(<PinnedPreviewCard item={{ id: 'i1', connId: 'c', bucket: 'b', key: 'x.json' }} />)
+    const pre = await screen.findByText('{"a":1}')
+    expect(pre.tagName).toBe('PRE')
+    expect(pre.className).toContain('h-[280px]')
+  })
+
+  it('tar エントリのテキストも固定高さの pre で表示される', async () => {
+    vi.mocked(api.tarEntryText).mockResolvedValue('hello')
+    render(<PinnedPreviewCard item={{ id: 'i2', connId: 'c', bucket: 'b', key: 's.tar', entryPath: 'u.txt' }} />)
+    const pre = await screen.findByText('hello')
+    expect(pre.tagName).toBe('PRE')
+    expect(pre.className).toContain('h-[280px]')
   })
 })
 
