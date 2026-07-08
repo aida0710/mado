@@ -13,3 +13,17 @@ export function computeDriftAdjustments(
   })
   return out
 }
+
+// 非終了トラックの currentTime の最大値をマスター時刻とする。終了 (ended) は
+// null で渡し無視する。全 null (全トラック終了) なら null を返す。
+// マスターを「先頭トラック」ではなく「まだ鳴っている中の最長 (最も進んだ) 時刻」に
+// することで、短いトラックが終わっても時計が止まらず、長いトラックを終端へ
+// 巻き戻さない (= 短いトラックの終端以降は無音 = 0 パディング)。
+export function masterTimeOf(trackSecs: Array<number | null>): number | null {
+  let max: number | null = null
+  for (const t of trackSecs) {
+    if (t == null) continue
+    if (max == null || t > max) max = t
+  }
+  return max
+}
