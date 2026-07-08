@@ -11,9 +11,15 @@ import { explainStorageError } from './lib/storageError.js'
 import { mountStorageListRoutes } from './routes/storage-list.js'
 import { mountStorageReadmeRoutes } from './routes/storage-readme.js'
 import { mountStoragePreviewRoutes } from './routes/storage-preview.js'
+import { mountStorageMediaRoutes } from './routes/storage-media.js'
 import { mountStorageFavoritesRoutes } from './routes/storage-favorites.js'
 import { mountConnectionsRoutes } from './routes/connections.js'
 import { mountNotesRoutes } from './routes/notes.js'
+
+// LAN ダッシュボード: 1 つのストリーム teardown 起因の未捕捉例外で全ユーザーの
+// リクエストを巻き添えにしない。root cause は都度直す前提の最後の砦 (ログは大声で)。
+process.on('uncaughtException', err => console.error('UNCAUGHT EXCEPTION (kept alive)', err))
+process.on('unhandledRejection', err => console.error('UNHANDLED REJECTION (kept alive)', err))
 
 const env = loadEnv()
 const pools = createPools({ rw: env.DATABASE_URL_RW, ro: env.DATABASE_URL_RO })
@@ -37,6 +43,11 @@ mountStorageListRoutes(api, {
 })
 mountStorageReadmeRoutes(api, { getStorage: storageFactory.getStorage, pools })
 mountStoragePreviewRoutes(api, { getStorage: storageFactory.getStorage, env })
+mountStorageMediaRoutes(api, {
+  getStorage: storageFactory.getStorage,
+  pools,
+  env,
+})
 mountStorageFavoritesRoutes(api, { pools })
 mountNotesRoutes(api, { pools })
 

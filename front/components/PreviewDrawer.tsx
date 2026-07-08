@@ -1,6 +1,7 @@
 import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from 'react'
 import { api } from '../lib/api/client'
 import { classify } from '../lib/api/mime'
+import { usePinnedPreviews } from '../lib/pinnedPreviews'
 import { PreviewText } from './PreviewText'
 import { PreviewImage } from './PreviewImage'
 import { PreviewAudio } from './PreviewAudio'
@@ -25,9 +26,15 @@ export function PreviewDrawer({
   connId, bucket, k, onClose,
   onResizeStart, onResizeKeyDown, onResetWidth, widthCustomized,
 }: Props) {
+  const { pins, addPin } = usePinnedPreviews()
   if (!k) return null
   const kind = classify(k)
   const filename = k.split('/').pop() ?? 'file'
+  // ドロワーの 📌 は「今開いている k」だけを対象にする (tar 内エントリは扱わない
+  // — それは TarEntryModal 側の 📌 が担当する) ので entryPath なしで比較する。
+  const alreadyPinned = pins.some(
+    p => p.connId === connId && p.bucket === bucket && p.key === k && p.entryPath === undefined,
+  )
   return (
     <aside className="drawer">
       {onResizeStart && (
@@ -52,6 +59,19 @@ export function PreviewDrawer({
             title="プレビュー幅を既定に戻す"
           >
             <span aria-hidden>↔</span>
+          </button>
+        )}
+        {/* tar アーカイブ自体はピン留め対象外 (個々のエントリのみピン留め可能)。 */}
+        {kind !== 'archive' && (
+          <button
+            type="button"
+            className="ghost"
+            onClick={() => addPin({ connId, bucket, key: k })}
+            disabled={alreadyPinned}
+            aria-label={alreadyPinned ? 'ピン留め済み' : 'ピン留め'}
+            title={alreadyPinned ? 'ピン留め済み' : 'ピン留め'}
+          >
+            <span aria-hidden>📌</span>
           </button>
         )}
         <a
@@ -79,7 +99,9 @@ export function PreviewDrawer({
           <PreviewText key={`${connId}|${bucket}|${k}`} connId={connId} bucket={bucket} k={k} />
         )}
         {kind === 'image' && <PreviewImage connId={connId} bucket={bucket} k={k} />}
-        {kind === 'audio' && <PreviewAudio connId={connId} bucket={bucket} k={k} />}
+        {kind === 'audio' && (
+          <PreviewAudio key={`${connId}|${bucket}|${k}`} connId={connId} bucket={bucket} k={k} />
+        )}
         {kind === 'archive' && (
           <PreviewArchive
             // ファイル切替時に内部 state (offset / pageSize) を一括リセットする。

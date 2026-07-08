@@ -31,6 +31,7 @@ interface MaskedConnection {
   accessKeyIdMasked: string
   forcePathStyle: boolean
   listObjectsVersion: 'v1' | 'v2'
+  isDefault: boolean
   createdAt: string
   updatedAt: string
 }
@@ -357,5 +358,54 @@ describe('DELETE /connections/:id', () => {
     })
     expect(res.status).toBe(404)
     expect(invalidate).not.toHaveBeenCalled()
+  })
+})
+
+describe('default connection', () => {
+  it('GET /connections は isDefault を返す (初期は全て false)', async () => {
+    await createOne({ name: 'conn-a' })
+    await createOne({ name: 'conn-b' })
+    const res = await app.request('/connections')
+    const list = (await res.json()) as MaskedConnection[]
+    expect(list.length).toBeGreaterThanOrEqual(2)
+    expect(list.every(c => c.isDefault === false)).toBe(true)
+  })
+
+  it('PUT /:id/default で切り替わり、常に 1 件だけ true', async () => {
+    const a = await createOne({ name: 'conn-a' })
+    const b = await createOne({ name: 'conn-b' })
+
+    let res = await app.request(`/connections/${a.id}/default`, { method: 'PUT' })
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ ok: true })
+    let after = (await (await app.request('/connections')).json()) as MaskedConnection[]
+    expect(after.filter(c => c.isDefault).map(c => c.id)).toEqual([a.id])
+
+    res = await app.request(`/connections/${b.id}/default`, { method: 'PUT' })
+    expect(res.status).toBe(200)
+    after = (await (await app.request('/connections')).json()) as MaskedConnection[]
+    expect(after.filter(c => c.isDefault).map(c => c.id)).toEqual([b.id])
+  })
+
+  it('既にデフォルトの id への PUT は冪等 (200 でデフォルトはその 1 件のまま)', async () => {
+    const a = await createOne({ name: 'conn-a' })
+    await createOne({ name: 'conn-b' })
+
+    let res = await app.request(`/connections/${a.id}/default`, { method: 'PUT' })
+    expect(res.status).toBe(200)
+
+    // 同じ id にもう一度 PUT しても 200 で、デフォルトは a の 1 件のまま。
+    res = await app.request(`/connections/${a.id}/default`, { method: 'PUT' })
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ ok: true })
+    const after = (await (await app.request('/connections')).json()) as MaskedConnection[]
+    expect(after.filter(c => c.isDefault).map(c => c.id)).toEqual([a.id])
+  })
+
+  it('存在しない id は 404', async () => {
+    const res = await app.request('/connections/nonexistent1/default', { method: 'PUT' })
+    expect(res.status).toBe(404)
+    const body = (await res.json()) as { error: string }
+    expect(body.error).toBe('connection not found')
   })
 })

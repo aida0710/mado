@@ -3,6 +3,8 @@ import { api } from '../lib/api/client'
 import { classifyEntry } from '../lib/api/mime'
 import { fmtSize } from '../lib/format'
 import { copyToClipboard } from '../lib/clipboard'
+import { usePinnedPreviews } from '../lib/pinnedPreviews'
+import { PreviewAudio } from './PreviewAudio'
 
 interface Props {
   connId: string
@@ -15,6 +17,7 @@ interface Props {
 export function TarEntryModal({ connId, bucket, archiveKey, entry, onClose }: Props) {
   const kind = classifyEntry(entry.name)
   const url = api.tarEntryUrl(connId, bucket, archiveKey, entry.name)
+  const { addPin } = usePinnedPreviews()
 
   // Escape で閉じる。
   useEffect(() => {
@@ -59,6 +62,15 @@ export function TarEntryModal({ connId, bucket, archiveKey, entry, onClose }: Pr
           >
             {fmtSize(entry.size)}
           </span>
+          <button
+            type="button"
+            className="ghost"
+            onClick={() => addPin({ connId, bucket, key: archiveKey, entryPath: entry.name })}
+            aria-label="ピン留め"
+            title="ピン留め"
+          >
+            <span aria-hidden>📌</span>
+          </button>
           <a
             className="ghost no-underline"
             href={url}
@@ -80,7 +92,15 @@ export function TarEntryModal({ connId, bucket, archiveKey, entry, onClose }: Pr
         </header>
         <div className="overflow-auto">
           {kind === 'image'   && <ImageBody url={url} alt={entry.name} />}
-          {kind === 'audio'   && <AudioBody url={url} />}
+          {kind === 'audio'   && (
+            <PreviewAudio
+              key={`${connId}|${bucket}|${archiveKey}|${entry.name}`}
+              connId={connId}
+              bucket={bucket}
+              k={archiveKey}
+              entryPath={entry.name}
+            />
+          )}
           {kind === 'text'    && <TextBody connId={connId} bucket={bucket} archiveKey={archiveKey} entry={entry.name} />}
           {kind === 'unknown' && <UnknownBody />}
         </div>
@@ -102,10 +122,6 @@ function ImageBody({ url, alt }: { url: string; alt: string }) {
       alt={alt}
     />
   )
-}
-
-function AudioBody({ url }: { url: string }) {
-  return <audio className="w-full" src={url} controls preload="metadata" />
 }
 
 function TextBody({

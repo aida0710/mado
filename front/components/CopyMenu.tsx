@@ -5,6 +5,7 @@ import { copyToClipboard } from '../lib/clipboard'
 export type MenuItem =
   | { kind: 'copy'; label: string; value: string }
   | { kind: 'download'; label: string; href: string; filename: string }
+  | { kind: 'action'; label: string; onSelect: () => void }
 
 interface Props {
   items: MenuItem[]
@@ -105,6 +106,12 @@ export const CopyMenu = memo(function CopyMenu({ items, trigger = '⋯', ariaLab
         aria-label={ariaLabel}
         // 親行 (FileRow) の onClick=preview を抑止しつつメニューを開く。
         onClick={e => { e.stopPropagation(); setOpen(o => !o) }}
+        // 行 (<tr>) の onKeyDown は Enter/Space で無条件に行アクション
+        // (preview / モーダル) を発火するため、⋯ にフォーカスして Enter/Space を
+        // 押すと伝播して誤発火する。その2キーだけ止める。native button の click は
+        // ここで止めても発生するのでメニュー開閉は壊れない。Escape 等は止めない
+        // ので、開いた直後に Escape で閉じる (document リスナ) が効いたまま。
+        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') e.stopPropagation() }}
         title={ariaLabel}
       >
         {feedback ?? trigger}
@@ -142,6 +149,23 @@ export const CopyMenu = memo(function CopyMenu({ items, trigger = '⋯', ariaLab
                 >
                   {it.label}
                 </a>
+              )
+            }
+            if (it.kind === 'action') {
+              return (
+                <button
+                  key={it.label}
+                  role="menuitem"
+                  type="button"
+                  className={
+                    'block w-full cursor-pointer border-0 bg-transparent px-3 py-2 ' +
+                    'text-left text-[13px] text-ink-11 transition-colors hover:bg-ink-1'
+                  }
+                  // 親行 (FileRow) の onClick=preview 抑止のため stopPropagation。
+                  onClick={e => { e.stopPropagation(); it.onSelect(); setOpen(false) }}
+                >
+                  {it.label}
+                </button>
               )
             }
             return (

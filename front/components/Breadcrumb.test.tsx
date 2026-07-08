@@ -16,6 +16,7 @@ const conn: Connection = {
   listObjectsVersion: 'v2',
   createdAt: '2026-01-01T00:00:00.000Z',
   updatedAt: '2026-01-01T00:00:00.000Z',
+  isDefault: false,
 }
 
 function renderBreadcrumb(prefix: string) {

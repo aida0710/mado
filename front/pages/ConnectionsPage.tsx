@@ -88,6 +88,14 @@ export default function ConnectionsPage() {
     dispatch({ type: 'closeDelete' })
     refresh()
   }
+  const handleSetDefault = async (id: string) => {
+    try {
+      await api.setDefaultConnection(id)
+      refresh()
+    } catch (e) {
+      dispatch({ type: 'loadErr', error: (e as Error).message })
+    }
+  }
 
   return (
     <div>
@@ -135,6 +143,15 @@ export default function ConnectionsPage() {
                 <div className="min-w-0 flex-1">
                   <strong className="block text-[15px] font-semibold tracking-[0.005em] text-ink-12">
                     {conn.name}
+                    {conn.isDefault ? (
+                      <span
+                        className="ml-2 align-middle text-[9.5px] font-semibold uppercase tracking-[0.18em] text-ink-7"
+                        style={{ border: '1px solid var(--rule)', borderRadius: 2, padding: '1px 5px' }}
+                        title="Storage タブはこの接続を開きます"
+                      >
+                        DEFAULT
+                      </span>
+                    ) : null}
                   </strong>
                   <div
                     className="mt-1 font-mono text-[12px] text-ink-7"
@@ -154,6 +171,15 @@ export default function ConnectionsPage() {
                   </div>
                 </div>
                 <div className="flex shrink-0 gap-2">
+                  {!conn.isDefault && (
+                    <button
+                      className="ghost"
+                      onClick={() => void handleSetDefault(conn.id)}
+                      title="Storage タブで開く接続にする"
+                    >
+                      デフォルトにする
+                    </button>
+                  )}
                   <Link className="ghost" to={`/storage/${encodeURIComponent(conn.id)}/`}>開く</Link>
                   <button className="ghost" onClick={() => dispatch({ type: 'openEdit', conn })}>編集</button>
                   <button

@@ -379,4 +379,45 @@ describe('GET /storage/:connId/preview/tar', () => {
     const errLine = lines.find((l): l is { error: string } => 'error' in l)
     expect(errLine?.error).toMatch(/not found|NoSuchKey|no/i)
   })
+
+  it('クライアントが reader.cancel() した後も S3 ストリームにデータが流れてプロセスが落ちない (stream mode)', async () => {
+    // 本物の IncomingMessage の代わりに、手動で 'data' を流せる Readable を使う。
+    // stream モード (tar.gz/.tar.xz) はオブジェクト全体を順次読みながら
+    // 'data' イベントごとに write({progress}) を呼ぶため、クライアント切断後に
+    // イベントが発火すると本番と同じ経路で再現できる。
+    const stub = new Readable({ read() {} })
+    storageMock.on(GetObjectCommand).resolves({ Body: stub as never })
+
+    const uncaught: Error[] = []
+    const onUncaught = (e: Error): void => { uncaught.push(e) }
+    process.on('uncaughtException', onUncaught)
+    try {
+      const res = await app.request(
+        `/storage/${TEST_CONN_ID}/preview/tar?bucket=b&key=foo/big.tar.gz`,
+      )
+      expect(res.status).toBe(200)
+      const reader = res.body!.getReader()
+
+      // 最初の行 ({"mode":"stream"}) を読んだところでクライアントが切断したと仮定する。
+      const first = await reader.read()
+      expect(first.done).toBe(false)
+
+      await reader.cancel()
+
+      // クライアント切断後も S3 からのダウンロードが (直そうとする前は) 続いていた
+      // ケースを再現: PROGRESS_STEP (4MB) を超えるデータを流し込む。
+      stub.push(Buffer.alloc(5 * 1024 * 1024, 1))
+      stub.push(null)
+
+      // 'data' ハンドラの (非同期の) 発火と、修正前なら投げられるはずの
+      // 未捕捉例外に猶予を与える。
+      await new Promise(r => setTimeout(r, 50))
+
+      expect(uncaught).toEqual([])
+      // stream モードのダウンロード自体が停止していること。
+      expect(stub.destroyed).toBe(true)
+    } finally {
+      process.off('uncaughtException', onUncaught)
+    }
+  })
 })

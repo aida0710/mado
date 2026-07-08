@@ -15,6 +15,8 @@
 - **URL コピー** — ファイルの Web URL (共有リンク) / S3 URL / ダウンロードをワンクリック
 - **ディレクトリ README** — 各ディレクトリに Markdown のメモを残せる (履歴つき)
 - **チーム共有ノート** — Mado 全体で 1 つの Markdown メモ (履歴つき)
+- **波形 / スペクトログラム** — 音声ファイルの波形とスペクトログラムをその場で確認 (解析結果はキャッシュ)
+- **同期プレイヤー** — 複数の音声ファイルを並べて同期再生し聴き比べる
 
 ---
 
@@ -35,13 +37,13 @@
 - **アクセスキー / シークレットキー** — 保存時に暗号化されます ([セキュリティ](#セキュリティ))
 - **path-style / ListObjects バージョン** — 互換ストレージに合わせて選択
 
-登録した接続は後から編集・削除できます。
+登録した接続は後から編集・削除でき、Storage タブが開くデフォルト接続もここで変更できます。
 
 <img width="567" height="767" alt="image" src="https://github.com/user-attachments/assets/e01ab4e2-6139-4f5c-b459-c7c40136ef48" />
 
 ### 2. バケット / ディレクトリをブラウズする (Storage)
 
-**Storage** タブで接続を選びます (登録が 1 つだけなら自動で開きます)。
+**Storage** タブは**デフォルト接続**を自動で開きます。別の接続に切り替えるときは右上の **CONN** メニュー、デフォルトの変更は **Settings** の各接続行の「デフォルトにする」から。
 
 - ディレクトリをクリックして潜る / パンくずで戻る
 - 上部の検索ボックスで **前方一致** 検索 (再帰検索オプションあり)
@@ -129,6 +131,10 @@ dev の DB パスワードは未設定なら既定値 (`postgres` / `CHANGEME`) 
 | `PREVIEW_TEXT_LIMIT` | no | テキストプレビュー最大バイト (default 65536) |
 | `PREVIEW_TAR_ENTRY_LIMIT` | no | tar 内 1 ページのエントリ最大数 (default 200) |
 | `PREVIEW_TARXZ_BYTE_LIMIT` | no | tar.xz の解凍バイト上限 (default 256MiB) |
+| `MEDIA_CONCURRENCY` | no | media-worker が同時実行する ffmpeg 解析数の上限 (default 3) |
+| `MEDIA_ANALYZE_TIMEOUT_SEC` | no | 音声 1 ファイルあたりの解析タイムアウト秒 (default 300) |
+| `MEDIA_CACHE_MAX_AGE_DAYS` | no | 解析結果キャッシュ (`media_cache`) の保持日数 (default 30) |
+| `MEDIA_SPECTROGRAM_MAX_WIDTH` | no | スペクトログラム画像の最大幅 (px) (default 4096) |
 
 > ⚠️ `POSTGRES_PASSWORD` / `DASHBOARD_PASSWORD` は **DB ボリュームの初回作成時のみ** 反映されます。既存 DB のパスワード変更は env ではなく `psql` の `ALTER ROLE` が必要です (詳細は [`db/README.md`](db/README.md))。生成例: `openssl rand -hex 24`
 
@@ -163,7 +169,7 @@ dev の DB パスワードは未設定なら既定値 (`postgres` / `CHANGEME`) 
 
 ### アーキテクチャ
 
-dev / prod 共通で 3 サービス。dev は Vite dev server で HMR、prod は nginx で静的配信 + リバプロ。
+dev / prod 共通で 4 サービス。dev は Vite dev server で HMR、prod は nginx で静的配信 + リバプロ。media-worker は api-internal と同じコードベース (+ ffmpeg) を持つ別コンテナで、host には公開せず compose ネットワーク内でのみ到達可能。
 
 ```
                  ┌─ docker compose ──────────────────────────────┐
@@ -171,7 +177,8 @@ Browser ─:5173 ─►│ front (vite dev / dev)                        │
    または :80    │   または                                      │
                  │ nginx (静的 + リバプロ / prod)                │
                  │   └─► /api/internal/* → api-internal (Hono)   │
-                 │                              │                │
+                 │                              ├─► media-worker │
+                 │                              │    (ffmpeg)    │
                  │                          postgres             │
                  └───────────────────────────────────────────────┘
                  公開ポート: dev=5173 のみ / prod=80 のみ (LAN/VPN 経由前提)
@@ -182,6 +189,7 @@ Browser ─:5173 ─►│ front (vite dev / dev)                        │
 | `front` | `vite dev` (HMR) | (なし、nginx に焼き込み) |
 | `nginx` | (なし、Vite proxy が代替) | 静的配信 + `/api/internal/*` リバプロ |
 | `api-internal` | `tsx watch internal.ts` | `node dist/internal.js` |
+| `media-worker` | `tsx watch worker.ts` | `node dist/worker.js` |
 | `postgres` | postgres:16-alpine (`127.0.0.1:5432`) | postgres:16-alpine (compose 内部のみ) |
 
 ### よく使うコマンド

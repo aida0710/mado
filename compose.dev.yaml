@@ -43,6 +43,21 @@ services:
       postgres:
         condition: service_healthy
 
+  media-worker:
+    build:
+      context: ./api
+      dockerfile: Dockerfile.worker
+    container_name: mado-dev-media-worker
+    command: ["npx", "tsx", "watch", "worker.ts"]
+    env_file:
+      - .env
+    volumes:
+      - ./api:/app
+      - /app/node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   front:
     build: ./front
     container_name: mado-dev-front

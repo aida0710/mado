@@ -2,9 +2,12 @@ import { memo, useCallback, useEffect, useMemo, useState, type KeyboardEvent } f
 import { Link } from 'react-router-dom'
 import type { z } from 'zod'
 import { api } from '../../lib/api/client'
+import { classify } from '../../lib/api/mime'
 import { StorageList } from '../../lib/api/types'
 import { fmtSize } from '../../lib/format'
 import { encPath } from '../../lib/route'
+import { usePlayerDeck } from '../../lib/playerDeck'
+import { usePinnedPreviews } from '../../lib/pinnedPreviews'
 import { CopyMenu, type MenuItem } from '../CopyMenu'
 
 // <sm (= 640px 未満、phones) で card list、それ以上で table。
@@ -97,6 +100,8 @@ const FileRow = memo(function FileRow({
   bucket: string
   onSelectFile?: (key: string) => void
 }) {
+  const deck = usePlayerDeck()
+  const pinned = usePinnedPreviews()
   const tail = f.key.startsWith(prefix) ? f.key.slice(prefix.length) : f.key
   const select = useCallback(() => onSelectFile?.(f.key), [onSelectFile, f.key])
   // Enter / Space で preview を開く。dir 行は <Link> がネイティブで処理する。
@@ -114,11 +119,25 @@ const FileRow = memo(function FileRow({
   const s3Url = `s3://${bucket}/${f.key}`
   const downloadUrl = api.downloadUrl(connId, bucket, f.key)
   const filename = f.key.split('/').pop() ?? 'file'
+  const isAudio = classify(f.key) === 'audio'
+  const isPreviewable = classify(f.key) !== 'unknown'
   const items = useMemo<MenuItem[]>(() => [
+    ...(isAudio ? [{
+      kind: 'action' as const,
+      label: 'デッキに追加',
+      onSelect: () => deck.addTrack({
+        label: filename, connId, bucket, key: f.key,
+      }),
+    }] : []),
+    ...(isPreviewable ? [{
+      kind: 'action' as const,
+      label: 'ピン留め',
+      onSelect: () => pinned.addPin({ connId, bucket, key: f.key }),
+    }] : []),
     { kind: 'download', label: 'このファイルをダウンロード', href: downloadUrl, filename },
     { kind: 'copy',     label: 'Web URL をコピー',           value: webUrl },
     { kind: 'copy',     label: 'S3 URL をコピー',            value: s3Url },
-  ], [downloadUrl, webUrl, s3Url, filename])
+  ], [isAudio, isPreviewable, deck, pinned, connId, bucket, f.key, downloadUrl, webUrl, s3Url, filename])
   return (
     <tr
       className={fileRowClass}
@@ -195,6 +214,8 @@ const FileCard = memo(function FileCard({
   bucket: string
   onSelectFile?: (key: string) => void
 }) {
+  const deck = usePlayerDeck()
+  const pinned = usePinnedPreviews()
   const tail = f.key.startsWith(prefix) ? f.key.slice(prefix.length) : f.key
   const select = useCallback(() => onSelectFile?.(f.key), [onSelectFile, f.key])
   const onKeyDown = useCallback((e: KeyboardEvent<HTMLLIElement>) => {
@@ -209,11 +230,25 @@ const FileCard = memo(function FileCard({
   const s3Url = `s3://${bucket}/${f.key}`
   const downloadUrl = api.downloadUrl(connId, bucket, f.key)
   const filename = f.key.split('/').pop() ?? 'file'
+  const isAudio = classify(f.key) === 'audio'
+  const isPreviewable = classify(f.key) !== 'unknown'
   const items = useMemo<MenuItem[]>(() => [
+    ...(isAudio ? [{
+      kind: 'action' as const,
+      label: 'デッキに追加',
+      onSelect: () => deck.addTrack({
+        label: filename, connId, bucket, key: f.key,
+      }),
+    }] : []),
+    ...(isPreviewable ? [{
+      kind: 'action' as const,
+      label: 'ピン留め',
+      onSelect: () => pinned.addPin({ connId, bucket, key: f.key }),
+    }] : []),
     { kind: 'download', label: 'このファイルをダウンロード', href: downloadUrl, filename },
     { kind: 'copy',     label: 'Web URL をコピー',           value: webUrl },
     { kind: 'copy',     label: 'S3 URL をコピー',            value: s3Url },
-  ], [downloadUrl, webUrl, s3Url, filename])
+  ], [isAudio, isPreviewable, deck, pinned, connId, bucket, f.key, downloadUrl, webUrl, s3Url, filename])
   return (
     <li
       className="cursor-pointer transition-colors hover:bg-ink-0 focus-within:bg-ink-1"

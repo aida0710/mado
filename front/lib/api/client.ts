@@ -4,6 +4,7 @@ import {
   ConnectionList,
   FavoriteBuckets,
   ListBuckets,
+  MediaAnalyze,
   Note,
   NoteHistoryList,
   NoteHistoryVersion,
@@ -148,6 +149,16 @@ export const api = {
 
   deleteConnection: (id: string) =>
     mutateJson(`${API_BASE}/connections/${encodeURIComponent(id)}`, { method: 'DELETE' }, null),
+
+  // デフォルト接続の切り替え。listConnections はキャッシュ層を通らないため
+  // 呼び出し後の再取得だけで最新が見える。
+  setDefaultConnection: async (id: string): Promise<void> => {
+    await mutateJson(
+      `${API_BASE}/connections/${encodeURIComponent(id)}/default`,
+      { method: 'PUT' },
+      z.object({ ok: z.boolean() }),
+    )
+  },
 
   buckets: (connId: string) =>
     bucketsCache.get(k('buckets', connId), () =>
@@ -339,6 +350,36 @@ export const api = {
 
   audioUrl: (connId: string, bucket: string, key: string): string =>
     buildUrl(`${API_BASE}/storage/${encodeURIComponent(connId)}/preview/audio`, { bucket, key }),
+
+  // 音声解析 (波形ピーク + スペクトログラム有無)。サーバー側でキャッシュされる
+  // ため TTLCache には入れない。長尺ファイルはレスポンスまで数十秒かかりうる —
+  // 呼び出し側は AbortSignal でアンマウント時に中断すること。
+  mediaAnalyze: async (
+    connId: string,
+    bucket: string,
+    key: string,
+    opts: { entryPath?: string; signal?: AbortSignal } = {},
+  ) => {
+    const url = buildUrl(`${API_BASE}/storage/${encodeURIComponent(connId)}/media/analyze`, {
+      bucket, key, entryPath: opts.entryPath,
+    })
+    const res = await fetch(url, {
+      headers: { Accept: 'application/json' },
+      signal: opts.signal,
+    })
+    if (!res.ok) {
+      let msg = res.statusText
+      try {
+        const body = (await res.json()) as { error?: string }
+        if (body.error) msg = body.error
+      } catch { /* statusText をそのまま使う */ }
+      throw new Error(msg)
+    }
+    return MediaAnalyze.parse(await res.json())
+  },
+
+  spectrogramUrl: (connId: string, cacheKey: string): string =>
+    buildUrl(`${API_BASE}/storage/${encodeURIComponent(connId)}/media/spectrogram`, { cacheKey }),
 
   // 任意のキーをそのままダウンロードする URL。バックエンドが
   // Content-Disposition: attachment を付けるためブラウザはファイル保存を促す。

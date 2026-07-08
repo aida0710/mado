@@ -1,10 +1,14 @@
 import { useEffect, useReducer, useState, type KeyboardEvent } from 'react'
 import { api } from '../lib/api/client'
 import type { z } from 'zod'
+import { classify, classifyEntry } from '../lib/api/mime'
+import { usePlayerDeck } from '../lib/playerDeck'
+import { usePinnedPreviews } from '../lib/pinnedPreviews'
 import { TarPreview } from '../lib/api/types'
 import { fmtSize } from '../lib/format'
 import { TarEntryModal } from './TarEntryModal'
 import { CacheMeta } from './CacheMeta'
+import { CopyMenu, type MenuItem } from './CopyMenu'
 
 type Resp = z.infer<typeof TarPreview>
 type Entry = Resp['entries'][number]
@@ -111,6 +115,8 @@ function reducer(s: State, a: Action): State {
 }
 
 export function PreviewArchive({ connId, bucket, k }: { connId: string; bucket: string; k: string }) {
+  const deck = usePlayerDeck()
+  const { addPin } = usePinnedPreviews()
   const [openedEntry, setOpenedEntry] = useState<Entry | null>(null)
   const [state, dispatch] = useReducer(reducer, undefined, makeInitial)
   const { data, offset, pageSize, error, loading, progress } = state
@@ -240,38 +246,67 @@ export function PreviewArchive({ connId, bucket, k }: { connId: string; bucket: 
             <tr style={{ borderBottom: '1px solid var(--color-rule-strong)' }}>
               <th className={tableHeadClass}>Name</th>
               <th className={`${tableHeadClass} w-px whitespace-nowrap text-right`}>Size</th>
+              <th className={`${tableHeadClass} w-px`}></th>
             </tr>
           </thead>
           <tbody>
-            {data.entries.map(e => (
-              <tr
-                key={e.name}
-                className={rowClass}
-                role="button"
-                tabIndex={0}
-                style={{ borderBottom: '1px solid var(--rule)' }}
-                onClick={() => setOpenedEntry(e)}
-                onKeyDown={(ev: KeyboardEvent<HTMLTableRowElement>) => {
-                  if (ev.key === 'Enter' || ev.key === ' ') {
-                    ev.preventDefault()
-                    setOpenedEntry(e)
-                  }
-                }}
-              >
-                <td
-                  className="p-2"
-                  style={{ fontFamily: 'var(--font-mono)', fontSize: '12.5px' }}
+            {data.entries.map(e => {
+              const items: MenuItem[] = [
+                ...(classify(e.name) === 'audio' ? [{
+                  kind: 'action' as const,
+                  label: 'デッキに追加',
+                  onSelect: () => deck.addTrack({
+                    label: e.name,
+                    connId, bucket, key: k, entryPath: e.name,
+                  }),
+                }] : []),
+                ...(classifyEntry(e.name) !== 'unknown' ? [{
+                  kind: 'action' as const,
+                  label: 'ピン留め',
+                  onSelect: () => addPin({ connId, bucket, key: k, entryPath: e.name }),
+                }] : []),
+                {
+                  kind: 'download',
+                  label: 'このエントリをダウンロード',
+                  href: api.tarEntryUrl(connId, bucket, k, e.name),
+                  filename: e.name.split('/').pop() ?? e.name,
+                },
+              ]
+              return (
+                <tr
+                  key={e.name}
+                  className={rowClass}
+                  role="button"
+                  tabIndex={0}
+                  style={{ borderBottom: '1px solid var(--rule)' }}
+                  onClick={() => setOpenedEntry(e)}
+                  onKeyDown={(ev: KeyboardEvent<HTMLTableRowElement>) => {
+                    if (ev.key === 'Enter' || ev.key === ' ') {
+                      ev.preventDefault()
+                      setOpenedEntry(e)
+                    }
+                  }}
                 >
-                  {e.name}
-                </td>
-                <td
-                  className="w-px whitespace-nowrap p-2 text-right text-ink-7 tabular-nums"
-                  style={{ fontFamily: 'var(--font-mono)', fontSize: '12px' }}
-                >
-                  {fmtSize(e.size)}
-                </td>
-              </tr>
-            ))}
+                  <td
+                    className="p-2"
+                    style={{ fontFamily: 'var(--font-mono)', fontSize: '12.5px' }}
+                  >
+                    <span className="flex items-baseline gap-2">
+                      <span className="min-w-0 flex-1 truncate">{e.name}</span>
+                    </span>
+                  </td>
+                  <td
+                    className="w-px whitespace-nowrap p-2 text-right text-ink-7 tabular-nums"
+                    style={{ fontFamily: 'var(--font-mono)', fontSize: '12px' }}
+                  >
+                    {fmtSize(e.size)}
+                  </td>
+                  <td className="w-px p-2 text-right">
+                    <CopyMenu items={items} />
+                  </td>
+                </tr>
+              )
+            })}
           </tbody>
         </table>
       </div>
