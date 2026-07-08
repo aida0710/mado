@@ -255,6 +255,33 @@ describe('PlayerDeck', () => {
     expect(b.currentTime).toBe(2)
   })
 
+  it('トラック波形クリックで全トラックがその時刻へシークする', () => {
+    const { container } = setup()
+    fireEvent.click(screen.getByText('add1'))
+    fireEvent.click(screen.getByText('add2'))
+    const [a, b] = [...container.querySelectorAll('audio')]
+
+    // a: 長さ1, b: 長さ3 → maxDuration=3。onLoadedMetadata 経由で durations を埋める。
+    Object.defineProperty(a, 'duration', { value: 1, configurable: true })
+    Object.defineProperty(b, 'duration', { value: 3, configurable: true })
+    fireEvent.loadedMetadata(a)
+    fireEvent.loadedMetadata(b)
+
+    // 1 本目のトラック波形 (canvas role="slider", aria-label で master seek の
+    // range と区別) を全幅 100px の中央 (clientX=50) でクリック → ratio=0.5。
+    const waveforms = screen.getAllByRole('slider', { name: '再生位置' })
+    vi.spyOn(waveforms[0], 'getBoundingClientRect').mockReturnValue(
+      { left: 0, width: 100, top: 0, height: 28, right: 100, bottom: 28, x: 0, y: 0, toJSON: () => ({}) } as DOMRect,
+    )
+    fireEvent.click(waveforms[0], { clientX: 50 })
+
+    // seekAll(0.5 * 3 = 1.5): a は自分の長さ (1) でクランプ、b は 1.5 秒へ。
+    // どのトラックの波形をクリックしても全トラックが同じマスター時刻へ揃う。
+    expect(a.currentTime).toBe(1)
+    expect(b.currentTime).toBe(1.5)
+    expect(screen.getByText('0:01 / 0:03')).toBeInTheDocument()
+  })
+
   it('全トラック終了後に ▶ を押すと頭出し (currentTime=0) してから再生し直す', () => {
     vi.useFakeTimers()
     try {

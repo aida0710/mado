@@ -260,6 +260,7 @@ export function PlayerDeck() {
                     peaks={peaksById[t.id] ?? []}
                     progress={maxDuration > 0 ? masterTime / maxDuration : 0}
                     durationRatio={maxDuration > 0 ? (durations[t.id] ?? 0) / maxDuration : 1}
+                    onSeek={maxDuration > 0 ? ratio => seekAll(ratio * maxDuration) : undefined}
                     height={28}
                   />
                 </div>
