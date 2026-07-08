@@ -5,7 +5,14 @@ import { PreviewDrawer } from './PreviewDrawer'
 import { PinnedPreviewsProvider } from '../lib/pinnedPreviews'
 
 vi.mock('../lib/api/client', () => ({
-  api: { downloadUrl: vi.fn(() => 'http://x/dl') },
+  api: {
+    downloadUrl: vi.fn(() => 'http://x/dl'),
+    // tar (アーカイブ) 用の PreviewArchive がマウントされた際に呼ばれる。
+    // ピン留めボタンの有無だけを見るテストなので中身は解決させず放置してよい。
+    tarPreview: vi.fn(() => new Promise(() => {})),
+    invalidateTarPreview: vi.fn(),
+    lastFetched: { tar: vi.fn(() => null) },
+  },
 }))
 
 afterEach(() => {
@@ -82,5 +89,18 @@ describe('PreviewDrawer - pin button', () => {
     render(<Wrapper k="file.xyz" onClose={onClose} />)
     fireEvent.click(screen.getByRole('button', { name: 'Close preview' }))
     expect(onClose).toHaveBeenCalledOnce()
+  })
+
+  // tar アーカイブ自体はピン留め対象外 (個々のエントリは PreviewArchive の
+  // ⋯ メニューからピン留めできる)。ドロワーの 📌 はアーカイブ全体には出さない。
+  it('tar アーカイブ (classify → archive) では 📌 ボタンが出ない', () => {
+    render(<Wrapper k="a.tar" />)
+    expect(screen.queryByRole('button', { name: 'ピン留め' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'ピン留め済み' })).not.toBeInTheDocument()
+  })
+
+  it('非アーカイブ (unknown) では引き続き 📌 ボタンが出る', () => {
+    render(<Wrapper k="file.xyz" />)
+    expect(screen.getByRole('button', { name: 'ピン留め' })).toBeInTheDocument()
   })
 })

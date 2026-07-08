@@ -61,16 +61,19 @@ export function PreviewDrawer({
             <span aria-hidden>↔</span>
           </button>
         )}
-        <button
-          type="button"
-          className="ghost"
-          onClick={() => addPin({ connId, bucket, key: k })}
-          disabled={alreadyPinned}
-          aria-label={alreadyPinned ? 'ピン留め済み' : 'ピン留め'}
-          title={alreadyPinned ? 'ピン留め済み' : 'ピン留め'}
-        >
-          <span aria-hidden>📌</span>
-        </button>
+        {/* tar アーカイブ自体はピン留め対象外 (個々のエントリのみピン留め可能)。 */}
+        {kind !== 'archive' && (
+          <button
+            type="button"
+            className="ghost"
+            onClick={() => addPin({ connId, bucket, key: k })}
+            disabled={alreadyPinned}
+            aria-label={alreadyPinned ? 'ピン留め済み' : 'ピン留め'}
+            title={alreadyPinned ? 'ピン留め済み' : 'ピン留め'}
+          >
+            <span aria-hidden>📌</span>
+          </button>
+        )}
         <a
           className="ghost no-underline"
           href={api.downloadUrl(connId, bucket, k)}
