@@ -6,6 +6,10 @@ interface Props {
   progress: number
   onSeek?: (ratio: number) => void
   height?: number
+  // ピーク描画幅の全幅に対する比 (0〜1、既定 1)。デッキで各トラックの長さ /
+  // maxDuration を渡すと、短いトラックは左寄せ + 右側空白になり、全トラックの
+  // 再生ヘッド (progress は全幅比のまま) が水平に揃う (0 パディングの可視化)。
+  durationRatio?: number
 }
 
 // CSS 変数を解決する。テスト (jsdom) や変数未定義時はフォールバック。
@@ -14,7 +18,7 @@ function cssVar(el: HTMLElement, name: string, fallback: string): string {
   return v || fallback
 }
 
-export function Waveform({ peaks, progress, onSeek, height = 64 }: Props) {
+export function Waveform({ peaks, progress, onSeek, height = 64, durationRatio = 1 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
   const draw = useCallback(() => {
@@ -36,7 +40,9 @@ export function Waveform({ peaks, progress, onSeek, height = 64 }: Props) {
     const played = cssVar(canvas, '--color-ink-11', '#444')
     const rest = cssVar(canvas, '--color-ink-6', '#999')
     const mid = h / 2
-    const barW = w / peaks.length
+    // ピークは全幅 × durationRatio の範囲に描く (残りは 0 パディングの空白)。
+    const peaksW = w * Math.min(1, Math.max(0, durationRatio))
+    const barW = peaksW / peaks.length
     const playedX = progress * w
     for (let i = 0; i < peaks.length; i++) {
       const [mn, mx] = peaks[i]
@@ -52,7 +58,7 @@ export function Waveform({ peaks, progress, onSeek, height = 64 }: Props) {
       ctx.fillStyle = played
       ctx.fillRect(playedX - 0.5, 0, 1, h)
     }
-  }, [peaks, progress, height])
+  }, [peaks, progress, height, durationRatio])
 
   useEffect(() => {
     draw()
