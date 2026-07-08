@@ -49,47 +49,47 @@ export function PreviewDrawer({
         />
       )}
       <header className="drawer__head">
-          <p className="drawer__title">{k}</p>
-          {onResetWidth && widthCustomized && (
-            <button
-              type="button"
-              className="ghost drawer__reset"
-              onClick={onResetWidth}
-              aria-label="プレビュー幅を既定に戻す"
-              title="プレビュー幅を既定に戻す"
-            >
-              <span aria-hidden>↔</span>
-            </button>
-          )}
+        <p className="drawer__title">{k}</p>
+        {onResetWidth && widthCustomized && (
           <button
             type="button"
-            className="ghost"
-            onClick={() => addPin({ connId, bucket, key: k })}
-            disabled={alreadyPinned}
-            aria-label={alreadyPinned ? 'ピン留め済み' : 'ピン留め'}
-            title={alreadyPinned ? 'ピン留め済み' : 'ピン留め'}
+            className="ghost drawer__reset"
+            onClick={onResetWidth}
+            aria-label="プレビュー幅を既定に戻す"
+            title="プレビュー幅を既定に戻す"
           >
-            <span aria-hidden>📌</span>
+            <span aria-hidden>↔</span>
           </button>
-          <a
-            className="ghost no-underline"
-            href={api.downloadUrl(connId, bucket, k)}
-            download={filename}
-            aria-label={`${filename} をダウンロード`}
-            title="ダウンロード"
-          >
-            <span aria-hidden>↓</span>
-            <span className="text-[10.5px] font-semibold uppercase tracking-[0.18em]">DL</span>
-          </a>
-          <button
-            className="ghost"
-            onClick={onClose}
-            aria-label="Close preview"
-            title="閉じる"
-          >
-            <span aria-hidden>✕</span>
-          </button>
-        </header>
+        )}
+        <button
+          type="button"
+          className="ghost"
+          onClick={() => addPin({ connId, bucket, key: k })}
+          disabled={alreadyPinned}
+          aria-label={alreadyPinned ? 'ピン留め済み' : 'ピン留め'}
+          title={alreadyPinned ? 'ピン留め済み' : 'ピン留め'}
+        >
+          <span aria-hidden>📌</span>
+        </button>
+        <a
+          className="ghost no-underline"
+          href={api.downloadUrl(connId, bucket, k)}
+          download={filename}
+          aria-label={`${filename} をダウンロード`}
+          title="ダウンロード"
+        >
+          <span aria-hidden>↓</span>
+          <span className="text-[10.5px] font-semibold uppercase tracking-[0.18em]">DL</span>
+        </a>
+        <button
+          className="ghost"
+          onClick={onClose}
+          aria-label="Close preview"
+          title="閉じる"
+        >
+          <span aria-hidden>✕</span>
+        </button>
+      </header>
       <div className="drawer__body">
         {/* ファイル切替で内部 state (本文/コピー表示) をリセットするため key で再マウント。 */}
         {kind === 'text' && (
