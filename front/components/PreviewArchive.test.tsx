@@ -1,4 +1,5 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { PreviewArchive } from './PreviewArchive'
 import { PinnedPreviewsProvider, usePinnedPreviews } from '../lib/pinnedPreviews'
@@ -12,6 +13,7 @@ vi.mock('../lib/api/client', () => ({
     tarPreview: vi.fn(async () => ({
       entries: [
         { name: 'notes.json', size: 12, type: '' },
+        { name: 'track.mp3', size: 99, type: '' },
         { name: 'blob.bin', size: 34, type: '' },
       ],
       truncated: false,
@@ -21,6 +23,7 @@ vi.mock('../lib/api/client', () => ({
     })),
     invalidateTarPreview: vi.fn(),
     lastFetched: { tar: vi.fn(() => null) },
+    tarEntryUrl: vi.fn(() => 'http://x/entry'),
   },
 }))
 
@@ -33,26 +36,74 @@ function PinsSpy() {
   return <output data-testid="count">{pins.length}</output>
 }
 
-describe('PreviewArchive - 行の 📌 ピン留め', () => {
-  it('プレビュー可能なエントリ (json) には 📌 ボタンが出て、押すとピンに積まれる', async () => {
+// エントリ名のセルから行 (<tr>) を辿り、その行内の ⋯ トリガーを開く。
+async function openMenuFor(entryName: string) {
+  const nameCell = await screen.findByText(entryName)
+  const row = nameCell.closest('tr')
+  if (!row) throw new Error(`row not found for ${entryName}`)
+  const trigger = within(row).getByRole('button', { name: 'アクション' })
+  await userEvent.click(trigger)
+  return row
+}
+
+describe('PreviewArchive - 行の ⋯ アクションメニュー', () => {
+  it('音声エントリ (mp3) にはデッキに追加・ピン留め・ダウンロードが揃う', async () => {
+    render(
+      <PinnedPreviewsProvider>
+        <PreviewArchive connId="c" bucket="b" k="a.tar" />
+      </PinnedPreviewsProvider>,
+    )
+    await openMenuFor('track.mp3')
+    expect(screen.getByRole('menuitem', { name: 'デッキに追加' })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: 'ピン留め' })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: 'このエントリをダウンロード' })).toBeInTheDocument()
+  })
+
+  it('json エントリにはピン留め・ダウンロードのみ (デッキに追加は出ない)', async () => {
+    render(
+      <PinnedPreviewsProvider>
+        <PreviewArchive connId="c" bucket="b" k="a.tar" />
+      </PinnedPreviewsProvider>,
+    )
+    await openMenuFor('notes.json')
+    expect(screen.getByRole('menuitem', { name: 'ピン留め' })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: 'このエントリをダウンロード' })).toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: 'デッキに追加' })).not.toBeInTheDocument()
+  })
+
+  it('unknown 種別 (bin) にはピン留め・デッキに追加が出ずダウンロードのみ', async () => {
+    render(
+      <PinnedPreviewsProvider>
+        <PreviewArchive connId="c" bucket="b" k="a.tar" />
+      </PinnedPreviewsProvider>,
+    )
+    await openMenuFor('blob.bin')
+    expect(screen.getByRole('menuitem', { name: 'このエントリをダウンロード' })).toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: 'ピン留め' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: 'デッキに追加' })).not.toBeInTheDocument()
+  })
+
+  it('ピン留めを選ぶとピンに積まれる', async () => {
     render(
       <PinnedPreviewsProvider>
         <PreviewArchive connId="c" bucket="b" k="a.tar" />
         <PinsSpy />
       </PinnedPreviewsProvider>,
     )
-    const btn = await screen.findByRole('button', { name: 'notes.json をピン留め' })
-    fireEvent.click(btn)
+    await openMenuFor('notes.json')
+    await userEvent.click(screen.getByRole('menuitem', { name: 'ピン留め' }))
     expect(screen.getByTestId('count').textContent).toBe('1')
   })
 
-  it('unknown 種別 (bin) には 📌 ボタンが出ない', async () => {
+  it('⋯ トリガーのクリックではエントリのモーダルは開かない', async () => {
     render(
       <PinnedPreviewsProvider>
         <PreviewArchive connId="c" bucket="b" k="a.tar" />
       </PinnedPreviewsProvider>,
     )
-    await screen.findByText('blob.bin')
-    expect(screen.queryByRole('button', { name: 'blob.bin をピン留め' })).not.toBeInTheDocument()
+    await openMenuFor('notes.json')
+    // TarEntryModal は role="dialog" で描画される。行クリックのみで開くはずなので
+    // ⋯ トリガーをクリックしただけでは出現しない。
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 })
