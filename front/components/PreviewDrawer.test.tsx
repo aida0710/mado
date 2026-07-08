@@ -48,10 +48,14 @@ describe('PreviewDrawer - width reset button', () => {
   })
 })
 
-function Wrapper({ k, onClose = () => {} }: { k: string | null; onClose?: () => void }) {
+function Wrapper({
+  k,
+  onClose = () => {},
+  ...rest
+}: { k: string | null } & Partial<Parameters<typeof PreviewDrawer>[0]>) {
   return (
     <PinnedPreviewsProvider>
-      <PreviewDrawer connId="c" bucket="b" k={k} onClose={onClose} />
+      <PreviewDrawer connId="c" bucket="b" k={k} onClose={onClose} {...rest} />
     </PinnedPreviewsProvider>
   )
 }
@@ -94,5 +98,18 @@ describe('PreviewDrawer - pinned previews', () => {
     expect(screen.getByText('ピン留め (1)')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '全部外す' }))
     expect(screen.queryByText(/ピン留め \(/)).not.toBeInTheDocument()
+  })
+
+  it('keeps the width reset button reachable when only pins remain (k=null, customized width)', () => {
+    // 幅カスタマイズ済みで現在プレビューを閉じピンだけになっても、リサイズは
+    // 効き続ける (ハンドルは k に依らない) ので、既定に戻す手段も残っていること。
+    const onResetWidth = vi.fn()
+    const props = { widthCustomized: true, onResetWidth, onResizeStart: () => {} }
+    const { rerender } = render(<Wrapper k="file.xyz" {...props} />)
+    fireEvent.click(screen.getByRole('button', { name: 'ピン留め' }))
+    rerender(<Wrapper k={null} {...props} />)
+    expect(screen.getByText('ピン留め (1)')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: RESET }))
+    expect(onResetWidth).toHaveBeenCalledOnce()
   })
 })

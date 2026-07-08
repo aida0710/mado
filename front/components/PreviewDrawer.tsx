@@ -39,6 +39,20 @@ export function PreviewDrawer({
   const alreadyPinned = k != null && pins.some(
     p => p.connId === connId && p.bucket === bucket && p.key === k && p.entryPath === undefined,
   )
+  // 幅リセットボタン。通常は現在プレビューのヘッダ内だが、ピンのみ表示 (k=null) でも
+  // リサイズハンドルは効き続けるため、幅カスタマイズ済みなら「既定に戻す」手段を
+  // 失わないようこのボタンだけの軽量ヘッダを出す (下の !k 分岐)。
+  const resetButton = onResetWidth && widthCustomized && (
+    <button
+      type="button"
+      className="ghost drawer__reset"
+      onClick={onResetWidth}
+      aria-label="プレビュー幅を既定に戻す"
+      title="プレビュー幅を既定に戻す"
+    >
+      <span aria-hidden>↔</span>
+    </button>
+  )
   return (
     <aside className="drawer">
       {onResizeStart && (
@@ -52,20 +66,18 @@ export function PreviewDrawer({
           onKeyDown={onResizeKeyDown}
         />
       )}
+      {/* ピンのみ表示時の軽量ヘッダ (📌 / DL / ✕ は現在プレビュー専用のため出さない)。
+          リセットボタンが不要な状態 (未カスタマイズ等) では何も出さない。 */}
+      {!k && resetButton && (
+        <header className="drawer__head">
+          <p className="drawer__title" />
+          {resetButton}
+        </header>
+      )}
       {k && (
         <header className="drawer__head">
           <p className="drawer__title">{k}</p>
-          {onResetWidth && widthCustomized && (
-            <button
-              type="button"
-              className="ghost drawer__reset"
-              onClick={onResetWidth}
-              aria-label="プレビュー幅を既定に戻す"
-              title="プレビュー幅を既定に戻す"
-            >
-              <span aria-hidden>↔</span>
-            </button>
-          )}
+          {resetButton}
           <button
             type="button"
             className="ghost"
