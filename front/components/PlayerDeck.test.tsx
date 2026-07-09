@@ -1,5 +1,6 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { api } from '../lib/api/client'
 import { PlayerDeckProvider, usePlayerDeck } from '../lib/playerDeck'
 import { PlayerDeck } from './PlayerDeck'
 
@@ -29,6 +30,19 @@ function AddTarButton() {
       label: 'tar-entry', connId: 'c', bucket: 'b', key: 'shard.tar', entryPath: 'u1.wav',
     })}>
       addTar
+    </button>
+  )
+}
+
+// 深い階層の tar エントリ。label にはエントリのフルパスが入る (PreviewArchive の流儀)。
+function TarLabelButton() {
+  const deck = usePlayerDeck()
+  return (
+    <button onClick={() => deck.addTrack({
+      label: 'audio/mic_01_far.wav',
+      connId: 'c', bucket: 'b', key: 'rec/session.tar', entryPath: 'audio/mic_01_far.wav',
+    })}>
+      addDeepTar
     </button>
   )
 }
@@ -282,6 +296,27 @@ describe('PlayerDeck', () => {
     expect(screen.getByText('0:01 / 0:03')).toBeInTheDocument()
   })
 
+  it('tar トラックのラベルは basename を出し、title / コピーはフルパス (アーカイブ › エントリ)', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      blob: () => Promise.resolve(new Blob(['data'])),
+    } as unknown as Response))
+    URL.createObjectURL = vi.fn(() => 'blob:mock-1')
+    URL.revokeObjectURL = vi.fn()
+
+    render(
+      <PlayerDeckProvider>
+        <TarLabelButton />
+        <PlayerDeck />
+      </PlayerDeckProvider>,
+    )
+    fireEvent.click(screen.getByText('addDeepTar'))
+    // label = 'audio/mic_01_far.wav' (エントリのフルパス) だが、w-56 の枠で切れて
+    // 肝心のファイル名が読めなくなるので basename だけを出す。
+    expect(await screen.findByText('mic_01_far.wav')).toBeInTheDocument()
+    expect(screen.getByTitle('rec/session.tar › audio/mic_01_far.wav')).toBeInTheDocument()
+  })
+
   it('全トラック終了後に ▶ を押すと頭出し (currentTime=0) してから再生し直す', () => {
     vi.useFakeTimers()
     try {
@@ -322,5 +357,214 @@ describe('PlayerDeck', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+})
+
+// ── L / R チャンネル ──────────────────────────────────────────────
+// jsdom に AudioContext は無い。この describe だけローカルに stub する
+// (vitest.setup.ts は汚さない) — 上の既存ケースは L/R を押さないので
+// グラフが構築されず、AudioContext 無しのまま通ることも同時に担保している。
+
+function mockAnalyze(channels: number | null) {
+  return vi.spyOn(api, 'mediaAnalyze').mockResolvedValue({
+    cacheKey: 'k', peaks: [], durationSec: 1, sampleRate: 16000, hasSpectrogram: false,
+    meta: {
+      codec: null, container: null, channels,
+      bitsPerSample: null, bitRate: null, sizeBytes: null, peakDb: null, rmsDb: null,
+    },
+  })
+}
+
+// splitter → merger のエッジ [出力ch, 入力ch] を記録する AudioContext。
+function installMockAudioContext() {
+  const splitterEdges: Array<[number, number]> = []
+  const gainSetTarget = vi.fn()
+  const sourceCount = { n: 0 }
+  const closed = { n: 0 }
+  const resumed = { n: 0 }
+
+  class MockAudioContext {
+    currentTime = 0
+    destination = {}
+    createMediaElementSource = vi.fn(() => {
+      sourceCount.n++
+      return { connect: vi.fn(), disconnect: vi.fn() }
+    })
+    createChannelSplitter = vi.fn(() => ({
+      connect: vi.fn((_target: unknown, from: number, to: number) => { splitterEdges.push([from, to]) }),
+      // 実装は張り替えのたびに disconnect() してから 2 本張り直す。
+      disconnect: vi.fn(() => { splitterEdges.length = 0 }),
+    }))
+    createChannelMerger = vi.fn(() => ({ connect: vi.fn(), disconnect: vi.fn() }))
+    createGain = vi.fn(() => ({
+      gain: { setTargetAtTime: gainSetTarget },
+      connect: vi.fn(),
+      disconnect: vi.fn(),
+    }))
+    resume = vi.fn(() => { resumed.n++; return Promise.resolve() })
+    close = vi.fn(() => { closed.n++; return Promise.resolve() })
+  }
+  vi.stubGlobal('AudioContext', MockAudioContext)
+  return { splitterEdges, gainSetTarget, sourceCount, closed, resumed }
+}
+
+const leftBtn = () => screen.getByRole('button', { name: '左チャンネル' })
+const rightBtn = () => screen.getByRole('button', { name: '右チャンネル' })
+
+describe('PlayerDeck - L/R チャンネル', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('既定は両チャンネル (L も R も非押下)', async () => {
+    installMockAudioContext()
+    mockAnalyze(2)
+    setup()
+    fireEvent.click(screen.getByText('add1'))
+    await waitFor(() => expect(leftBtn()).toBeEnabled())
+    expect(leftBtn()).toHaveAttribute('aria-pressed', 'false')
+    expect(rightBtn()).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  it('L 押下で左 ch を左右へ複製し、グラフはそのとき初めて 1 回だけ作られる', async () => {
+    const { splitterEdges, sourceCount, resumed } = installMockAudioContext()
+    mockAnalyze(2)
+    const { container } = setup()
+    fireEvent.click(screen.getByText('add1'))
+    await waitFor(() => expect(leftBtn()).toBeEnabled())
+
+    // 押すまでは <audio> のネイティブ出力のまま (退行防止の肝)
+    expect(sourceCount.n).toBe(0)
+
+    fireEvent.click(leftBtn())
+    expect(sourceCount.n).toBe(1)
+    expect(resumed.n).toBe(1) // gesture 内で resume する
+    expect(splitterEdges).toEqual([[0, 0], [0, 1]])
+    expect(leftBtn()).toHaveAttribute('aria-pressed', 'true')
+    expect(rightBtn()).toHaveAttribute('aria-pressed', 'false')
+    // グラフへ移したトラックの要素側 muted は必ず解除される (二重消音の防止)
+    expect(container.querySelector('audio')!.muted).toBe(false)
+  })
+
+  it('同じ L をもう一度押すと both に戻る (グラフは作り直さない)', async () => {
+    const { splitterEdges, sourceCount } = installMockAudioContext()
+    mockAnalyze(2)
+    setup()
+    fireEvent.click(screen.getByText('add1'))
+    await waitFor(() => expect(leftBtn()).toBeEnabled())
+
+    fireEvent.click(leftBtn())
+    fireEvent.click(leftBtn())
+    expect(splitterEdges).toEqual([[0, 0], [1, 1]])
+    expect(leftBtn()).toHaveAttribute('aria-pressed', 'false')
+    // createMediaElementSource は 1 要素 1 回きり。2 回目は張り替えだけ。
+    expect(sourceCount.n).toBe(1)
+  })
+
+  it('L がアクティブなときに R を押すと right になる (both を経由しない)', async () => {
+    const { splitterEdges } = installMockAudioContext()
+    mockAnalyze(2)
+    setup()
+    fireEvent.click(screen.getByText('add1'))
+    await waitFor(() => expect(leftBtn()).toBeEnabled())
+
+    fireEvent.click(leftBtn())
+    fireEvent.click(rightBtn())
+    expect(splitterEdges).toEqual([[1, 0], [1, 1]])
+    expect(leftBtn()).toHaveAttribute('aria-pressed', 'false')
+    expect(rightBtn()).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('モノラルファイルでは L/R が無効になり、理由が title に出る', async () => {
+    installMockAudioContext()
+    mockAnalyze(1)
+    setup()
+    fireEvent.click(screen.getByText('add1'))
+    await waitFor(() => expect(leftBtn()).toBeDisabled())
+    expect(rightBtn()).toBeDisabled()
+    expect(leftBtn()).toHaveAttribute('title', 'モノラルのため分割できません')
+  })
+
+  it('チャンネル数が不明 (meta=null) なら L/R は有効のまま', async () => {
+    installMockAudioContext()
+    vi.spyOn(api, 'mediaAnalyze').mockResolvedValue({
+      cacheKey: 'k', peaks: [], durationSec: 1, sampleRate: 16000, hasSpectrogram: false, meta: null,
+    })
+    setup()
+    fireEvent.click(screen.getByText('add1'))
+    await waitFor(() => expect(leftBtn()).toBeEnabled())
+  })
+
+  it('tar エントリは blob 取得が終わるまで L/R が無効 (<audio> が無くグラフを作れない)', async () => {
+    installMockAudioContext()
+    mockAnalyze(2)
+    let resolveFetch!: (v: Response) => void
+    vi.stubGlobal('fetch', vi.fn().mockReturnValue(
+      new Promise<Response>(resolve => { resolveFetch = resolve }),
+    ))
+    URL.createObjectURL = vi.fn(() => 'blob:mock-1')
+    URL.revokeObjectURL = vi.fn()
+
+    render(
+      <PlayerDeckProvider>
+        <AddTarButton />
+        <PlayerDeck />
+      </PlayerDeckProvider>,
+    )
+    fireEvent.click(screen.getByText('addTar'))
+    expect(leftBtn()).toBeDisabled()
+    expect(leftBtn()).toHaveAttribute('title', '取得中')
+
+    await act(async () => {
+      resolveFetch({ ok: true, blob: () => Promise.resolve(new Blob(['d'])) } as unknown as Response)
+    })
+    await waitFor(() => expect(leftBtn()).toBeEnabled())
+  })
+
+  it('グラフ化後のミュートは要素の muted ではなく gain で行う', async () => {
+    const { gainSetTarget } = installMockAudioContext()
+    mockAnalyze(2)
+    const { container } = setup()
+    fireEvent.click(screen.getByText('add1'))
+    await waitFor(() => expect(leftBtn()).toBeEnabled())
+
+    fireEvent.click(leftBtn())
+    gainSetTarget.mockClear()
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'ミュート' })[0])
+    // gain を 0 へ (10ms の時定数)。<audio>.muted は触らない —
+    // MediaElementAudioSourceNode 経由で効くかがブラウザ実装依存なため。
+    expect(gainSetTarget).toHaveBeenCalledWith(0, 0, 0.01)
+    expect(container.querySelector('audio')!.muted).toBe(false)
+  })
+
+  it('「クリア」で AudioContext を閉じ、次に L を押したら新しい ctx を作り直す', async () => {
+    const { closed, sourceCount } = installMockAudioContext()
+    mockAnalyze(2)
+    setup()
+    fireEvent.click(screen.getByText('add1'))
+    await waitFor(() => expect(leftBtn()).toBeEnabled())
+    fireEvent.click(leftBtn())
+
+    fireEvent.click(screen.getByText('クリア'))
+    expect(closed.n).toBe(1)
+
+    // close 済みの ctx ではノードを作れない。再追加 → L で新しい ctx が立ち上がる。
+    fireEvent.click(screen.getByText('add1'))
+    await waitFor(() => expect(leftBtn()).toBeEnabled())
+    fireEvent.click(leftBtn())
+    expect(sourceCount.n).toBe(2)
+    expect(leftBtn()).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('AudioContext 非対応のブラウザでは L/R ボタンを描画しない', () => {
+    vi.unstubAllGlobals() // jsdom の既定 = AudioContext なし
+    mockAnalyze(2)
+    setup()
+    fireEvent.click(screen.getByText('add1'))
+    expect(screen.queryByRole('button', { name: '左チャンネル' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '右チャンネル' })).not.toBeInTheDocument()
+    // ミュート / ソロは従来どおり出る
+    expect(screen.getByRole('button', { name: 'ミュート' })).toBeInTheDocument()
   })
 })
