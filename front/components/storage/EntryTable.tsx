@@ -120,7 +120,6 @@ const FileRow = memo(function FileRow({
   const downloadUrl = api.downloadUrl(connId, bucket, f.key)
   const filename = f.key.split('/').pop() ?? 'file'
   const isAudio = classify(f.key) === 'audio'
-  const isPreviewable = classify(f.key) !== 'unknown'
   const items = useMemo<MenuItem[]>(() => [
     ...(isAudio ? [{
       kind: 'action' as const,
@@ -129,15 +128,18 @@ const FileRow = memo(function FileRow({
         label: filename, connId, bucket, key: f.key,
       }),
     }] : []),
-    ...(isPreviewable ? [{
+    // 種別で出し分けない。中身を見るまでテキストかどうか分からないので、
+    // 拡張子でゲートすると「ドロワーでは開けるのにピン留めできない」不揃いが残る。
+    // バイナリをピンしてもカードに「プレビュー非対応」と出るだけで実害はない。
+    {
       kind: 'action' as const,
       label: 'ピン留め',
       onSelect: () => pinned.addPin({ connId, bucket, key: f.key }),
-    }] : []),
+    },
     { kind: 'download', label: 'このファイルをダウンロード', href: downloadUrl, filename },
     { kind: 'copy',     label: 'Web URL をコピー',           value: webUrl },
     { kind: 'copy',     label: 'S3 URL をコピー',            value: s3Url },
-  ], [isAudio, isPreviewable, deck, pinned, connId, bucket, f.key, downloadUrl, webUrl, s3Url, filename])
+  ], [isAudio, deck, pinned, connId, bucket, f.key, downloadUrl, webUrl, s3Url, filename])
   return (
     <tr
       className={fileRowClass}
@@ -231,7 +233,6 @@ const FileCard = memo(function FileCard({
   const downloadUrl = api.downloadUrl(connId, bucket, f.key)
   const filename = f.key.split('/').pop() ?? 'file'
   const isAudio = classify(f.key) === 'audio'
-  const isPreviewable = classify(f.key) !== 'unknown'
   const items = useMemo<MenuItem[]>(() => [
     ...(isAudio ? [{
       kind: 'action' as const,
@@ -240,15 +241,18 @@ const FileCard = memo(function FileCard({
         label: filename, connId, bucket, key: f.key,
       }),
     }] : []),
-    ...(isPreviewable ? [{
+    // 種別で出し分けない。中身を見るまでテキストかどうか分からないので、
+    // 拡張子でゲートすると「ドロワーでは開けるのにピン留めできない」不揃いが残る。
+    // バイナリをピンしてもカードに「プレビュー非対応」と出るだけで実害はない。
+    {
       kind: 'action' as const,
       label: 'ピン留め',
       onSelect: () => pinned.addPin({ connId, bucket, key: f.key }),
-    }] : []),
+    },
     { kind: 'download', label: 'このファイルをダウンロード', href: downloadUrl, filename },
     { kind: 'copy',     label: 'Web URL をコピー',           value: webUrl },
     { kind: 'copy',     label: 'S3 URL をコピー',            value: s3Url },
-  ], [isAudio, isPreviewable, deck, pinned, connId, bucket, f.key, downloadUrl, webUrl, s3Url, filename])
+  ], [isAudio, deck, pinned, connId, bucket, f.key, downloadUrl, webUrl, s3Url, filename])
   return (
     <li
       className="cursor-pointer transition-colors hover:bg-ink-0 focus-within:bg-ink-1"

@@ -1,52 +1,26 @@
-import { useEffect, useState } from 'react'
 import { api } from '../lib/api/client'
 import { classify, classifyEntry } from '../lib/api/mime'
-import { basename, fullEntryLabel } from '../lib/format'
+import { basename, fullEntryLabel, prettyPrintJson } from '../lib/format'
+import { useSniffedText } from '../lib/useSniffedText'
 import { usePinnedPreviews, type PinnedItem } from '../lib/pinnedPreviews'
 import { CopyablePath } from './CopyablePath'
 import { PreviewImage } from './PreviewImage'
 import { PreviewAudio } from './PreviewAudio'
 import { PreviewArchive } from './PreviewArchive'
+import { UnsupportedPreview } from './UnsupportedPreview'
 
-const unsupportedMessage = (
-  <p className="text-[13px] text-ink-7">
-    プレビュー非対応のファイル種別です。上の DL ボタンからダウンロードできます。
-  </p>
-)
-
-// ピンカード内のテキスト/JSON 表示。単体ファイルは api.textPreview、tar エントリは
-// api.tarEntryText を load に渡す。minify された 1 行 JSON でも潰れないよう固定高さ
+// ピンカード内のテキスト/JSON 表示。url は単体ファイルなら api.textPreviewUrl、
+// tar エントリなら api.tarEntryUrl。minify された 1 行 JSON でも潰れないよう固定高さ
 // (音声カードのスペクトログラム相当) にして縦横スクロールで読ませる。name は拡張子
 // 判定用のファイル名 (単体は key、tar エントリは entryPath)。
-function PinnedTextBody({ name, load }: { name: string; load: () => Promise<string> }) {
-  const [text, setText] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  useEffect(() => {
-    let cancelled = false
-    load()
-      .then(t => { if (!cancelled) setText(t) })
-      .catch((e: Error) => { if (!cancelled) setError(e.message) })
-    return () => { cancelled = true }
-    // load は呼び出しごとに新しい関数だが、item 由来で安定しているため deps は空でよい
-    // (呼び出し側は key={item.id} でカードごと再マウントされる)。
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+function PinnedTextBody({ name, url }: { name: string; url: string }) {
+  const sniffed = useSniffedText(url)
 
-  if (error) return <p className="error">{error}</p>
-  if (text === null) return <p className="text-[13px] text-ink-7">loading…</p>
+  if (sniffed.status === 'error') return <p className="error">{sniffed.message}</p>
+  if (sniffed.status === 'loading') return <p className="text-[13px] text-ink-7">loading…</p>
+  if (sniffed.status === 'binary') return <UnsupportedPreview />
 
-  // .json (単一ドキュメント) はプリティプリントする。.jsonl / .ndjson は 1 行 1 JSON 値
-  // の形式なのでそのまま。TarEntryModal の TextBody と同じ整形をピンカードでも行い、
-  // minify された 1 行 JSON が固定高さの箱で 1 行に潰れて見えないようにする。
-  let display = text
-  const lower = name.toLowerCase()
-  if (lower.endsWith('.json') && !lower.endsWith('.jsonl')) {
-    try {
-      display = JSON.stringify(JSON.parse(text), null, 2)
-    } catch {
-      /* そのまま表示 */
-    }
-  }
+  const display = prettyPrintJson(name, sniffed.text)
   return (
     <pre
       className="m-0 h-[280px] overflow-auto whitespace-pre p-3 text-[12px] leading-snug"
@@ -90,17 +64,15 @@ function PinnedPreviewBody({ item }: { item: PinnedItem }) {
     if (kind === 'image') {
       return <PinnedEntryImage connId={connId} bucket={bucket} archiveKey={key} entry={entryPath} />
     }
-    if (kind === 'text') {
-      return <PinnedTextBody name={entryPath} load={() => api.tarEntryText(connId, bucket, key, entryPath)} />
-    }
-    return unsupportedMessage
+    // 画像・音声以外はすべてテキスト表示に落とし、中身で判定する。
+    return <PinnedTextBody name={entryPath} url={api.tarEntryUrl(connId, bucket, key, entryPath)} />
   }
+  // 単体ファイルも同じ。画像・音声・アーカイブ以外はテキスト表示に落とし、中身で判定する。
   const kind = classify(key)
-  if (kind === 'text')    return <PinnedTextBody name={key} load={() => api.textPreview(connId, bucket, key)} />
   if (kind === 'image')   return <PreviewImage connId={connId} bucket={bucket} k={key} />
   if (kind === 'audio')   return <PreviewAudio connId={connId} bucket={bucket} k={key} />
   if (kind === 'archive') return <PreviewArchive connId={connId} bucket={bucket} k={key} />
-  return unsupportedMessage
+  return <PinnedTextBody name={key} url={api.textPreviewUrl(connId, bucket, key)} />
 }
 
 export function PinnedPreviewCard({ item }: { item: PinnedItem }) {

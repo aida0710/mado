@@ -100,7 +100,9 @@ export function PreviewDrawer({
       </header>
       <div className="drawer__body">
         {/* ファイル切替で内部 state (本文/コピー表示) をリセットするため key で再マウント。 */}
-        {kind === 'text' && (
+        {/* 画像 / 音声 / アーカイブ以外はすべてテキストとして開こうとする。
+            中身がバイナリなら PreviewText 側が「プレビュー非対応」を出す。 */}
+        {kind === 'unknown' && (
           <PreviewText key={`${connId}|${bucket}|${k}`} connId={connId} bucket={bucket} k={k} />
         )}
         {kind === 'image' && <PreviewImage connId={connId} bucket={bucket} k={k} />}
@@ -119,11 +121,6 @@ export function PreviewDrawer({
             initialEntry={entry ?? null}
             onEntryChange={onEntryChange}
           />
-        )}
-        {kind === 'unknown' && (
-          <p className="text-[13px] text-ink-7">
-            プレビュー非対応のファイル種別です。上の DL ボタンからダウンロードできます。
-          </p>
         )}
       </div>
     </aside>

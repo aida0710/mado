@@ -7,7 +7,7 @@ import { PinnedPreviewsProvider, usePinnedPreviews } from '../lib/pinnedPreviews
 vi.mock('../lib/api/client', () => ({
   api: {
     tarEntryUrl: vi.fn(() => 'http://x/entry'),
-    tarEntryText: vi.fn(async () => ''),
+    readHead: vi.fn(async () => new Uint8Array(0)),
   },
 }))
 vi.mock('../lib/clipboard', () => ({
@@ -16,6 +16,8 @@ vi.mock('../lib/clipboard', () => ({
 
 import { api } from '../lib/api/client'
 import { copyToClipboard } from '../lib/clipboard'
+
+const utf8 = (s: string): Uint8Array => new TextEncoder().encode(s)
 
 afterEach(() => {
   vi.clearAllMocks()
@@ -35,7 +37,7 @@ function renderEntry(name: string) {
 
 describe('TarEntryModal - copy all', () => {
   it('copies the full pretty-printed text of a .json entry', async () => {
-    vi.mocked(api.tarEntryText).mockResolvedValue('{"a":1}')
+    vi.mocked(api.readHead).mockResolvedValue(utf8('{"a":1}'))
     renderEntry('x.json')
     // テキスト読み込み後にコピーボタンが現れる
     const btn = await screen.findByRole('button', { name: '内容をコピー' })
@@ -44,11 +46,25 @@ describe('TarEntryModal - copy all', () => {
   })
 
   it('copies the raw text of a .jsonl entry (no pretty-print)', async () => {
-    vi.mocked(api.tarEntryText).mockResolvedValue('{"a":1}\n{"b":2}')
+    vi.mocked(api.readHead).mockResolvedValue(utf8('{"a":1}\n{"b":2}'))
     renderEntry('x.jsonl')
     const btn = await screen.findByRole('button', { name: '内容をコピー' })
     await userEvent.click(btn)
     expect(copyToClipboard).toHaveBeenCalledWith('{"a":1}\n{"b":2}')
+  })
+})
+
+describe('TarEntryModal - スニッフ', () => {
+  it('拡張子が未知でも中身がテキストなら開ける', async () => {
+    vi.mocked(api.readHead).mockResolvedValue(utf8('root:x:0:0'))
+    renderEntry('etc/passwd')
+    expect(await screen.findByText(/root:x:0:0/)).toBeInTheDocument()
+  })
+
+  it('NUL を含むエントリは「プレビュー非対応」', async () => {
+    vi.mocked(api.readHead).mockResolvedValue(new Uint8Array([0x93, 0x4e, 0x00]))
+    renderEntry('feat.npy')
+    expect(await screen.findByText(/プレビュー非対応/)).toBeInTheDocument()
   })
 })
 

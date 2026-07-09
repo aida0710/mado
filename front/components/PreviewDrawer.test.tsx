@@ -7,6 +7,10 @@ import { PinnedPreviewsProvider } from '../lib/pinnedPreviews'
 vi.mock('../lib/api/client', () => ({
   api: {
     downloadUrl: vi.fn(() => 'http://x/dl'),
+    textPreviewUrl: vi.fn(() => 'http://x/text'),
+    // unknown 拡張子もスニッフ経由でテキスト判定される。NUL を返してバイナリ扱いにし、
+    // 「プレビュー非対応」表示のままにする (このテストの関心はピン留めボタンの有無)。
+    readHead: vi.fn(async () => new Uint8Array([0x00])),
     // tar (アーカイブ) 用の PreviewArchive がマウントされた際に呼ばれる。
     // ピン留めボタンの有無だけを見るテストなので中身は解決させず放置してよい。
     tarPreview: vi.fn(() => new Promise(() => {})),
@@ -26,7 +30,7 @@ function renderDrawer(props: Partial<Parameters<typeof PreviewDrawer>[0]> = {}) 
     <PreviewDrawer
       connId="c"
       bucket="b"
-      k="file.xyz" // classify → unknown: fetch を伴うプレビューを描画しない
+      k="file.xyz" // unknown: スニッフ結果がバイナリ（mock の readHead が NUL）なので重いプレビューは描画されない
       onClose={() => {}}
       onResizeStart={() => {}}
       onResetWidth={() => {}}

@@ -34,9 +34,10 @@ describe('EntryTable ピン留め', () => {
     expect(screen.getByTestId('count').textContent).toBe('1')
   })
 
-  it('unknown 種別のファイルには出ない', () => {
+  it('unknown 種別のファイルにも出る (中身を見るまでテキストか分からないため)', () => {
     setup([{ key: 'a.weird', size: 10 }])
     fireEvent.click(screen.getByRole('button', { name: 'アクション' }))
-    expect(screen.queryByText('ピン留め')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByText('ピン留め'))
+    expect(screen.getByTestId('count').textContent).toBe('1')
   })
 })

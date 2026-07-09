@@ -1,22 +1,18 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { api } from '../lib/api/client'
 import { copyToClipboard } from '../lib/clipboard'
+import { useSniffedText } from '../lib/useSniffedText'
+import { UnsupportedPreview } from './UnsupportedPreview'
 
 export function PreviewText({ connId, bucket, k }: { connId: string; bucket: string; k: string }) {
-  const [text, setText] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const sniffed = useSniffedText(api.textPreviewUrl(connId, bucket, k))
   const [copyMsg, setCopyMsg] = useState<string | null>(null)
-  useEffect(() => {
-    let cancelled = false
-    api.textPreview(connId, bucket, k)
-      .then(t => { if (!cancelled) setText(t) })
-      .catch((e: Error) => { if (!cancelled) setError(e.message) })
-    return () => { cancelled = true }
-  }, [connId, bucket, k])
 
-  if (error) return <p className="error">{error}</p>
-  if (text === null) return <p className="text-[13px] text-ink-7">loading…</p>
+  if (sniffed.status === 'error') return <p className="error">{sniffed.message}</p>
+  if (sniffed.status === 'loading') return <p className="text-[13px] text-ink-7">loading…</p>
+  if (sniffed.status === 'binary') return <UnsupportedPreview />
 
+  const text = sniffed.text
   const handleCopy = async () => {
     const ok = await copyToClipboard(text)
     setCopyMsg(ok ? 'コピーしました ✓' : 'コピー失敗')

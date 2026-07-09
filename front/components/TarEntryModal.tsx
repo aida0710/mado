@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react'
 import { api } from '../lib/api/client'
 import { classifyEntry } from '../lib/api/mime'
-import { fmtSize } from '../lib/format'
+import { fmtSize, prettyPrintJson } from '../lib/format'
 import { tarEntryWebUrl } from '../lib/route'
 import { copyToClipboard } from '../lib/clipboard'
 import { usePinnedPreviews } from '../lib/pinnedPreviews'
+import { useSniffedText } from '../lib/useSniffedText'
 import { CopyMenu, type MenuItem } from './CopyMenu'
 import { PreviewAudio } from './PreviewAudio'
+import { UnsupportedPreview } from './UnsupportedPreview'
 
 interface Props {
   connId: string
@@ -108,8 +110,8 @@ export function TarEntryModal({ connId, bucket, archiveKey, entry, onClose }: Pr
           </button>
         </header>
         <div className="overflow-auto">
-          {kind === 'image'   && <ImageBody url={url} alt={entry.name} />}
-          {kind === 'audio'   && (
+          {kind === 'image' && <ImageBody url={url} alt={entry.name} />}
+          {kind === 'audio' && (
             <PreviewAudio
               key={`${connId}|${bucket}|${archiveKey}|${entry.name}`}
               connId={connId}
@@ -118,8 +120,9 @@ export function TarEntryModal({ connId, bucket, archiveKey, entry, onClose }: Pr
               entryPath={entry.name}
             />
           )}
-          {kind === 'text'    && <TextBody connId={connId} bucket={bucket} archiveKey={archiveKey} entry={entry.name} />}
-          {kind === 'unknown' && <UnknownBody />}
+          {/* 画像 / 音声以外はすべてテキストとして開こうとする。
+              中身がバイナリなら TextBody が「プレビュー非対応」を出す。 */}
+          {kind !== 'image' && kind !== 'audio' && <TextBody url={url} name={entry.name} />}
         </div>
       </div>
     </div>
@@ -141,42 +144,20 @@ function ImageBody({ url, alt }: { url: string; alt: string }) {
   )
 }
 
-function TextBody({
-  connId, bucket, archiveKey, entry,
-}: { connId: string; bucket: string; archiveKey: string; entry: string }) {
-  const [text, setText] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
+function TextBody({ url, name }: { url: string; name: string }) {
+  const sniffed = useSniffedText(url)
   const [copyMsg, setCopyMsg] = useState<string | null>(null)
-  useEffect(() => {
-    let cancelled = false
-    api.tarEntryText(connId, bucket, archiveKey, entry)
-      .then(t => { if (!cancelled) setText(t) })
-      .catch((e: Error) => { if (!cancelled) setError(e.message) })
-    return () => { cancelled = true }
-  }, [connId, bucket, archiveKey, entry])
 
-  if (error) return <p className="error">{error}</p>
-  if (text === null) {
-    return <p className="text-[13px] text-ink-7">loading…</p>
-  }
+  if (sniffed.status === 'error') return <p className="error">{sniffed.message}</p>
+  if (sniffed.status === 'loading') return <p className="text-[13px] text-ink-7">loading…</p>
+  if (sniffed.status === 'binary') return <UnsupportedPreview />
 
-  // .json (単一ドキュメント) はプリティプリントする。.jsonl / .ndjson は
-  // 1行1JSON値の形式なのでそのまま表示する。
-  let display = text
-  const lower = entry.toLowerCase()
-  if (lower.endsWith('.json') && !lower.endsWith('.jsonl')) {
-    try {
-      display = JSON.stringify(JSON.parse(text), null, 2)
-    } catch {
-      /* そのまま表示 */
-    }
-  }
+  const display = prettyPrintJson(name, sniffed.text)
 
   // 末尾の改行で行数が余分に増えないようにする。
   const trimmed = display.endsWith('\n') ? display.slice(0, -1) : display
   const lines = trimmed.length === 0 ? 0 : trimmed.split('\n').length
 
-  // 表示中の内容 (display: .json は整形済) をまるごとクリップボードへ。
   const handleCopy = async () => {
     const ok = await copyToClipboard(display)
     setCopyMsg(ok ? 'コピーしました ✓' : 'コピー失敗')
@@ -215,14 +196,5 @@ function TextBody({
         {display}
       </pre>
     </div>
-  )
-}
-
-function UnknownBody() {
-  // ダウンロードはヘッダの DL ボタンに集約済。
-  return (
-    <p className="text-[13px] text-ink-7">
-      プレビュー非対応のファイル種別です。上の DL ボタンからダウンロードできます。
-    </p>
   )
 }

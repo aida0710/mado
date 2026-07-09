@@ -331,15 +331,47 @@ export const api = {
     })
   },
 
-  // text preview を Promise で返す。PreviewText の useEffect で fetch() を直接
-  // 呼ばずに済むよう、fetch 抽象を集中させる。
-  textPreview: async (connId: string, bucket: string, key: string): Promise<string> => {
-    const res = await fetch(buildUrl(
-      `${API_BASE}/storage/${encodeURIComponent(connId)}/preview/text`,
-      { bucket, key },
-    ))
-    if (!res.ok) throw new Error(res.statusText)
-    return res.text()
+  // URL の先頭 maxBytes だけ読み、残りは reader.cancel() で捨てる。
+  //
+  // /preview/tar-entry は Range 非対応で常に全量 (最大 100MB) を返す。テキストか
+  // どうかを見るだけのために 100MB の npy を落としきるのは無駄なので、ストリームを
+  // 途中で打ち切る。size を知らなくても安全なので、呼び出し側にサイズ上限の分岐が要らない。
+  readHead: async (url: string, maxBytes: number): Promise<Uint8Array> => {
+    const res = await fetch(url)
+    if (!res.ok) {
+      let msg = res.statusText
+      try {
+        const body = (await res.json()) as { error?: string }
+        if (body.error) msg = body.error
+      } catch { /* statusText をそのまま使う */ }
+      throw new Error(msg)
+    }
+    // body が無い環境 (TS の型上 nullable) では stream を刻めない。せめて maxBytes で切る。
+    if (!res.body) return new Uint8Array(await res.arrayBuffer()).slice(0, maxBytes)
+
+    const reader = res.body.getReader()
+    const chunks: Uint8Array[] = []
+    let total = 0
+    try {
+      while (total < maxBytes) {
+        const { done, value } = await reader.read()
+        if (done) break
+        chunks.push(value)
+        total += value.length
+      }
+    } finally {
+      // 既に done でも cancel は解決する。打ち切り時はここで残りの転送が止まる。
+      await reader.cancel().catch(() => { /* 二重 cancel は無視 */ })
+    }
+
+    const out = new Uint8Array(Math.min(total, maxBytes))
+    let offset = 0
+    for (const c of chunks) {
+      const take = Math.min(c.length, out.length - offset)
+      out.set(c.subarray(0, take), offset)
+      offset += take
+    }
+    return out
   },
 
   textPreviewUrl: (connId: string, bucket: string, key: string): string =>
@@ -423,22 +455,6 @@ export const api = {
   // `<img src>` / `<audio src>` 用の tar エントリ本体への URL 形式。
   tarEntryUrl: (connId: string, bucket: string, key: string, entry: string): string =>
     buildUrl(`${API_BASE}/storage/${encodeURIComponent(connId)}/preview/tar-entry`, { bucket, key, entry }),
-
-  // エントリ本体をテキストとしてフェッチする。4xx/5xx (エントリが見つからない等) で例外を投げる。
-  tarEntryText: async (
-    connId: string, bucket: string, key: string, entry: string,
-  ): Promise<string> => {
-    const res = await fetch(api.tarEntryUrl(connId, bucket, key, entry))
-    if (!res.ok) {
-      let msg = res.statusText
-      try {
-        const j = (await res.json()) as { error?: string }
-        if (j.error) msg = j.error
-      } catch { /* statusText をそのまま使う */ }
-      throw new Error(msg)
-    }
-    return res.text()
-  },
 
   favorites: (connId: string) =>
     favoritesCache.get(k('favorites', connId), () =>
