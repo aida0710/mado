@@ -17,8 +17,6 @@ describe('classify - audio', () => {
 describe('classify - その他種別は影響を受けない', () => {
   it.each([
     ['a.png', 'image'],
-    ['a.md', 'text'],
-    ['a.jsonl', 'text'],
     ['a.tar.xz', 'archive'],
     ['a.bin', 'unknown'],
     ['a.m4v', 'unknown'], // 動画は audio に巻き込まない
@@ -29,5 +27,16 @@ describe('classify - その他種別は影響を受けない', () => {
   it('tar エントリでは archive を unknown に落とすが audio は残す', () => {
     expect(classifyEntry('inner.tar')).toBe('unknown')
     expect(classifyEntry('clip.m4a')).toBe('audio')
+  })
+})
+
+describe('classify - テキストは拡張子で判定しない', () => {
+  // テキストかどうかは描画時に中身 (先頭 64KB の NUL) で決める。ここで
+  // 'text' を返してしまうと、拡張子リストの保守が永遠に終わらない。
+  it.each([
+    'a.md', 'a.jsonl', 'a.txt', 'a.csv',
+    'README', 'Dockerfile', 'run.sh', 'conf.toml', 'utt.lab',
+  ])('%s は unknown (= 中身を見る)', key => {
+    expect(classify(key)).toBe('unknown')
   })
 })

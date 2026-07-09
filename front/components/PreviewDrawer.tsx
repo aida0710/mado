@@ -102,7 +102,7 @@ export function PreviewDrawer({
         {/* ファイル切替で内部 state (本文/コピー表示) をリセットするため key で再マウント。 */}
         {/* 画像 / 音声 / アーカイブ以外はすべてテキストとして開こうとする。
             中身がバイナリなら PreviewText 側が「プレビュー非対応」を出す。 */}
-        {(kind === 'text' || kind === 'unknown') && (
+        {kind === 'unknown' && (
           <PreviewText key={`${connId}|${bucket}|${k}`} connId={connId} bucket={bucket} k={k} />
         )}
         {kind === 'image' && <PreviewImage connId={connId} bucket={bucket} k={k} />}

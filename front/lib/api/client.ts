@@ -331,17 +331,6 @@ export const api = {
     })
   },
 
-  // text preview を Promise で返す。PreviewText の useEffect で fetch() を直接
-  // 呼ばずに済むよう、fetch 抽象を集中させる。
-  textPreview: async (connId: string, bucket: string, key: string): Promise<string> => {
-    const res = await fetch(buildUrl(
-      `${API_BASE}/storage/${encodeURIComponent(connId)}/preview/text`,
-      { bucket, key },
-    ))
-    if (!res.ok) throw new Error(res.statusText)
-    return res.text()
-  },
-
   // URL の先頭 maxBytes だけ読み、残りは reader.cancel() で捨てる。
   //
   // /preview/tar-entry は Range 非対応で常に全量 (最大 100MB) を返す。テキストか
@@ -466,22 +455,6 @@ export const api = {
   // `<img src>` / `<audio src>` 用の tar エントリ本体への URL 形式。
   tarEntryUrl: (connId: string, bucket: string, key: string, entry: string): string =>
     buildUrl(`${API_BASE}/storage/${encodeURIComponent(connId)}/preview/tar-entry`, { bucket, key, entry }),
-
-  // エントリ本体をテキストとしてフェッチする。4xx/5xx (エントリが見つからない等) で例外を投げる。
-  tarEntryText: async (
-    connId: string, bucket: string, key: string, entry: string,
-  ): Promise<string> => {
-    const res = await fetch(api.tarEntryUrl(connId, bucket, key, entry))
-    if (!res.ok) {
-      let msg = res.statusText
-      try {
-        const j = (await res.json()) as { error?: string }
-        if (j.error) msg = j.error
-      } catch { /* statusText をそのまま使う */ }
-      throw new Error(msg)
-    }
-    return res.text()
-  },
 
   favorites: (connId: string) =>
     favoritesCache.get(k('favorites', connId), () =>
