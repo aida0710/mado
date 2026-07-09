@@ -64,9 +64,10 @@ function PinnedPreviewBody({ item }: { item: PinnedItem }) {
     if (kind === 'image') {
       return <PinnedEntryImage connId={connId} bucket={bucket} archiveKey={key} entry={entryPath} />
     }
-    // text / unknown はどちらも中身で判定する。
+    // 画像・音声以外はすべてテキスト表示に落とし、中身で判定する。
     return <PinnedTextBody name={entryPath} url={api.tarEntryUrl(connId, bucket, key, entryPath)} />
   }
+  // 単体ファイルも同じ。画像・音声・アーカイブ以外はテキスト表示に落とし、中身で判定する。
   const kind = classify(key)
   if (kind === 'image')   return <PreviewImage connId={connId} bucket={bucket} k={key} />
   if (kind === 'audio')   return <PreviewAudio connId={connId} bucket={bucket} k={key} />
