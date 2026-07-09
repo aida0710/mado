@@ -346,7 +346,8 @@ export const api = {
       } catch { /* statusText をそのまま使う */ }
       throw new Error(msg)
     }
-    if (!res.body) return new Uint8Array(await res.arrayBuffer())
+    // body が無い環境 (TS の型上 nullable) では stream を刻めない。せめて maxBytes で切る。
+    if (!res.body) return new Uint8Array(await res.arrayBuffer()).slice(0, maxBytes)
 
     const reader = res.body.getReader()
     const chunks: Uint8Array[] = []
@@ -366,7 +367,6 @@ export const api = {
     const out = new Uint8Array(Math.min(total, maxBytes))
     let offset = 0
     for (const c of chunks) {
-      if (offset >= out.length) break
       const take = Math.min(c.length, out.length - offset)
       out.set(c.subarray(0, take), offset)
       offset += take

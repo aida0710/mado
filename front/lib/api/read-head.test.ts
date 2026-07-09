@@ -61,6 +61,31 @@ describe('api.readHead', () => {
     expect((await api.readHead('/x', 1024)).length).toBe(0)
   })
 
+  it('total が maxBytes ちょうどでも打ち切り、cancel する', async () => {
+    const { fake, cancel } = res([[1, 2, 3]])
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(fake)
+
+    const head = await api.readHead('/x', 3)
+
+    expect([...head]).toEqual([1, 2, 3])
+    expect(cancel).toHaveBeenCalled()
+  })
+
+  it('res.body が無い環境でも maxBytes で切る', async () => {
+    const fake = {
+      ok: true,
+      statusText: 'OK',
+      body: null,
+      arrayBuffer: async () => new Uint8Array([1, 2, 3, 4, 5]).buffer,
+      json: async () => ({}),
+    } as unknown as Response
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(fake)
+
+    const head = await api.readHead('/x', 3)
+
+    expect([...head]).toEqual([1, 2, 3])
+  })
+
   it('4xx / 5xx は statusText で throw する', async () => {
     const { fake } = res([], { ok: false, statusText: 'Not Found' })
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(fake)
