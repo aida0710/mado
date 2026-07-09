@@ -48,3 +48,19 @@ export function fmtCacheTime(d: Date): string {
     hour: '2-digit', minute: '2-digit', hour12: false,
   })
 }
+
+// .json (単一ドキュメント) だけプリティプリントする。.jsonl / .ndjson は
+// 1 行 1 JSON 値の形式なのでそのまま返す。整形できない (不正な JSON) ときも
+// そのまま返し、プレビューが空にならないようにする。
+//
+// これは表示上の整形であって、プレビューの描画先を決める分岐ではない
+// (種別は中身のスニッフで決める。front/lib/textSniff.ts を参照)。
+export function prettyPrintJson(name: string, text: string): string {
+  const lower = name.toLowerCase()
+  if (!lower.endsWith('.json') || lower.endsWith('.jsonl')) return text
+  try {
+    return JSON.stringify(JSON.parse(text), null, 2)
+  } catch {
+    return text
+  }
+}
