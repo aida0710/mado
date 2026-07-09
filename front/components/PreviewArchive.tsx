@@ -6,12 +6,17 @@ import { usePlayerDeck } from '../lib/playerDeck'
 import { usePinnedPreviews } from '../lib/pinnedPreviews'
 import { TarPreview } from '../lib/api/types'
 import { fmtSize } from '../lib/format'
+import { tarEntryWebUrl } from '../lib/route'
 import { TarEntryModal } from './TarEntryModal'
 import { CacheMeta } from './CacheMeta'
 import { CopyMenu, type MenuItem } from './CopyMenu'
 
 type Resp = z.infer<typeof TarPreview>
 type Entry = Resp['entries'][number]
+// モーダルを開くのに必要なのはエントリ名だけ (本文は name から自前でフェッチする)。
+// permalink で来たエントリは今のページに載っているとは限らず size を引けないので、
+// size / type は「載っていれば付ける」任意の飾りとして扱う。
+type OpenedEntry = { name: string; size?: number; type?: string }
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const
 const DEFAULT_PAGE_SIZE = 10
@@ -114,12 +119,36 @@ function reducer(s: State, a: Action): State {
   }
 }
 
-export function PreviewArchive({ connId, bucket, k }: { connId: string; bucket: string; k: string }) {
+export function PreviewArchive({ connId, bucket, k, initialEntry = null, onEntryChange }: {
+  connId: string
+  bucket: string
+  k: string
+  // 開いた状態で復元するエントリ名 (URL の ?entry=)。onEntryChange とセットで使う。
+  initialEntry?: string | null
+  onEntryChange?: (entryPath: string | null) => void
+}) {
   const deck = usePlayerDeck()
   const { addPin } = usePinnedPreviews()
-  const [openedEntry, setOpenedEntry] = useState<Entry | null>(null)
+  // 行クリックで積んだエントリ。size を出すためだけの enrichment で、開閉の真実源ではない。
+  const [clicked, setClicked] = useState<Entry | null>(null)
   const [state, dispatch] = useReducer(reducer, undefined, makeInitial)
   const { data, offset, pageSize, error, loading, progress } = state
+
+  // onEntryChange の有無で「URL 駆動」か「ローカル」かが決まる。
+  //
+  // このコンポーネントは PinnedPreviewCard からも描画され、ピンカードは <Routes> の
+  // 外 (BottomDock) に居る。ここで自前で useSearchParams を読むと、別の tar の
+  // permalink を開いただけでピン留め済みアーカイブのモーダルまで勝手に開いてしまう。
+  // URL と繋ぐのは PreviewDrawer 経由の 1 経路だけ、と prop で線引きする。
+  const urlDriven = onEntryChange != null
+  const openEntry = (e: Entry): void => {
+    setClicked(e)
+    onEntryChange?.(e.name)
+  }
+  const closeEntry = (): void => {
+    setClicked(null)
+    onEntryChange?.(null)
+  }
 
   // 当該アーカイブのキャッシュを丸ごと破棄して同じページを再取得。
   const forceRefresh = (): void => {
@@ -232,6 +261,17 @@ export function PreviewArchive({ connId, bucket, k }: { connId: string; bucket: 
   const end = data.offset + data.entries.length
   const page = Math.floor(data.offset / pageSize) + 1
 
+  // 開いているエントリ。URL 駆動なら initialEntry が真実源なので、ブラウザの
+  // 戻る/進むがそのままモーダルの開閉になる。size はページに載っていれば拾い、
+  // 載っていなければ (permalink で 2 ページ目以降のエントリに直接来た場合)
+  // 名前だけで開く — TarEntryModal は本文を name から自前でフェッチする。
+  const openedEntry: OpenedEntry | null = urlDriven
+    ? (initialEntry == null
+        ? null
+        : data.entries.find(e => e.name === initialEntry)
+          ?? (clicked?.name === initialEntry ? clicked : { name: initialEntry }))
+    : clicked
+
   return (
     <div>
       <div className="mb-3 flex items-center justify-between">{sizeSelect}</div>
@@ -271,6 +311,18 @@ export function PreviewArchive({ connId, bucket, k }: { connId: string; bucket: 
                   href: api.tarEntryUrl(connId, bucket, k, e.name),
                   filename: e.name.split('/').pop() ?? e.name,
                 },
+                // 人に送る用 (このエントリを開いた状態で復元される) と、
+                // curl / VLC / <audio src> にそのまま食わせる生データ用。
+                {
+                  kind: 'copy',
+                  label: 'Web URL をコピー',
+                  value: `${window.location.origin}${tarEntryWebUrl(connId, bucket, k, e.name)}`,
+                },
+                {
+                  kind: 'copy',
+                  label: '生データ URL をコピー',
+                  value: api.tarEntryUrl(connId, bucket, k, e.name),
+                },
               ]
               return (
                 <tr
@@ -279,11 +331,11 @@ export function PreviewArchive({ connId, bucket, k }: { connId: string; bucket: 
                   role="button"
                   tabIndex={0}
                   style={{ borderBottom: '1px solid var(--rule)' }}
-                  onClick={() => setOpenedEntry(e)}
+                  onClick={() => openEntry(e)}
                   onKeyDown={(ev: KeyboardEvent<HTMLTableRowElement>) => {
                     if (ev.key === 'Enter' || ev.key === ' ') {
                       ev.preventDefault()
-                      setOpenedEntry(e)
+                      openEntry(e)
                     }
                   }}
                 >
@@ -344,7 +396,7 @@ export function PreviewArchive({ connId, bucket, k }: { connId: string; bucket: 
           bucket={bucket}
           archiveKey={k}
           entry={openedEntry}
-          onClose={() => setOpenedEntry(null)}
+          onClose={closeEntry}
         />
       )}
     </div>

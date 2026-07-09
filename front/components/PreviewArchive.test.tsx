@@ -24,8 +24,15 @@ vi.mock('../lib/api/client', () => ({
     invalidateTarPreview: vi.fn(),
     lastFetched: { tar: vi.fn(() => null) },
     tarEntryUrl: vi.fn(() => 'http://x/entry'),
+    // テキストエントリのモーダル (TarEntryModal の TextBody) が本文を取りに来る。
+    tarEntryText: vi.fn(async () => 'entry body'),
   },
 }))
+vi.mock('../lib/clipboard', () => ({
+  copyToClipboard: vi.fn(async () => true),
+}))
+
+import { copyToClipboard } from '../lib/clipboard'
 
 afterEach(() => {
   vi.clearAllMocks()
@@ -107,6 +114,25 @@ describe('PreviewArchive - 行の ⋯ アクションメニュー', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
+  it('Web URL / 生データ URL のコピー項目が並ぶ', async () => {
+    render(
+      <PinnedPreviewsProvider>
+        <PreviewArchive connId="c" bucket="b" k="rec/a.tar" />
+      </PinnedPreviewsProvider>,
+    )
+    await openMenuFor('track.mp3')
+
+    await userEvent.click(screen.getByRole('menuitem', { name: /Web URL をコピー/ }))
+    // 親ディレクトリのリスト + ?preview=<tar> + &entry=<エントリ> の共有 URL。
+    expect(copyToClipboard).toHaveBeenCalledWith(
+      `${window.location.origin}/storage/c/b/rec/?preview=rec%2Fa.tar&entry=track.mp3`,
+    )
+
+    await openMenuFor('track.mp3')
+    await userEvent.click(screen.getByRole('menuitem', { name: /生データ URL をコピー/ }))
+    expect(copyToClipboard).toHaveBeenLastCalledWith('http://x/entry')
+  })
+
   it('⋯ トリガーに focus して Enter を押しても行のモーダルは開かない', async () => {
     render(
       <PinnedPreviewsProvider>
@@ -124,5 +150,62 @@ describe('PreviewArchive - 行の ⋯ アクションメニュー', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     // Enter でメニュー自体は開く (native button の click が発火する)。
     expect(screen.getByRole('menuitem', { name: 'このエントリをダウンロード' })).toBeInTheDocument()
+  })
+})
+
+describe('PreviewArchive - URL 駆動のエントリ開閉 (?entry=)', () => {
+  function renderUrlDriven(props: {
+    initialEntry?: string | null
+    onEntryChange?: (e: string | null) => void
+  }) {
+    return render(
+      <PinnedPreviewsProvider>
+        <PreviewArchive connId="c" bucket="b" k="a.tar" {...props} />
+      </PinnedPreviewsProvider>,
+    )
+  }
+
+  it('initialEntry のモーダルがマウント時に開く', async () => {
+    renderUrlDriven({ initialEntry: 'notes.json', onEntryChange: vi.fn() })
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText('notes.json')).toBeInTheDocument()
+  })
+
+  it('今のページに載っていないエントリでも名前だけで開ける (permalink の核心)', async () => {
+    // ページングされた一覧に 'ghost.bin' は無いが、共有 URL からは直接開ける。
+    // 本文は name から自前でフェッチするので size / type は無くてよい。
+    renderUrlDriven({ initialEntry: 'deep/ghost.bin', onEntryChange: vi.fn() })
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText('deep/ghost.bin')).toBeInTheDocument()
+    // サイズは引けないので表示しない (「7 B」のような行が出ない)。
+    expect(within(dialog).queryByText(/\d+ B$/)).not.toBeInTheDocument()
+  })
+
+  it('行クリックで onEntryChange(name)、✕ で onEntryChange(null) を呼ぶ', async () => {
+    const onEntryChange = vi.fn()
+    renderUrlDriven({ initialEntry: null, onEntryChange })
+
+    await userEvent.click(await screen.findByText('blob.bin'))
+    expect(onEntryChange).toHaveBeenCalledWith('blob.bin')
+    // initialEntry が真実源なので、URL が返ってくるまでモーダルは開かない
+    // (呼び出し側が ?entry= を push → 再レンダで initialEntry が入る)。
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+
+    onEntryChange.mockClear()
+    renderUrlDriven({ initialEntry: 'blob.bin', onEntryChange })
+    await userEvent.click(await screen.findByRole('button', { name: 'Close entry' }))
+    expect(onEntryChange).toHaveBeenCalledWith(null)
+  })
+
+  it('onEntryChange が無いとき (ピンカード) は initialEntry を無視し、行クリックでローカルに開く', async () => {
+    // ピンカードは <Routes> の外に居る。URL の ?entry= に反応してしまうと、
+    // 無関係な tar の permalink を開いただけでピン留め済みカードのモーダルが開く。
+    renderUrlDriven({ initialEntry: 'notes.json' })
+    await screen.findByText('notes.json')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByText('blob.bin'))
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText('blob.bin')).toBeInTheDocument()
   })
 })

@@ -58,12 +58,44 @@ export function fileLinkToDirRedirect(
   bucket: string,
   fileKey: string,
 ): string {
-  const lastSlash = fileKey.lastIndexOf('/')
-  const parentPrefix = lastSlash >= 0 ? fileKey.slice(0, lastSlash + 1) : ''
   return (
     `/storage/${encodeURIComponent(connId)}` +
     `/${encodeURIComponent(bucket)}` +
-    `/${encPath(parentPrefix)}` +
+    `/${encPath(parentPrefixOf(fileKey))}` +
     `?preview=${encodeURIComponent(fileKey)}`
+  )
+}
+
+// キーの親ディレクトリ (末尾スラッシュ込み)。bucket 直下なら空文字。
+function parentPrefixOf(key: string): string {
+  const lastSlash = key.lastIndexOf('/')
+  return lastSlash >= 0 ? key.slice(0, lastSlash + 1) : ''
+}
+
+// tar 内エントリの共有 permalink。親ディレクトリのリスト + `?preview=<tar>` に加え、
+// `&entry=<エントリ名>` でアーカイブ内のどのエントリを開くかを表す。
+//
+// 例:
+//   ('c1', 'b1', 'rec/session.tar', 'audio/mic_01.wav')
+//     → '/storage/c1/b1/rec/?preview=rec%2Fsession.tar&entry=audio%2Fmic_01.wav'
+//
+// エントリ一覧はページングして取得されるため、URL に「何ページ目か」は載せない
+// (載せても圧縮 tar では再展開が要る)。受け取った側はエントリ名だけでモーダルを
+// 復元する — TarEntryModal は本文を name から自前でフェッチするのでそれで足りる。
+//
+// origin は付けない (fileLinkToDirRedirect と同様、window 非依存に保つ)。
+// 共有用の絶対 URL が要るなら呼び出し側で `${window.location.origin}` を前置する。
+export function tarEntryWebUrl(
+  connId: string,
+  bucket: string,
+  tarKey: string,
+  entryPath: string,
+): string {
+  return (
+    `/storage/${encodeURIComponent(connId)}` +
+    `/${encodeURIComponent(bucket)}` +
+    `/${encPath(parentPrefixOf(tarKey))}` +
+    `?preview=${encodeURIComponent(tarKey)}` +
+    `&entry=${encodeURIComponent(entryPath)}`
   )
 }

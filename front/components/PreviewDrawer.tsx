@@ -20,11 +20,16 @@ interface Props {
   // ヘッダにリセットボタンを出す。CSS 側で <1024px は非表示。
   onResetWidth?: () => void
   widthCustomized?: boolean
+  // tar アーカイブを開いているときに、その中のどのエントリを開くか (URL の ?entry=)。
+  // アーカイブ以外の種別では意味を持たないので単に無視される。
+  entry?: string | null
+  onEntryChange?: (entryPath: string | null) => void
 }
 
 export function PreviewDrawer({
   connId, bucket, k, onClose,
   onResizeStart, onResizeKeyDown, onResetWidth, widthCustomized,
+  entry, onEntryChange,
 }: Props) {
   const { pins, addPin } = usePinnedPreviews()
   if (!k) return null
@@ -109,6 +114,10 @@ export function PreviewDrawer({
             connId={connId}
             bucket={bucket}
             k={k}
+            // URL (?entry=) と繋ぐのはこの経路だけ。ピンカードから描画される
+            // PreviewArchive には渡さない (PreviewArchive 側のコメント参照)。
+            initialEntry={entry ?? null}
+            onEntryChange={onEntryChange}
           />
         )}
         {kind === 'unknown' && (
