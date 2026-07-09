@@ -7,6 +7,19 @@ export function fmtSize(n: number): string {
   return `${(n / 1024 ** 3).toFixed(1)} GB`
 }
 
+// プレビュー対象を人が読める 1 本の文字列にする。tar 内エントリは
+// 「アーカイブ名 › エントリ名」、単体ファイルは key そのもの。
+// 画面上は basename しか出さない (幅が足りない) ので、これは title 属性と
+// クリップボードにだけ載る「省略しないフルパス」の唯一の出所。
+export function fullEntryLabel(key: string, entryPath?: string): string {
+  return entryPath != null ? `${key} › ${entryPath}` : key
+}
+
+// パスの末尾 (ファイル名)。区切りが無ければ入力そのもの。
+export function basename(path: string): string {
+  return path.split('/').pop() || path
+}
+
 export function fmtAgo(iso: string): string {
   const ms = Date.now() - new Date(iso).getTime()
   const s = Math.max(0, Math.floor(ms / 1000))
