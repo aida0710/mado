@@ -1,7 +1,18 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
+import {
+  canSplitChannels,
+  createTrackAudioGraph,
+  getAudioContextCtor,
+  nextChannelMode,
+  type ChannelMode,
+  type ChannelSide,
+  type TrackAudioGraph,
+} from '../lib/deckAudioGraph'
 import { computeDriftAdjustments, masterTimeOf } from '../lib/driftSync'
+import { basename, fullEntryLabel } from '../lib/format'
 import { usePlayerDeck, type DeckTrack } from '../lib/playerDeck'
 import { useAudioSrc } from '../lib/useAudioSrc'
+import { CopyablePath } from './CopyablePath'
 import { Waveform } from './Waveform'
 import { api } from '../lib/api/client'
 
@@ -59,6 +70,16 @@ export function PlayerDeck() {
   const [soloId, setSoloId] = useState<string | null>(null)
   const [muted, setMuted] = useState<Set<string>>(new Set())
   const [peaksById, setPeaksById] = useState<Record<string, Array<[number, number]>>>({})
+  // トラックごとの再生チャンネル。**キーの存在 = そのトラックのグラフ構築済み**という
+  // 不変条件を持たせている (both に戻してもエントリは消さない — 一度 <audio> を
+  // AudioContext へ繋いだら二度と戻せないので、グラフは壊さず張り替えるだけ)。
+  const [channelById, setChannelById] = useState<Record<string, ChannelMode>>({})
+  // mediaAnalyze が返すチャンネル数。L/R を出せるか (mono でないか) の判定にだけ使う。
+  const [channelsById, setChannelsById] = useState<Record<string, number | null>>({})
+  // L/R を使うトラックの Web Audio ノード群と、それらが共有する AudioContext。
+  // 再生位置に関わらない命令的ハンドルなので state ではなく ref に置く。
+  const graphsRef = useRef(new Map<string, TrackAudioGraph>())
+  const ctxRef = useRef<AudioContext | null>(null)
   // トラックごとの再生時間。マスターシークバーの max はここから導出する
   // (audios() = ref 経由の読み出しなので render 中に直接呼ぶと react-hooks/refs
   // に引っかかる。onLoadedMetadata というイベントハンドラで拾って state 化する)。
@@ -120,27 +141,106 @@ export function PlayerDeck() {
   const effectiveSoloId =
     soloId != null && tracks.some(t => t.id === soloId) ? soloId : null
 
-  // ミュート / ソロを <audio> に反映。setState は呼ばない (DOM プロパティへの
-  // 直接代入のみ) ので react-hooks/set-state-in-effect の対象にはならない。
+  // そのトラックが今ミュートされるべきか (ソロが立っていればソロ以外が全部ミュート)。
+  const isMuted = useCallback(
+    (id: string) => (effectiveSoloId != null ? id !== effectiveSoloId : muted.has(id)),
+    [effectiveSoloId, muted],
+  )
+
+  // ミュート / ソロを反映。setState は呼ばない (DOM プロパティ / gain への直接代入
+  // のみ) ので react-hooks/set-state-in-effect の対象にはならない。
+  //
+  // グラフを持つトラックは gain が唯一のミュート源。<audio>.muted が
+  // MediaElementAudioSourceNode 経由の出力に効くかはブラウザ実装依存なので、
+  // L/R に触れていない大多数のトラックだけが従来どおり muted を使う。
   useEffect(() => {
     for (const t of tracks) {
       const a = audioRefs.current.get(t.id)
       if (!a) continue
-      a.muted = effectiveSoloId != null ? t.id !== effectiveSoloId : muted.has(t.id)
+      const g = graphsRef.current.get(t.id)
+      if (g) g.setMuted(isMuted(t.id))
+      else a.muted = isMuted(t.id)
     }
-  }, [tracks, effectiveSoloId, muted])
+  }, [tracks, isMuted])
 
   // 各トラックの波形 (キャッシュ済みが多い想定)。失敗は静かに無視。
+  // 同じレスポンスの meta.channels も拾う — L/R ボタンの有効判定に使うが、
+  // そのためだけの追加リクエストは不要。
   useEffect(() => {
     for (const t of tracks) {
       if (peaksById[t.id]) continue
       api.mediaAnalyze(t.connId, t.bucket, t.key, { entryPath: t.entryPath })
-        .then(r => setPeaksById(cur => ({ ...cur, [t.id]: r.peaks })))
+        .then(r => {
+          setPeaksById(cur => ({ ...cur, [t.id]: r.peaks }))
+          setChannelsById(cur => ({ ...cur, [t.id]: r.meta?.channels ?? null }))
+        })
         .catch(() => { /* デッキでは波形なしで続行 */ })
     }
   }, [tracks, peaksById])
 
+  // 外から removeTrack された (この component の ✕ を経由しない) トラックの
+  // ノードを掃除する。durations に幽霊が残りうるのと同じ穴を塞ぐ防御。
+  useEffect(() => {
+    const ids = new Set(tracks.map(t => t.id))
+    for (const [id, g] of graphsRef.current) {
+      if (ids.has(id)) continue
+      g.dispose()
+      graphsRef.current.delete(id)
+    }
+  }, [tracks])
+
+  // 本当の unmount でのみ走る (tracks 0 件の `return null` はフック実行後なので
+  // アンマウントされない — そちらの ctx 破棄は「クリア」ハンドラの責務)。
+  useEffect(() => {
+    const graphs = graphsRef.current
+    const ctxHolder = ctxRef
+    return () => {
+      for (const g of graphs.values()) g.dispose()
+      graphs.clear()
+      void ctxHolder.current?.close().catch(() => { /* 二重 close は無視 */ })
+      ctxHolder.current = null
+    }
+  }, [])
+
   if (tracks.length === 0) return null
+
+  // AudioContext のコンストラクタ。render 内で解決する (テストの stubGlobal を
+  // 取りこぼさないため)。未対応ブラウザでは L/R ボタン自体を出さない。
+  const AudioCtx = getAudioContextCtor()
+
+  const disposeGraph = (id: string): void => {
+    const g = graphsRef.current.get(id)
+    if (!g) return
+    g.dispose()
+    graphsRef.current.delete(id)
+  }
+
+  // L / R ボタン。押されたトラックのグラフをここで初めて作る。
+  //
+  // createMediaElementSource() は 1 要素 1 回きりで、呼んだ瞬間からその <audio> は
+  // AudioContext 経由でしか鳴らなくなる。deck のマウント時や初回 ▶ でまとめて作ると、
+  // L/R を使わないユーザーまで巻き込み、autoplay policy で ctx が suspended のままだと
+  // 「両チャンネルすら無音」という退行になる。ユーザーが L/R を押した瞬間 (= gesture)
+  // にそのトラックだけ作れば、触らないトラックは今までどおりネイティブ出力で鳴る。
+  const toggleChannel = (t: DeckTrack, pressed: ChannelSide): void => {
+    const el = audioRefs.current.get(t.id)
+    if (!el || !AudioCtx) return
+    const mode = nextChannelMode(channelById[t.id] ?? 'both', pressed)
+    const existing = graphsRef.current.get(t.id)
+    if (existing) {
+      existing.setChannel(mode)
+    } else {
+      const ctx = (ctxRef.current ??= new AudioCtx())
+      void ctx.resume()
+      const g = createTrackAudioGraph(ctx, el, mode)
+      graphsRef.current.set(t.id, g)
+      // ミュート状態を要素から gain へ引き継ぎ、要素側は必ず解除する。
+      // 両方に効かせたままだと、後で unmute しても要素が muted のまま残って無音になる。
+      g.setMuted(el.muted)
+      el.muted = false
+    }
+    setChannelById(cur => ({ ...cur, [t.id]: mode }))
+  }
 
   const playAll = (): void => {
     // 全トラック終了状態から ▶ を押したら頭から再生し直す。
@@ -148,6 +248,9 @@ export function PlayerDeck() {
       for (const a of audios()) a.currentTime = 0
       setMasterTime(0)
     }
+    // タブ復帰などで suspended に戻った ctx を起こす。L/R 未使用なら ctx は
+    // 無い (null) ので no-op — 既定の再生経路には一切触らない。
+    void ctxRef.current?.resume()
     for (const a of audios()) void a.play()
     setPlaying(true)
   }
@@ -222,6 +325,15 @@ export function PlayerDeck() {
             setMuted(new Set())
             setDurations({})
             setReadyIds(new Set())
+            setChannelById({})
+            setChannelsById({})
+            for (const g of graphsRef.current.values()) g.dispose()
+            graphsRef.current.clear()
+            // ブラウザは同時に開ける AudioContext 数に上限がある。全トラックが
+            // 消えるここで閉じる。close 済みの ctx ではノードを作れないので null に
+            // 戻し、次に L/R が押されたら新しい ctx を作り直させる。
+            void ctxRef.current?.close().catch(() => { /* 二重 close は無視 */ })
+            ctxRef.current = null
           }}
         >
           クリア
@@ -247,9 +359,28 @@ export function PlayerDeck() {
       {!collapsed && (
         <>
           <ul className="m-0 max-h-48 list-none overflow-y-auto p-0">
-            {tracks.map(t => (
+            {tracks.map(t => {
+              // 表示は basename に揃える。t.label は tar エントリだとフルエントリパス
+              // (audio/mic_01.wav)、単体ファイルだと basename と意味が揃っておらず、
+              // 幅の狭い枠で truncate すると肝心のファイル名から切れてしまう。
+              // ホバーとコピーには「アーカイブ名 › エントリ名」のフルパスを載せる。
+              const fullPath = fullEntryLabel(t.key, t.entryPath)
+              const mode = channelById[t.id] ?? 'both'
+              // <audio> が生えるまではグラフを作れない (tar は blob 取得待ち)。
+              // mono は splitter の output 1 が無音なので R を押させない。
+              const ready = readyIds.has(t.id)
+              const splittable = canSplitChannels(channelsById[t.id])
+              const lrDisabled = !ready || !splittable
+              const lrTitle = !ready ? '取得中'
+                : !splittable ? 'モノラルのため分割できません'
+                : '選んだチャンネルを左右両方から鳴らす'
+              return (
               <li key={t.id} className="flex items-center gap-2 py-1" style={{ borderTop: '1px solid var(--rule)' }}>
-                <span className="w-40 truncate text-[12px] text-ink-11" title={t.label}>{t.label}</span>
+                <CopyablePath
+                  text={basename(t.label)}
+                  fullPath={fullPath}
+                  className="w-56 text-[12px] text-ink-11"
+                />
                 {/* tar 内エントリは blob 取得が終わるまで再生できない。無表示だと
                     ▶ を押しても鳴らない理由が見えないので、取得中を明示する。 */}
                 {t.entryPath != null && !readyIds.has(t.id) && (
@@ -264,6 +395,32 @@ export function PlayerDeck() {
                     height={28}
                   />
                 </div>
+                {/* L / R: 既定は両チャンネル (どちらも非押下)。Web Audio 非対応の
+                    ブラウザでは出さない — 押しても何も起きないボタンは害しかない。 */}
+                {AudioCtx && (
+                  <>
+                    <button
+                      type="button"
+                      className="ghost text-[11px]"
+                      style={toggleBtnStyle(mode === 'left')}
+                      aria-pressed={mode === 'left'}
+                      aria-label="左チャンネル"
+                      title={lrTitle}
+                      disabled={lrDisabled}
+                      onClick={() => toggleChannel(t, 'left')}
+                    >L</button>
+                    <button
+                      type="button"
+                      className="ghost text-[11px]"
+                      style={toggleBtnStyle(mode === 'right')}
+                      aria-pressed={mode === 'right'}
+                      aria-label="右チャンネル"
+                      title={lrTitle}
+                      disabled={lrDisabled}
+                      onClick={() => toggleChannel(t, 'right')}
+                    >R</button>
+                  </>
+                )}
                 <button
                   type="button"
                   className="ghost text-[11px]"
@@ -294,6 +451,21 @@ export function PlayerDeck() {
                     // 削除トラックに紐づく状態を漏れなく剪定する。soloId は
                     // effectiveSoloId の導出でも守られるが、明示的に消して
                     // 「消したトラックの ID が state に残る」余地をなくす。
+                    // Web Audio ノードは reconcile effect でも拾えるが、ここでも
+                    // 即座に畳んで <audio> より長生きさせない。
+                    disposeGraph(t.id)
+                    setChannelById(cur => {
+                      if (!(t.id in cur)) return cur
+                      const next = { ...cur }
+                      delete next[t.id]
+                      return next
+                    })
+                    setChannelsById(cur => {
+                      if (!(t.id in cur)) return cur
+                      const next = { ...cur }
+                      delete next[t.id]
+                      return next
+                    })
                     setSoloId(cur => (cur === t.id ? null : cur))
                     setMuted(cur => {
                       if (!cur.has(t.id)) return cur
@@ -316,7 +488,8 @@ export function PlayerDeck() {
                   }}
                 >✕</button>
               </li>
-            ))}
+              )
+            })}
           </ul>
           <div className="flex items-center gap-3 pt-1" style={{ borderTop: '1px solid var(--rule)' }}>
             {playing ? (

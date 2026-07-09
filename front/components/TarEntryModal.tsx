@@ -2,15 +2,20 @@ import { useEffect, useState } from 'react'
 import { api } from '../lib/api/client'
 import { classifyEntry } from '../lib/api/mime'
 import { fmtSize } from '../lib/format'
+import { tarEntryWebUrl } from '../lib/route'
 import { copyToClipboard } from '../lib/clipboard'
 import { usePinnedPreviews } from '../lib/pinnedPreviews'
+import { CopyMenu, type MenuItem } from './CopyMenu'
 import { PreviewAudio } from './PreviewAudio'
 
 interface Props {
   connId: string
   bucket: string
   archiveKey: string
-  entry: { name: string; size: number; type: string }
+  // size / type は任意。共有 URL (?entry=) から直接開いたエントリは、ページングされた
+  // 一覧の今のページに載っているとは限らず、そのときサイズを引く手段がない。
+  // 本文は name から自前でフェッチするので、開くのに必要なのは name だけ。
+  entry: { name: string; size?: number; type?: string }
   onClose: () => void
 }
 
@@ -18,6 +23,15 @@ export function TarEntryModal({ connId, bucket, archiveKey, entry, onClose }: Pr
   const kind = classifyEntry(entry.name)
   const url = api.tarEntryUrl(connId, bucket, archiveKey, entry.name)
   const { addPin } = usePinnedPreviews()
+  // 人に送る用 (このエントリを開いた状態で復元される) と、curl / VLC 用の生データ。
+  const copyItems: MenuItem[] = [
+    {
+      kind: 'copy',
+      label: 'Web URL をコピー',
+      value: `${window.location.origin}${tarEntryWebUrl(connId, bucket, archiveKey, entry.name)}`,
+    },
+    { kind: 'copy', label: '生データ URL をコピー', value: url },
+  ]
 
   // Escape で閉じる。
   useEffect(() => {
@@ -56,12 +70,14 @@ export function TarEntryModal({ connId, bucket, archiveKey, entry, onClose }: Pr
             <span className="text-ink-3 px-[2px]" style={{ fontFamily: 'var(--font-serif)' }}>›</span>
             <span className="text-ink-12">{entry.name}</span>
           </p>
-          <span
-            className="text-[11px] text-ink-7 tabular-nums"
-            style={{ fontFamily: 'var(--font-mono)' }}
-          >
-            {fmtSize(entry.size)}
-          </span>
+          {entry.size != null && (
+            <span
+              className="text-[11px] text-ink-7 tabular-nums"
+              style={{ fontFamily: 'var(--font-mono)' }}
+            >
+              {fmtSize(entry.size)}
+            </span>
+          )}
           <button
             type="button"
             className="ghost"
@@ -71,6 +87,7 @@ export function TarEntryModal({ connId, bucket, archiveKey, entry, onClose }: Pr
           >
             <span aria-hidden>📌</span>
           </button>
+          <CopyMenu items={copyItems} trigger="🔗" ariaLabel="URL をコピー" />
           <a
             className="ghost no-underline"
             href={url}

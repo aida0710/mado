@@ -1,8 +1,13 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { PinnedPreviewCard } from './PinnedPreviewCard'
 import { PinnedPreviewsProvider, usePinnedPreviews, type PinnedItem } from '../lib/pinnedPreviews'
 import { api } from '../lib/api/client'
+import { copyToClipboard } from '../lib/clipboard'
+
+vi.mock('../lib/clipboard', () => ({
+  copyToClipboard: vi.fn(async () => true),
+}))
 
 vi.mock('../lib/api/client', () => ({
   api: {
@@ -119,6 +124,25 @@ describe('PinnedPreviewCard - kind branching', () => {
     )
     await screen.findByText(/"a":1/)
     expect(container.querySelector('pre')?.textContent).toBe('{"a":1}\n{"b":2}')
+  })
+})
+
+describe('PinnedPreviewCard - パスのコピー', () => {
+  it('ファイル名をクリックするとフルパスがコピーされる (画面は basename しか出せない)', async () => {
+    render(<PinnedPreviewCard item={item({
+      key: 'rec/shard.tar', entryPath: 'audio/u1.wav', id: 'c|b|rec/shard.tar|audio/u1.wav',
+    })} />)
+    const label = screen.getByTitle('rec/shard.tar › audio/u1.wav')
+    expect(label).toHaveTextContent('u1.wav')
+    fireEvent.click(label)
+    expect(copyToClipboard).toHaveBeenCalledWith('rec/shard.tar › audio/u1.wav')
+    await waitFor(() => expect(label).toHaveTextContent('コピーしました ✓'))
+  })
+
+  it('単体ファイルは key をそのままコピーする', () => {
+    render(<PinnedPreviewCard item={item({ key: 'notes/readme.txt' })} />)
+    fireEvent.click(screen.getByTitle('notes/readme.txt'))
+    expect(copyToClipboard).toHaveBeenCalledWith('notes/readme.txt')
   })
 })
 

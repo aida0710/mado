@@ -15,11 +15,13 @@ export default function StorageBucket({ connId }: Props) {
   const bucket = decodeURIComponent(params.bucket ?? '')
   const prefix = params['*'] ?? ''
 
-  // 選択中ファイルは URL の ?preview=<key> で表現する。
+  // 選択中ファイルは URL の ?preview=<key> で表現する。tar アーカイブを開いている
+  // ときは、その中のどのエントリを開いているかを &entry=<エントリ名> で足す。
   // 直リンク (deep-link) で復元可能、選択するたびに URL も更新するので
   // ブラウザの戻る/進むも自然に効く。
   const [searchParams, setSearchParams] = useSearchParams()
   const selected = searchParams.get('preview')
+  const selectedEntry = searchParams.get('entry')
 
   const setSelected = useCallback((key: string | null) => {
     setSearchParams(
@@ -27,6 +29,24 @@ export default function StorageBucket({ connId }: Props) {
         const next = new URLSearchParams(prev)
         if (key === null) next.delete('preview')
         else next.set('preview', key)
+        // entry は「今開いている tar の中のエントリ」を指す。preview を差し替える /
+        // 閉じるときは必ず捨てる — 残すと無関係なファイルに ?entry= がぶら下がり、
+        // 次にその tar を開いた瞬間に身に覚えのないモーダルが開く。
+        next.delete('entry')
+        return next
+      },
+      { replace: false },
+    )
+  }, [setSearchParams])
+
+  // entry だけを出し入れする (preview は保持)。tar の中でエントリを開閉するのに使い、
+  // push なので「開く = 履歴 1 段」「戻る = モーダルが閉じる」が自然に成立する。
+  const setSelectedEntry = useCallback((entryPath: string | null) => {
+    setSearchParams(
+      prev => {
+        const next = new URLSearchParams(prev)
+        if (entryPath === null) next.delete('entry')
+        else next.set('entry', entryPath)
         return next
       },
       { replace: false },
@@ -64,6 +84,8 @@ export default function StorageBucket({ connId }: Props) {
           connId={connId}
           bucket={bucket}
           k={selected}
+          entry={selectedEntry}
+          onEntryChange={setSelectedEntry}
           onClose={() => setSelected(null)}
           onResizeStart={onResizeStart}
           onResizeKeyDown={onResizeKeyDown}

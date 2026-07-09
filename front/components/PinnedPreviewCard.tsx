@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
 import { api } from '../lib/api/client'
 import { classify, classifyEntry } from '../lib/api/mime'
+import { basename, fullEntryLabel } from '../lib/format'
 import { usePinnedPreviews, type PinnedItem } from '../lib/pinnedPreviews'
+import { CopyablePath } from './CopyablePath'
 import { PreviewImage } from './PreviewImage'
 import { PreviewAudio } from './PreviewAudio'
 import { PreviewArchive } from './PreviewArchive'
@@ -104,8 +106,8 @@ function PinnedPreviewBody({ item }: { item: PinnedItem }) {
 export function PinnedPreviewCard({ item }: { item: PinnedItem }) {
   const { removePin } = usePinnedPreviews()
   const { connId, bucket, key, entryPath } = item
-  const fullPath = entryPath != null ? `${key} › ${entryPath}` : key
-  const filename = (entryPath ?? key).split('/').pop() ?? key
+  const fullPath = fullEntryLabel(key, entryPath)
+  const filename = basename(entryPath ?? key)
   const downloadUrl = entryPath != null
     ? api.tarEntryUrl(connId, bucket, key, entryPath)
     : api.downloadUrl(connId, bucket, key)
@@ -116,13 +118,12 @@ export function PinnedPreviewCard({ item }: { item: PinnedItem }) {
       style={{ border: '1px solid var(--rule)', borderRadius: 'var(--radius-2)' }}
     >
       <header className="flex items-center gap-2">
-        <p
-          className="m-0 min-w-0 flex-1 truncate text-[12px] text-ink-11"
-          title={fullPath}
+        <CopyablePath
+          text={filename}
+          fullPath={fullPath}
+          className="min-w-0 flex-1 text-[12px] text-ink-11"
           style={{ fontFamily: 'var(--font-mono)' }}
-        >
-          {filename}
-        </p>
+        />
         <a
           className="ghost no-underline"
           href={downloadUrl}
