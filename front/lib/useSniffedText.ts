@@ -10,12 +10,12 @@ export type SniffedText =
 
 // プレビュー対象の先頭を取得し、テキストかバイナリかを決める。url は
 // api.textPreviewUrl() か api.tarEntryUrl() の戻り値。
-//
-// url 変化時の loading への差し戻しはしない — 呼び出し側は key で再マウントする
-// 流儀 (PreviewDrawer / TarEntryModal / PinnedPreviewCard)。effect 内で同期 setState
-// すると react-hooks/set-state-in-effect に引っかかるので、そこは避ける。
 export function useSniffedText(url: string): SniffedText {
-  const [state, setState] = useState<SniffedText>({ status: 'loading' })
+  // 取得結果は「どの url のものか」と一緒に持つ。こうすると url が変わった瞬間に
+  // 描画側が loading に戻り、前のファイルの本文が一瞬見える事故が起きない。
+  // effect 内で同期 setState して loading に戻す手もあるが、それは
+  // react-hooks/set-state-in-effect に引っかかる。
+  const [result, setResult] = useState<{ url: string; value: SniffedText } | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -24,15 +24,18 @@ export function useSniffedText(url: string): SniffedText {
         if (cancelled) return
         // fatal なしの不可逆デコード。64KB 境界で割れたマルチバイト文字は
         // U+FFFD 1 個で済み、非 UTF-8 のテキストも従来どおり文字化けして表示される。
-        setState(looksBinary(head)
-          ? { status: 'binary' }
-          : { status: 'text', text: new TextDecoder().decode(head) })
+        setResult({
+          url,
+          value: looksBinary(head)
+            ? { status: 'binary' }
+            : { status: 'text', text: new TextDecoder().decode(head) },
+        })
       })
-      .catch((e: Error) => {
-        if (!cancelled) setState({ status: 'error', message: e.message })
+      .catch((e: unknown) => {
+        if (!cancelled) setResult({ url, value: { status: 'error', message: (e as Error).message } })
       })
     return () => { cancelled = true }
   }, [url])
 
-  return state
+  return result?.url === url ? result.value : { status: 'loading' }
 }

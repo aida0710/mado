@@ -44,4 +44,16 @@ describe('useSniffedText', () => {
     renderHook(() => useSniffedText('/some/url'))
     await waitFor(() => expect(api.readHead).toHaveBeenCalledWith('/some/url', 65536))
   })
+
+  it('url が変わったら再マウントなしでも loading に戻る', async () => {
+    vi.mocked(api.readHead).mockResolvedValue(utf8('first'))
+    const { result, rerender } = renderHook(({ url }) => useSniffedText(url), {
+      initialProps: { url: '/a' },
+    })
+    await waitFor(() => expect(result.current).toEqual({ status: 'text', text: 'first' }))
+
+    vi.mocked(api.readHead).mockReturnValue(new Promise<Uint8Array>(() => {}))
+    rerender({ url: '/b' })
+    expect(result.current.status).toBe('loading')
+  })
 })
