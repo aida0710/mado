@@ -1156,6 +1156,12 @@ EOF
 
 ---
 
+> **実行順序の訂正 (実装中に判明):** Task 8（ピン留めゲートの撤廃）を **Task 7 より先に** 実行すること。
+> `classify()` から `'text'` を消すと `.txt` / `.json` が `unknown` に落ちるが、この時点ではまだ
+> `EntryTable` / `PreviewArchive` のピン留めゲート `classify() !== 'unknown'` が生きているため、
+> 既存テスト 3 件（`EntryTable.pin.test.tsx` の 1 件、`PreviewArchive.test.tsx` の 2 件）が赤くなる。
+> Task 8 は `'text'` が残った状態でも単独で緑になるので、8 → 7 の順なら各タスクの末尾で常に全テストが通る。
+
 ### Task 7: `classify()` から `'text'` を削除する
 
 **Files:**
