@@ -8,6 +8,10 @@ export type SniffedText =
   | { status: 'binary' }
   | { status: 'error'; message: string }
 
+// loading は毎回同じ参照を返す。新しいオブジェクトを返すと、消費側がこの戻り値を
+// 依存配列に入れたときに無関係な再描画のたびに再発火する踏み台になる。
+const LOADING: SniffedText = { status: 'loading' }
+
 // プレビュー対象の先頭を取得し、テキストかバイナリかを決める。url は
 // api.textPreviewUrl() か api.tarEntryUrl() の戻り値。
 export function useSniffedText(url: string): SniffedText {
@@ -37,5 +41,5 @@ export function useSniffedText(url: string): SniffedText {
     return () => { cancelled = true }
   }, [url])
 
-  return result?.url === url ? result.value : { status: 'loading' }
+  return result?.url === url ? result.value : LOADING
 }
