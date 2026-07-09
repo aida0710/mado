@@ -684,15 +684,89 @@ EOF
 ### Task 5: ピンカードをスニッフに載せ替える
 
 **Files:**
+- Modify: `front/lib/format.ts`（`prettyPrintJson` を追加）
+- Test: `front/lib/format.test.ts`（**新規**）
 - Modify: `front/components/PinnedPreviewCard.tsx`（`PinnedTextBody` と `PinnedPreviewBody` の分岐、`unsupportedMessage` 削除）
 - Test: `front/components/PinnedPreviewCard.test.tsx`
 - Test: `front/components/BottomDock.test.tsx`（`x.bin` のカードが fetch するようになる）
 
 **Interfaces:**
 - Consumes: `useSniffedText`（Task 3）、`UnsupportedPreview`（Task 4）、`api.textPreviewUrl` / `api.tarEntryUrl`（既存）
-- Produces: なし（内部コンポーネントのみ）
+- Produces: `export function prettyPrintJson(name: string, text: string): string`（Task 6 の `TarEntryModal.TextBody` も使う）
 
 `.json` のプリティプリントは**表示上の整形**として残す。描画先の分岐ではないので拡張子リストの復活には当たらない。
+
+整形ロジックは現在 `PinnedPreviewCard.tsx:39-47` と `TarEntryModal.tsx:146-156` に逐語的に重複している。両方を書き換えるこのタイミングで `front/lib/format.ts` に抽出し、Task 5 と Task 6 の両方から呼ぶ。
+
+**追加ステップ（Step 0）: `prettyPrintJson` を先に切り出す**
+
+`front/lib/format.test.ts`（新規）:
+
+```ts
+import { describe, expect, it } from 'vitest'
+import { prettyPrintJson } from './format'
+
+describe('prettyPrintJson', () => {
+  it('.json は minify されていても整形する', () => {
+    expect(prettyPrintJson('a.json', '{"a":1,"b":2}')).toBe('{\n  "a": 1,\n  "b": 2\n}')
+  })
+
+  it('.jsonl / .ndjson は 1 行 1 JSON 値なので整形しない', () => {
+    expect(prettyPrintJson('a.jsonl', '{"a":1}\n{"b":2}')).toBe('{"a":1}\n{"b":2}')
+    expect(prettyPrintJson('a.ndjson', '{"a":1}\n{"b":2}')).toBe('{"a":1}\n{"b":2}')
+  })
+
+  it('不正な JSON はそのまま返す', () => {
+    expect(prettyPrintJson('bad.json', '{oops not json')).toBe('{oops not json')
+  })
+
+  it('json 以外の拡張子はそのまま返す', () => {
+    expect(prettyPrintJson('a.txt', '{"a":1}')).toBe('{"a":1}')
+    expect(prettyPrintJson('README', 'hello')).toBe('hello')
+  })
+
+  it('拡張子の大小文字を問わない', () => {
+    expect(prettyPrintJson('A.JSON', '{"a":1}')).toBe('{\n  "a": 1\n}')
+  })
+})
+```
+
+`front/lib/format.ts` に追加:
+
+```ts
+// .json (単一ドキュメント) だけプリティプリントする。.jsonl / .ndjson は
+// 1 行 1 JSON 値の形式なのでそのまま返す。整形できない (不正な JSON) ときも
+// そのまま返し、プレビューが空にならないようにする。
+//
+// これは表示上の整形であって、プレビューの描画先を決める分岐ではない
+// (種別は中身のスニッフで決める。front/lib/textSniff.ts を参照)。
+export function prettyPrintJson(name: string, text: string): string {
+  const lower = name.toLowerCase()
+  if (!lower.endsWith('.json') || lower.endsWith('.jsonl')) return text
+  try {
+    return JSON.stringify(JSON.parse(text), null, 2)
+  } catch {
+    return text
+  }
+}
+```
+
+Run: `cd front && npx vitest run lib/format.test.ts` → PASS（5 tests）
+
+このステップだけを先にコミットしてよい:
+
+```bash
+git add front/lib/format.ts front/lib/format.test.ts
+git commit -m "$(cat <<'EOF'
+refactor: JSON プリティプリントを prettyPrintJson に抽出する
+
+PinnedPreviewCard と TarEntryModal に逐語的に重複していた整形ロジックを
+format.ts へ寄せる。表示上の整形であって描画先の分岐ではない。
+
+Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
+EOF
+)"
+```
 
 - [ ] **Step 1: Write the failing test**
 
@@ -824,17 +898,7 @@ function PinnedTextBody({ name, url }: { name: string; url: string }) {
   if (sniffed.status === 'loading') return <p className="text-[13px] text-ink-7">loading…</p>
   if (sniffed.status === 'binary') return <UnsupportedPreview />
 
-  // .json (単一ドキュメント) はプリティプリントする。.jsonl / .ndjson は 1 行 1 JSON 値
-  // の形式なのでそのまま。これは表示上の整形であって、描画先の分岐ではない。
-  let display = sniffed.text
-  const lower = name.toLowerCase()
-  if (lower.endsWith('.json') && !lower.endsWith('.jsonl')) {
-    try {
-      display = JSON.stringify(JSON.parse(sniffed.text), null, 2)
-    } catch {
-      /* そのまま表示 */
-    }
-  }
+  const display = prettyPrintJson(name, sniffed.text)
   return (
     <pre
       className="m-0 h-[280px] overflow-auto whitespace-pre p-3 text-[12px] leading-snug"
@@ -910,7 +974,7 @@ EOF
 - Test: `front/components/PreviewArchive.test.tsx`（モーダルが `tarEntryText` ではなく `readHead` を使う）
 
 **Interfaces:**
-- Consumes: `useSniffedText`（Task 3）、`UnsupportedPreview`（Task 4）、`api.tarEntryUrl`（既存）
+- Consumes: `useSniffedText`（Task 3）、`UnsupportedPreview`（Task 4）、`prettyPrintJson`（Task 5）、`api.tarEntryUrl`（既存）
 - Produces: なし
 
 - [ ] **Step 1: Write the failing test**
@@ -998,17 +1062,7 @@ function TextBody({ url, name }: { url: string; name: string }) {
   if (sniffed.status === 'loading') return <p className="text-[13px] text-ink-7">loading…</p>
   if (sniffed.status === 'binary') return <UnsupportedPreview />
 
-  // .json (単一ドキュメント) はプリティプリントする。.jsonl / .ndjson は
-  // 1行1JSON値の形式なのでそのまま表示する。
-  let display = sniffed.text
-  const lower = name.toLowerCase()
-  if (lower.endsWith('.json') && !lower.endsWith('.jsonl')) {
-    try {
-      display = JSON.stringify(JSON.parse(sniffed.text), null, 2)
-    } catch {
-      /* そのまま表示 */
-    }
-  }
+  const display = prettyPrintJson(name, sniffed.text)
 
   // 末尾の改行で行数が余分に増えないようにする。
   const trimmed = display.endsWith('\n') ? display.slice(0, -1) : display
@@ -1479,7 +1533,7 @@ rm -rf "$FX"
 | `mime.ts` から `'text'` 削除 | Task 7 |
 | `api.textPreview` / `tarEntryText` 削除 | Task 7 |
 | ピン留めゲート撤廃（`EntryTable` / `PreviewArchive`） | Task 8 |
-| `.json` プリティプリントを表示上の整形として残す | Task 5・6 |
+| `.json` プリティプリントを表示上の整形として残す | Task 5（`prettyPrintJson` に抽出）・Task 6（利用） |
 | 既存テスト 7 本の更新 | Task 4（`PreviewText` / `PreviewDrawer`）、Task 5（`PinnedPreviewCard` / `BottomDock`）、Task 6（`TarEntryModal` / `PreviewArchive`）、Task 7（`mime`）、Task 8（`EntryTable.pin` / `PreviewArchive`） |
 | 検証（`README` / npy / Shift_JIS / 転送量） | Task 9 |
 
