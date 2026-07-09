@@ -24,8 +24,8 @@ vi.mock('../lib/api/client', () => ({
     invalidateTarPreview: vi.fn(),
     lastFetched: { tar: vi.fn(() => null) },
     tarEntryUrl: vi.fn(() => 'http://x/entry'),
-    // テキストエントリのモーダル (TarEntryModal の TextBody) が本文を取りに来る。
-    tarEntryText: vi.fn(async () => 'entry body'),
+    // モーダル本文はスニッフ経由で取得される。
+    readHead: vi.fn(async () => new TextEncoder().encode('entry body')),
   },
 }))
 vi.mock('../lib/clipboard', () => ({
