@@ -30,7 +30,7 @@ function renderDrawer(props: Partial<Parameters<typeof PreviewDrawer>[0]> = {}) 
     <PreviewDrawer
       connId="c"
       bucket="b"
-      k="file.xyz" // classify → unknown: fetch を伴うプレビューを描画しない
+      k="file.xyz" // unknown: スニッフ結果がバイナリ（mock の readHead が NUL）なので重いプレビューは描画されない
       onClose={() => {}}
       onResizeStart={() => {}}
       onResetWidth={() => {}}
