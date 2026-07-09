@@ -78,7 +78,7 @@ describe('PreviewArchive - 行の ⋯ アクションメニュー', () => {
     expect(screen.queryByRole('menuitem', { name: 'デッキに追加' })).not.toBeInTheDocument()
   })
 
-  it('unknown 種別 (bin) にはピン留め・デッキに追加が出ずダウンロードのみ', async () => {
+  it('unknown 種別 (bin) にもピン留めが出る (デッキに追加は音声のみ)', async () => {
     render(
       <PinnedPreviewsProvider>
         <PreviewArchive connId="c" bucket="b" k="a.tar" />
@@ -86,7 +86,7 @@ describe('PreviewArchive - 行の ⋯ アクションメニュー', () => {
     )
     await openMenuFor('blob.bin')
     expect(screen.getByRole('menuitem', { name: 'このエントリをダウンロード' })).toBeInTheDocument()
-    expect(screen.queryByRole('menuitem', { name: 'ピン留め' })).not.toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: 'ピン留め' })).toBeInTheDocument()
     expect(screen.queryByRole('menuitem', { name: 'デッキに追加' })).not.toBeInTheDocument()
   })
 

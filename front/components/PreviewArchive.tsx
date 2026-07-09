@@ -1,7 +1,7 @@
 import { useEffect, useReducer, useState, type KeyboardEvent } from 'react'
 import { api } from '../lib/api/client'
 import type { z } from 'zod'
-import { classify, classifyEntry } from '../lib/api/mime'
+import { classify } from '../lib/api/mime'
 import { usePlayerDeck } from '../lib/playerDeck'
 import { usePinnedPreviews } from '../lib/pinnedPreviews'
 import { TarPreview } from '../lib/api/types'
@@ -300,11 +300,12 @@ export function PreviewArchive({ connId, bucket, k, initialEntry = null, onEntry
                     connId, bucket, key: k, entryPath: e.name,
                   }),
                 }] : []),
-                ...(classifyEntry(e.name) !== 'unknown' ? [{
+                // 種別で出し分けない (EntryTable と同じ理由)。
+                {
                   kind: 'action' as const,
                   label: 'ピン留め',
                   onSelect: () => addPin({ connId, bucket, key: k, entryPath: e.name }),
-                }] : []),
+                },
                 {
                   kind: 'download',
                   label: 'このエントリをダウンロード',
