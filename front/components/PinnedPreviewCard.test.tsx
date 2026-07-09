@@ -12,10 +12,10 @@ vi.mock('../lib/clipboard', () => ({
 vi.mock('../lib/api/client', () => ({
   api: {
     downloadUrl: vi.fn(() => 'http://x/dl'),
-    textPreview: vi.fn(async () => 'hello text'),
+    textPreviewUrl: vi.fn(() => 'http://x/text'),
     tarEntryUrl: vi.fn(() => 'http://x/entry'),
-    tarEntryText: vi.fn(async () => 'entry text body'),
     imageUrl: vi.fn(() => 'http://x/image'),
+    readHead: vi.fn(async () => new Uint8Array(0)),
   },
 }))
 
@@ -41,8 +41,11 @@ function item(overrides: Partial<PinnedItem> = {}): PinnedItem {
   }
 }
 
+const utf8 = (s: string): Uint8Array => new TextEncoder().encode(s)
+
 describe('PinnedPreviewCard - kind branching', () => {
   it('renders text preview for a plain text file', async () => {
+    vi.mocked(api.readHead).mockResolvedValue(utf8('hello text'))
     render(<PinnedPreviewCard item={item({ key: 'notes/readme.txt' })} />)
     expect(await screen.findByText('hello text')).toBeInTheDocument()
     // ヘッダはパス末尾を表示し、フルパスは title に持つ
@@ -61,6 +64,7 @@ describe('PinnedPreviewCard - kind branching', () => {
   })
 
   it('renders a lightweight tarEntryText body for a tar-entry text pin', async () => {
+    vi.mocked(api.readHead).mockResolvedValue(utf8('entry text body'))
     render(<PinnedPreviewCard item={item({
       key: 'shard.tar', entryPath: 'meta.json', id: 'c|b|shard.tar|meta.json',
     })} />)
@@ -69,13 +73,20 @@ describe('PinnedPreviewCard - kind branching', () => {
     expect(title).toHaveTextContent('meta.json')
   })
 
-  it('shows the unsupported-kind fallback message for an unknown extension', () => {
+  it('NUL を含むファイルは「プレビュー非対応」になる (拡張子ではなく中身で判定)', async () => {
+    vi.mocked(api.readHead).mockResolvedValue(new Uint8Array([0x93, 0x4e, 0x00]))
     render(<PinnedPreviewCard item={item({ key: 'weird.xyz' })} />)
-    expect(screen.getByText(/プレビュー非対応/)).toBeInTheDocument()
+    expect(await screen.findByText(/プレビュー非対応/)).toBeInTheDocument()
+  })
+
+  it('拡張子が未知でも中身がテキストなら開ける', async () => {
+    vi.mocked(api.readHead).mockResolvedValue(utf8('FROM alpine'))
+    render(<PinnedPreviewCard item={item({ key: 'Dockerfile' })} />)
+    expect(await screen.findByText('FROM alpine')).toBeInTheDocument()
   })
 
   it('単体テキストファイルのピンは固定高さの pre で表示される', async () => {
-    vi.mocked(api.textPreview).mockResolvedValue('plain body')
+    vi.mocked(api.readHead).mockResolvedValue(utf8('plain body'))
     render(<PinnedPreviewCard item={{ id: 'i1', connId: 'c', bucket: 'b', key: 'x.txt' }} />)
     const pre = await screen.findByText('plain body')
     expect(pre.tagName).toBe('PRE')
@@ -83,7 +94,7 @@ describe('PinnedPreviewCard - kind branching', () => {
   })
 
   it('tar エントリのテキストも固定高さの pre で表示される', async () => {
-    vi.mocked(api.tarEntryText).mockResolvedValue('hello')
+    vi.mocked(api.readHead).mockResolvedValue(utf8('hello'))
     render(<PinnedPreviewCard item={{ id: 'i2', connId: 'c', bucket: 'b', key: 's.tar', entryPath: 'u.txt' }} />)
     const pre = await screen.findByText('hello')
     expect(pre.tagName).toBe('PRE')
@@ -91,7 +102,7 @@ describe('PinnedPreviewCard - kind branching', () => {
   })
 
   it('単体 .json のピンは minify されていてもプリティプリントされる', async () => {
-    vi.mocked(api.textPreview).mockResolvedValue('{"a":1,"b":2}')
+    vi.mocked(api.readHead).mockResolvedValue(utf8('{"a":1,"b":2}'))
     const { container } = render(
       <PinnedPreviewCard item={{ id: 'j1', connId: 'c', bucket: 'b', key: 'x.json' }} />,
     )
@@ -100,7 +111,7 @@ describe('PinnedPreviewCard - kind branching', () => {
   })
 
   it('tar エントリの .json もプリティプリントされる', async () => {
-    vi.mocked(api.tarEntryText).mockResolvedValue('{"x":true}')
+    vi.mocked(api.readHead).mockResolvedValue(utf8('{"x":true}'))
     const { container } = render(
       <PinnedPreviewCard item={{ id: 'j2', connId: 'c', bucket: 'b', key: 's.tar', entryPath: 'meta.json' }} />,
     )
@@ -109,7 +120,7 @@ describe('PinnedPreviewCard - kind branching', () => {
   })
 
   it('不正な JSON の .json はそのまま表示される (整形は try/catch でフォールバック)', async () => {
-    vi.mocked(api.textPreview).mockResolvedValue('{oops not json')
+    vi.mocked(api.readHead).mockResolvedValue(utf8('{oops not json'))
     const { container } = render(
       <PinnedPreviewCard item={{ id: 'j3', connId: 'c', bucket: 'b', key: 'bad.json' }} />,
     )
@@ -118,7 +129,7 @@ describe('PinnedPreviewCard - kind branching', () => {
   })
 
   it('.jsonl は1行1値なので整形せずそのまま表示される', async () => {
-    vi.mocked(api.textPreview).mockResolvedValue('{"a":1}\n{"b":2}')
+    vi.mocked(api.readHead).mockResolvedValue(utf8('{"a":1}\n{"b":2}'))
     const { container } = render(
       <PinnedPreviewCard item={{ id: 'j4', connId: 'c', bucket: 'b', key: 'data.jsonl' }} />,
     )
