@@ -1,6 +1,7 @@
 import { api } from '../lib/api/client'
 import { classify, classifyEntry } from '../lib/api/mime'
 import { basename, fullEntryLabel, prettyPrintJson } from '../lib/format'
+import { TEXT_HEAD_BYTES } from '../lib/textSniff'
 import { useSniffedText } from '../lib/useSniffedText'
 import { usePinnedPreviews, type PinnedItem } from '../lib/pinnedPreviews'
 import { CopyablePath } from './CopyablePath'
@@ -65,7 +66,14 @@ function PinnedPreviewBody({ item }: { item: PinnedItem }) {
       return <PinnedEntryImage connId={connId} bucket={bucket} archiveKey={key} entry={entryPath} />
     }
     // 画像・音声以外はすべてテキスト表示に落とし、中身で判定する。
-    return <PinnedTextBody name={entryPath} url={api.tarEntryUrl(connId, bucket, key, entryPath)} />
+    // head モードで先頭だけ抽出させる。バイナリエントリのために 100MB を
+    // サーバーで解凍させない (レスポンスも 64KB で済む)。
+    return (
+      <PinnedTextBody
+        name={entryPath}
+        url={api.tarEntryUrl(connId, bucket, key, entryPath, { maxBytes: TEXT_HEAD_BYTES })}
+      />
+    )
   }
   // 単体ファイルも同じ。画像・音声・アーカイブ以外はテキスト表示に落とし、中身で判定する。
   const kind = classify(key)

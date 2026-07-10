@@ -453,8 +453,19 @@ export const api = {
     ),
 
   // `<img src>` / `<audio src>` 用の tar エントリ本体への URL 形式。
-  tarEntryUrl: (connId: string, bucket: string, key: string, entry: string): string =>
-    buildUrl(`${API_BASE}/storage/${encodeURIComponent(connId)}/preview/tar-entry`, { bucket, key, entry }),
+  //
+  // opts.maxBytes を渡すと、サーバーはエントリの先頭 maxBytes だけを抽出して返す
+  // (head モード)。テキストかどうか見るだけの用途で 100MB のエントリを丸ごと
+  // 解凍させないために使う。**<img src> / <audio src> / ダウンロードでは付けないこと**
+  // — 本体が途中で切れる。
+  tarEntryUrl: (
+    connId: string, bucket: string, key: string, entry: string,
+    opts: { maxBytes?: number } = {},
+  ): string =>
+    buildUrl(`${API_BASE}/storage/${encodeURIComponent(connId)}/preview/tar-entry`, {
+      bucket, key, entry,
+      maxBytes: opts.maxBytes != null ? String(opts.maxBytes) : undefined,
+    }),
 
   favorites: (connId: string) =>
     favoritesCache.get(k('favorites', connId), () =>

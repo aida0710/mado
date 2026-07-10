@@ -90,6 +90,20 @@ describe('TarEntryModal - URL コピー', () => {
   })
 })
 
+describe('TarEntryModal - head モード', () => {
+  it('本文の取得だけ maxBytes 付き URL を使い、DL / 生データ URL は本体を全部指す', async () => {
+    vi.mocked(api.readHead).mockResolvedValue(utf8('hello'))
+    renderEntry('notes.txt')
+    await screen.findByText('hello')
+
+    const calls = vi.mocked(api.tarEntryUrl).mock.calls
+    // 本文用 (head モード): 5 番目の引数に maxBytes が入る
+    expect(calls.some(c => c[4]?.maxBytes === 65536)).toBe(true)
+    // DL / <img src> / 生データ URL 用: opts なし
+    expect(calls.some(c => c[4] === undefined)).toBe(true)
+  })
+})
+
 describe('TarEntryModal - size なしのエントリ', () => {
   it('name だけでも開ける (permalink で来たエントリはサイズを引けない)', () => {
     render(
