@@ -99,7 +99,8 @@ export function PreviewDrawer({
         </button>
       </header>
       <div className="drawer__body">
-        {/* ファイル切替で内部 state (本文/コピー表示) をリセットするため key で再マウント。 */}
+        {/* ファイル切替でコピー完了トーストをリセットするため key で再マウントする。
+            本文の切り替えは useSniffedText が url をキーに持つので key に依存しない。 */}
         {/* 画像 / 音声 / アーカイブ以外はすべてテキストとして開こうとする。
             中身がバイナリなら PreviewText 側が「プレビュー非対応」を出す。 */}
         {kind === 'unknown' && (
