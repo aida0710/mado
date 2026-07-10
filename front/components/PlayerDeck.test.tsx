@@ -211,6 +211,39 @@ describe('PlayerDeck', () => {
     expect(wav.currentTime).toBe(30)
   })
 
+  it('ソロ中に blob 解決した後着トラックはミュートされる (ソロ漏れ防止)', async () => {
+    let resolveFetch!: (v: Response) => void
+    vi.stubGlobal('fetch', vi.fn().mockReturnValue(
+      new Promise<Response>(resolve => { resolveFetch = resolve }),
+    ))
+    URL.createObjectURL = vi.fn(() => 'blob:mock-1')
+    URL.revokeObjectURL = vi.fn()
+
+    const { container } = render(
+      <PlayerDeckProvider>
+        <AddButton n={1} />
+        <AddTarButton />
+        <PlayerDeck />
+      </PlayerDeckProvider>,
+    )
+    fireEvent.click(screen.getByText('add1'))
+    fireEvent.click(screen.getByText('addTar'))
+
+    // tar の <audio> がまだ無いうちに ch1 をソロにする
+    fireEvent.click(screen.getAllByRole('button', { name: 'ソロ' })[0])
+    expect(container.querySelectorAll('audio')).toHaveLength(1)
+
+    await act(async () => {
+      resolveFetch({ ok: true, blob: () => Promise.resolve(new Blob(['d'])) } as unknown as Response)
+    })
+    await waitFor(() => expect(container.querySelectorAll('audio')).toHaveLength(2))
+
+    // ミュート反映 effect の依存には「<audio> が生えた」が入っていない。
+    // onTrackArrive が明示的に適用しないと、ソロ中でも後着トラックが鳴る。
+    const tar = [...container.querySelectorAll('audio')].find(a => a.src.startsWith('blob:'))!
+    expect(tar.muted).toBe(true)
+  })
+
   it('短いトラックが終了しても masterTime が長いトラックに追従して進む', () => {
     vi.useFakeTimers()
     try {
@@ -375,37 +408,47 @@ function mockAnalyze(channels: number | null) {
   })
 }
 
-// splitter → merger のエッジ [出力ch, 入力ch] を記録する AudioContext。
+// splitter → merger のエッジ [出力ch, 入力ch] と、source の行き先を記録する AudioContext。
 function installMockAudioContext() {
   const splitterEdges: Array<[number, number]> = []
   const gainSetTarget = vi.fn()
   const sourceCount = { n: 0 }
   const closed = { n: 0 }
   const resumed = { n: 0 }
+  // source が今どのノードへ繋がっているか ('gain' | 'splitter')。both は gain 直結。
+  const sourceTarget = { name: null as string | null }
 
   class MockAudioContext {
     currentTime = 0
     destination = {}
-    createMediaElementSource = vi.fn(() => {
-      sourceCount.n++
-      return { connect: vi.fn(), disconnect: vi.fn() }
-    })
-    createChannelSplitter = vi.fn(() => ({
+    // ノードの同一性を見るための目印。
+    private splitter = {
+      __kind: 'splitter',
       connect: vi.fn((_target: unknown, from: number, to: number) => { splitterEdges.push([from, to]) }),
-      // 実装は張り替えのたびに disconnect() してから 2 本張り直す。
+      // 実装は張り替えのたびに disconnect() してから張り直す。
       disconnect: vi.fn(() => { splitterEdges.length = 0 }),
-    }))
-    createChannelMerger = vi.fn(() => ({ connect: vi.fn(), disconnect: vi.fn() }))
-    createGain = vi.fn(() => ({
+    }
+    private gain = {
+      __kind: 'gain',
       gain: { setTargetAtTime: gainSetTarget },
       connect: vi.fn(),
       disconnect: vi.fn(),
-    }))
+    }
+    createMediaElementSource = vi.fn(() => {
+      sourceCount.n++
+      return {
+        connect: vi.fn((target: { __kind?: string }) => { sourceTarget.name = target.__kind ?? null }),
+        disconnect: vi.fn(() => { sourceTarget.name = null }),
+      }
+    })
+    createChannelSplitter = vi.fn(() => this.splitter)
+    createChannelMerger = vi.fn(() => ({ __kind: 'merger', connect: vi.fn(), disconnect: vi.fn() }))
+    createGain = vi.fn(() => this.gain)
     resume = vi.fn(() => { resumed.n++; return Promise.resolve() })
     close = vi.fn(() => { closed.n++; return Promise.resolve() })
   }
   vi.stubGlobal('AudioContext', MockAudioContext)
-  return { splitterEdges, gainSetTarget, sourceCount, closed, resumed }
+  return { splitterEdges, sourceTarget, gainSetTarget, sourceCount, closed, resumed }
 }
 
 const leftBtn = () => screen.getByRole('button', { name: '左チャンネル' })
@@ -446,16 +489,21 @@ describe('PlayerDeck - L/R チャンネル', () => {
     expect(container.querySelector('audio')!.muted).toBe(false)
   })
 
-  it('同じ L をもう一度押すと both に戻る (グラフは作り直さない)', async () => {
-    const { splitterEdges, sourceCount } = installMockAudioContext()
+  it('同じ L をもう一度押すと both に戻り、splitter を通らなくなる', async () => {
+    const { splitterEdges, sourceTarget, sourceCount } = installMockAudioContext()
     mockAnalyze(2)
     setup()
     fireEvent.click(screen.getByText('add1'))
     await waitFor(() => expect(leftBtn()).toBeEnabled())
 
     fireEvent.click(leftBtn())
+    expect(sourceTarget.name).toBe('splitter')
+
     fireEvent.click(leftBtn())
-    expect(splitterEdges).toEqual([[0, 0], [1, 1]])
+    // 回帰ガード: both で splitter を通すと、モノラル音源では output 1 が無音になり
+    // 右チャンネルが恒久的に死ぬ。both は source を gain へ直結する。
+    expect(sourceTarget.name).toBe('gain')
+    expect(splitterEdges).toEqual([])
     expect(leftBtn()).toHaveAttribute('aria-pressed', 'false')
     // createMediaElementSource は 1 要素 1 回きり。2 回目は張り替えだけ。
     expect(sourceCount.n).toBe(1)
@@ -490,6 +538,23 @@ describe('PlayerDeck - L/R チャンネル', () => {
     vi.spyOn(api, 'mediaAnalyze').mockResolvedValue({
       cacheKey: 'k', peaks: [], durationSec: 1, sampleRate: 16000, hasSpectrogram: false, meta: null,
     })
+    setup()
+    fireEvent.click(screen.getByText('add1'))
+    await waitFor(() => expect(leftBtn()).toBeEnabled())
+  })
+
+  it('解析が返るまでは L/R を押させない (mono で R を押して無音になるのを防ぐ)', async () => {
+    installMockAudioContext()
+    vi.spyOn(api, 'mediaAnalyze').mockReturnValue(new Promise(() => { /* 未解決 */ }))
+    setup()
+    fireEvent.click(screen.getByText('add1'))
+    expect(leftBtn()).toBeDisabled()
+    expect(leftBtn()).toHaveAttribute('title', 'チャンネル数を調べています')
+  })
+
+  it('解析に失敗しても L/R は有効になる (永久に「調べています」で止まらない)', async () => {
+    installMockAudioContext()
+    vi.spyOn(api, 'mediaAnalyze').mockRejectedValue(new Error('media-worker down'))
     setup()
     fireEvent.click(screen.getByText('add1'))
     await waitFor(() => expect(leftBtn()).toBeEnabled())
