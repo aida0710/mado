@@ -23,7 +23,9 @@ vi.mock('../lib/api/client', () => ({
     })),
     invalidateTarPreview: vi.fn(),
     lastFetched: { tar: vi.fn(() => null) },
-    tarEntryUrl: vi.fn(() => 'http://x/entry'),
+    // 本物と同じく **相対パス** を返す。絶対 URL を返すモックだと
+    // 「生データ URL のコピーに origin が付いていない」バグを見逃す。
+    tarEntryUrl: vi.fn(() => '/api/internal/storage/c/preview/tar-entry?bucket=b&key=a.tar&entry=x'),
     // モーダル本文はスニッフ経由で取得される。
     readHead: vi.fn(async () => new TextEncoder().encode('entry body')),
   },
@@ -130,7 +132,10 @@ describe('PreviewArchive - 行の ⋯ アクションメニュー', () => {
 
     await openMenuFor('track.mp3')
     await userEvent.click(screen.getByRole('menuitem', { name: /生データ URL をコピー/ }))
-    expect(copyToClipboard).toHaveBeenLastCalledWith('http://x/entry')
+    // 相対パスのままコピーするとホストが分からず、受け取った側が開けない。
+    expect(copyToClipboard).toHaveBeenLastCalledWith(
+      `${window.location.origin}/api/internal/storage/c/preview/tar-entry?bucket=b&key=a.tar&entry=x`,
+    )
   })
 
   it('⋯ トリガーに focus して Enter を押しても行のモーダルは開かない', async () => {

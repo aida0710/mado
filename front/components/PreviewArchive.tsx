@@ -6,7 +6,7 @@ import { usePlayerDeck } from '../lib/playerDeck'
 import { usePinnedPreviews } from '../lib/pinnedPreviews'
 import { TarPreview } from '../lib/api/types'
 import { fmtSize } from '../lib/format'
-import { tarEntryWebUrl } from '../lib/route'
+import { absoluteUrl, tarEntryWebUrl } from '../lib/route'
 import { TarEntryModal } from './TarEntryModal'
 import { CacheMeta } from './CacheMeta'
 import { CopyMenu, type MenuItem } from './CopyMenu'
@@ -314,15 +314,16 @@ export function PreviewArchive({ connId, bucket, k, initialEntry = null, onEntry
                 },
                 // 人に送る用 (このエントリを開いた状態で復元される) と、
                 // curl / VLC / <audio src> にそのまま食わせる生データ用。
+                // どちらもクリップボードに載せるので絶対 URL にする。
                 {
                   kind: 'copy',
                   label: 'Web URL をコピー',
-                  value: `${window.location.origin}${tarEntryWebUrl(connId, bucket, k, e.name)}`,
+                  value: absoluteUrl(tarEntryWebUrl(connId, bucket, k, e.name)),
                 },
                 {
                   kind: 'copy',
                   label: '生データ URL をコピー',
-                  value: api.tarEntryUrl(connId, bucket, k, e.name),
+                  value: absoluteUrl(api.tarEntryUrl(connId, bucket, k, e.name)),
                 },
               ]
               return (

@@ -84,7 +84,7 @@ function parentPrefixOf(key: string): string {
 // 復元する — TarEntryModal は本文を name から自前でフェッチするのでそれで足りる。
 //
 // origin は付けない (fileLinkToDirRedirect と同様、window 非依存に保つ)。
-// 共有用の絶対 URL が要るなら呼び出し側で `${window.location.origin}` を前置する。
+// 共有用の絶対 URL が要るなら呼び出し側で absoluteUrl() に通す。
 export function tarEntryWebUrl(
   connId: string,
   bucket: string,
@@ -98,4 +98,14 @@ export function tarEntryWebUrl(
     `?preview=${encodeURIComponent(tarKey)}` +
     `&entry=${encodeURIComponent(entryPath)}`
   )
+}
+
+// サイト内の絶対パス (`/storage/...` や `/api/internal/...`) を、そのまま人に送れる
+// 完全な URL にする。
+//
+// クリップボードへ載せる値は必ずこれを通すこと。アプリ内で使う URL は相対のままで
+// 正しく動くので、コピー項目だけ origin を付け忘れても画面上は何も壊れず、
+// 受け取った側が「ホスト名が無い」と困って初めて分かる。
+export function absoluteUrl(path: string): string {
+  return `${window.location.origin}${path}`
 }

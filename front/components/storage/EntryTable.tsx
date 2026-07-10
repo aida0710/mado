@@ -5,7 +5,7 @@ import { api } from '../../lib/api/client'
 import { classify } from '../../lib/api/mime'
 import { StorageList } from '../../lib/api/types'
 import { fmtSize } from '../../lib/format'
-import { encPath } from '../../lib/route'
+import { absoluteUrl, encPath } from '../../lib/route'
 import { usePlayerDeck } from '../../lib/playerDeck'
 import { usePinnedPreviews } from '../../lib/pinnedPreviews'
 import { CopyMenu, type MenuItem } from '../CopyMenu'
@@ -62,7 +62,7 @@ const DirRow = memo(function DirRow({
   const tail = d.startsWith(prefix) ? d.slice(prefix.length) : d
   const dirHref = `/storage/${encodeURIComponent(connId)}/${encodeURIComponent(bucket)}/${encPath(d)}`
   const dirS3Url = `s3://${bucket}/${d}`
-  const dirWebUrl = `${window.location.origin}${dirHref}`
+  const dirWebUrl = absoluteUrl(dirHref)
   const items = useMemo<MenuItem[]>(() => [
     { kind: 'copy', label: 'Web URL をコピー', value: dirWebUrl },
     { kind: 'copy', label: 'S3 URL をコピー', value: dirS3Url },
@@ -113,9 +113,10 @@ const FileRow = memo(function FileRow({
   }, [select])
   // Web URL は dashboard origin + 現在ナビゲーション + ?preview=<key>。
   // 別ユーザに送ると「直リンクで preview drawer が開く」共有 URL になる。
-  const webUrl = `${window.location.origin}`
-    + `/storage/${encodeURIComponent(connId)}/${encodeURIComponent(bucket)}/${encPath(prefix)}`
-    + `?preview=${encodeURIComponent(f.key)}`
+  const webUrl = absoluteUrl(
+    `/storage/${encodeURIComponent(connId)}/${encodeURIComponent(bucket)}/${encPath(prefix)}`
+    + `?preview=${encodeURIComponent(f.key)}`,
+  )
   const s3Url = `s3://${bucket}/${f.key}`
   const downloadUrl = api.downloadUrl(connId, bucket, f.key)
   const filename = f.key.split('/').pop() ?? 'file'
@@ -183,7 +184,7 @@ const DirCard = memo(function DirCard({
   const tail = d.startsWith(prefix) ? d.slice(prefix.length) : d
   const dirHref = `/storage/${encodeURIComponent(connId)}/${encodeURIComponent(bucket)}/${encPath(d)}`
   const dirS3Url = `s3://${bucket}/${d}`
-  const dirWebUrl = `${window.location.origin}${dirHref}`
+  const dirWebUrl = absoluteUrl(dirHref)
   const items = useMemo<MenuItem[]>(() => [
     { kind: 'copy', label: 'Web URL をコピー', value: dirWebUrl },
     { kind: 'copy', label: 'S3 URL をコピー', value: dirS3Url },
@@ -226,9 +227,10 @@ const FileCard = memo(function FileCard({
       select()
     }
   }, [select])
-  const webUrl = `${window.location.origin}`
-    + `/storage/${encodeURIComponent(connId)}/${encodeURIComponent(bucket)}/${encPath(prefix)}`
-    + `?preview=${encodeURIComponent(f.key)}`
+  const webUrl = absoluteUrl(
+    `/storage/${encodeURIComponent(connId)}/${encodeURIComponent(bucket)}/${encPath(prefix)}`
+    + `?preview=${encodeURIComponent(f.key)}`,
+  )
   const s3Url = `s3://${bucket}/${f.key}`
   const downloadUrl = api.downloadUrl(connId, bucket, f.key)
   const filename = f.key.split('/').pop() ?? 'file'
