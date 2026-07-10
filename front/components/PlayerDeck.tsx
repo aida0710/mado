@@ -32,21 +32,35 @@ function DeckAudio({
   onArrive: (id: string, el: HTMLAudioElement) => void
 }) {
   const { src } = useAudioSrc(track.connId, track.bucket, track.key, track.entryPath)
+  const elRef = useRef<HTMLAudioElement | null>(null)
+  // ref callback は識別子が安定していないと再レンダーのたびに detach(null) →
+  // attach(el) され、その隙間で audioRefs から要素が消える。register を親が
+  // useCallback で安定させ、ここも useCallback で包むことで、本当のマウント /
+  // アンマウントでしか audioRefs を触らない。
+  const setRef = useCallback((el: HTMLAudioElement | null) => {
+    elRef.current = el
+    register(track.id, el)
+  }, [register, track.id])
+
   // onArrive は「このトラックに <audio> が初めて現れた」1 回だけ通知する。
-  // inline の ref callback は再レンダーごとに detach/attach (null → el) される
-  // ため、ref の発火回数ではなくこのフラグで 1 回に絞る。register を先に呼び、
-  // onArrive 側から audioRefs 経由でも自分が見えるようにしておく。
+  //
+  // ref callback ではなく effect から呼ぶ。ref の attach は commit 中に走るため、
+  // 同じコミットで再レンダーされた兄弟トラックの ref はまだ張り直されておらず、
+  // onArrive が audioRefs 経由でマスターを探しても見つからないことがある
+  // (見つからないと後着トラックが 0 秒から鳴り始める)。effect なら全ての ref が
+  // 出揃った後に走る。arrivedRef で 1 回に絞るので毎コミット走っても害はない。
   const arrivedRef = useRef(false)
+  useEffect(() => {
+    const el = elRef.current
+    if (!el || arrivedRef.current) return
+    arrivedRef.current = true
+    onArrive(track.id, el)
+  })
+
   if (!src) return null
   return (
     <audio
-      ref={el => {
-        register(track.id, el)
-        if (el && !arrivedRef.current) {
-          arrivedRef.current = true
-          onArrive(track.id, el)
-        }
-      }}
+      ref={setRef}
       src={src}
       preload="metadata"
       onLoadedMetadata={e => {
@@ -80,6 +94,12 @@ export function PlayerDeck() {
   // 再生位置に関わらない命令的ハンドルなので state ではなく ref に置く。
   const graphsRef = useRef(new Map<string, TrackAudioGraph>())
   const ctxRef = useRef<AudioContext | null>(null)
+  // DeckAudio の ref callback を安定させるため空 deps。毎レンダーで新しい関数を
+  // 渡すと ref が detach/attach を繰り返し、その隙間で audioRefs から要素が消える。
+  const registerAudio = useCallback((id: string, el: HTMLAudioElement | null) => {
+    if (el) audioRefs.current.set(id, el)
+    else audioRefs.current.delete(id)
+  }, [])
   // トラックごとの再生時間。マスターシークバーの max はここから導出する
   // (audios() = ref 経由の読み出しなので render 中に直接呼ぶと react-hooks/refs
   // に引っかかる。onLoadedMetadata というイベントハンドラで拾って state 化する)。
@@ -163,9 +183,12 @@ export function PlayerDeck() {
     }
   }, [tracks, isMuted])
 
-  // 各トラックの波形 (キャッシュ済みが多い想定)。失敗は静かに無視。
+  // 各トラックの波形 (キャッシュ済みが多い想定)。失敗しても波形なしで続行する。
   // 同じレスポンスの meta.channels も拾う — L/R ボタンの有効判定に使うが、
   // そのためだけの追加リクエストは不要。
+  //
+  // 解析に失敗したときも channelsById に null を入れる。キーの有無が「チャンネル数を
+  // 調べ終えたか」を表すので、入れないと L/R が「取得中」のまま永久に無効になる。
   useEffect(() => {
     for (const t of tracks) {
       if (peaksById[t.id]) continue
@@ -174,12 +197,19 @@ export function PlayerDeck() {
           setPeaksById(cur => ({ ...cur, [t.id]: r.peaks }))
           setChannelsById(cur => ({ ...cur, [t.id]: r.meta?.channels ?? null }))
         })
-        .catch(() => { /* デッキでは波形なしで続行 */ })
+        .catch(() => {
+          setChannelsById(cur => (t.id in cur ? cur : { ...cur, [t.id]: null }))
+        })
     }
   }, [tracks, peaksById])
 
   // 外から removeTrack された (この component の ✕ を経由しない) トラックの
   // ノードを掃除する。durations に幽霊が残りうるのと同じ穴を塞ぐ防御。
+  //
+  // トラックが 0 件になったら ctx も畳む。✕ で 1 本ずつ消した場合、ピンが 1 件でも
+  // 残っていると BottomDock は PlayerDeck を描画し続ける (tracks 0 件の `return null`
+  // はフック実行後なのでアンマウントされない) ため、ここで閉じないと使われない
+  // AudioContext がオーディオスレッドごと居座る。
   useEffect(() => {
     const ids = new Set(tracks.map(t => t.id))
     for (const [id, g] of graphsRef.current) {
@@ -187,10 +217,13 @@ export function PlayerDeck() {
       g.dispose()
       graphsRef.current.delete(id)
     }
+    if (tracks.length === 0 && ctxRef.current) {
+      void ctxRef.current.close().catch(() => { /* 二重 close は無視 */ })
+      ctxRef.current = null
+    }
   }, [tracks])
 
-  // 本当の unmount でのみ走る (tracks 0 件の `return null` はフック実行後なので
-  // アンマウントされない — そちらの ctx 破棄は「クリア」ハンドラの責務)。
+  // 本当の unmount でのみ走る。
   useEffect(() => {
     const graphs = graphsRef.current
     const ctxHolder = ctxRef
@@ -231,7 +264,7 @@ export function PlayerDeck() {
       existing.setChannel(mode)
     } else {
       const ctx = (ctxRef.current ??= new AudioCtx())
-      void ctx.resume()
+      void ctx.resume().catch(() => { /* 既に running / close 済みなら無視 */ })
       const g = createTrackAudioGraph(ctx, el, mode)
       graphsRef.current.set(t.id, g)
       // ミュート状態を要素から gain へ引き継ぎ、要素側は必ず解除する。
@@ -250,7 +283,7 @@ export function PlayerDeck() {
     }
     // タブ復帰などで suspended に戻った ctx を起こす。L/R 未使用なら ctx は
     // 無い (null) ので no-op — 既定の再生経路には一切触らない。
-    void ctxRef.current?.resume()
+    void ctxRef.current?.resume().catch(() => { /* 既に running なら無視 */ })
     for (const a of audios()) void a.play()
     setPlaying(true)
   }
@@ -288,6 +321,11 @@ export function PlayerDeck() {
       next.add(id)
       return next
     })
+    // 現在のミュート / ソロを後着トラックにも適用する。ミュート反映 effect の依存は
+    // [tracks, isMuted] で、「<audio> が生えた」ことは含まれない。ここで明示しないと
+    // ソロ中に blob 解決したトラックが muted=false のまま鳴ってしまう。
+    // (グラフはまだ無い — 構築には <audio> が要るので、必ず要素側の muted で足りる)
+    el.muted = isMuted(id)
     if (!playing) return
     // マスターは必ず自分以外から選ぶ。後着が tracks の先頭スロットだと
     // audios()[0] は自分自身になり、シークがスキップされて 0 秒スタート →
@@ -327,6 +365,10 @@ export function PlayerDeck() {
             setReadyIds(new Set())
             setChannelById({})
             setChannelsById({})
+            // peaksById は「解析済みか」の番人も兼ねている。channelsById だけ捨てて
+            // ここを残すと、同じトラックを再追加しても解析 effect が skip され、
+            // チャンネル数が永久に不明のまま L/R が無効になる。
+            setPeaksById({})
             for (const g of graphsRef.current.values()) g.dispose()
             graphsRef.current.clear()
             // ブラウザは同時に開ける AudioContext 数に上限がある。全トラックが
@@ -348,10 +390,7 @@ export function PlayerDeck() {
         <DeckAudio
           key={t.id}
           track={t}
-          register={(id, el) => {
-            if (el) audioRefs.current.set(id, el)
-            else audioRefs.current.delete(id)
-          }}
+          register={registerAudio}
           onDuration={(id, d) => setDurations(cur => ({ ...cur, [id]: d }))}
           onArrive={onTrackArrive}
         />
@@ -368,10 +407,16 @@ export function PlayerDeck() {
               const mode = channelById[t.id] ?? 'both'
               // <audio> が生えるまではグラフを作れない (tar は blob 取得待ち)。
               // mono は splitter の output 1 が無音なので R を押させない。
+              //
+              // channelsById にキーが無い間は「まだ調べていない」= 押させない。
+              // 解析が返る前に mono で R を押されると無音になり、原因が見えないため
+              // (解析失敗時も null が入るので、ここで永久に無効化されることはない)。
               const ready = readyIds.has(t.id)
+              const channelsKnown = t.id in channelsById
               const splittable = canSplitChannels(channelsById[t.id])
-              const lrDisabled = !ready || !splittable
+              const lrDisabled = !ready || !channelsKnown || !splittable
               const lrTitle = !ready ? '取得中'
+                : !channelsKnown ? 'チャンネル数を調べています'
                 : !splittable ? 'モノラルのため分割できません'
                 : '選んだチャンネルを左右両方から鳴らす'
               return (
@@ -461,6 +506,14 @@ export function PlayerDeck() {
                       return next
                     })
                     setChannelsById(cur => {
+                      if (!(t.id in cur)) return cur
+                      const next = { ...cur }
+                      delete next[t.id]
+                      return next
+                    })
+                    // peaksById は解析 effect の「解析済みか」の番人でもある。残すと
+                    // 再追加時に skip され、チャンネル数が不明のまま L/R が無効になる。
+                    setPeaksById(cur => {
                       if (!(t.id in cur)) return cur
                       const next = { ...cur }
                       delete next[t.id]

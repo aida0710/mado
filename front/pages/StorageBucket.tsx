@@ -20,8 +20,11 @@ export default function StorageBucket({ connId }: Props) {
   // 直リンク (deep-link) で復元可能、選択するたびに URL も更新するので
   // ブラウザの戻る/進むも自然に効く。
   const [searchParams, setSearchParams] = useSearchParams()
-  const selected = searchParams.get('preview')
-  const selectedEntry = searchParams.get('entry')
+  // URLSearchParams.get は値なしキー (?preview= / ?entry=) に null ではなく '' を返す。
+  // 空文字列は「無し」として扱う — そのまま流すと、名前が空のエントリでモーダルが
+  // 開き、?entry= への無駄なリクエストまで走る (URL の貼り付け損ねで実際に起きる)。
+  const selected = searchParams.get('preview') || null
+  const selectedEntry = searchParams.get('entry') || null
 
   const setSelected = useCallback((key: string | null) => {
     setSearchParams(

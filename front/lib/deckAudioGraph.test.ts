@@ -8,10 +8,6 @@ import {
 } from './deckAudioGraph'
 
 describe('channelRouting', () => {
-  it('both はそのまま L→L / R→R', () => {
-    expect(channelRouting('both')).toEqual([[0, 0], [1, 1]])
-  })
-
   it('left は左 ch を左右へ複製する (片耳だけにならない)', () => {
     expect(channelRouting('left')).toEqual([[0, 0], [0, 1]])
   })
@@ -107,21 +103,47 @@ function splitterEdges(splitter: FakeNode, merger: FakeNode): Array<[number, num
     .map(e => [e.output as number, e.input as number])
 }
 
+// source の行き先ノード一覧。
+function sourceTargets(source: FakeNode): unknown[] {
+  return source.edges.map(e => e.target)
+}
+
 describe('createTrackAudioGraph', () => {
-  it('source → splitter → merger → gain → destination を張る', () => {
-    const { ctx, source, splitter, merger, gain, destination, el } = build()
+  it('merger → gain → destination は常に張られる', () => {
+    const { ctx, merger, gain, destination, el } = build()
     expect(ctx.createMediaElementSource).toHaveBeenCalledExactlyOnceWith(el)
-    expect(source.edges).toEqual([{ target: splitter, output: undefined, input: undefined }])
     expect(merger.edges).toEqual([{ target: gain, output: undefined, input: undefined }])
     expect(gain.edges).toEqual([{ target: destination, output: undefined, input: undefined }])
   })
 
-  it('初期モードの routing でエッジが張られる', () => {
-    const { splitter, merger } = build('right')
-    expect(splitterEdges(splitter, merger)).toEqual([[1, 0], [1, 1]])
+  it('both は splitter を通さず source を gain へ直結する', () => {
+    // 回帰ガード: splitter は discrete 解釈なのでモノラル入力だと output 1 が無音になり、
+    // both を [0→0, 1→1] で組むと右チャンネルが恒久的に死ぬ。直結ならチャンネル数に
+    // 関わらずネイティブ再生と同じ出力になる。
+    const { source, splitter, merger, gain } = build('both')
+    expect(sourceTargets(source)).toEqual([gain])
+    expect(sourceTargets(source)).not.toContain(splitter)
+    expect(splitterEdges(splitter, merger)).toEqual([])
   })
 
-  it('setChannel は splitter 発のエッジだけを張り替える (下流は触らない)', () => {
+  it('left / right は source を splitter へ通す', () => {
+    const l = build('left')
+    expect(sourceTargets(l.source)).toEqual([l.splitter])
+    expect(splitterEdges(l.splitter, l.merger)).toEqual([[0, 0], [0, 1]])
+
+    const r = build('right')
+    expect(sourceTargets(r.source)).toEqual([r.splitter])
+    expect(splitterEdges(r.splitter, r.merger)).toEqual([[1, 0], [1, 1]])
+  })
+
+  it('left → both に戻すと splitter が外れ、右チャンネルが復活する', () => {
+    const { graph, source, splitter, merger, gain } = build('left')
+    graph.setChannel('both')
+    expect(sourceTargets(source)).toEqual([gain])
+    expect(splitterEdges(splitter, merger)).toEqual([])
+  })
+
+  it('setChannel は source と splitter のエッジだけを張り替える (下流は触らない)', () => {
     const { graph, splitter, merger, gain, destination } = build('both')
     const disconnectsBefore = splitter.disconnectCount
 
@@ -134,12 +156,14 @@ describe('createTrackAudioGraph', () => {
     expect(gain.edges).toEqual([{ target: destination, output: undefined, input: undefined }])
   })
 
-  it('setChannel を繰り返してもエッジは 2 本のまま (張りっぱなしにならない)', () => {
-    const { graph, splitter, merger } = build('both')
+  it('setChannel を繰り返してもエッジは張りっぱなしにならない', () => {
+    const { graph, source, splitter, merger, gain } = build('both')
     graph.setChannel('left')
     graph.setChannel('right')
+    expect(splitterEdges(splitter, merger)).toEqual([[1, 0], [1, 1]])
     graph.setChannel('both')
-    expect(splitterEdges(splitter, merger)).toEqual([[0, 0], [1, 1]])
+    expect(splitterEdges(splitter, merger)).toEqual([])
+    expect(sourceTargets(source)).toEqual([gain])
   })
 
   it('setMuted は gain を 10ms の時定数で 0 / 1 へ寄せる (プチノイズ回避)', () => {

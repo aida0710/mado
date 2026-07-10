@@ -171,6 +171,14 @@ describe('PreviewArchive - URL 駆動のエントリ開閉 (?entry=)', () => {
     expect(within(dialog).getByText('notes.json')).toBeInTheDocument()
   })
 
+  it('?entry= が空文字列ならモーダルを開かない (URL の貼り付け損ね)', async () => {
+    // URLSearchParams.get('entry') は値なしキーに null ではなく '' を返す。
+    // 「無し」として扱わないと、名前が空のモーダルが開き無駄なフェッチまで走る。
+    renderUrlDriven({ initialEntry: '', onEntryChange: vi.fn() })
+    expect(await screen.findByText('notes.json')).toBeInTheDocument()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
   it('今のページに載っていないエントリでも名前だけで開ける (permalink の核心)', async () => {
     // ページングされた一覧に 'ghost.bin' は無いが、共有 URL からは直接開ける。
     // 本文は name から自前でフェッチするので size / type は無くてよい。

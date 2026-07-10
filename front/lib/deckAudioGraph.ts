@@ -10,16 +10,18 @@
 export type ChannelMode = 'both' | 'left' | 'right'
 export type ChannelSide = 'left' | 'right'
 
-// splitter の出力 ch → merger の入力 ch。left / right は選んだ ch を左右の
-// 両方へ複製する (= モノラル化) — 片耳だけ鳴ると聴き比べにならないため。
-const ROUTING: Record<ChannelMode, ReadonlyArray<readonly [number, number]>> = {
-  both: [[0, 0], [1, 1]],
+// splitter の出力 ch → merger の入力 ch。選んだ ch を左右の両方へ複製する
+// (= モノラル化) — 片耳だけ鳴ると聴き比べにならないため。
+//
+// both がここに無いのは意図的。both は splitter を通さず source を gain へ直結する
+// (createTrackAudioGraph 参照)。
+const ROUTING: Record<ChannelSide, ReadonlyArray<readonly [number, number]>> = {
   left: [[0, 0], [0, 1]],
   right: [[1, 0], [1, 1]],
 }
 
-export function channelRouting(mode: ChannelMode): ReadonlyArray<readonly [number, number]> {
-  return ROUTING[mode]
+export function channelRouting(side: ChannelSide): ReadonlyArray<readonly [number, number]> {
+  return ROUTING[side]
 }
 
 // 押されたボタンから次のモードを決める。既にそのチャンネルなら both に戻す
@@ -32,9 +34,10 @@ export function nextChannelMode(current: ChannelMode, pressed: ChannelSide): Cha
 // channelCount=2 / explicit / discrete なので、モノラル入力は output 1 が
 // 無音になり「R」を選んでも何も鳴らない → mono では L/R を使わせない。
 //
-// channels が null (ffprobe が返さない / 旧 API で meta 全体が null) のときは
-// true にフォールバックする。false に倒すと実ステレオまで機能を失うが、
-// true に倒して外した場合の実害は「mono で R が無音」だけで済む。
+// channels が null (ffprobe が返さない / 旧 API で meta 全体が null / 解析に失敗)
+// のときは true にフォールバックする。false に倒すと実ステレオまで機能を失う。
+// 外したときの実害は「mono で R を選ぶと無音」だけで、もう一度 R を押して both に
+// 戻せば直る (both は splitter を通らないため)。
 export function canSplitChannels(channels: number | null | undefined): boolean {
   if (channels == null) return true
   return channels >= 2
@@ -46,12 +49,18 @@ export interface TrackAudioGraph {
   dispose(): void
 }
 
-// source → splitter(2) → merger(2) → gain → destination。
+// both:        source → gain → destination
+// left/right:  source → splitter(2) → merger(2) → gain → destination
 //
-// source→splitter / merger→gain / gain→destination は張りっぱなしで、モード切替は
-// splitter→merger のエッジだけを張り替える。both もバイパスせず splitter/merger を
-// 通すことで切替が「エッジの張り直し」1 種類に収まり、gain (ミュート) の状態も
-// チャンネル切替をまたいで保たれる。
+// merger→gain / gain→destination は張りっぱなしで、モード切替は source の行き先と
+// splitter→merger のエッジだけを張り替える。gain (ミュート) の状態はチャンネル切替を
+// またいで保たれる。
+//
+// **both で splitter を通してはいけない。** ChannelSplitterNode は discrete 解釈なので
+// モノラル入力では output 1 が常に無音になり、both の [0→0, 1→1] が右チャンネルを
+// 殺してしまう。createMediaElementSource は不可逆なので、一度こうなるとトラックを
+// 削除して追加し直すまで右耳が戻らない。source を gain へ直結すれば、チャンネル数に
+// 関わらずネイティブ再生と同じ出力になる (3ch 以上も先頭 2ch に切り詰められない)。
 //
 // 注意: createMediaElementSource() は 1 つの要素につき 1 回しか呼べず、呼んだ
 // 瞬間からその <audio> のネイティブ出力は AudioContext 経由に切り替わって
@@ -66,13 +75,19 @@ export function createTrackAudioGraph(
   const merger = ctx.createChannelMerger(2)
   const gain = ctx.createGain()
 
-  source.connect(splitter)
   merger.connect(gain)
   gain.connect(ctx.destination)
 
   const setChannel = (mode: ChannelMode): void => {
-    // splitter 発のエッジを全部切ってから張り直す。merger より下流は触らない。
+    // source と splitter 発のエッジを切ってから張り直す。merger より下流は触らない。
+    // both のとき merger は無入力になるが、無音を足すだけなので害はない。
+    source.disconnect()
     splitter.disconnect()
+    if (mode === 'both') {
+      source.connect(gain)
+      return
+    }
+    source.connect(splitter)
     for (const [from, to] of channelRouting(mode)) splitter.connect(merger, from, to)
   }
   setChannel(initialMode)

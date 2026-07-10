@@ -265,8 +265,11 @@ export function PreviewArchive({ connId, bucket, k, initialEntry = null, onEntry
   // 戻る/進むがそのままモーダルの開閉になる。size はページに載っていれば拾い、
   // 載っていなければ (permalink で 2 ページ目以降のエントリに直接来た場合)
   // 名前だけで開く — TarEntryModal は本文を name から自前でフェッチする。
+  //
+  // 空文字列は「無し」として扱う。tar のエントリ名が空になることはないし、
+  // ?entry= (値なし) が来たときに名前が空のモーダルを開かせない。
   const openedEntry: OpenedEntry | null = urlDriven
-    ? (initialEntry == null
+    ? (!initialEntry
         ? null
         : data.entries.find(e => e.name === initialEntry)
           ?? (clicked?.name === initialEntry ? clicked : { name: initialEntry }))
