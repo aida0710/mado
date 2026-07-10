@@ -138,6 +138,16 @@ describe('PinnedPreviewCard - kind branching', () => {
   })
 })
 
+describe('PinnedPreviewCard - head モード', () => {
+  it('tar エントリのテキスト取得は maxBytes 付き URL を使う (100MB を解凍させない)', async () => {
+    vi.mocked(api.readHead).mockResolvedValue(new TextEncoder().encode('body'))
+    render(<PinnedPreviewCard item={item({ key: 's.tar', entryPath: 'x.bin', id: 'c|b|s.tar|x.bin' })} />)
+    await screen.findByText('body')
+    const calls = vi.mocked(api.tarEntryUrl).mock.calls
+    expect(calls.some(c => c[4]?.maxBytes === 65536)).toBe(true)
+  })
+})
+
 describe('PinnedPreviewCard - パスのコピー', () => {
   it('ファイル名をクリックするとフルパスがコピーされる (画面は basename しか出せない)', async () => {
     render(<PinnedPreviewCard item={item({

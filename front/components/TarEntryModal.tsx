@@ -5,6 +5,7 @@ import { fmtSize, prettyPrintJson } from '../lib/format'
 import { tarEntryWebUrl } from '../lib/route'
 import { copyToClipboard } from '../lib/clipboard'
 import { usePinnedPreviews } from '../lib/pinnedPreviews'
+import { TEXT_HEAD_BYTES } from '../lib/textSniff'
 import { useSniffedText } from '../lib/useSniffedText'
 import { CopyMenu, type MenuItem } from './CopyMenu'
 import { PreviewAudio } from './PreviewAudio'
@@ -23,7 +24,10 @@ interface Props {
 
 export function TarEntryModal({ connId, bucket, archiveKey, entry, onClose }: Props) {
   const kind = classifyEntry(entry.name)
+  // <img src> / DL / 生データ URL は本体を全部要る。
   const url = api.tarEntryUrl(connId, bucket, archiveKey, entry.name)
+  // テキスト判定は先頭だけで足りる。head モードでサーバーに 100MB を解凍させない。
+  const headUrl = api.tarEntryUrl(connId, bucket, archiveKey, entry.name, { maxBytes: TEXT_HEAD_BYTES })
   const { addPin } = usePinnedPreviews()
   // 人に送る用 (このエントリを開いた状態で復元される) と、curl / VLC 用の生データ。
   const copyItems: MenuItem[] = [
@@ -122,7 +126,7 @@ export function TarEntryModal({ connId, bucket, archiveKey, entry, onClose }: Pr
           )}
           {/* 画像 / 音声以外はすべてテキストとして開こうとする。
               中身がバイナリなら TextBody が「プレビュー非対応」を出す。 */}
-          {kind !== 'image' && kind !== 'audio' && <TextBody url={url} name={entry.name} />}
+          {kind !== 'image' && kind !== 'audio' && <TextBody url={headUrl} name={entry.name} />}
         </div>
       </div>
     </div>

@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { createReadStream } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { pack as tarPack } from 'tar-stream'
 import { mountStoragePreviewRoutes } from './storage-preview.js'
 
 const here = dirname(fileURLToPath(import.meta.url))
@@ -23,6 +24,7 @@ mountStoragePreviewRoutes(app, {
     PREVIEW_TEXT_LIMIT: 8,
     PREVIEW_TAR_ENTRY_LIMIT: 200,
     PREVIEW_TARXZ_BYTE_LIMIT: 1_000_000,
+    PREVIEW_TAR_ENTRY_MAX_BYTES: 100 * 1024 * 1024,
   },
 })
 
@@ -418,6 +420,113 @@ describe('GET /storage/:connId/preview/tar', () => {
       expect(stub.destroyed).toBe(true)
     } finally {
       process.off('uncaughtException', onUncaught)
+    }
+  })
+})
+
+// ── /preview/tar-entry ─────────────────────────────────────────────
+// head モード (?maxBytes=N) を含む。テスト用の app は
+// PREVIEW_TAR_ENTRY_MAX_BYTES を小さくして 413 を到達可能にする。
+
+const entryApp = new Hono()
+const ENTRY_MAX = 1024
+mountStoragePreviewRoutes(entryApp, {
+  getStorage,
+  env: {
+    PREVIEW_TEXT_LIMIT: 8,
+    PREVIEW_TAR_ENTRY_LIMIT: 200,
+    PREVIEW_TARXZ_BYTE_LIMIT: 1_000_000,
+    PREVIEW_TAR_ENTRY_MAX_BYTES: ENTRY_MAX,
+  },
+})
+
+async function packOneEntryTar(name: string, bodySize: number): Promise<Buffer> {
+  const p = tarPack()
+  const chunks: Buffer[] = []
+  const done = new Promise<void>((res, rej) => {
+    p.on('data', (c: Buffer) => chunks.push(c))
+    p.on('end', res)
+    p.on('error', rej)
+  })
+  p.entry({ name, size: bodySize }, Buffer.alloc(bodySize, 0x41)) // 'A'
+  p.finalize()
+  await done
+  return Buffer.concat(chunks)
+}
+
+function serveTar(tar: Buffer): void {
+  storageMock.on(GetObjectCommand).resolves({
+    Body: Readable.from(tar) as never,
+    ContentLength: tar.length,
+  })
+}
+
+const entryUrl = (entry: string, qs = '') =>
+  `/storage/${TEST_CONN_ID}/preview/tar-entry?bucket=b&key=a.tar&entry=${encodeURIComponent(entry)}${qs}`
+
+describe('GET /storage/:connId/preview/tar-entry', () => {
+  it('bucket / key / entry が欠けたら 400', async () => {
+    const res = await entryApp.request(`/storage/${TEST_CONN_ID}/preview/tar-entry?bucket=b&key=a.tar`)
+    expect(res.status).toBe(400)
+  })
+
+  it('アーカイブでない拡張子は 400', async () => {
+    const res = await entryApp.request(`/storage/${TEST_CONN_ID}/preview/tar-entry?bucket=b&key=a.txt&entry=x`)
+    expect(res.status).toBe(400)
+  })
+
+  it('存在しないエントリは 404', async () => {
+    serveTar(await packOneEntryTar('present.txt', 10))
+    const res = await entryApp.request(entryUrl('missing.txt'))
+    expect(res.status).toBe(404)
+  })
+
+  it('上限内なら 200 で本体を返し、拡張子から Content-Type を決める', async () => {
+    serveTar(await packOneEntryTar('notes.txt', 100))
+    const res = await entryApp.request(entryUrl('notes.txt'))
+    expect(res.status).toBe(200)
+    expect(res.headers.get('Content-Type')).toBe('text/plain; charset=utf-8')
+    expect(res.headers.get('X-Preview-Truncated')).toBeNull()
+    expect((await res.arrayBuffer()).byteLength).toBe(100)
+  })
+
+  it('maxBytes 無しで上限を超えるエントリは 413', async () => {
+    serveTar(await packOneEntryTar('huge.bin', ENTRY_MAX + 1))
+    const res = await entryApp.request(entryUrl('huge.bin'))
+    expect(res.status).toBe(413)
+    expect((await res.json() as { error: string }).error).toContain('exceeds preview limit')
+  })
+
+  it('maxBytes を付けると先頭だけを 200 で返し、切り詰めをヘッダで知らせる', async () => {
+    // 本文が上限を超えていても 413 にならない = スニッフ経路が壊れない。
+    serveTar(await packOneEntryTar('huge.bin', ENTRY_MAX + 1))
+    const res = await entryApp.request(entryUrl('huge.bin', '&maxBytes=64'))
+    expect(res.status).toBe(200)
+    expect(res.headers.get('X-Preview-Truncated')).toBe('1')
+    expect((await res.arrayBuffer()).byteLength).toBe(64)
+  })
+
+  it('maxBytes が本体より大きければ全部返し、切り詰めヘッダは付かない', async () => {
+    serveTar(await packOneEntryTar('small.bin', 32))
+    const res = await entryApp.request(entryUrl('small.bin', '&maxBytes=1000'))
+    expect(res.status).toBe(200)
+    expect(res.headers.get('X-Preview-Truncated')).toBeNull()
+    expect((await res.arrayBuffer()).byteLength).toBe(32)
+  })
+
+  it('maxBytes はサーバー側の上限を超えられない', async () => {
+    // maxBytes=999999 でも byteLimit は ENTRY_MAX に丸められる。
+    serveTar(await packOneEntryTar('huge.bin', ENTRY_MAX + 500))
+    const res = await entryApp.request(entryUrl('huge.bin', '&maxBytes=999999'))
+    expect(res.status).toBe(200)
+    expect((await res.arrayBuffer()).byteLength).toBe(ENTRY_MAX)
+  })
+
+  it('不正な maxBytes (0 / 負 / 非数値) は head モードにならない', async () => {
+    for (const bad of ['0', '-1', 'abc']) {
+      serveTar(await packOneEntryTar('huge.bin', ENTRY_MAX + 1))
+      const res = await entryApp.request(entryUrl('huge.bin', `&maxBytes=${bad}`))
+      expect(res.status, `maxBytes=${bad}`).toBe(413)
     }
   })
 })

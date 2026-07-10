@@ -75,7 +75,7 @@ export function createDecompressor(kind: ArchiveKind): NodeJS.ReadWriteStream {
 
 export interface TarEntryBody {
   buffer: Buffer
-  /** byteLimit を超えてエントリ本体が打ち切られた場合 true。呼び出し元は 413 を返すべき。 */
+  /** エントリ本体が byteLimit より大きく、途中で打ち切った場合 true。 */
   truncated: boolean
 }
 
@@ -83,7 +83,12 @@ export interface TarEntryBody {
 // tar-entry プレビュールートで使用。`byteLimit` で本体サイズを制限し、
 // 悪意あるアーカイブエントリによるメモリ枯渇を防ぐ。
 // 上限到達時はバッファに収集済みのバイトと `truncated: true` を返し、
-// 呼び出し元が 413 等で明示的に扱えるようにする (silent truncation を避ける)。
+// 呼び出し元が 413 を返すか、先頭だけのプレビューとして扱うかを決める。
+//
+// 上限に達したら**その場でストリームを畳む**。以前は末尾までドレインしていたため、
+// 先頭 64KB しか要らない場面でも 100MB のエントリを丸ごと解凍していた。
+// 本体がちょうど byteLimit のときは truncated=false を保つ必要があるので、
+// 「上限を超えるデータが実際に来た」ことを確認してから畳む。
 export function extractTarEntry(
   source: NodeJS.ReadableStream,
   kind: ArchiveKind,
@@ -115,26 +120,37 @@ export function extractTarEntry(
       found = true
       const chunks: Buffer[] = []
       let total = 0
-      stream.on('data', (chunk: Buffer) => {
-        if (total >= byteLimit) {
-          truncated = true
-          return
-        }
-        const remaining = byteLimit - total
-        const piece = chunk.byteLength <= remaining ? chunk : chunk.subarray(0, remaining)
-        chunks.push(piece)
-        total += piece.byteLength
-        if (chunk.byteLength > remaining) {
-          // chunk を途中で切り捨てた = 本体は byteLimit より大きい。
-          truncated = true
-        }
-      })
-      stream.on('end', () => {
-        // パイプラインの残りを破棄してダウンロードを停止する。
+      let settled = false
+
+      // パイプラインの残りを破棄してダウンロード / 解凍を止め、1 回だけ解決する。
+      const finish = (): void => {
+        if (settled) return
+        settled = true
         ;(source as NodeJS.ReadableStream & { destroy?: () => void }).destroy?.()
         ext.destroy()
         resolveP({ buffer: Buffer.concat(chunks), truncated })
+      }
+
+      stream.on('data', (chunk: Buffer) => {
+        if (settled) return
+        if (total >= byteLimit) {
+          // 上限ちょうどで止めていたところへ次のデータが来た = 本体は上限より大きい。
+          truncated = true
+          finish()
+          return
+        }
+        const remaining = byteLimit - total
+        if (chunk.byteLength > remaining) {
+          chunks.push(chunk.subarray(0, remaining))
+          total = byteLimit
+          truncated = true
+          finish()
+          return
+        }
+        chunks.push(chunk)
+        total += chunk.byteLength
       })
+      stream.on('end', finish)
       stream.resume()
     })
 

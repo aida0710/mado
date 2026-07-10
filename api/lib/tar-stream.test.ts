@@ -227,6 +227,75 @@ describe('extractTarEntry', () => {
       process.off('uncaughtException', onUncaught)
     }
   })
+
+  // ── byteLimit の境界と早期打ち切り ─────────────────────────────
+
+  // 名前とサイズを指定して 1 エントリの tar を丸ごと組み立てる。
+  async function packTar(name: string, bodySize: number): Promise<Buffer> {
+    const p = tarPack()
+    const chunks: Buffer[] = []
+    const done = new Promise<void>((res, rej) => {
+      p.on('data', (c: Buffer) => chunks.push(c))
+      p.on('end', res)
+      p.on('error', rej)
+    })
+    p.entry({ name, size: bodySize }, Buffer.alloc(bodySize, 7))
+    p.finalize()
+    await done
+    return Buffer.concat(chunks)
+  }
+
+  // source から実際に読み出されたバイト数を数える Readable。
+  // 早期打ち切りが効いていれば、tar 全体より十分少ないバイト数しか読まれない。
+  function countingStream(buf: Buffer, chunkSize: number) {
+    let pos = 0
+    const state = { bytesRead: 0 }
+    const stream = new Readable({
+      read() {
+        if (pos >= buf.length) { this.push(null); return }
+        const end = Math.min(pos + chunkSize, buf.length)
+        const chunk = buf.subarray(pos, end)
+        pos = end
+        state.bytesRead += chunk.length
+        this.push(chunk)
+      },
+    })
+    return { stream, state }
+  }
+
+  it('本体が byteLimit より小さければ全部返り truncated=false', async () => {
+    const tar = await packTar('small.bin', 100)
+    const r = await extractTarEntry(Readable.from(tar), 'tar', 'small.bin', 1024)
+    expect(r?.truncated).toBe(false)
+    expect(r?.buffer.byteLength).toBe(100)
+  })
+
+  it('本体が byteLimit ちょうどなら truncated=false (境界)', async () => {
+    const tar = await packTar('exact.bin', 1024)
+    const r = await extractTarEntry(Readable.from(tar), 'tar', 'exact.bin', 1024)
+    expect(r?.truncated).toBe(false)
+    expect(r?.buffer.byteLength).toBe(1024)
+  })
+
+  it('本体が byteLimit を超えたら先頭 byteLimit バイト + truncated=true', async () => {
+    const tar = await packTar('big.bin', 4096)
+    const r = await extractTarEntry(Readable.from(tar), 'tar', 'big.bin', 1024)
+    expect(r?.truncated).toBe(true)
+    expect(r?.buffer.byteLength).toBe(1024)
+    expect(r?.buffer.every(b => b === 7)).toBe(true)
+  })
+
+  it('byteLimit に達したらその場でストリームを畳む (末尾までドレインしない)', async () => {
+    // 1MB の本体を 64KB ずつ流し、先頭 1KB だけ要求する。
+    const tar = await packTar('huge.bin', 1024 * 1024)
+    const { stream, state } = countingStream(tar, 64 * 1024)
+    const r = await extractTarEntry(stream, 'tar', 'huge.bin', 1024)
+    expect(r?.truncated).toBe(true)
+    expect(r?.buffer.byteLength).toBe(1024)
+    // 上限到達で畳むので、tar 全体 (1MB 超) を読み切っていないこと。
+    // チャンク単位なので最初の 1〜2 チャンクで止まる。
+    expect(state.bytesRead).toBeLessThan(tar.length / 2)
+  })
 })
 
 describe('isMacOsMetadata', () => {

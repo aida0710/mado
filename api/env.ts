@@ -23,6 +23,9 @@ const schema = z.object({
   PREVIEW_TEXT_LIMIT: z.coerce.number().default(65536),
   PREVIEW_TAR_ENTRY_LIMIT: z.coerce.number().default(200),
   PREVIEW_TARXZ_BYTE_LIMIT: z.coerce.number().default(268435456),
+  // tar エントリ 1 つをメモリに載せる上限 (100 MB)。api/lib/media-service.ts の
+  // TAR_ENTRY_MAX_BYTES と同値。片方を変えたら他方も変えること。
+  PREVIEW_TAR_ENTRY_MAX_BYTES: z.coerce.number().default(104857600),
   // media-worker (波形/スペクトログラム解析) 関連。全て default 付きで
   // 既存デプロイの .env を変更せずに済む。
   MEDIA_CONCURRENCY: z.coerce.number().default(3),

@@ -16,17 +16,18 @@ export interface PreviewEnv {
   PREVIEW_TEXT_LIMIT: number
   PREVIEW_TAR_ENTRY_LIMIT: number
   PREVIEW_TARXZ_BYTE_LIMIT: number
+  /**
+   * メモリにバッファする tar エントリ 1 つのサイズ上限。既定 100 MB は
+   * 典型的な WebDataset の音声サンプルをカバーしつつ、悪意あるアーカイブによる
+   * ダッシュボードの OOM を防ぐ。media-service.ts の TAR_ENTRY_MAX_BYTES と同値。
+   */
+  PREVIEW_TAR_ENTRY_MAX_BYTES: number
 }
 
 export interface StoragePreviewDeps {
   getStorage: GetStorage
   env: PreviewEnv
 }
-
-// メモリにバッファするtarエントリ1つのサイズ上限。100 MB は
-// 典型的な WebDataset の音声サンプルをカバーしつつ、悪意あるアーカイブによる
-// ダッシュボードの OOM を防ぐ。
-const TAR_ENTRY_MAX_BYTES = 100 * 1024 * 1024
 
 const IMAGE_MIME: Record<string, string> = {
   jpg: 'image/jpeg',
@@ -83,6 +84,15 @@ function entryContentType(name: string): string {
   if (e === 'json') return 'application/json; charset=utf-8'
   if (TEXT_EXT.has(e)) return 'text/plain; charset=utf-8'
   return 'application/octet-stream'
+}
+
+// 正の整数のクエリ値。未指定 / 数値でない / 0 以下はすべて null に倒す
+// (不正な値でモードが切り替わらないようにする)。
+function parsePositiveInt(raw: string | undefined): number | null {
+  if (raw == null) return null
+  const n = Number(raw)
+  if (!Number.isFinite(n) || n <= 0) return null
+  return Math.floor(n)
 }
 
 async function readN(
@@ -438,29 +448,39 @@ export function mountStoragePreviewRoutes(app: Hono, deps: StoragePreviewDeps): 
       return storageError(c, e)
     }
 
+    // ?maxBytes=N を付けると「先頭 N バイトだけ」を 200 で返す (head モード)。
+    // テキストか判定するだけのために 100MB のエントリを丸ごと解凍するのを避ける
+    // ためのもので、クライアント側の abort はここまで届かない
+    // (c.req.raw.signal は未配線)。付けなければ従来どおり全量 + 超過は 413。
+    const maxBytes = deps.env.PREVIEW_TAR_ENTRY_MAX_BYTES
+    const headBytes = parsePositiveInt(c.req.query('maxBytes'))
+    const byteLimit = headBytes != null ? Math.min(headBytes, maxBytes) : maxBytes
+
     let result: { buffer: Buffer; truncated: boolean } | null
     try {
-      result = await extractTarEntry(stream, kind, entry, TAR_ENTRY_MAX_BYTES)
+      result = await extractTarEntry(stream, kind, entry, byteLimit)
     } catch (e) {
       return c.json({ error: (e as Error).message }, 500)
     }
     if (!result) {
       return c.json({ error: `entry not found: ${entry}` }, 404)
     }
-    if (result.truncated) {
+    if (result.truncated && headBytes == null) {
       return c.json({
-        error: `entry exceeds preview limit (${TAR_ENTRY_MAX_BYTES} bytes)`,
+        error: `entry exceeds preview limit (${maxBytes} bytes)`,
       }, 413)
     }
 
     const buf = result.buffer
     const body = new Uint8Array(buf.byteLength)
     body.set(buf)
-    return new Response(body, {
-      headers: {
-        'Content-Type': entryContentType(entry),
-        'Content-Length': String(buf.byteLength),
-      },
-    })
+    const headers: Record<string, string> = {
+      'Content-Type': entryContentType(entry),
+      'Content-Length': String(buf.byteLength),
+    }
+    // head モードで実際に切り詰めたことを呼び出し側から見えるようにしておく
+    // (プレビューが「全部」なのか「先頭だけ」なのかを区別したくなった時のため)。
+    if (result.truncated) headers['X-Preview-Truncated'] = '1'
+    return new Response(body, { headers })
   })
 }
