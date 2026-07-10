@@ -17,6 +17,7 @@ describe('loadEnv', () => {
     expect(env.ALLOWED_ORIGINS).toEqual(['http://localhost:5173'])
     expect(env.PREVIEW_TEXT_LIMIT).toBe(65536) // デフォルト値
     expect(env.PREVIEW_TAR_ENTRY_LIMIT).toBe(200)
+    expect(env.PREVIEW_TAR_ENTRY_MAX_BYTES).toBe(100 * 1024 * 1024)
   })
 
   it('splits ALLOWED_ORIGINS by comma + trims spaces + drops empty', () => {
