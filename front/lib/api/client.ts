@@ -3,11 +3,13 @@ import {
   Connection,
   ConnectionList,
   FavoriteBuckets,
+  LineageLinks,
   ListBuckets,
   MediaAnalyze,
   Note,
   NoteHistoryList,
   NoteHistoryVersion,
+  PostLineageLinkOk,
   PutNoteOk,
   PutReadmeOk,
   Readme,
@@ -44,6 +46,7 @@ const readmeCache    = new TTLCache<z.infer<typeof Readme>>(LONG_CACHE_TTL_MS,  
 const tarCache       = new TTLCache<z.infer<typeof TarPreview>>(CACHE_TTL_MS)
 const bucketsCache   = new TTLCache<z.infer<typeof ListBuckets>>(LONG_CACHE_TTL_MS,    { persistKey: 'mado.cache.buckets' })
 const favoritesCache = new TTLCache<z.infer<typeof FavoriteBuckets>>(CACHE_TTL_MS)
+const lineageLinksCache = new TTLCache<z.infer<typeof LineageLinks>>(CACHE_TTL_MS)
 
 // 以前 tar も localStorage に永続化していたので、その残骸を起動時に一度だけ
 // 掃除する。今のビルドはこのキーを読み書きしないため、放置しても害は無いが
@@ -492,6 +495,48 @@ export const api = {
     )
     if (!res.ok) throw new Error(res.statusText)
     favoritesCache.invalidate(k('favorites', connId))
+  },
+
+  lineageLinks: (connId: string) =>
+    lineageLinksCache.get(k('lineage-links', connId), () =>
+      getJson(`${API_BASE}/storage/${encodeURIComponent(connId)}/lineage-links`, LineageLinks),
+    ),
+
+  invalidateLineageLinks: (connId: string): void => {
+    lineageLinksCache.invalidate(k('lineage-links', connId))
+  },
+
+  addLineageLink: async (
+    connId: string,
+    parent: { bucket: string; path: string },
+    child: { bucket: string; path: string },
+    editor: string,
+  ): Promise<number> => {
+    const res = await fetch(`${API_BASE}/storage/${encodeURIComponent(connId)}/lineage-links`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ parent, child, editor }),
+    })
+    if (!res.ok) {
+      let msg = res.statusText
+      try {
+        const e = (await res.json()) as { error?: string }
+        if (e.error) msg = e.error
+      } catch { /* statusText をそのまま使う */ }
+      throw new Error(msg)
+    }
+    const parsed = PostLineageLinkOk.parse(await res.json())
+    lineageLinksCache.invalidate(k('lineage-links', connId))
+    return parsed.id
+  },
+
+  removeLineageLink: async (connId: string, id: number): Promise<void> => {
+    const res = await fetch(
+      `${API_BASE}/storage/${encodeURIComponent(connId)}/lineage-links/${id}`,
+      { method: 'DELETE' },
+    )
+    if (!res.ok) throw new Error(res.statusText)
+    lineageLinksCache.invalidate(k('lineage-links', connId))
   },
 
   // 該当キャッシュエントリが「いつ S3 から取得されたか」を Date で返す。
