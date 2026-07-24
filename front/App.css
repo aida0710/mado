@@ -1361,3 +1361,18 @@ pre { font-size: 12px; }
 .lineage-add__title { margin: 0 0 var(--space-2); font: 600 13px/1.3 var(--font-sans); }
 .lineage-add__target { margin: 0 0 var(--space-3); font: 400 12px/1.4 var(--font-mono); color: var(--ink-9); }
 .lineage-add__editor { display: flex; flex-direction: column; gap: 4px; font: 400 12px/1.3 var(--font-sans); }
+
+/* ====================================================================
+   StorageBucket — 一覧 / 家系図 タブ
+   ==================================================================== */
+.storage-bucket__tabs { display: flex; gap: var(--space-2); margin: var(--space-2) 0; }
+.storage-bucket__tab {
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  padding: 6px 2px;
+  font: 500 12.5px/1.3 var(--font-sans);
+  color: var(--ink-7);
+  cursor: pointer;
+}
+.storage-bucket__tab[aria-selected="true"] { color: var(--ink-12); border-bottom-color: var(--ink-12); }
