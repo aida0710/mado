@@ -1243,3 +1243,43 @@ pre { font-size: 12px; }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* ====================================================================
+   家系図 — グラフ描画
+   ==================================================================== */
+.lineage-canvas {
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+  overflow-x: auto;
+  padding: var(--space-5);
+}
+.lineage-canvas__empty { padding: var(--space-4); font: 400 13px/1.5 var(--font-sans); color: var(--ink-7); }
+.lineage-column {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  flex: 0 0 auto;
+}
+.lineage-column--center { position: relative; }
+.lineage-node {
+  background: var(--paper);
+  border: 1px solid var(--color-rule-strong);
+  border-radius: var(--radius-1);
+  padding: 8px 12px;
+  font: 400 12px/1.3 var(--font-mono);
+  color: var(--ink-11);
+  cursor: pointer;
+  white-space: nowrap;
+  text-align: left;
+}
+.lineage-node:hover { background: var(--ink-1); }
+.lineage-node[data-emphasize] {
+  background: var(--ink-12);
+  color: var(--paper);
+  border-color: var(--ink-12);
+  font-weight: 600;
+}
+.lineage-edge-list { margin: 0; padding: var(--space-4); list-style: none; display: flex; flex-direction: column; gap: var(--space-2); }
+.lineage-edge-row { display: flex; align-items: center; gap: var(--space-2); }
+.lineage-edge-arrow { color: var(--ink-5); }
