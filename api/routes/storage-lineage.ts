@@ -47,26 +47,20 @@ export function mountStorageLineageRoutes(app: Hono, deps: StorageLineageDeps): 
     if (parent.bucket === child.bucket && parent.path === child.path) {
       return c.json({ error: 'parent and child must differ' }, 400)
     }
-    // ON CONFLICT DO NOTHING で重複登録を無害化しつつ、新規/既存いずれでも id を
+    // ON CONFLICT DO UPDATE で重複登録を無害化しつつ、新規/既存いずれでも id を
     // 返す (フロントが「解除」ボタンへ即座に紐づける id を必要とするため)。
-    // ins の INSERT と後段の SELECT は同じ statement 内の snapshot を共有するため
-    // (Postgres の data-modifying CTE の仕様)、成功時は ins だけが 1 行返り、
-    // 衝突時は後段の SELECT だけが 1 行返る — どちらの枝でも常にちょうど1行になる。
+    // DO UPDATE は (DO NOTHING と違い) 衝突時も対象行をロックして必ず1行返す
+    // ことが Postgres で保証されているため、DO NOTHING + フォールバック SELECT
+    // 方式で起きていた「両方 0 行になる」並行 POST 時のレースが発生しない。
+    // created_by は EXCLUDED を使わず既存値へ書き戻す no-op にしているため、
+    // 重複 POST があっても最初の作成者名はそのまま維持される。
     const r = await deps.pools.rw.query(
-      `WITH ins AS (
-         INSERT INTO storage_lineage_links
-           (connection_id, parent_bucket, parent_path, child_bucket, child_path, created_by)
-         VALUES ($1, $2, $3, $4, $5, $6)
-         ON CONFLICT (connection_id, parent_bucket, parent_path, child_bucket, child_path)
-         DO NOTHING
-         RETURNING id
-       )
-       SELECT id FROM ins
-       UNION ALL
-       SELECT id FROM storage_lineage_links
-        WHERE connection_id = $1 AND parent_bucket = $2 AND parent_path = $3
-          AND child_bucket = $4 AND child_path = $5
-        LIMIT 1`,
+      `INSERT INTO storage_lineage_links
+         (connection_id, parent_bucket, parent_path, child_bucket, child_path, created_by)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       ON CONFLICT (connection_id, parent_bucket, parent_path, child_bucket, child_path)
+       DO UPDATE SET created_by = storage_lineage_links.created_by
+       RETURNING id`,
       [connId, parent.bucket, parent.path, child.bucket, child.path, editor],
     )
     return c.json({ ok: true, id: Number(r.rows[0].id) })
