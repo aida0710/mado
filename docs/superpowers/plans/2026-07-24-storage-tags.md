@@ -926,7 +926,7 @@ const tagAssignmentsCache  = new TTLCache<z.infer<typeof TagAssignmentMap>>(CACH
     connId: string, bucket: string, kind: TargetKind, paths: string[],
   ): Promise<z.infer<typeof TagAssignmentMap>> => {
     if (paths.length === 0) return Promise.resolve({})
-    const cacheKey = k('tagAssignments', connId, bucket, kind, paths.join(' '))
+    const cacheKey = k('tagAssignments', connId, bucket, kind, ...paths)
     return tagAssignmentsCache.get(cacheKey, () => {
       const search = new URLSearchParams({ bucket, kind })
       for (const p of paths) search.append('paths', p)
