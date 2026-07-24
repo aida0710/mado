@@ -22,6 +22,22 @@ const UpdateTagBody = z.object({
   color: ColorSchema.optional(),
 })
 
+const TargetKindSchema = z.enum(['bucket', 'prefix', 'file'])
+
+const AssignmentBody = z.object({
+  bucket: z.string().min(1),
+  kind: TargetKindSchema,
+  path: z.string(),
+  tagId: z.string().min(1),
+})
+
+// kind='bucket' は対象がバケット自体 1 つなので path を '' に固定する。
+// 呼び出し側が何を渡しても同じキーに正規化することで、
+// バケット自体のタグが複数の path に分裂しないようにする。
+function normalizePath(kind: z.infer<typeof TargetKindSchema>, path: string): string {
+  return kind === 'bucket' ? '' : path
+}
+
 interface TagRow {
   id: string
   name: string
@@ -97,6 +113,58 @@ export function mountStorageTagsRoutes(app: Hono, deps: StorageTagsDeps): void {
     const id = c.req.param('id')
     const r = await deps.pools.rw.query(`DELETE FROM storage_tags WHERE id = $1`, [id])
     if (r.rowCount === 0) return c.json({ error: 'not found' }, 404)
+    return c.json({ ok: true })
+  })
+
+  app.get('/storage/:connId/tags', async c => {
+    const connId = c.req.param('connId')
+    const bucket = c.req.query('bucket')
+    if (!bucket) return c.json({ error: 'bucket is required' }, 400)
+    const kindRaw = c.req.query('kind')
+    const kindParsed = TargetKindSchema.safeParse(kindRaw)
+    if (!kindParsed.success) return c.json({ error: 'kind must be bucket|prefix|file' }, 400)
+    const kind = kindParsed.data
+    const paths = c.req.queries('paths') ?? []
+    if (paths.length === 0) return c.json({})
+
+    const r = await deps.pools.ro.query<{ target_path: string; tag_id: string }>(
+      `SELECT target_path, tag_id FROM storage_tag_assignments
+         WHERE connection_id = $1 AND bucket = $2 AND target_kind = $3
+           AND target_path = ANY($4::text[])`,
+      [connId, bucket, kind, paths.map(p => normalizePath(kind, p))],
+    )
+    const out: Record<string, string[]> = {}
+    for (const row of r.rows) {
+      (out[row.target_path] ??= []).push(row.tag_id)
+    }
+    return c.json(out)
+  })
+
+  app.put('/storage/:connId/tags', async c => {
+    const connId = c.req.param('connId')
+    const parsed = AssignmentBody.safeParse(await c.req.json().catch(() => null))
+    if (!parsed.success) return c.json({ error: parsed.error.message }, 400)
+    const { bucket, kind, path, tagId } = parsed.data
+    await deps.pools.rw.query(
+      `INSERT INTO storage_tag_assignments (tag_id, connection_id, bucket, target_kind, target_path)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (connection_id, bucket, target_kind, target_path, tag_id) DO NOTHING`,
+      [tagId, connId, bucket, kind, normalizePath(kind, path)],
+    )
+    return c.json({ ok: true })
+  })
+
+  app.delete('/storage/:connId/tags', async c => {
+    const connId = c.req.param('connId')
+    const parsed = AssignmentBody.safeParse(await c.req.json().catch(() => null))
+    if (!parsed.success) return c.json({ error: parsed.error.message }, 400)
+    const { bucket, kind, path, tagId } = parsed.data
+    await deps.pools.rw.query(
+      `DELETE FROM storage_tag_assignments
+         WHERE tag_id = $1 AND connection_id = $2 AND bucket = $3
+           AND target_kind = $4 AND target_path = $5`,
+      [tagId, connId, bucket, kind, normalizePath(kind, path)],
+    )
     return c.json({ ok: true })
   })
 }

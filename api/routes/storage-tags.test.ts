@@ -126,3 +126,78 @@ describe('タグレジストリ', () => {
     expect(remaining.rows).toEqual([])
   })
 })
+
+describe('タグ割り当て', () => {
+  async function createTag(name: string, color = '#123456'): Promise<TagRow> {
+    return (await (await app.request('/tags', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, color }),
+    })).json()) as TagRow
+  }
+
+  beforeEach(async () => {
+    await seedConnection(pools, 'conn000001')
+  })
+
+  it('GET はバッチで path→tagId[] を返す (割り当てなしは空配列)', async () => {
+    const tag = await createTag('A')
+    await app.request('/storage/conn000001/tags', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ bucket: 'bkt', kind: 'prefix', path: 'a/', tagId: tag.id }),
+    })
+
+    const res = await app.request(
+      '/storage/conn000001/tags?bucket=bkt&kind=prefix&paths=a/&paths=b/',
+    )
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ 'a/': [tag.id] })
+  })
+
+  it('PUT は冪等 (同じ組み合わせを二度投げてもエラーにならない)', async () => {
+    const tag = await createTag('B')
+    const body = JSON.stringify({ bucket: 'bkt', kind: 'file', path: 'x.txt', tagId: tag.id })
+    const r1 = await app.request('/storage/conn000001/tags', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body,
+    })
+    const r2 = await app.request('/storage/conn000001/tags', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body,
+    })
+    expect(r1.status).toBe(200)
+    expect(r2.status).toBe(200)
+    const res = await app.request('/storage/conn000001/tags?bucket=bkt&kind=file&paths=x.txt')
+    expect(await res.json()).toEqual({ 'x.txt': [tag.id] })
+  })
+
+  it('kind=bucket のとき path は "" に正規化される', async () => {
+    const tag = await createTag('C')
+    await app.request('/storage/conn000001/tags', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ bucket: 'bkt', kind: 'bucket', path: 'ignored', tagId: tag.id }),
+    })
+    const res = await app.request('/storage/conn000001/tags?bucket=bkt&kind=bucket&paths=')
+    expect(await res.json()).toEqual({ '': [tag.id] })
+  })
+
+  it('DELETE で割り当てを解除できる', async () => {
+    const tag = await createTag('D')
+    const body = JSON.stringify({ bucket: 'bkt', kind: 'prefix', path: 'a/', tagId: tag.id })
+    await app.request('/storage/conn000001/tags', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body,
+    })
+    const del = await app.request('/storage/conn000001/tags', {
+      method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body,
+    })
+    expect(del.status).toBe(200)
+    const res = await app.request('/storage/conn000001/tags?bucket=bkt&kind=prefix&paths=a/')
+    expect(await res.json()).toEqual({})
+  })
+
+  it('paths が空なら GET は空オブジェクトを返す', async () => {
+    const res = await app.request('/storage/conn000001/tags?bucket=bkt&kind=prefix')
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({})
+  })
+})
