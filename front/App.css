@@ -1190,3 +1190,56 @@ pre { font-size: 12px; }
   background: var(--ink-0);
   font-style: italic;
 }
+
+/* ====================================================================
+   家系図 — ノードポップアップ
+   ==================================================================== */
+.modal-backdrop--lineage-node { z-index: 55; }
+.modal--lineage-node {
+  width: min(480px, 100%);
+  max-width: 480px;
+  max-height: calc(100vh - var(--space-6));
+  display: flex;
+  flex-direction: column;
+}
+.lineage-popup__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding-bottom: var(--space-2);
+}
+.lineage-popup__title {
+  margin: 0;
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 600 13px/1.4 var(--font-mono);
+}
+.lineage-popup__body {
+  max-height: 40vh;
+  overflow: auto;
+}
+.lineage-popup__unsupported { font: 400 12px/1.5 var(--font-sans); color: var(--ink-7); }
+.lineage-popup__neighbours {
+  margin-top: var(--space-3);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--rule);
+}
+.lineage-popup__neighbour-list { margin: 0 0 var(--space-2); padding: 0; list-style: none; }
+.lineage-popup__neighbour {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: 4px 0;
+  font: 400 12px/1.4 var(--font-mono);
+}
+.lineage-popup__neighbour-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
