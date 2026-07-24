@@ -15,6 +15,7 @@ import { mountStorageMediaRoutes } from './routes/storage-media.js'
 import { mountStorageFavoritesRoutes } from './routes/storage-favorites.js'
 import { mountConnectionsRoutes } from './routes/connections.js'
 import { mountNotesRoutes } from './routes/notes.js'
+import { mountStorageTagsRoutes } from './routes/storage-tags.js'
 
 // LAN ダッシュボード: 1 つのストリーム teardown 起因の未捕捉例外で全ユーザーの
 // リクエストを巻き添えにしない。root cause は都度直す前提の最後の砦 (ログは大声で)。
@@ -50,6 +51,7 @@ mountStorageMediaRoutes(api, {
 })
 mountStorageFavoritesRoutes(api, { pools })
 mountNotesRoutes(api, { pools })
+mountStorageTagsRoutes(api, { pools })
 
 app.route('/api/internal', api)
 
