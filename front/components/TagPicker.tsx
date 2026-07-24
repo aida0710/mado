@@ -30,16 +30,30 @@ export function TagPicker({
     const wasAssigned = assigned.has(tag.id)
     setError(null)
     setBusyId(tag.id)
-    const next = new Set(assigned)
-    if (wasAssigned) next.delete(tag.id); else next.add(tag.id)
-    setAssigned(next)
+    // 楽観更新。他のタグの操作が並行して進行中でも壊れないよう、
+    // 常に最新の状態 (prev) を起点に自分自身のタグだけを変更する。
+    // このトグル自身が確定させる結果を settled に控えておき、成功時に
+    // そのまま onChange へ渡す (outer の assigned は以降一切読まない)。
+    let settled: string[] = []
+    setAssigned(prev => {
+      const next = new Set(prev)
+      if (wasAssigned) next.delete(tag.id); else next.add(tag.id)
+      settled = [...next]
+      return next
+    })
     try {
       if (wasAssigned) await api.unassignTag(connId, bucket, kind, path, tag.id)
       else await api.assignTag(connId, bucket, kind, path, tag.id)
-      onChange([...next])
+      onChange(settled)
     } catch (e) {
       // 失敗時はチェック状態を戻す (楽観更新のロールバック)。
-      setAssigned(assigned)
+      // outer の assigned は参照せず、最新状態 (prev) に対して
+      // 自分自身のタグの変更だけを打ち消す。
+      setAssigned(prev => {
+        const rolledBack = new Set(prev)
+        if (wasAssigned) rolledBack.add(tag.id); else rolledBack.delete(tag.id)
+        return rolledBack
+      })
       setError((e as Error).message)
     } finally {
       setBusyId(null)
