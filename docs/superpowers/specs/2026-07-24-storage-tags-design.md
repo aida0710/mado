@@ -69,9 +69,11 @@ GRANT SELECT ON storage_tags, storage_tag_assignments TO dashboard_ro;
 ```
 GET    /api/internal/tags              → [{ id, name, color }]
 POST   /api/internal/tags              body: { name, color }   → { id, name, color }
-PATCH  /api/internal/tags/:id          body: { name?, color? } → { id, name, color }
+PUT    /api/internal/tags/:id          body: { name?, color? } → { id, name, color }
 DELETE /api/internal/tags/:id                                   → { ok: true }
 ```
+
+(`PATCH` ではなく `PUT` — 既存の `PUT /connections/:id` の部分更新規約に揃える)
 
 - `name` は UNIQUE 制約により重複作成は 409。
 - `color` は `#RRGGBB` 形式を zod でバリデート。
