@@ -15,9 +15,13 @@ import {
   ReadmeHistoryVersion,
   ReadmeSearchResult,
   StorageList,
+  Tag,
+  TagAssignmentMap,
+  TagList,
+  TagSearchResult,
   TarPreview,
 } from './types'
-import type { ConnectionCreateInput, ConnectionUpdateInput } from './types'
+import type { ConnectionCreateInput, ConnectionUpdateInput, TagCreateInput, TagUpdateInput, TargetKind } from './types'
 import { TTLCache } from './cache'
 
 const API_BASE = '/api/internal'
@@ -39,11 +43,13 @@ const API_BASE = '/api/internal'
 const CACHE_TTL_MS      = 5 * 60 * 1000
 const LONG_CACHE_TTL_MS = 6 * 60 * 60 * 1000
 
-const listCache      = new TTLCache<z.infer<typeof StorageList>>(LONG_CACHE_TTL_MS,    { persistKey: 'mado.cache.list' })
-const readmeCache    = new TTLCache<z.infer<typeof Readme>>(LONG_CACHE_TTL_MS,         { persistKey: 'mado.cache.readme' })
-const tarCache       = new TTLCache<z.infer<typeof TarPreview>>(CACHE_TTL_MS)
-const bucketsCache   = new TTLCache<z.infer<typeof ListBuckets>>(LONG_CACHE_TTL_MS,    { persistKey: 'mado.cache.buckets' })
-const favoritesCache = new TTLCache<z.infer<typeof FavoriteBuckets>>(CACHE_TTL_MS)
+const listCache            = new TTLCache<z.infer<typeof StorageList>>(LONG_CACHE_TTL_MS,    { persistKey: 'mado.cache.list' })
+const readmeCache          = new TTLCache<z.infer<typeof Readme>>(LONG_CACHE_TTL_MS,         { persistKey: 'mado.cache.readme' })
+const tarCache             = new TTLCache<z.infer<typeof TarPreview>>(CACHE_TTL_MS)
+const bucketsCache         = new TTLCache<z.infer<typeof ListBuckets>>(LONG_CACHE_TTL_MS,    { persistKey: 'mado.cache.buckets' })
+const favoritesCache       = new TTLCache<z.infer<typeof FavoriteBuckets>>(CACHE_TTL_MS)
+const tagsCache            = new TTLCache<z.infer<typeof TagList>>(CACHE_TTL_MS)
+const tagAssignmentsCache  = new TTLCache<z.infer<typeof TagAssignmentMap>>(CACHE_TTL_MS)
 
 // 以前 tar も localStorage に永続化していたので、その残骸を起動時に一度だけ
 // 掃除する。今のビルドはこのキーを読み書きしないため、放置しても害は無いが
@@ -492,6 +498,80 @@ export const api = {
     )
     if (!res.ok) throw new Error(res.statusText)
     favoritesCache.invalidate(k('favorites', connId))
+  },
+
+  tags: () => tagsCache.get('tags', () => getJson(`${API_BASE}/tags`, TagList)),
+
+  invalidateTags: (): void => { tagsCache.invalidate('tags') },
+
+  createTag: async (input: TagCreateInput): Promise<z.infer<typeof Tag>> => {
+    const t = await mutateJson(`${API_BASE}/tags`, { method: 'POST', body: input }, Tag)
+    tagsCache.invalidate('tags')
+    return t
+  },
+
+  updateTag: async (id: string, input: TagUpdateInput): Promise<z.infer<typeof Tag>> => {
+    const t = await mutateJson(`${API_BASE}/tags/${encodeURIComponent(id)}`, { method: 'PUT', body: input }, Tag)
+    tagsCache.invalidate('tags')
+    return t
+  },
+
+  deleteTag: async (id: string): Promise<void> => {
+    await mutateJson(`${API_BASE}/tags/${encodeURIComponent(id)}`, { method: 'DELETE' }, null)
+    tagsCache.invalidate('tags')
+  },
+
+  // 一覧をまとめて hydrate するバッチ取得。paths が空なら fetch しない
+  // (呼び出し側が dirs/files 0 件のときに空 URL を叩かないための短絡)。
+  tagAssignments: (
+    connId: string, bucket: string, kind: TargetKind, paths: string[],
+  ): Promise<z.infer<typeof TagAssignmentMap>> => {
+    if (paths.length === 0) return Promise.resolve({})
+    const cacheKey = k('tagAssignments', connId, bucket, kind, paths.join(' '))
+    return tagAssignmentsCache.get(cacheKey, () => {
+      const search = new URLSearchParams({ bucket, kind })
+      for (const p of paths) search.append('paths', p)
+      return getJson(
+        `${API_BASE}/storage/${encodeURIComponent(connId)}/tags?${search.toString()}`,
+        TagAssignmentMap,
+      )
+    })
+  },
+
+  invalidateTagAssignments: (connId: string, bucket: string, kind: TargetKind): void => {
+    tagAssignmentsCache.invalidatePrefix(k('tagAssignments', connId, bucket, kind))
+  },
+
+  assignTag: async (
+    connId: string, bucket: string, kind: TargetKind, path: string, tagId: string,
+  ): Promise<void> => {
+    await mutateJson(
+      `${API_BASE}/storage/${encodeURIComponent(connId)}/tags`,
+      { method: 'PUT', body: { bucket, kind, path, tagId } },
+      null,
+    )
+    tagAssignmentsCache.invalidatePrefix(k('tagAssignments', connId, bucket, kind))
+  },
+
+  unassignTag: async (
+    connId: string, bucket: string, kind: TargetKind, path: string, tagId: string,
+  ): Promise<void> => {
+    await mutateJson(
+      `${API_BASE}/storage/${encodeURIComponent(connId)}/tags`,
+      { method: 'DELETE', body: { bucket, kind, path, tagId } },
+      null,
+    )
+    tagAssignmentsCache.invalidatePrefix(k('tagAssignments', connId, bucket, kind))
+  },
+
+  // 同一接続内の全バケットを横断して、選んだタグのいずれかが付いた対象を返す。
+  tagSearch: (connId: string, tagIds: string[]): Promise<z.infer<typeof TagSearchResult>> => {
+    const search = new URLSearchParams()
+    for (const id of tagIds) search.append('tagId', id)
+    return getJson(
+      `${API_BASE}/storage/${encodeURIComponent(connId)}/tags/search?${search.toString()}`,
+      TagSearchResult,
+    )
   },
 
   // 該当キャッシュエントリが「いつ S3 から取得されたか」を Date で返す。
