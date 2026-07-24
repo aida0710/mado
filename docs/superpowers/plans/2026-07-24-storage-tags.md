@@ -228,7 +228,7 @@ describe('タグレジストリ', () => {
   })
 
   it('DELETE /tags/:id で削除でき、割り当ても連鎖削除される', async () => {
-    await seedConnection(pools, 'conn0000001')
+    await seedConnection(pools, 'conn000001')
     const created = await (await app.request('/tags', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -236,7 +236,7 @@ describe('タグレジストリ', () => {
     })).json() as TagRow
     await pools.rw.query(
       `INSERT INTO storage_tag_assignments (tag_id, connection_id, bucket, target_kind, target_path)
-       VALUES ($1, 'conn0000001', 'bkt', 'bucket', '')`,
+       VALUES ($1, 'conn000001', 'bkt', 'bucket', '')`,
       [created.id],
     )
 
@@ -422,19 +422,19 @@ describe('タグ割り当て', () => {
   }
 
   beforeEach(async () => {
-    await seedConnection(pools, 'conn0000001')
+    await seedConnection(pools, 'conn000001')
   })
 
   it('GET はバッチで path→tagId[] を返す (割り当てなしは空配列)', async () => {
     const tag = await createTag('A')
-    await app.request('/storage/conn0000001/tags', {
+    await app.request('/storage/conn000001/tags', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ bucket: 'bkt', kind: 'prefix', path: 'a/', tagId: tag.id }),
     })
 
     const res = await app.request(
-      '/storage/conn0000001/tags?bucket=bkt&kind=prefix&paths=a/&paths=b/',
+      '/storage/conn000001/tags?bucket=bkt&kind=prefix&paths=a/&paths=b/',
     )
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ 'a/': [tag.id] })
@@ -443,45 +443,45 @@ describe('タグ割り当て', () => {
   it('PUT は冪等 (同じ組み合わせを二度投げてもエラーにならない)', async () => {
     const tag = await createTag('B')
     const body = JSON.stringify({ bucket: 'bkt', kind: 'file', path: 'x.txt', tagId: tag.id })
-    const r1 = await app.request('/storage/conn0000001/tags', {
+    const r1 = await app.request('/storage/conn000001/tags', {
       method: 'PUT', headers: { 'Content-Type': 'application/json' }, body,
     })
-    const r2 = await app.request('/storage/conn0000001/tags', {
+    const r2 = await app.request('/storage/conn000001/tags', {
       method: 'PUT', headers: { 'Content-Type': 'application/json' }, body,
     })
     expect(r1.status).toBe(200)
     expect(r2.status).toBe(200)
-    const res = await app.request('/storage/conn0000001/tags?bucket=bkt&kind=file&paths=x.txt')
+    const res = await app.request('/storage/conn000001/tags?bucket=bkt&kind=file&paths=x.txt')
     expect(await res.json()).toEqual({ 'x.txt': [tag.id] })
   })
 
   it('kind=bucket のとき path は "" に正規化される', async () => {
     const tag = await createTag('C')
-    await app.request('/storage/conn0000001/tags', {
+    await app.request('/storage/conn000001/tags', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ bucket: 'bkt', kind: 'bucket', path: 'ignored', tagId: tag.id }),
     })
-    const res = await app.request('/storage/conn0000001/tags?bucket=bkt&kind=bucket&paths=')
+    const res = await app.request('/storage/conn000001/tags?bucket=bkt&kind=bucket&paths=')
     expect(await res.json()).toEqual({ '': [tag.id] })
   })
 
   it('DELETE で割り当てを解除できる', async () => {
     const tag = await createTag('D')
     const body = JSON.stringify({ bucket: 'bkt', kind: 'prefix', path: 'a/', tagId: tag.id })
-    await app.request('/storage/conn0000001/tags', {
+    await app.request('/storage/conn000001/tags', {
       method: 'PUT', headers: { 'Content-Type': 'application/json' }, body,
     })
-    const del = await app.request('/storage/conn0000001/tags', {
+    const del = await app.request('/storage/conn000001/tags', {
       method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body,
     })
     expect(del.status).toBe(200)
-    const res = await app.request('/storage/conn0000001/tags?bucket=bkt&kind=prefix&paths=a/')
+    const res = await app.request('/storage/conn000001/tags?bucket=bkt&kind=prefix&paths=a/')
     expect(await res.json()).toEqual({})
   })
 
   it('paths が空なら GET は空オブジェクトを返す', async () => {
-    const res = await app.request('/storage/conn0000001/tags?bucket=bkt&kind=prefix')
+    const res = await app.request('/storage/conn000001/tags?bucket=bkt&kind=prefix')
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({})
   })
@@ -606,8 +606,8 @@ git commit -m "feat(api): bucket/prefix/file へのタグ割り当てエンド�
 ```typescript
 describe('タグ横断検索', () => {
   beforeEach(async () => {
-    await seedConnection(pools, 'conn0000001')
-    await seedConnection(pools, 'conn0000002')
+    await seedConnection(pools, 'conn000001')
+    await seedConnection(pools, 'conn000002')
   })
 
   it('選んだタグのいずれかを含む対象を、接続内の全バケットから返す', async () => {
@@ -621,21 +621,21 @@ describe('タグ横断検索', () => {
     })).json() as TagRow
 
     const assign = (bucket: string, kind: string, path: string, tagId: string) =>
-      app.request('/storage/conn0000001/tags', {
+      app.request('/storage/conn000001/tags', {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ bucket, kind, path, tagId }),
       })
     await assign('bkt-1', 'bucket', '', tagA.id)
     await assign('bkt-2', 'prefix', 'dir/', tagB.id)
     await assign('bkt-2', 'file', 'dir/file.txt', tagA.id)
-    // 別接続 (conn0000002) の割り当ては横断検索の対象外
-    await app.request('/storage/conn0000002/tags', {
+    // 別接続 (conn000002) の割り当ては横断検索の対象外
+    await app.request('/storage/conn000002/tags', {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ bucket: 'other', kind: 'bucket', path: '', tagId: tagA.id }),
     })
 
     const res = await app.request(
-      `/storage/conn0000001/tags/search?tagId=${tagA.id}&tagId=${tagB.id}`,
+      `/storage/conn000001/tags/search?tagId=${tagA.id}&tagId=${tagB.id}`,
     )
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual([
@@ -646,7 +646,7 @@ describe('タグ横断検索', () => {
   })
 
   it('tagId が無ければ空配列を返す', async () => {
-    const res = await app.request('/storage/conn0000001/tags/search')
+    const res = await app.request('/storage/conn000001/tags/search')
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual([])
   })
