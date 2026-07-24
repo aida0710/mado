@@ -1334,3 +1334,30 @@ pre { font-size: 12px; }
   cursor: pointer;
 }
 .filelist__select-current:disabled { opacity: 0.4; cursor: default; }
+
+/* ====================================================================
+   家系図 — ビュー全体 (ツールバー・追加モーダル)
+   ==================================================================== */
+.lineage-view { display: flex; flex-direction: column; gap: var(--space-3); }
+.lineage-view__toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+.lineage-view__scopes { display: flex; gap: 4px; }
+.lineage-view__scope-btn {
+  background: transparent;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-1);
+  padding: 5px 12px;
+  font: 400 12px/1.3 var(--font-sans);
+  color: var(--ink-9);
+  cursor: pointer;
+}
+.lineage-view__scope-btn[data-active] { background: var(--ink-12); color: var(--paper); border-color: var(--ink-12); }
+.lineage-view__add-actions { display: flex; gap: var(--space-2); }
+.lineage-add__title { margin: 0 0 var(--space-2); font: 600 13px/1.3 var(--font-sans); }
+.lineage-add__target { margin: 0 0 var(--space-3); font: 400 12px/1.4 var(--font-mono); color: var(--ink-9); }
+.lineage-add__editor { display: flex; flex-direction: column; gap: 4px; font: 400 12px/1.3 var(--font-sans); }
