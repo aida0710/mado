@@ -201,3 +201,51 @@ describe('タグ割り当て', () => {
     expect(await res.json()).toEqual({})
   })
 })
+
+describe('タグ横断検索', () => {
+  beforeEach(async () => {
+    await seedConnection(pools, 'conn000001')
+    await seedConnection(pools, 'conn000002')
+  })
+
+  it('選んだタグのいずれかを含む対象を、接続内の全バケットから返す', async () => {
+    const tagA = await (await app.request('/tags', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'search-a', color: '#111111' }),
+    })).json() as TagRow
+    const tagB = await (await app.request('/tags', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'search-b', color: '#222222' }),
+    })).json() as TagRow
+
+    const assign = (bucket: string, kind: string, path: string, tagId: string) =>
+      app.request('/storage/conn000001/tags', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bucket, kind, path, tagId }),
+      })
+    await assign('bkt-1', 'bucket', '', tagA.id)
+    await assign('bkt-2', 'prefix', 'dir/', tagB.id)
+    await assign('bkt-2', 'file', 'dir/file.txt', tagA.id)
+    // 別接続 (conn000002) の割り当ては横断検索の対象外
+    await app.request('/storage/conn000002/tags', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ bucket: 'other', kind: 'bucket', path: '', tagId: tagA.id }),
+    })
+
+    const res = await app.request(
+      `/storage/conn000001/tags/search?tagId=${tagA.id}&tagId=${tagB.id}`,
+    )
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual([
+      { tagId: tagA.id, bucket: 'bkt-1', kind: 'bucket', path: '' },
+      { tagId: tagB.id, bucket: 'bkt-2', kind: 'prefix', path: 'dir/' },
+      { tagId: tagA.id, bucket: 'bkt-2', kind: 'file', path: 'dir/file.txt' },
+    ])
+  })
+
+  it('tagId が無ければ空配列を返す', async () => {
+    const res = await app.request('/storage/conn000001/tags/search')
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual([])
+  })
+})

@@ -167,4 +167,26 @@ export function mountStorageTagsRoutes(app: Hono, deps: StorageTagsDeps): void {
     )
     return c.json({ ok: true })
   })
+
+  app.get('/storage/:connId/tags/search', async c => {
+    const connId = c.req.param('connId')
+    const tagIds = c.req.queries('tagId') ?? []
+    if (tagIds.length === 0) return c.json([])
+
+    const r = await deps.pools.ro.query<{
+      tag_id: string; bucket: string; target_kind: string; target_path: string
+    }>(
+      `SELECT tag_id, bucket, target_kind, target_path
+         FROM storage_tag_assignments
+         WHERE connection_id = $1 AND tag_id = ANY($2::text[])
+         ORDER BY bucket, target_path, target_kind`,
+      [connId, tagIds],
+    )
+    return c.json(r.rows.map(row => ({
+      tagId: row.tag_id,
+      bucket: row.bucket,
+      kind: row.target_kind,
+      path: row.target_path,
+    })))
+  })
 }
