@@ -674,7 +674,7 @@ Expected: FAIL (`/tags/search` が 404 を返す)
       `SELECT tag_id, bucket, target_kind, target_path
          FROM storage_tag_assignments
          WHERE connection_id = $1 AND tag_id = ANY($2::text[])
-         ORDER BY bucket, target_kind, target_path`,
+         ORDER BY bucket, target_path, target_kind`,
       [connId, tagIds],
     )
     return c.json(r.rows.map(row => ({
