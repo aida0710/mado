@@ -4,6 +4,7 @@ import { api } from '../lib/api/client'
 import type { Connection, ConnectionCreateInput, ConnectionUpdateInput } from '../lib/api/types'
 import { ConnectionForm } from '../components/ConnectionForm'
 import { ConnectionDeleteConfirm } from '../components/ConnectionDeleteConfirm'
+import { TagsSettings } from '../components/TagsSettings'
 import { About } from '../components/About'
 
 const sectionTitleClass =
@@ -194,6 +195,8 @@ export default function ConnectionsPage() {
           </ul>
         )}
       </section>
+
+      <TagsSettings />
 
       <About />
 
