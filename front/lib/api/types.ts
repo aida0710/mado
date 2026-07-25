@@ -214,3 +214,4 @@ export const TagSearchHit = z.object({
   path: z.string(),
 })
 export const TagSearchResult = z.array(TagSearchHit)
+export type TagSearchResult = z.infer<typeof TagSearchResult>

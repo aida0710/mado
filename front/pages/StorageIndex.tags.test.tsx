@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { api } from '../lib/api/client'
@@ -76,7 +76,14 @@ describe('StorageIndex タグ', () => {
     // タグ付与状況はバケット一覧より 1 render 遅れて非同期に届く (buckets state
     // が確定してから別 effect が発火する) ため、getByRole (同期) だと稀に間に合わない。
     // findByRole でタグチップの到着を待ってからクリックする。
-    fireEvent.click(await screen.findByRole('button', { name: '重要' }))
+    //
+    // TagSearchPanel (Task 11) も同じタグ名で "重要" ボタンを描画するため、画面全体を
+    // screen.findByRole('button', { name: '重要' }) だけで引くと複数ヒット (もしくは
+    // 描画タイミング次第でどちらが先に見つかるか不定) になる。TagFilterBar のラベル
+    // "タグで絞り込み" を含むコンテナに絞り込んでクリック対象を一意にする。
+    const filterBarLabel = await screen.findByText('タグで絞り込み')
+    const filterBar = filterBarLabel.closest('div') as HTMLElement
+    fireEvent.click(await within(filterBar).findByRole('button', { name: '重要' }))
 
     expect(screen.getByText('bkt-1')).toBeInTheDocument()
     expect(screen.queryByText('bkt-2')).not.toBeInTheDocument()

@@ -7,6 +7,7 @@ import {S3PathPanel} from '../components/S3PathPanel'
 import {CacheMeta} from '../components/CacheMeta'
 import {TagBadge} from '../components/TagBadge'
 import {TagPicker} from '../components/TagPicker'
+import {TagSearchPanel} from '../components/TagSearchPanel'
 import {TagFilterBar} from '../components/storage/TagFilterBar'
 import type {Tag} from '../lib/api/types'
 
@@ -146,6 +147,7 @@ export default function StorageIndex({connId}: Props) {
             </header>
 
             <ReadmeSearchPanel connId={connId}/>
+            <TagSearchPanel connId={connId}/>
             <TagFilterBar
                 tags={filterCandidates}
                 selected={selectedTagIds}
