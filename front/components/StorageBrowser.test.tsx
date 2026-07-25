@@ -9,6 +9,10 @@ vi.mock('../lib/api/client', () => ({
     list: vi.fn(),
     invalidateList: vi.fn(),
     downloadUrl: vi.fn(() => 'http://x/dl'),
+    // タグ機能 (StorageBrowser のバッチ取得 effect) が既定で叩く分。
+    // このテストファイルはタグの挙動自体は検証しないので、空を返すだけにしておく。
+    tags: vi.fn(() => Promise.resolve([])),
+    tagAssignments: vi.fn(() => Promise.resolve({})),
     // CacheMeta は fetchedAt が null なら描画しないので、テストでは固定で null を返す。
     lastFetched: { list: vi.fn(() => null) },
   },
