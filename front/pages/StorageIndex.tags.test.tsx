@@ -47,10 +47,8 @@ describe('StorageIndex タグ', () => {
     })
 
     renderIndex()
-    // 「重要」は TagFilterBar の候補チップと BucketLi の行バッジの両方に
-    // 出現するため、findByText (単数) だと "Found multiple elements" になる
-    // (StorageBrowser.tags.test.tsx と同じ事情)。ここでは「少なくとも 1 箇所に
-    // バッジ表示されている」ことだけを確認する。
+    // TagPanel は既定で畳んでおり候補チップを出さないので、ここで見つかる
+    // 「重要」は BucketLi の行バッジ。
     const badges = await screen.findAllByText('重要')
     expect(badges.length).toBeGreaterThan(0)
   })
@@ -73,17 +71,10 @@ describe('StorageIndex タグ', () => {
     await waitFor(() => expect(screen.getByText('bkt-1')).toBeInTheDocument())
     expect(screen.getByText('bkt-2')).toBeInTheDocument()
 
-    // タグ付与状況はバケット一覧より 1 render 遅れて非同期に届く (buckets state
-    // が確定してから別 effect が発火する) ため、getByRole (同期) だと稀に間に合わない。
-    // findByRole でタグチップの到着を待ってからクリックする。
-    //
-    // TagSearchPanel (Task 11) も同じタグ名で "重要" ボタンを描画するため、画面全体を
-    // screen.findByRole('button', { name: '重要' }) だけで引くと複数ヒット (もしくは
-    // 描画タイミング次第でどちらが先に見つかるか不定) になる。TagFilterBar のラベル
-    // "タグで絞り込み" を含むコンテナに絞り込んでクリック対象を一意にする。
-    const filterBarLabel = await screen.findByText('タグで絞り込み')
-    const filterBar = filterBarLabel.closest('div') as HTMLElement
-    fireEvent.click(await within(filterBar).findByRole('button', { name: '重要' }))
+    // TagPanel は既定で畳んである。開いてからチップを押す。
+    fireEvent.click(await screen.findByRole('button', { name: /タグ/ }))
+    const panel = screen.getByRole('button', { name: /タグ/ }).closest('section') as HTMLElement
+    fireEvent.click(await within(panel).findByRole('button', { name: '重要' }))
 
     expect(screen.getByText('bkt-1')).toBeInTheDocument()
     expect(screen.queryByText('bkt-2')).not.toBeInTheDocument()

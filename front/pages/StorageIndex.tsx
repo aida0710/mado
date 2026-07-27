@@ -7,8 +7,7 @@ import {S3PathPanel} from '../components/S3PathPanel'
 import {CacheMeta} from '../components/CacheMeta'
 import {TagBadge} from '../components/TagBadge'
 import {TagPicker} from '../components/TagPicker'
-import {TagSearchPanel} from '../components/TagSearchPanel'
-import {TagFilterBar} from '../components/storage/TagFilterBar'
+import {TagPanel} from '../components/TagPanel'
 import {CopyMenu, type MenuItem} from '../components/CopyMenu'
 import {absoluteUrl} from '../lib/route'
 import type {Tag} from '../lib/api/types'
@@ -89,11 +88,8 @@ export default function StorageIndex({connId}: Props) {
         setBucketTags(prev => ({ ...prev, [bucketName]: tagIds }))
     }, [])
 
-    const visibleTagIds = useMemo(() => new Set(Object.values(bucketTags).flat()), [bucketTags])
-    const filterCandidates = useMemo(
-        () => allTags.filter(t => visibleTagIds.has(t.id)),
-        [allTags, visibleTagIds],
-    )
+    // 候補は「表示中のバケットに出現するタグ」ではなく全タグ (TagPanel の
+    // 責務コメント参照 — 今の一覧に無いタグも選べる必要がある)。
     const toggleTagFilter = useCallback((tagId: string) => {
         setSelectedTagIds(prev => {
             const next = new Set(prev)
@@ -151,14 +147,15 @@ export default function StorageIndex({connId}: Props) {
             </header>
 
             <ReadmeSearchPanel connId={connId}/>
-            <TagSearchPanel connId={connId}/>
-            <TagFilterBar
-                tags={filterCandidates}
+            <S3PathPanel connId={connId}/>
+            {/* 「探す」系 (README 全文検索 / S3 パス貼付) の下にまとめる。 */}
+            <TagPanel
+                connId={connId}
+                allTags={allTags}
                 selected={selectedTagIds}
                 onToggle={toggleTagFilter}
                 onClear={() => setSelectedTagIds(new Set())}
             />
-            <S3PathPanel connId={connId}/>
 
             {error && <p className="error">{error}</p>}
             {loading && buckets.length === 0 && (
