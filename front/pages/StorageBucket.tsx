@@ -115,7 +115,7 @@ export default function StorageBucket({ connId }: Props) {
             className="storage-bucket__tab"
             onClick={() => setView('lineage')}
           >
-            🔗 家系図
+            家系図
           </button>
         )}
       </nav>

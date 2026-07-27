@@ -56,14 +56,16 @@ describe('TagPanel', () => {
     expect(onToggle).toHaveBeenCalledWith('t1')
   })
 
-  // 畳んだ状態で絞り込みが効いていることが見えないと、行が減った理由が分からない。
-  it('畳んでいても選択中のタグとクリアは出す', () => {
+  // 閉じたら閉じたまま。ただし絞り込みが効いていること自体は分かるように件数を出す。
+  it('畳んでいる間は選択中のタグを出さず、件数だけをラベルに添える', () => {
     vi.spyOn(api, 'tagSearch').mockResolvedValue([])
     renderPanel(['t1'])
 
-    expect(screen.getByRole('button', { name: /タグ/ })).toHaveAttribute('aria-expanded', 'false')
-    expect(screen.getByText('処理前')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'クリア' })).toBeInTheDocument()
+    const head = screen.getByRole('button', { name: /タグ/ })
+    expect(head).toHaveAttribute('aria-expanded', 'false')
+    expect(head).toHaveTextContent('(1)')
+    expect(screen.queryByText('処理前')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'クリア' })).not.toBeInTheDocument()
   })
 
   it('選択があると接続全体を検索し、ヒット件数を畳んで出す', async () => {

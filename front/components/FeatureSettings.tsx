@@ -82,10 +82,10 @@ export function FeatureSettings() {
           disabled={state.loading}
           onChange={e => void toggle(e.target.checked)}
         />
-        <span>🔗 家系図タブを表示する</span>
+        <span>家系図タブを表示する</span>
       </label>
       <p className="px-1 text-[12px] text-ink-7">
-        オフにするとバケット画面の「家系図」タブが消えます。登録済みのリンクは削除されません。
+        オフにするとバケット画面とバケット一覧から「家系図」の導線が消えます。登録済みのリンクは削除されません。
       </p>
     </section>
   )

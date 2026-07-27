@@ -70,8 +70,8 @@ const headLabelClass =
 // の両方が同時に起きるようにして、「今見えている範囲」と「接続全体」を
 // 親子関係で並べる。
 //
-// 既定は畳んだ状態。ただし選択中のタグは畳んでいてもヘッダに出す
-// (絞り込みが効いていることが見えないと「バケットが消えた」と誤解される)。
+// 既定は畳んだ状態。畳んでいる間は選択中のタグそのものは出さず、件数だけを
+// ラベルに添える (絞り込みが効いていること自体は分かるようにする)。
 export function TagPanel({ connId, allTags, selected, onToggle, onClear }: Props) {
   const [open, setOpen] = useState(false)
   const [hitsOpen, setHitsOpen] = useState(false)
@@ -93,7 +93,6 @@ export function TagPanel({ connId, allTags, selected, onToggle, onClear }: Props
 
   if (allTags.length === 0) return null
 
-  const selectedTags = allTags.filter(t => selected.has(t.id))
 
   const chip = (tag: Tag) => (
     <button
@@ -119,11 +118,13 @@ export function TagPanel({ connId, allTags, selected, onToggle, onClear }: Props
         >
           <span aria-hidden>{open ? '▾' : '▸'}</span>
           <span className={headLabelClass}>タグ</span>
+          {/* 畳んでいる間、選択中のタグそのものは出さない (閉じたら閉じたまま
+              にする)。ただし絞り込みが効いていること自体が見えないと行が減った
+              理由が分からないので、件数だけラベルに添える。 */}
+          {selected.size > 0 && (
+            <span className={headLabelClass}>({selected.size})</span>
+          )}
         </button>
-        {!open && selectedTags.map(t => <TagBadge key={t.id} tag={t} />)}
-        {!open && selected.size > 0 && (
-          <button type="button" className="ghost" onClick={onClear}>クリア</button>
-        )}
       </div>
 
       {open && (

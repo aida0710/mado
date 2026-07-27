@@ -1,5 +1,5 @@
 import {useCallback, useEffect, useMemo, useState} from 'react'
-import {Link} from 'react-router-dom'
+import {Link, useNavigate} from 'react-router-dom'
 import {api} from '../lib/api/client'
 import {ConnectionSwitcher} from '../components/ConnectionSwitcher'
 import {ReadmeSearchPanel} from '../components/ReadmeSearchPanel'
@@ -8,6 +8,7 @@ import {CacheMeta} from '../components/CacheMeta'
 import {TagBadge} from '../components/TagBadge'
 import {TagPicker} from '../components/TagPicker'
 import {TagPanel} from '../components/TagPanel'
+import {useLineageEnabled} from '../lib/useLineageEnabled'
 import {CopyMenu, type MenuItem} from '../components/CopyMenu'
 import {absoluteUrl} from '../lib/route'
 import type {Tag} from '../lib/api/types'
@@ -61,6 +62,7 @@ export default function StorageIndex({connId}: Props) {
         refresh()
     }, [refresh])
 
+    const lineageEnabled = useLineageEnabled()
     const [allTags, setAllTags] = useState<Tag[]>([])
     const [bucketTags, setBucketTags] = useState<Record<string, string[]>>({})
     const [selectedTagIds, setSelectedTagIds] = useState<Set<string>>(() => new Set())
@@ -182,6 +184,7 @@ export default function StorageIndex({connId}: Props) {
                                 allTags={allTags}
                                 tagIds={bucketTags[b.name] ?? []}
                                 onTagsChange={handleTagsChange}
+                                lineageEnabled={lineageEnabled}
                             />
                         ))}
                     </ul>
@@ -205,6 +208,7 @@ export default function StorageIndex({connId}: Props) {
                                 allTags={allTags}
                                 tagIds={bucketTags[b.name] ?? []}
                                 onTagsChange={handleTagsChange}
+                                lineageEnabled={lineageEnabled}
                             />
                         ))}
                     </ul>
@@ -215,11 +219,13 @@ export default function StorageIndex({connId}: Props) {
 }
 
 function BucketLi({
-                      connId, bucket, inUse, onToggle, allTags, tagIds, onTagsChange,
+                      connId, bucket, inUse, onToggle, allTags, tagIds, onTagsChange, lineageEnabled,
                   }: {
     connId: string; bucket: BucketRow; inUse: boolean; onToggle: () => void
     allTags: Tag[]; tagIds: string[]; onTagsChange: (bucketName: string, tagIds: string[]) => void
+    lineageEnabled: boolean
 }) {
+    const navigate = useNavigate()
     const [pickerOpen, setPickerOpen] = useState(false)
     const checkboxId = `use-${bucket.name}`
     const tags = allTags.filter(t => tagIds.includes(t.id))
@@ -228,13 +234,21 @@ function BucketLi({
     const bucketHref = `/storage/${encodeURIComponent(connId)}/${encodeURIComponent(bucket.name)}/`
     const items = useMemo<MenuItem[]>(() => [
         {kind: 'action', label: 'タグを編集', onSelect: () => setPickerOpen(true)},
+        // 家系図はバケット自身をノードにできる (prefix='' が bucket ノード)。
+        // ここからバケットの家系図へ直接入れるようにする — 従来はバケットの中に
+        // 入らないとタブに辿り着けなかった。Settings で無効なら出さない。
+        ...(lineageEnabled
+            ? [{kind: 'action' as const, label: '家系図を開く', onSelect: () => navigate(`${bucketHref}?view=lineage`)}]
+            : []),
         {kind: 'copy', label: 'Web URL をコピー', value: absoluteUrl(bucketHref)},
         {kind: 'copy', label: 'S3 URL をコピー', value: `s3://${bucket.name}/`},
-    ], [bucketHref, bucket.name])
+    ], [bucketHref, bucket.name, lineageEnabled, navigate])
     return (
-        <li className={liClass} style={{borderBottom: '1px solid var(--rule)'}}>
+        <li className={`${liClass} relative`} style={{borderBottom: '1px solid var(--rule)'}}>
+            {/* チェックボックスと ⋯ は行リンクの上に出す (下の after:inset-0 が
+                行全体を覆うので、z を上げないとクリックを奪われる)。 */}
             <label
-                className="use-toggle"
+                className="use-toggle relative z-[1]"
                 htmlFor={checkboxId}
                 title={inUse ? '使用中から外す' : '現在使っているバケットに追加'}
             >
@@ -249,7 +263,11 @@ function BucketLi({
             {/* タグは名前の右ではなく下の行に置く (EntryTable と同じ理由 —
                 右に並べると長いバケット名が truncate されて読めなくなる)。 */}
             <div className="min-w-0 flex-1">
-                <Link className={linkClass} to={bucketHref}>
+                {/* 行のどこを押してもバケットへ入れるようにする (名前の文字列だけが
+                    当たり判定だと狭くて押しづらい)。onClick ハンドラではなく
+                    after:inset-0 で <a> の当たり判定を行全体へ広げる方式にして、
+                    中クリックや「新しいタブで開く」が効く本物のリンクのまま保つ。 */}
+                <Link className={`${linkClass} after:absolute after:inset-0`} to={bucketHref}>
                     {bucket.name}
                 </Link>
                 {tags.length > 0 && (
@@ -266,7 +284,7 @@ function BucketLi({
           {bucket.creationDate.slice(0, 10)}
         </span>
             )}
-            <span className="shrink-0">
+            <span className="relative z-[1] shrink-0">
                 <CopyMenu items={items}/>
             </span>
             {pickerOpen && (
