@@ -1,4 +1,4 @@
--- db/migrations/010_storage_tags.sql
+-- db/migrations/011_storage_tags.sql
 -- 事前定義タグ + bucket/ディレクトリ/ファイルへの割り当て
 -- (spec: docs/superpowers/specs/2026-07-24-storage-tags-design.md)
 

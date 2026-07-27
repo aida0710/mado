@@ -215,3 +215,17 @@ export const TagSearchHit = z.object({
 })
 export const TagSearchResult = z.array(TagSearchHit)
 export type TagSearchResult = z.infer<typeof TagSearchResult>
+
+export const LineageLink = z.object({
+  id: z.number(),
+  parentBucket: z.string(),
+  parentPath: z.string(),
+  childBucket: z.string(),
+  childPath: z.string(),
+  createdBy: z.string(),
+  createdAt: z.string(),
+})
+export type LineageLink = z.infer<typeof LineageLink>
+export const LineageLinks = z.array(LineageLink)
+
+export const PostLineageLinkOk = z.object({ ok: z.literal(true), id: z.number() })
