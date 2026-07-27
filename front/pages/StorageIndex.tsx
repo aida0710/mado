@@ -9,6 +9,8 @@ import {TagBadge} from '../components/TagBadge'
 import {TagPicker} from '../components/TagPicker'
 import {TagSearchPanel} from '../components/TagSearchPanel'
 import {TagFilterBar} from '../components/storage/TagFilterBar'
+import {CopyMenu, type MenuItem} from '../components/CopyMenu'
+import {absoluteUrl} from '../lib/route'
 import type {Tag} from '../lib/api/types'
 
 interface BucketRow {
@@ -222,6 +224,14 @@ function BucketLi({
     const [pickerOpen, setPickerOpen] = useState(false)
     const checkboxId = `use-${bucket.name}`
     const tags = allTags.filter(t => tagIds.includes(t.id))
+    // バケット直下を指す URL。パンくず (prefix='') と同じ形に揃えるので
+    // S3 URL は末尾スラッシュ付き `s3://<bucket>/` になる。
+    const bucketHref = `/storage/${encodeURIComponent(connId)}/${encodeURIComponent(bucket.name)}/`
+    const items = useMemo<MenuItem[]>(() => [
+        {kind: 'action', label: 'タグを編集', onSelect: () => setPickerOpen(true)},
+        {kind: 'copy', label: 'Web URL をコピー', value: absoluteUrl(bucketHref)},
+        {kind: 'copy', label: 'S3 URL をコピー', value: `s3://${bucket.name}/`},
+    ], [bucketHref, bucket.name])
     return (
         <li className={liClass} style={{borderBottom: '1px solid var(--rule)'}}>
             <label
@@ -237,10 +247,7 @@ function BucketLi({
                     aria-label={`${bucket.name} を現在使っているバケットに${inUse ? '外す' : '追加'}`}
                 />
             </label>
-            <Link
-                className={linkClass}
-                to={`/storage/${encodeURIComponent(connId)}/${encodeURIComponent(bucket.name)}/`}
-            >
+            <Link className={linkClass} to={bucketHref}>
                 {bucket.name}
             </Link>
             {tags.map(t => <TagBadge key={t.id} tag={t} />)}
@@ -252,9 +259,9 @@ function BucketLi({
           {bucket.creationDate.slice(0, 10)}
         </span>
             )}
-            <button type="button" className="ghost shrink-0" onClick={() => setPickerOpen(true)} aria-label="タグを編集">
-                <span aria-hidden>🏷</span>
-            </button>
+            <span className="shrink-0">
+                <CopyMenu items={items}/>
+            </span>
             {pickerOpen && (
                 <TagPicker
                     connId={connId} bucket={bucket.name} kind="bucket" path="" label={bucket.name}
