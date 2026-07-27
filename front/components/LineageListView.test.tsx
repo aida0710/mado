@@ -142,3 +142,62 @@ describe('LineageListView', () => {
     await waitFor(() => expect(screen.getByText('boom')).toBeInTheDocument())
   })
 })
+
+// 環境をまたいでリンクを持ち運ぶための入出力。
+describe('LineageListView インポート / エクスポート', () => {
+  const pickFile = async (json: unknown) => {
+    const input = screen.getByLabelText('インポート') as HTMLInputElement
+    const file = new File([JSON.stringify(json)], 'x.json', { type: 'application/json' })
+    // jsdom の File.text() は実装があるのでそのまま使える。
+    fireEvent.change(input, { target: { files: [file] } })
+  }
+
+  it('mado のファイルでなければ取り込まない', async () => {
+    vi.spyOn(api, 'lineageLinks').mockResolvedValue([])
+    const add = vi.spyOn(api, 'addLineageLink')
+    renderView()
+    await screen.findByText('0 件')
+
+    await pickFile({ hello: 'world' })
+    expect(await screen.findByRole('alert')).toHaveTextContent('エクスポートファイルではありません')
+    expect(add).not.toHaveBeenCalled()
+  })
+
+  it('新規リンクを追加し、既存はスキップして件数を出す', async () => {
+    vi.spyOn(api, 'lineageLinks').mockResolvedValue([link(1, ['raw', ''], ['clean', 'v2/'])])
+    const add = vi.spyOn(api, 'addLineageLink').mockResolvedValue(2)
+    renderView()
+    await screen.findByText('1 件')
+
+    await pickFile({
+      mado: 'lineage', version: 1,
+      links: [
+        // 既存と同じ組 → スキップ
+        { parentBucket: 'raw', parentPath: '', childBucket: 'clean', childPath: 'v2/' },
+        // 新規
+        { parentBucket: 'clean', parentPath: 'v2/', childBucket: 'out', childPath: 'f.csv' },
+      ],
+    })
+
+    await waitFor(() => expect(add).toHaveBeenCalledTimes(1))
+    expect(add).toHaveBeenCalledWith(
+      'c1', { bucket: 'clean', path: 'v2/' }, { bucket: 'out', path: 'f.csv' }, 'import',
+    )
+    expect(await screen.findByText('追加 1 件 / スキップ 1 件')).toBeInTheDocument()
+  })
+
+  // 閉路はサーバが 409 を返す。取り込みは止めず、失敗として数える。
+  it('サーバに弾かれた項目は失敗として数える', async () => {
+    vi.spyOn(api, 'lineageLinks').mockResolvedValue([])
+    vi.spyOn(api, 'addLineageLink').mockRejectedValue(new Error('このリンクを追加すると循環します'))
+    renderView()
+    await screen.findByText('0 件')
+
+    await pickFile({
+      mado: 'lineage', version: 1,
+      links: [{ parentBucket: 'a', parentPath: '', childBucket: 'b', childPath: '' }],
+    })
+
+    expect(await screen.findByText(/失敗 1 件/)).toBeInTheDocument()
+  })
+})

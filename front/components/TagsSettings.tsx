@@ -2,6 +2,16 @@ import { useEffect, useReducer } from 'react'
 import { api } from '../lib/api/client'
 import type { Tag } from '../lib/api/types'
 import { TagBadge } from './TagBadge'
+import { ImportExportButtons } from './ImportExportButtons'
+import { downloadJson, type ImportSummary } from '../lib/jsonFile'
+
+// エクスポート形式。id は書き出さない — インポート先で採番するため
+// (id は nanoid で、環境をまたいで意味を持たない)。同一性は name で見る。
+interface TagsExport {
+  mado: 'tags'
+  version: 1
+  tags: Array<{ name: string; color: string }>
+}
 
 const sectionTitleClass =
   'm-0 text-[10.5px] font-semibold uppercase tracking-[0.22em] text-ink-7'
@@ -135,16 +145,58 @@ export function TagsSettings() {
   }
   useEffect(() => { refresh() }, [])
 
+  const handleExport = () => {
+    const body: TagsExport = {
+      mado: 'tags',
+      version: 1,
+      tags: tags.map(t => ({ name: t.name, color: t.color })),
+    }
+    downloadJson('mado-tags.json', body)
+  }
+
+  // 同名のタグは作り直さずスキップする (名前が UNIQUE で、色だけ違う場合に
+  // 上書きすると既存の割り当ての見た目が黙って変わるため)。
+  const handleImport = async (data: unknown): Promise<ImportSummary> => {
+    const d = data as Partial<TagsExport>
+    if (d?.mado !== 'tags' || !Array.isArray(d.tags)) {
+      throw new Error('mado のタグのエクスポートファイルではありません。')
+    }
+    const existing = new Set(tags.map(t => t.name))
+    const summary: ImportSummary = { added: 0, skipped: 0, failed: [] }
+    for (const t of d.tags) {
+      if (typeof t?.name !== 'string' || typeof t?.color !== 'string') {
+        summary.failed.push('name / color が文字列でない項目があります')
+        continue
+      }
+      if (existing.has(t.name)) { summary.skipped++; continue }
+      try {
+        await api.createTag({ name: t.name, color: t.color })
+        existing.add(t.name)
+        summary.added++
+      } catch (e) {
+        summary.failed.push(`${t.name}: ${(e as Error).message}`)
+      }
+    }
+    return summary
+  }
+
   return (
     <section className="mt-7">
       <div
-        className="mb-3 flex items-baseline justify-between gap-3 pb-2"
+        className="mb-3 flex flex-wrap items-baseline justify-between gap-3 pb-2"
         style={{ borderBottom: '1px solid var(--rule)' }}
       >
         <h3 className={sectionTitleClass}>タグの管理</h3>
-        <button className="ghost" onClick={() => dispatch({ type: 'openAdd' })}>
-          <span aria-hidden>+</span> 追加
-        </button>
+        <span className="inline-flex flex-wrap items-center gap-2">
+          <ImportExportButtons
+            onExport={handleExport}
+            onImport={handleImport}
+            onDone={refresh}
+          />
+          <button className="ghost" onClick={() => dispatch({ type: 'openAdd' })}>
+            <span aria-hidden>+</span> 追加
+          </button>
+        </span>
       </div>
 
       {loading && <p className="text-[13px] text-ink-7">読み込み中…</p>}

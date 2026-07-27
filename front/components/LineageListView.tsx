@@ -5,6 +5,19 @@ import type { LineageLink } from '../lib/api/types'
 import { nodeKey, wouldCreateCycle, type LineageNode } from '../lib/lineageGraph'
 import { encPath } from '../lib/route'
 import type { FlowEdge } from './storage/lineage/LineageFlowCanvas'
+import { ImportExportButtons } from './ImportExportButtons'
+import { downloadJson, type ImportSummary } from '../lib/jsonFile'
+
+// エクスポート形式。id / createdAt / createdBy は書き出さない — 取り込み先で
+// 採番・記録し直すため。リンクの同一性は 4 つのパスの組で決まる。
+interface LineageExport {
+  mado: 'lineage'
+  version: 1
+  links: Array<{
+    parentBucket: string; parentPath: string
+    childBucket: string; childPath: string
+  }>
+}
 
 // React Flow は重いので家系図を開いた人だけが払うよう別チャンクにする
 // (バケット画面の LineageView と同じ扱い)。
@@ -99,6 +112,54 @@ export function LineageListView({ connId }: Props) {
     }
   }, [connId, refresh])
 
+  const handleExport = () => {
+    const body: LineageExport = {
+      mado: 'lineage',
+      version: 1,
+      links: (links ?? []).map(l => ({
+        parentBucket: l.parentBucket, parentPath: l.parentPath,
+        childBucket: l.childBucket, childPath: l.childPath,
+      })),
+    }
+    downloadJson('mado-lineage.json', body)
+  }
+
+  // 既存と同じ組はスキップする。POST 自体は冪等 (ON CONFLICT DO UPDATE) だが、
+  // 「何件が新規だったか」を出したいのでこちら側でも見る。
+  // 閉路になる組はサーバが 409 を返すので失敗として数える。
+  const handleImport = async (data: unknown): Promise<ImportSummary> => {
+    const d = data as Partial<LineageExport>
+    if (d?.mado !== 'lineage' || !Array.isArray(d.links)) {
+      throw new Error('mado の家系図のエクスポートファイルではありません。')
+    }
+    const key = (l: { parentBucket: string; parentPath: string; childBucket: string; childPath: string }) =>
+      `${l.parentBucket}|${l.parentPath}>${l.childBucket}|${l.childPath}`
+    const existing = new Set((links ?? []).map(key))
+    const who = editor || 'import'
+    const summary: ImportSummary = { added: 0, skipped: 0, failed: [] }
+    for (const l of d.links) {
+      if (typeof l?.parentBucket !== 'string' || typeof l?.childBucket !== 'string'
+        || typeof l?.parentPath !== 'string' || typeof l?.childPath !== 'string') {
+        summary.failed.push('パスが文字列でない項目があります')
+        continue
+      }
+      if (existing.has(key(l))) { summary.skipped++; continue }
+      try {
+        await api.addLineageLink(
+          connId,
+          { bucket: l.parentBucket, path: l.parentPath },
+          { bucket: l.childBucket, path: l.childPath },
+          who,
+        )
+        existing.add(key(l))
+        summary.added++
+      } catch (e) {
+        summary.failed.push(`${l.parentBucket}/${l.parentPath} → ${l.childBucket}/${l.childPath}: ${(e as Error).message}`)
+      }
+    }
+    return summary
+  }
+
   const flowEdges: FlowEdge[] = (links ?? []).map(l => ({
     ids: [l.id],
     parent: { bucket: l.parentBucket, path: l.parentPath },
@@ -116,11 +177,14 @@ export function LineageListView({ connId }: Props) {
       {error && <p className="error mt-2">{error}</p>}
       {opError && <p className="error mt-2" role="alert">{opError}</p>}
 
-      {links !== null && (
-        <p className="mt-1 text-[10.5px] font-semibold uppercase tracking-[0.22em] text-ink-7">
-          {links.length} 件
-        </p>
-      )}
+      <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
+        {links !== null && (
+          <p className="m-0 text-[10.5px] font-semibold uppercase tracking-[0.22em] text-ink-7">
+            {links.length} 件
+          </p>
+        )}
+        <ImportExportButtons onExport={handleExport} onImport={handleImport} onDone={refresh} />
+      </div>
 
       {links !== null && links.length === 0 && !error && (
         <p className="mt-3 text-[13px] text-ink-7">

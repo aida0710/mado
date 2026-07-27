@@ -38,3 +38,44 @@ describe('TagsSettings', () => {
     await waitFor(() => expect(deleteSpy).toHaveBeenCalledWith('t1'))
   })
 })
+
+// 環境をまたいでタグ定義を持ち運ぶための入出力。
+describe('TagsSettings インポート / エクスポート', () => {
+  const pickFile = (json: unknown) => {
+    const input = screen.getByLabelText('インポート') as HTMLInputElement
+    const file = new File([JSON.stringify(json)], 'x.json', { type: 'application/json' })
+    fireEvent.change(input, { target: { files: [file] } })
+  }
+
+  it('mado のファイルでなければ取り込まない', async () => {
+    vi.spyOn(api, 'tags').mockResolvedValue([])
+    const create = vi.spyOn(api, 'createTag')
+    render(<TagsSettings />)
+    await screen.findByLabelText('インポート')
+
+    pickFile({ hello: 'world' })
+    expect(await screen.findByRole('alert')).toHaveTextContent('エクスポートファイルではありません')
+    expect(create).not.toHaveBeenCalled()
+  })
+
+  // 名前が UNIQUE。同名を上書きすると既存の割り当ての見た目が黙って変わるので
+  // スキップする。
+  it('同名タグはスキップし、新規だけ作る', async () => {
+    vi.spyOn(api, 'tags').mockResolvedValue([{ id: 't1', name: '重要', color: '#ff0000' }])
+    const create = vi.spyOn(api, 'createTag').mockResolvedValue({ id: 't2', name: '処理前', color: '#00ff00' })
+    render(<TagsSettings />)
+    await screen.findByText('重要')
+
+    pickFile({
+      mado: 'tags', version: 1,
+      tags: [
+        { name: '重要', color: '#0000ff' },   // 既存 → スキップ (色が違っても上書きしない)
+        { name: '処理前', color: '#00ff00' }, // 新規
+      ],
+    })
+
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(1))
+    expect(create).toHaveBeenCalledWith({ name: '処理前', color: '#00ff00' })
+    expect(await screen.findByText('追加 1 件 / スキップ 1 件')).toBeInTheDocument()
+  })
+})
