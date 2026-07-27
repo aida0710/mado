@@ -3,20 +3,41 @@ import { useNavigate } from 'react-router-dom'
 import { api } from '../lib/api/client'
 import type { LineageLink } from '../lib/api/types'
 import { nodeKey, wouldCreateCycle, type LineageNode } from '../lib/lineageGraph'
-import { encPath } from '../lib/route'
+import { encPath, parseS3Path } from '../lib/route'
 import type { FlowEdge } from './storage/lineage/LineageFlowCanvas'
+import { LineageNodePopup } from './storage/lineage/LineageNodePopup'
 import { ImportExportButtons } from './ImportExportButtons'
 import { downloadJson, type ImportSummary } from '../lib/jsonFile'
 
 // エクスポート形式。id / createdAt / createdBy は書き出さない — 取り込み先で
-// 採番・記録し直すため。リンクの同一性は 4 つのパスの組で決まる。
-interface LineageExport {
+// 採番・記録し直すため。リンクの同一性は親子のパスの組で決まる。
+//
+// v2 でノードを `s3://bucket/key` の 1 本のフルパスにした。v1 は bucket と
+// path が別フィールドに割れていて、バケット直下が path:"" になるなど、
+// 目で読んで手で直すのがつらかった。アプリ内の「S3 URL をコピー」や
+// `s3://bucket/key を貼付` と同じ表記で揃える。
+//
+// バケット直下は末尾スラッシュ付き (`s3://bucket/`)。ディレクトリも末尾
+// スラッシュを保つ。ファイルは付かない — nodeKind() の判定規則がそのまま乗る。
+interface LineageExportV2 {
   mado: 'lineage'
-  version: 1
-  links: Array<{
-    parentBucket: string; parentPath: string
-    childBucket: string; childPath: string
-  }>
+  version: 2
+  links: Array<{ parent: string; child: string }>
+}
+
+// v1 (bucket / path が別フィールド) もインポートは受け付ける — すでに
+// 書き出したファイルを読めるようにするため。判定は handleImport 内で行う。
+
+function toS3Uri(n: LineageNode): string {
+  return `s3://${n.bucket}/${n.path}`
+}
+
+// `s3://bucket/key` を戻す。バケットが取れないものは弾く。
+function fromS3Uri(uri: unknown): LineageNode | null {
+  if (typeof uri !== 'string') return null
+  const parsed = parseS3Path(uri)
+  if (!parsed) return null
+  return { bucket: parsed.bucket, path: parsed.prefix }
 }
 
 // React Flow は重いので家系図を開いた人だけが払うよう別チャンクにする
@@ -63,6 +84,7 @@ export function LineageListView({ connId }: Props) {
   const [saving, setSaving] = useState(false)
   const [pendingConnect, setPendingConnect] = useState<{ parent: LineageNode; child: LineageNode } | null>(null)
   const [pendingUnlink, setPendingUnlink] = useState<number[] | null>(null)
+  const [popupNode, setPopupNode] = useState<LineageNode | null>(null)
   const [opError, setOpError] = useState<string | null>(null)
 
   const refresh = useCallback(() => {
@@ -113,12 +135,12 @@ export function LineageListView({ connId }: Props) {
   }, [connId, refresh])
 
   const handleExport = () => {
-    const body: LineageExport = {
+    const body: LineageExportV2 = {
       mado: 'lineage',
-      version: 1,
+      version: 2,
       links: (links ?? []).map(l => ({
-        parentBucket: l.parentBucket, parentPath: l.parentPath,
-        childBucket: l.childBucket, childPath: l.childPath,
+        parent: toS3Uri({ bucket: l.parentBucket, path: l.parentPath }),
+        child: toS3Uri({ bucket: l.childBucket, path: l.childPath }),
       })),
     }
     downloadJson('mado-lineage.json', body)
@@ -128,33 +150,51 @@ export function LineageListView({ connId }: Props) {
   // 「何件が新規だったか」を出したいのでこちら側でも見る。
   // 閉路になる組はサーバが 409 を返すので失敗として数える。
   const handleImport = async (data: unknown): Promise<ImportSummary> => {
-    const d = data as Partial<LineageExport>
+    // v1 と v2 は version が違うので交差型にすると never になる。ここは
+    // 形の検証が目的なので緩い型で受けて、下で 1 件ずつ判定する。
+    const d = data as { mado?: unknown; links?: unknown } | null
     if (d?.mado !== 'lineage' || !Array.isArray(d.links)) {
       throw new Error('mado の家系図のエクスポートファイルではありません。')
     }
-    const key = (l: { parentBucket: string; parentPath: string; childBucket: string; childPath: string }) =>
-      `${l.parentBucket}|${l.parentPath}>${l.childBucket}|${l.childPath}`
-    const existing = new Set((links ?? []).map(key))
+    // v1 / v2 のどちらでも読めるようにここで 1 つの形へ寄せる。
+    const pairs: Array<{ parent: LineageNode; child: LineageNode } | null> =
+      (d.links as unknown[]).map(raw => {
+        const l = raw as Record<string, unknown>
+        if (typeof l?.parent === 'string' || typeof l?.child === 'string') {
+          const parent = fromS3Uri(l.parent)
+          const child = fromS3Uri(l.child)
+          return parent && child ? { parent, child } : null
+        }
+        if (typeof l?.parentBucket === 'string' && typeof l?.childBucket === 'string'
+          && typeof l?.parentPath === 'string' && typeof l?.childPath === 'string') {
+          return {
+            parent: { bucket: l.parentBucket, path: l.parentPath },
+            child: { bucket: l.childBucket, path: l.childPath },
+          }
+        }
+        return null
+      })
+
+    const key = (n: { parent: LineageNode; child: LineageNode }) =>
+      `${nodeKey(n.parent)}>${nodeKey(n.child)}`
+    const existing = new Set((links ?? []).map(l => key({
+      parent: { bucket: l.parentBucket, path: l.parentPath },
+      child: { bucket: l.childBucket, path: l.childPath },
+    })))
     const who = editor || 'import'
     const summary: ImportSummary = { added: 0, skipped: 0, failed: [] }
-    for (const l of d.links) {
-      if (typeof l?.parentBucket !== 'string' || typeof l?.childBucket !== 'string'
-        || typeof l?.parentPath !== 'string' || typeof l?.childPath !== 'string') {
-        summary.failed.push('パスが文字列でない項目があります')
+    for (const pair of pairs) {
+      if (!pair) {
+        summary.failed.push('パスとして読めない項目があります')
         continue
       }
-      if (existing.has(key(l))) { summary.skipped++; continue }
+      if (existing.has(key(pair))) { summary.skipped++; continue }
       try {
-        await api.addLineageLink(
-          connId,
-          { bucket: l.parentBucket, path: l.parentPath },
-          { bucket: l.childBucket, path: l.childPath },
-          who,
-        )
-        existing.add(key(l))
+        await api.addLineageLink(connId, pair.parent, pair.child, who)
+        existing.add(key(pair))
         summary.added++
       } catch (e) {
-        summary.failed.push(`${l.parentBucket}/${l.parentPath} → ${l.childBucket}/${l.childPath}: ${(e as Error).message}`)
+        summary.failed.push(`${toS3Uri(pair.parent)} → ${toS3Uri(pair.child)}: ${(e as Error).message}`)
       }
     }
     return summary
@@ -183,7 +223,7 @@ export function LineageListView({ connId }: Props) {
             {links.length} 件
           </p>
         )}
-        <ImportExportButtons onExport={handleExport} onImport={handleImport} onDone={refresh} />
+        <ImportExportButtons what="家系図" onExport={handleExport} onImport={handleImport} onDone={refresh} />
       </div>
 
       {links !== null && links.length === 0 && !error && (
@@ -199,9 +239,7 @@ export function LineageListView({ connId }: Props) {
               nodes={flowNodes}
               edges={flowEdges}
               center={null}
-              /* 接続全体では中心が無く、親子の詳細はバケット画面側で見るので
-                 シングルクリックのポップアップは持たない。 */
-              onNodeClick={() => {}}
+              onNodeClick={setPopupNode}
               onNodeDoubleClick={goTo}
               onEdgeClick={setPendingUnlink}
               onConnect={connectByDrag}
@@ -214,6 +252,17 @@ export function LineageListView({ connId }: Props) {
             エッジをクリックで解除。
           </p>
         </div>
+      )}
+
+      {popupNode && links && (
+        <LineageNodePopup
+          connId={connId}
+          node={popupNode}
+          edges={links}
+          onNavigate={goTo}
+          onUnlink={id => { void unlinkMany([id]) }}
+          onClose={() => setPopupNode(null)}
+        />
       )}
 
       {pendingConnect && (

@@ -2,6 +2,9 @@ import { useId, useRef, useState } from 'react'
 import { readJsonFile, summaryText, type ImportSummary } from '../lib/jsonFile'
 
 interface Props {
+  /** 対象名 (例: 接続 / タグ / 家系図)。隠し input の aria-label に使う。
+   *  1 画面に複数置くとボタン名だけでは区別がつかないため。 */
+  what: string
   /** エクスポート押下時。ファイルの組み立てと保存は呼び出し側。 */
   onExport: () => void
   /** インポート。読み込んだ JSON を受け取り、件数のまとめを返す。 */
@@ -15,7 +18,7 @@ interface Props {
 // タグ / 家系図で共通のインポート・エクスポート導線。
 // <input type="file"> は見た目を揃えにくいので隠し、ボタンから click() で開く。
 export function ImportExportButtons({
-  onExport, onImport, onDone, exportLabel = 'エクスポート', importLabel = 'インポート',
+  what, onExport, onImport, onDone, exportLabel = 'エクスポート', importLabel = 'インポート',
 }: Props) {
   const inputId = useId()
   const inputRef = useRef<HTMLInputElement>(null)
@@ -62,7 +65,7 @@ export function ImportExportButtons({
         type="file"
         accept="application/json,.json"
         className="hidden"
-        aria-label={importLabel}
+        aria-label={`${what}をインポート`}
         onChange={e => {
           const f = e.target.files?.[0]
           if (f) void handleFile(f)

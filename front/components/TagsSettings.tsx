@@ -189,6 +189,7 @@ export function TagsSettings() {
         <h3 className={sectionTitleClass}>タグの管理</h3>
         <span className="inline-flex flex-wrap items-center gap-2">
           <ImportExportButtons
+            what="タグ"
             onExport={handleExport}
             onImport={handleImport}
             onDone={refresh}

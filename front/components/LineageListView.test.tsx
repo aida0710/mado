@@ -146,7 +146,7 @@ describe('LineageListView', () => {
 // 環境をまたいでリンクを持ち運ぶための入出力。
 describe('LineageListView インポート / エクスポート', () => {
   const pickFile = async (json: unknown) => {
-    const input = screen.getByLabelText('インポート') as HTMLInputElement
+    const input = screen.getByLabelText('家系図をインポート') as HTMLInputElement
     const file = new File([JSON.stringify(json)], 'x.json', { type: 'application/json' })
     // jsdom の File.text() は実装があるのでそのまま使える。
     fireEvent.change(input, { target: { files: [file] } })
@@ -163,19 +163,19 @@ describe('LineageListView インポート / エクスポート', () => {
     expect(add).not.toHaveBeenCalled()
   })
 
-  it('新規リンクを追加し、既存はスキップして件数を出す', async () => {
+  // v2 は s3://bucket/key の 1 本のフルパス。別バケット間のリンクが多いので
+  // bucket と path が割れていると読みづらい。
+  it('v2 (s3:// フルパス) を取り込み、既存はスキップする', async () => {
     vi.spyOn(api, 'lineageLinks').mockResolvedValue([link(1, ['raw', ''], ['clean', 'v2/'])])
     const add = vi.spyOn(api, 'addLineageLink').mockResolvedValue(2)
     renderView()
     await screen.findByText('1 件')
 
     await pickFile({
-      mado: 'lineage', version: 1,
+      mado: 'lineage', version: 2,
       links: [
-        // 既存と同じ組 → スキップ
-        { parentBucket: 'raw', parentPath: '', childBucket: 'clean', childPath: 'v2/' },
-        // 新規
-        { parentBucket: 'clean', parentPath: 'v2/', childBucket: 'out', childPath: 'f.csv' },
+        { parent: 's3://raw/', child: 's3://clean/v2/' },            // 既存 → スキップ
+        { parent: 's3://clean/v2/', child: 's3://out/f.csv' },       // 新規
       ],
     })
 
@@ -186,6 +186,23 @@ describe('LineageListView インポート / エクスポート', () => {
     expect(await screen.findByText('追加 1 件 / スキップ 1 件')).toBeInTheDocument()
   })
 
+  // すでに書き出した v1 のファイルも読めるようにしておく。
+  it('v1 (bucket / path が別フィールド) も取り込める', async () => {
+    vi.spyOn(api, 'lineageLinks').mockResolvedValue([])
+    const add = vi.spyOn(api, 'addLineageLink').mockResolvedValue(2)
+    renderView()
+    await screen.findByText('0 件')
+
+    await pickFile({
+      mado: 'lineage', version: 1,
+      links: [{ parentBucket: 'clean', parentPath: 'v2/', childBucket: 'out', childPath: 'f.csv' }],
+    })
+
+    await waitFor(() => expect(add).toHaveBeenCalledWith(
+      'c1', { bucket: 'clean', path: 'v2/' }, { bucket: 'out', path: 'f.csv' }, 'import',
+    ))
+  })
+
   // 閉路はサーバが 409 を返す。取り込みは止めず、失敗として数える。
   it('サーバに弾かれた項目は失敗として数える', async () => {
     vi.spyOn(api, 'lineageLinks').mockResolvedValue([])
@@ -194,8 +211,8 @@ describe('LineageListView インポート / エクスポート', () => {
     await screen.findByText('0 件')
 
     await pickFile({
-      mado: 'lineage', version: 1,
-      links: [{ parentBucket: 'a', parentPath: '', childBucket: 'b', childPath: '' }],
+      mado: 'lineage', version: 2,
+      links: [{ parent: 's3://a/', child: 's3://b/' }],
     })
 
     expect(await screen.findByText(/失敗 1 件/)).toBeInTheDocument()

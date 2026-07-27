@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import ConnectionsPage from './ConnectionsPage'
@@ -54,5 +54,66 @@ describe('ConnectionsPage の狭い画面向けレイアウト', () => {
     // 4 ボタンが 360px に収まらないので折り返しを許可する。
     const buttons = screen.getByText('削除').closest('div') as HTMLElement
     expect(buttons.className).toContain('flex-wrap')
+  })
+})
+
+// 接続定義を環境間で持ち運ぶための入出力。
+describe('ConnectionsPage インポート / エクスポート', () => {
+  const pickFile = (json: unknown) => {
+    const input = screen.getByLabelText('接続をインポート') as HTMLInputElement
+    const file = new File([JSON.stringify(json)], 'x.json', { type: 'application/json' })
+    fireEvent.change(input, { target: { files: [file] } })
+  }
+
+  it('mado のファイルでなければ取り込まない', async () => {
+    vi.mocked(api.listConnections).mockResolvedValue([])
+    render(<MemoryRouter><ConnectionsPage /></MemoryRouter>)
+    await screen.findByLabelText('接続をインポート')
+
+    pickFile({ hello: 'world' })
+    expect(await screen.findByRole('alert')).toHaveTextContent('エクスポートファイルではありません')
+  })
+
+  // エクスポートは雛形なので鍵が空。そのまま取り込もうとしたら理由を出す
+  // (API の min(1) エラーをそのまま見せない)。
+  it('鍵が空の項目は理由つきで失敗として数える', async () => {
+    vi.mocked(api.listConnections).mockResolvedValue([])
+    render(<MemoryRouter><ConnectionsPage /></MemoryRouter>)
+    await screen.findByLabelText('接続をインポート')
+
+    pickFile({
+      mado: 'connections', version: 1,
+      connections: [{
+        name: 'r2', endpoint: 'https://e', region: 'auto',
+        accessKeyId: '', secretAccessKey: '',
+        forcePathStyle: true, listObjectsVersion: 'v2',
+      }],
+    })
+
+    expect(await screen.findByText(/失敗 1 件/)).toBeInTheDocument()
+    expect(await screen.findByRole('alert')).toHaveTextContent('シークレットキーが空')
+  })
+
+  it('鍵を書き足した項目は createConnection で作る', async () => {
+    vi.mocked(api.listConnections).mockResolvedValue([])
+    const create = vi.spyOn(api, 'createConnection').mockResolvedValue(conn)
+    render(<MemoryRouter><ConnectionsPage /></MemoryRouter>)
+    await screen.findByLabelText('接続をインポート')
+
+    pickFile({
+      mado: 'connections', version: 1,
+      connections: [{
+        name: 'r2', endpoint: 'https://e', region: 'auto',
+        accessKeyId: 'AKIA', secretAccessKey: 'sec',
+        forcePathStyle: true, listObjectsVersion: 'v2',
+      }],
+    })
+
+    await waitFor(() => expect(create).toHaveBeenCalledWith({
+      name: 'r2', endpoint: 'https://e', region: 'auto',
+      accessKeyId: 'AKIA', secretAccessKey: 'sec',
+      forcePathStyle: true, listObjectsVersion: 'v2',
+    }))
+    expect(await screen.findByText('追加 1 件 / スキップ 0 件')).toBeInTheDocument()
   })
 })

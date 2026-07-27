@@ -42,7 +42,7 @@ describe('TagsSettings', () => {
 // 環境をまたいでタグ定義を持ち運ぶための入出力。
 describe('TagsSettings インポート / エクスポート', () => {
   const pickFile = (json: unknown) => {
-    const input = screen.getByLabelText('インポート') as HTMLInputElement
+    const input = screen.getByLabelText('タグをインポート') as HTMLInputElement
     const file = new File([JSON.stringify(json)], 'x.json', { type: 'application/json' })
     fireEvent.change(input, { target: { files: [file] } })
   }
@@ -51,7 +51,7 @@ describe('TagsSettings インポート / エクスポート', () => {
     vi.spyOn(api, 'tags').mockResolvedValue([])
     const create = vi.spyOn(api, 'createTag')
     render(<TagsSettings />)
-    await screen.findByLabelText('インポート')
+    await screen.findByLabelText('タグをインポート')
 
     pickFile({ hello: 'world' })
     expect(await screen.findByRole('alert')).toHaveTextContent('エクスポートファイルではありません')

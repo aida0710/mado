@@ -7,6 +7,28 @@ import { ConnectionDeleteConfirm } from '../components/ConnectionDeleteConfirm'
 import { TagsSettings } from '../components/TagsSettings'
 import { FeatureSettings } from '../components/FeatureSettings'
 import { About } from '../components/About'
+import { ImportExportButtons } from '../components/ImportExportButtons'
+import { downloadJson, type ImportSummary } from '../lib/jsonFile'
+
+// エクスポート形式。認証情報は空文字で書き出す。
+//
+// アクセスキー / シークレットキーは暗号化して保存され、API は平文を返さない
+// (accessKeyIdMasked しか出てこない)。したがって「秘密を伏せる」というより
+// 「そもそも取り出せない」ので、両方とも空にして雛形として出す。
+// 取り込む側でファイルに書き足してもらう。
+interface ConnectionsExport {
+  mado: 'connections'
+  version: 1
+  connections: Array<{
+    name: string
+    endpoint: string
+    region: string
+    accessKeyId: string
+    secretAccessKey: string
+    forcePathStyle: boolean
+    listObjectsVersion: 'v1' | 'v2'
+  }>
+}
 
 const sectionTitleClass =
   'm-0 text-[10.5px] font-semibold uppercase tracking-[0.22em] text-ink-7'
@@ -99,6 +121,64 @@ export default function ConnectionsPage() {
     }
   }
 
+  const handleExport = () => {
+    const body: ConnectionsExport = {
+      mado: 'connections',
+      version: 1,
+      connections: connections.map(c => ({
+        name: c.name,
+        endpoint: c.endpoint,
+        region: c.region,
+        // 平文を取り出せないので雛形として空で出す (上のコメント参照)。
+        accessKeyId: '',
+        secretAccessKey: '',
+        forcePathStyle: c.forcePathStyle,
+        listObjectsVersion: c.listObjectsVersion,
+      })),
+    }
+    downloadJson('mado-connections.json', body)
+  }
+
+  // 同名の接続はスキップする。同じ名前が並ぶと Storage の CONN メニューで
+  // 見分けがつかなくなるため。
+  const handleImport = async (data: unknown): Promise<ImportSummary> => {
+    const d = data as { mado?: unknown; connections?: unknown } | null
+    if (d?.mado !== 'connections' || !Array.isArray(d.connections)) {
+      throw new Error('mado の接続のエクスポートファイルではありません。')
+    }
+    const existing = new Set(connections.map(c => c.name))
+    const summary: ImportSummary = { added: 0, skipped: 0, failed: [] }
+    for (const raw of d.connections as unknown[]) {
+      const c = raw as Record<string, unknown>
+      if (typeof c?.name !== 'string' || typeof c?.endpoint !== 'string' || typeof c?.region !== 'string') {
+        summary.failed.push('name / endpoint / region が文字列でない項目があります')
+        continue
+      }
+      if (existing.has(c.name)) { summary.skipped++; continue }
+      // 空のまま取り込むと API の min(1) で弾かれるので、先に理由を出す。
+      if (!c.accessKeyId || !c.secretAccessKey) {
+        summary.failed.push(`${c.name}: アクセスキー / シークレットキーが空です`)
+        continue
+      }
+      try {
+        await api.createConnection({
+          name: c.name,
+          endpoint: c.endpoint,
+          region: c.region,
+          accessKeyId: String(c.accessKeyId),
+          secretAccessKey: String(c.secretAccessKey),
+          forcePathStyle: c.forcePathStyle !== false,
+          listObjectsVersion: c.listObjectsVersion === 'v1' ? 'v1' : 'v2',
+        })
+        existing.add(c.name)
+        summary.added++
+      } catch (e) {
+        summary.failed.push(`${c.name}: ${(e as Error).message}`)
+      }
+    }
+    return summary
+  }
+
   return (
     <div>
       <header className="page-head">
@@ -107,13 +187,16 @@ export default function ConnectionsPage() {
 
       <section className="mt-7">
         <div
-          className="mb-3 flex items-baseline justify-between gap-3 pb-2"
+          className="mb-3 flex flex-wrap items-baseline justify-between gap-3 pb-2"
           style={{ borderBottom: '1px solid var(--rule)' }}
         >
           <h3 className={sectionTitleClass}>オブジェクトストレージ接続先の管理</h3>
-          <button className="ghost" onClick={() => dispatch({ type: 'openAdd' })}>
-            <span aria-hidden>+</span> 追加
-          </button>
+          <span className="inline-flex flex-wrap items-center gap-2">
+            <ImportExportButtons what="接続" onExport={handleExport} onImport={handleImport} onDone={refresh} />
+            <button className="ghost" onClick={() => dispatch({ type: 'openAdd' })}>
+              <span aria-hidden>+</span> 追加
+            </button>
+          </span>
         </div>
 
         {loading && (
