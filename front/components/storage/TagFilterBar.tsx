@@ -23,7 +23,9 @@ export function TagFilterBar({ tags, selected, onToggle, onClear }: Props) {
           type="button"
           onClick={() => onToggle(tag.id)}
           className="border-0 bg-transparent p-0 cursor-pointer"
-          style={{ opacity: selected.size === 0 || selected.has(tag.id) ? 1 : 0.4 }}
+          // 未選択は淡くするが 0.4 だと薄い。バッジ自体が淡いティントに
+          // なったので、それより薄くすると読めなくなる。
+          style={{ opacity: selected.size === 0 || selected.has(tag.id) ? 1 : 0.55 }}
           aria-pressed={selected.has(tag.id)}
         >
           <TagBadge tag={tag} />
