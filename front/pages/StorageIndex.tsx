@@ -27,8 +27,10 @@ const sectionTitleClass =
 const listClass = 'm-0 list-none p-0'
 const liClass =
     'flex min-w-0 items-baseline gap-3 px-1 py-3 transition-colors hover:bg-ink-0'
+// block: 親が flex コンテナでなくなった (タグ行と縦積みするラッパ div の中) ので、
+// 明示しないと inline のままで text-ellipsis が効かない。
 const linkClass =
-    'min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap font-semibold ' +
+    'block min-w-0 overflow-hidden text-ellipsis whitespace-nowrap font-semibold ' +
     'tracking-[-0.005em] text-ink-12 no-underline hover:underline underline-offset-[3px]'
 
 export default function StorageIndex({connId}: Props) {
@@ -247,10 +249,18 @@ function BucketLi({
                     aria-label={`${bucket.name} を現在使っているバケットに${inUse ? '外す' : '追加'}`}
                 />
             </label>
-            <Link className={linkClass} to={bucketHref}>
-                {bucket.name}
-            </Link>
-            {tags.map(t => <TagBadge key={t.id} tag={t} />)}
+            {/* タグは名前の右ではなく下の行に置く (EntryTable と同じ理由 —
+                右に並べると長いバケット名が truncate されて読めなくなる)。 */}
+            <div className="min-w-0 flex-1">
+                <Link className={linkClass} to={bucketHref}>
+                    {bucket.name}
+                </Link>
+                {tags.length > 0 && (
+                    <div className="mt-1 flex flex-wrap gap-1">
+                        {tags.map(t => <TagBadge key={t.id} tag={t} />)}
+                    </div>
+                )}
+            </div>
             {bucket.creationDate && (
                 <span
                     className="font-mono text-[11.5px] text-ink-7 shrink-0"

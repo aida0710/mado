@@ -103,7 +103,7 @@ export function ConnectionSwitcher() {
           <Link
             role="menuitem"
             className={itemClass}
-            to="/connections"
+            to="/settings"
             onClick={() => setOpen(false)}
           >
             <span aria-hidden className="mr-1">⚙</span>

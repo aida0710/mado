@@ -13,6 +13,18 @@ import { CopyMenu, type MenuItem } from '../CopyMenu'
 import { TagBadge } from '../TagBadge'
 import { TagPicker } from '../TagPicker'
 
+// タグは名前の「右」ではなく「下」に別行で出す。右に並べると、長いキーほど
+// 名前側の truncate / break-all が効いてファイル名・ディレクトリ名が読めなく
+// なるため。呼び出し側は glyph の隣の列 (名前と同じ列) に置いて字下げを揃える。
+function TagRow({ tags }: { tags: Tag[] }) {
+  if (tags.length === 0) return null
+  return (
+    <span className="mt-1 flex flex-wrap gap-1">
+      {tags.map(t => <TagBadge key={t.id} tag={t} />)}
+    </span>
+  )
+}
+
 // <sm (= 640px 未満、phones) で card list、それ以上で table。
 // CSS の `hidden sm:block` で両方を DOM に置くと jsdom + Testing Library が
 // 同じ key の要素を複数ヒットしてしまうので、matchMedia を購読して片方だけ
@@ -89,8 +101,10 @@ const DirRow = memo(function DirRow({
           >
             {/* dir glyph: chevron — folder シンボルとしての editorial 表現 */}
             <span aria-hidden className="text-ink-5 select-none text-[10px]">▸</span>
-            <span className="truncate">{tail}</span>
-            {tags.map(t => <TagBadge key={t.id} tag={t} />)}
+            <span className="min-w-0 flex-1">
+              <span className="block truncate">{tail}</span>
+              <TagRow tags={tags} />
+            </span>
           </Link>
         </td>
         <td className={tdNumClass}>-</td>
@@ -179,17 +193,19 @@ const FileRow = memo(function FileRow({
           <span className="flex items-baseline gap-2">
             {/* file glyph: 控えめな点 — タイポ的に存在を主張しすぎない */}
             <span aria-hidden className="text-ink-3 select-none text-[10px]">·</span>
-            <span
-              className="truncate text-ink-11"
-              style={{
-                fontFamily: 'var(--font-mono)',
-                fontSize: '12.5px',
-                letterSpacing: '0.005em',
-              }}
-            >
-              {tail}
+            <span className="min-w-0 flex-1">
+              <span
+                className="block truncate text-ink-11"
+                style={{
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: '12.5px',
+                  letterSpacing: '0.005em',
+                }}
+              >
+                {tail}
+              </span>
+              <TagRow tags={tags} />
             </span>
-            {tags.map(t => <TagBadge key={t.id} tag={t} />)}
           </span>
         </td>
         <td className={tdNumClass}>{fmtSize(f.size)}</td>
@@ -241,8 +257,10 @@ const DirCard = memo(function DirCard({
           className="flex-1 min-w-0 flex items-baseline gap-2 font-semibold text-ink-12 no-underline"
         >
           <span aria-hidden className="text-ink-5 select-none text-[10px]">▸</span>
-          <span className="break-all">{tail}</span>
-          {tags.map(t => <TagBadge key={t.id} tag={t} />)}
+          <span className="min-w-0 flex-1">
+            <span className="block break-all">{tail}</span>
+            <TagRow tags={tags} />
+          </span>
         </Link>
         <CopyMenu items={items} />
       </div>
@@ -322,17 +340,19 @@ const FileCard = memo(function FileCard({
         <div className="min-w-0 flex-1">
           <div className="flex items-baseline gap-2">
             <span aria-hidden className="text-ink-3 select-none text-[10px]">·</span>
-            <span
-              className="break-all text-ink-11"
-              style={{
-                fontFamily: 'var(--font-mono)',
-                fontSize: '12.5px',
-                letterSpacing: '0.005em',
-              }}
-            >
-              {tail}
+            <span className="min-w-0 flex-1">
+              <span
+                className="block break-all text-ink-11"
+                style={{
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: '12.5px',
+                  letterSpacing: '0.005em',
+                }}
+              >
+                {tail}
+              </span>
+              <TagRow tags={tags} />
             </span>
-            {tags.map(t => <TagBadge key={t.id} tag={t} />)}
           </div>
           <div
             className="mt-1 ml-3 text-[11px] text-ink-7 tabular-nums"

@@ -48,7 +48,7 @@ function Tabs() {
     <nav className="flex items-stretch gap-4 sm:gap-6">
       <Tab to="/"            label="Home" />
       <Tab to="/storage"     label="Storage" />
-      <Tab to="/connections" label="Settings" />
+      <Tab to="/settings"    label="Settings" />
     </nav>
   )
 }
@@ -111,7 +111,7 @@ export default function App() {
               <Routes>
                 <Route path="/"                  element={<HomePage />} />
                 <Route path="/edit-note"         element={<NoteEditPage />} />
-                <Route path="/connections"       element={<ConnectionsPage />} />
+                <Route path="/settings"          element={<ConnectionsPage />} />
                 <Route path="/storage"           element={<StorageLanding />} />
                 <Route path="/storage/:connId/*" element={<StoragePageWithKey />} />
               </Routes>

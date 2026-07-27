@@ -73,7 +73,7 @@ export function TagPicker({
 
         {allTags.length === 0 ? (
           <p className="text-[13px] text-ink-7">
-            タグがまだありません。<Link to="/connections">Settings</Link> で作成してください。
+            タグがまだありません。<Link to="/settings">Settings</Link> で作成してください。
           </p>
         ) : (
           <ul className="m-0 list-none p-0">

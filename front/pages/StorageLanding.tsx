@@ -37,7 +37,7 @@ export default function StorageLanding() {
         ここに表示する S3 互換ストレージはまだ登録されていません。<br />
         設定ページから一つ追加してみましょう。
       </p>
-      <Link className="empty-state__cta" to="/connections">接続を追加</Link>
+      <Link className="empty-state__cta" to="/settings">接続を追加</Link>
     </div>
   )
 }
