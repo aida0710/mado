@@ -7,6 +7,11 @@ export type MenuItem =
   | { kind: 'download'; label: string; href: string; filename: string }
   | { kind: 'action'; label: string; onSelect: () => void }
 
+// メニュー幅の下限 / 上限。className の min-w-[280px] / max-w-[480px] と対で、
+// place() が viewport 幅に丸めるときの基準値にも使う。
+const MENU_MIN_W = 280
+const MENU_MAX_W = 480
+
 interface Props {
   items: MenuItem[]
   // 初期表示のトリガー (default: "⋯")
@@ -44,15 +49,31 @@ export const CopyMenu = memo(function CopyMenu({ items, trigger = '⋯', ariaLab
     const menuH = menuRef.current?.offsetHeight || items.length * 48 + 8
     const gap = 6
     const margin = 8
+    const vw = window.innerWidth
     const spaceBelow = window.innerHeight - r.bottom
     const up = spaceBelow < menuH + gap && r.top > spaceBelow
+    // 幅は className の min-w/max-w (280/480px) が基本だが、それを viewport 幅にも
+    // 収める。スマホ幅では 280px の min-width が画面からはみ出す原因になるため、
+    // min 側も同じ上限で丸める (inline style は class より優先されるので効く)。
+    const maxW = Math.min(MENU_MAX_W, Math.max(0, vw - margin * 2))
+    const minW = Math.min(MENU_MIN_W, maxW)
+    const menuW = menuRef.current?.offsetWidth || minW
+    // 横はトリガ右端に揃えるが、左端が画面外へ出ないよう right に上限をかける。
+    // 揃えるだけだと、トリガが画面左寄りにある行 (パンくず等) を狭い画面で開いた
+    // とき right が大きくなりすぎ、メニューが左へ突き抜けて見切れる。
+    const right = Math.min(
+      Math.max(margin, Math.round(vw - r.right)),
+      Math.max(margin, vw - margin - menuW),
+    )
     setMenuStyle({
       position: 'fixed',
-      right: Math.max(margin, Math.round(window.innerWidth - r.right)),
+      right,
       ...(up
         ? { bottom: Math.round(window.innerHeight - r.top + gap) }
         : { top: Math.round(r.bottom + gap) }),
       maxHeight: `calc(100vh - ${margin * 2}px)`,
+      maxWidth: maxW,
+      minWidth: minW,
     })
   }, [items.length])
 

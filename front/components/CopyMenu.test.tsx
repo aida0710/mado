@@ -98,3 +98,68 @@ describe('CopyMenu - open direction (portal + fixed)', () => {
     expect(menu.style.top).toBe('')
   })
 })
+
+// スマホ幅で「横に突き抜ける」不具合の回帰テスト。right をトリガ右端に揃える
+// だけだと、トリガが画面左寄り (パンくず等) にあるとき right が大きくなりすぎ、
+// メニューの左端が負の座標へ回り込んで見切れる。
+describe('CopyMenu - horizontal clamping', () => {
+  const items: MenuItem[] = [
+    { kind: 'copy', label: 'A', value: 'a' },
+    { kind: 'copy', label: 'B', value: 'b' },
+  ]
+  const MIN_W = 280
+  const MARGIN = 8
+
+  // jsdom の innerWidth は getter なので defineProperty で差し替える。
+  const setViewportWidth = (w: number) => {
+    Object.defineProperty(window, 'innerWidth', { value: w, configurable: true, writable: true })
+  }
+  const originalWidth = window.innerWidth
+  afterEach(() => setViewportWidth(originalWidth))
+
+  it('keeps the left edge on screen when the trigger sits far from the right edge', async () => {
+    const user = userEvent.setup()
+    render(<CopyMenu items={items} />)
+    const trigger = screen.getByRole('button', { name: 'アクション' })
+    // rect() のトリガは left=0/right=20 — 画面左端。素朴に right = innerWidth - 20
+    // とすると左端が -260px になる。
+    vi.spyOn(trigger, 'getBoundingClientRect').mockReturnValue(rect(80, 100))
+    await user.click(trigger)
+    const menu = screen.getByRole('menu')
+
+    const right = parseFloat(menu.style.right)
+    // 左端 = innerWidth - right - 幅。これが margin 以上なら画面内に収まっている。
+    expect(window.innerWidth - right - MIN_W).toBeGreaterThanOrEqual(MARGIN)
+  })
+
+  it('shrinks the menu to the viewport on a phone-width screen', async () => {
+    const user = userEvent.setup()
+    setViewportWidth(360)
+    render(<CopyMenu items={items} />)
+    const trigger = screen.getByRole('button', { name: 'アクション' })
+    vi.spyOn(trigger, 'getBoundingClientRect').mockReturnValue(rect(80, 100))
+    await user.click(trigger)
+    const menu = screen.getByRole('menu')
+
+    // 幅が viewport - 左右マージンを超えない。min-width も同じ上限で丸める
+    // (class の min-w-[280px] が残ると 360px 幅でもはみ出す)。
+    expect(parseFloat(menu.style.maxWidth)).toBeLessThanOrEqual(360 - MARGIN * 2)
+    expect(parseFloat(menu.style.minWidth)).toBeLessThanOrEqual(360 - MARGIN * 2)
+    expect(parseFloat(menu.style.right)).toBeGreaterThanOrEqual(MARGIN)
+  })
+
+  it('still caps the width at 480px on a wide screen', async () => {
+    const user = userEvent.setup()
+    setViewportWidth(1600)
+    render(<CopyMenu items={items} />)
+    const trigger = screen.getByRole('button', { name: 'アクション' })
+    vi.spyOn(trigger, 'getBoundingClientRect').mockReturnValue(rect(80, 100))
+    await user.click(trigger)
+    const menu = screen.getByRole('menu')
+
+    // デスクトップでは従来どおり 280〜480px。inline style が class の上限を
+    // 広げてしまわないことの確認。
+    expect(parseFloat(menu.style.maxWidth)).toBe(480)
+    expect(parseFloat(menu.style.minWidth)).toBe(280)
+  })
+})
