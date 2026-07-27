@@ -1,10 +1,12 @@
-import { useCallback, useEffect, useReducer, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import type { z } from 'zod'
 import { api } from '../lib/api/client'
 import { StorageList } from '../lib/api/types'
+import type { Tag } from '../lib/api/types'
 import { EntryTable } from './storage/EntryTable'
 import { Pager } from './storage/Pager'
 import { SearchBar } from './storage/SearchBar'
+import { TagFilterBar } from './storage/TagFilterBar'
 
 interface Props {
   connId: string
@@ -180,6 +182,62 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
 
   const dirs = page?.directories ?? []
   const files = page?.files ?? []
+
+  // タグ: レジストリ全件 + 表示中の dirs/files 分のバッチ割り当てを取得する。
+  // dirs/files が変わるたび (ページ送り・検索・prefix 遷移) に再取得する。
+  const [allTags, setAllTags] = useState<Tag[]>([])
+  const [dirTags, setDirTags] = useState<Record<string, string[]>>({})
+  const [fileTags, setFileTags] = useState<Record<string, string[]>>({})
+  const [selectedTagIds, setSelectedTagIds] = useState<Set<string>>(new Set())
+
+  useEffect(() => { api.tags().then(setAllTags).catch(() => {}) }, [connId])
+
+  useEffect(() => {
+    let cancelled = false
+    Promise.all([
+      api.tagAssignments(connId, bucket, 'prefix', dirs),
+      api.tagAssignments(connId, bucket, 'file', files.map(f => f.key)),
+    ]).then(([d, f]) => {
+      if (cancelled) return
+      setDirTags(d)
+      setFileTags(f)
+    }).catch(() => {})
+    return () => { cancelled = true }
+    // dirs/files は毎レンダ新しい配列参照になるため、実際の中身 (キー結合) で比較する。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connId, bucket, dirs.join(' '), files.map(f => f.key).join(' ')])
+
+  const handleTagsChange = useCallback((path: string, tagIds: string[]) => {
+    setDirTags(prev => (path in prev || dirs.includes(path)) ? { ...prev, [path]: tagIds } : prev)
+    setFileTags(prev => (path in prev || files.some(f => f.key === path)) ? { ...prev, [path]: tagIds } : prev)
+  }, [dirs, files])
+
+  const tagsByPath = useMemo(() => ({ ...dirTags, ...fileTags }), [dirTags, fileTags])
+
+  // 絞り込みチップの候補: 今表示中の行に実際に出現するタグのみ。
+  const visibleTagIds = useMemo(() => new Set(Object.values(tagsByPath).flat()), [tagsByPath])
+  const filterCandidates = useMemo(
+    () => allTags.filter(t => visibleTagIds.has(t.id)),
+    [allTags, visibleTagIds],
+  )
+
+  const matchesSelectedTags = useCallback((path: string): boolean => {
+    if (selectedTagIds.size === 0) return true
+    const ids = tagsByPath[path] ?? []
+    return ids.some(id => selectedTagIds.has(id))
+  }, [selectedTagIds, tagsByPath])
+
+  const visibleDirs = useMemo(() => dirs.filter(matchesSelectedTags), [dirs, matchesSelectedTags])
+  const visibleFiles = useMemo(() => files.filter(f => matchesSelectedTags(f.key)), [files, matchesSelectedTags])
+
+  const toggleTagFilter = useCallback((tagId: string) => {
+    setSelectedTagIds(prev => {
+      const next = new Set(prev)
+      if (next.has(tagId)) next.delete(tagId); else next.add(tagId)
+      return next
+    })
+  }, [setSelectedTagIds])
+
   // hasNext は「次がある」だけでなく「server が cursor を進めるか」も判定する。
   // DDN 製などの S3 互換は IsTruncated=true でも ContinuationToken / 最終キーが
   // 進まないことがあり、その状態で「次」を押しても同じデータしか返らないため
@@ -192,7 +250,7 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
     return c.continuation !== used.continuation || c.startAfter !== used.startAfter
   })()
   const cursorStuck = !!(page && nextCursor(page) && !hasNext)
-  const isEmpty = !loading && dirs.length === 0 && files.length === 0
+  const isEmpty = !loading && visibleDirs.length === 0 && visibleFiles.length === 0
   const isSearching = submittedQ.length > 0
   const isTrailingPage = pageIdx === history.length - 1
   const totalLabel = isTrailingPage && hasNext
@@ -230,13 +288,22 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
         aria-busy={loading}
         className={loading ? 'pointer-events-none opacity-60 transition-opacity' : 'transition-opacity'}
       >
+        <TagFilterBar
+          tags={filterCandidates}
+          selected={selectedTagIds}
+          onToggle={toggleTagFilter}
+          onClear={() => setSelectedTagIds(new Set())}
+        />
         <EntryTable
-          dirs={dirs}
-          files={files}
+          dirs={visibleDirs}
+          files={visibleFiles}
           prefix={prefix}
           connId={connId}
           bucket={bucket}
           onSelectFile={onSelectFile}
+          allTags={allTags}
+          tagsByPath={tagsByPath}
+          onTagsChange={handleTagsChange}
         />
 
         {isEmpty && !error && (

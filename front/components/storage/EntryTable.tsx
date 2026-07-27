@@ -8,7 +8,10 @@ import { fmtSize } from '../../lib/format'
 import { absoluteUrl, encPath } from '../../lib/route'
 import { usePlayerDeck } from '../../lib/playerDeck'
 import { usePinnedPreviews } from '../../lib/pinnedPreviews'
+import type { Tag } from '../../lib/api/types'
 import { CopyMenu, type MenuItem } from '../CopyMenu'
+import { TagBadge } from '../TagBadge'
+import { TagPicker } from '../TagPicker'
 
 // <sm (= 640px 未満、phones) で card list、それ以上で table。
 // CSS の `hidden sm:block` で両方を DOM に置くと jsdom + Testing Library が
@@ -55,53 +58,72 @@ const dirRowClass =
 // スキップできる。各行は items: MenuItem[] を内部で useMemo して
 // CopyMenu の memo を活かす。
 const DirRow = memo(function DirRow({
-  d, prefix, connId, bucket,
-}: { d: string; prefix: string; connId: string; bucket: string }) {
+  d, prefix, connId, bucket, allTags, tagIds, onTagsChange,
+}: {
+  d: string; prefix: string; connId: string; bucket: string
+  allTags: Tag[]; tagIds: string[]; onTagsChange?: (path: string, tagIds: string[]) => void
+}) {
+  const [pickerOpen, setPickerOpen] = useState(false)
   // 表示は現ディレクトリ基準で末尾を切る。検索中は effectivePrefix が
   // `prefix + q` だが、入っているキーは prefix で始まるのでそのまま slice。
   const tail = d.startsWith(prefix) ? d.slice(prefix.length) : d
   const dirHref = `/storage/${encodeURIComponent(connId)}/${encodeURIComponent(bucket)}/${encPath(d)}`
   const dirS3Url = `s3://${bucket}/${d}`
   const dirWebUrl = absoluteUrl(dirHref)
+  const tags = allTags.filter(t => tagIds.includes(t.id))
   const items = useMemo<MenuItem[]>(() => [
     { kind: 'copy', label: 'Web URL をコピー', value: dirWebUrl },
     { kind: 'copy', label: 'S3 URL をコピー', value: dirS3Url },
+    { kind: 'action', label: 'タグを編集', onSelect: () => setPickerOpen(true) },
   ], [dirWebUrl, dirS3Url])
   return (
-    <tr className={dirRowClass} style={{ borderBottom: '1px solid var(--rule)' }}>
-      <td className={`${tdNameClass} p-0`}>
-        <Link
-          to={dirHref}
-          className={
-            'flex items-baseline gap-2 px-2 py-2.5 ' +
-            'font-semibold text-ink-12 no-underline'
-          }
-        >
-          {/* dir glyph: chevron — folder シンボルとしての editorial 表現 */}
-          <span aria-hidden className="text-ink-5 select-none text-[10px]">▸</span>
-          <span className="truncate">{tail}</span>
-        </Link>
-      </td>
-      <td className={tdNumClass}>-</td>
-      <td className={tdNumClass}>-</td>
-      <td className={tdNumClass}>
-        <CopyMenu items={items} />
-      </td>
-    </tr>
+    <>
+      <tr className={dirRowClass} style={{ borderBottom: '1px solid var(--rule)' }}>
+        <td className={`${tdNameClass} p-0`}>
+          <Link
+            to={dirHref}
+            className={
+              'flex items-baseline gap-2 px-2 py-2.5 ' +
+              'font-semibold text-ink-12 no-underline'
+            }
+          >
+            {/* dir glyph: chevron — folder シンボルとしての editorial 表現 */}
+            <span aria-hidden className="text-ink-5 select-none text-[10px]">▸</span>
+            <span className="truncate">{tail}</span>
+            {tags.map(t => <TagBadge key={t.id} tag={t} />)}
+          </Link>
+        </td>
+        <td className={tdNumClass}>-</td>
+        <td className={tdNumClass}>-</td>
+        <td className={tdNumClass}>
+          <CopyMenu items={items} />
+        </td>
+      </tr>
+      {pickerOpen && (
+        <TagPicker
+          connId={connId} bucket={bucket} kind="prefix" path={d} label={tail}
+          allTags={allTags} assignedTagIds={tagIds}
+          onChange={next => onTagsChange?.(d, next)}
+          onClose={() => setPickerOpen(false)}
+        />
+      )}
+    </>
   )
 })
 
 const FileRow = memo(function FileRow({
-  f, prefix, connId, bucket, onSelectFile,
+  f, prefix, connId, bucket, onSelectFile, allTags, tagIds, onTagsChange,
 }: {
   f: FileEntry
   prefix: string
   connId: string
   bucket: string
   onSelectFile?: (key: string) => void
+  allTags: Tag[]; tagIds: string[]; onTagsChange?: (path: string, tagIds: string[]) => void
 }) {
   const deck = usePlayerDeck()
   const pinned = usePinnedPreviews()
+  const [pickerOpen, setPickerOpen] = useState(false)
   const tail = f.key.startsWith(prefix) ? f.key.slice(prefix.length) : f.key
   const select = useCallback(() => onSelectFile?.(f.key), [onSelectFile, f.key])
   // Enter / Space で preview を開く。dir 行は <Link> がネイティブで処理する。
@@ -121,6 +143,7 @@ const FileRow = memo(function FileRow({
   const downloadUrl = api.downloadUrl(connId, bucket, f.key)
   const filename = f.key.split('/').pop() ?? 'file'
   const isAudio = classify(f.key) === 'audio'
+  const tags = allTags.filter(t => tagIds.includes(t.id))
   const items = useMemo<MenuItem[]>(() => [
     ...(isAudio ? [{
       kind: 'action' as const,
@@ -137,41 +160,53 @@ const FileRow = memo(function FileRow({
       label: 'ピン留め',
       onSelect: () => pinned.addPin({ connId, bucket, key: f.key }),
     },
+    { kind: 'action' as const, label: 'タグを編集', onSelect: () => setPickerOpen(true) },
     { kind: 'download', label: 'このファイルをダウンロード', href: downloadUrl, filename },
     { kind: 'copy',     label: 'Web URL をコピー',           value: webUrl },
     { kind: 'copy',     label: 'S3 URL をコピー',            value: s3Url },
   ], [isAudio, deck, pinned, connId, bucket, f.key, downloadUrl, webUrl, s3Url, filename])
   return (
-    <tr
-      className={fileRowClass}
-      style={{ borderBottom: '1px solid var(--rule)' }}
-      role="button"
-      tabIndex={0}
-      onClick={select}
-      onKeyDown={onKeyDown}
-    >
-      <td className={tdNameClass}>
-        <span className="flex items-baseline gap-2">
-          {/* file glyph: 控えめな点 — タイポ的に存在を主張しすぎない */}
-          <span aria-hidden className="text-ink-3 select-none text-[10px]">·</span>
-          <span
-            className="truncate text-ink-11"
-            style={{
-              fontFamily: 'var(--font-mono)',
-              fontSize: '12.5px',
-              letterSpacing: '0.005em',
-            }}
-          >
-            {tail}
+    <>
+      <tr
+        className={fileRowClass}
+        style={{ borderBottom: '1px solid var(--rule)' }}
+        role="button"
+        tabIndex={0}
+        onClick={select}
+        onKeyDown={onKeyDown}
+      >
+        <td className={tdNameClass}>
+          <span className="flex items-baseline gap-2">
+            {/* file glyph: 控えめな点 — タイポ的に存在を主張しすぎない */}
+            <span aria-hidden className="text-ink-3 select-none text-[10px]">·</span>
+            <span
+              className="truncate text-ink-11"
+              style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: '12.5px',
+                letterSpacing: '0.005em',
+              }}
+            >
+              {tail}
+            </span>
+            {tags.map(t => <TagBadge key={t.id} tag={t} />)}
           </span>
-        </span>
-      </td>
-      <td className={tdNumClass}>{fmtSize(f.size)}</td>
-      <td className={tdNumClass}>{f.lastModified?.slice(0, 10) ?? ''}</td>
-      <td className={tdNumClass}>
-        <CopyMenu items={items} />
-      </td>
-    </tr>
+        </td>
+        <td className={tdNumClass}>{fmtSize(f.size)}</td>
+        <td className={tdNumClass}>{f.lastModified?.slice(0, 10) ?? ''}</td>
+        <td className={tdNumClass}>
+          <CopyMenu items={items} />
+        </td>
+      </tr>
+      {pickerOpen && (
+        <TagPicker
+          connId={connId} bucket={bucket} kind="file" path={f.key} label={tail}
+          allTags={allTags} assignedTagIds={tagIds}
+          onChange={next => onTagsChange?.(f.key, next)}
+          onClose={() => setPickerOpen(false)}
+        />
+      )}
+    </>
   )
 })
 
@@ -179,15 +214,21 @@ const FileRow = memo(function FileRow({
 // <sm では table を card list に切替。table の横スクロールでは長いキー名が
 // 一行に収まらず読みにくいので、カード上で 2 段組 (name / meta) に展開する。
 const DirCard = memo(function DirCard({
-  d, prefix, connId, bucket,
-}: { d: string; prefix: string; connId: string; bucket: string }) {
+  d, prefix, connId, bucket, allTags, tagIds, onTagsChange,
+}: {
+  d: string; prefix: string; connId: string; bucket: string
+  allTags: Tag[]; tagIds: string[]; onTagsChange?: (path: string, tagIds: string[]) => void
+}) {
+  const [pickerOpen, setPickerOpen] = useState(false)
   const tail = d.startsWith(prefix) ? d.slice(prefix.length) : d
   const dirHref = `/storage/${encodeURIComponent(connId)}/${encodeURIComponent(bucket)}/${encPath(d)}`
   const dirS3Url = `s3://${bucket}/${d}`
   const dirWebUrl = absoluteUrl(dirHref)
+  const tags = allTags.filter(t => tagIds.includes(t.id))
   const items = useMemo<MenuItem[]>(() => [
     { kind: 'copy', label: 'Web URL をコピー', value: dirWebUrl },
     { kind: 'copy', label: 'S3 URL をコピー', value: dirS3Url },
+    { kind: 'action', label: 'タグを編集', onSelect: () => setPickerOpen(true) },
   ], [dirWebUrl, dirS3Url])
   return (
     <li
@@ -201,24 +242,35 @@ const DirCard = memo(function DirCard({
         >
           <span aria-hidden className="text-ink-5 select-none text-[10px]">▸</span>
           <span className="break-all">{tail}</span>
+          {tags.map(t => <TagBadge key={t.id} tag={t} />)}
         </Link>
         <CopyMenu items={items} />
       </div>
+      {pickerOpen && (
+        <TagPicker
+          connId={connId} bucket={bucket} kind="prefix" path={d} label={tail}
+          allTags={allTags} assignedTagIds={tagIds}
+          onChange={next => onTagsChange?.(d, next)}
+          onClose={() => setPickerOpen(false)}
+        />
+      )}
     </li>
   )
 })
 
 const FileCard = memo(function FileCard({
-  f, prefix, connId, bucket, onSelectFile,
+  f, prefix, connId, bucket, onSelectFile, allTags, tagIds, onTagsChange,
 }: {
   f: FileEntry
   prefix: string
   connId: string
   bucket: string
   onSelectFile?: (key: string) => void
+  allTags: Tag[]; tagIds: string[]; onTagsChange?: (path: string, tagIds: string[]) => void
 }) {
   const deck = usePlayerDeck()
   const pinned = usePinnedPreviews()
+  const [pickerOpen, setPickerOpen] = useState(false)
   const tail = f.key.startsWith(prefix) ? f.key.slice(prefix.length) : f.key
   const select = useCallback(() => onSelectFile?.(f.key), [onSelectFile, f.key])
   const onKeyDown = useCallback((e: KeyboardEvent<HTMLLIElement>) => {
@@ -235,6 +287,7 @@ const FileCard = memo(function FileCard({
   const downloadUrl = api.downloadUrl(connId, bucket, f.key)
   const filename = f.key.split('/').pop() ?? 'file'
   const isAudio = classify(f.key) === 'audio'
+  const tags = allTags.filter(t => tagIds.includes(t.id))
   const items = useMemo<MenuItem[]>(() => [
     ...(isAudio ? [{
       kind: 'action' as const,
@@ -251,6 +304,7 @@ const FileCard = memo(function FileCard({
       label: 'ピン留め',
       onSelect: () => pinned.addPin({ connId, bucket, key: f.key }),
     },
+    { kind: 'action' as const, label: 'タグを編集', onSelect: () => setPickerOpen(true) },
     { kind: 'download', label: 'このファイルをダウンロード', href: downloadUrl, filename },
     { kind: 'copy',     label: 'Web URL をコピー',           value: webUrl },
     { kind: 'copy',     label: 'S3 URL をコピー',            value: s3Url },
@@ -278,6 +332,7 @@ const FileCard = memo(function FileCard({
             >
               {tail}
             </span>
+            {tags.map(t => <TagBadge key={t.id} tag={t} />)}
           </div>
           <div
             className="mt-1 ml-3 text-[11px] text-ink-7 tabular-nums"
@@ -294,6 +349,14 @@ const FileCard = memo(function FileCard({
         </div>
         <CopyMenu items={items} />
       </div>
+      {pickerOpen && (
+        <TagPicker
+          connId={connId} bucket={bucket} kind="file" path={f.key} label={tail}
+          allTags={allTags} assignedTagIds={tagIds}
+          onChange={next => onTagsChange?.(f.key, next)}
+          onClose={() => setPickerOpen(false)}
+        />
+      )}
     </li>
   )
 })
@@ -305,9 +368,15 @@ interface Props {
   connId: string
   bucket: string
   onSelectFile?: (key: string) => void
+  allTags?: Tag[]
+  tagsByPath?: Record<string, string[]>
+  onTagsChange?: (path: string, tagIds: string[]) => void
 }
 
-export function EntryTable({ dirs, files, prefix, connId, bucket, onSelectFile }: Props) {
+export function EntryTable({
+  dirs, files, prefix, connId, bucket, onSelectFile,
+  allTags = [], tagsByPath = {}, onTagsChange,
+}: Props) {
   const isCompact = useIsCompact()
   if (isCompact) {
     return (
@@ -316,7 +385,10 @@ export function EntryTable({ dirs, files, prefix, connId, bucket, onSelectFile }
         style={{ borderTop: '1px solid var(--color-rule-strong)' }}
       >
         {dirs.map(d => (
-          <DirCard key={d} d={d} prefix={prefix} connId={connId} bucket={bucket} />
+          <DirCard
+            key={d} d={d} prefix={prefix} connId={connId} bucket={bucket}
+            allTags={allTags} tagIds={tagsByPath[d] ?? []} onTagsChange={onTagsChange}
+          />
         ))}
         {files.map(f => (
           <FileCard
@@ -326,6 +398,7 @@ export function EntryTable({ dirs, files, prefix, connId, bucket, onSelectFile }
             connId={connId}
             bucket={bucket}
             onSelectFile={onSelectFile}
+            allTags={allTags} tagIds={tagsByPath[f.key] ?? []} onTagsChange={onTagsChange}
           />
         ))}
       </ul>
@@ -344,7 +417,10 @@ export function EntryTable({ dirs, files, prefix, connId, bucket, onSelectFile }
         </thead>
         <tbody>
           {dirs.map(d => (
-            <DirRow key={d} d={d} prefix={prefix} connId={connId} bucket={bucket} />
+            <DirRow
+              key={d} d={d} prefix={prefix} connId={connId} bucket={bucket}
+              allTags={allTags} tagIds={tagsByPath[d] ?? []} onTagsChange={onTagsChange}
+            />
           ))}
           {files.map(f => (
             <FileRow
@@ -354,6 +430,7 @@ export function EntryTable({ dirs, files, prefix, connId, bucket, onSelectFile }
               connId={connId}
               bucket={bucket}
               onSelectFile={onSelectFile}
+              allTags={allTags} tagIds={tagsByPath[f.key] ?? []} onTagsChange={onTagsChange}
             />
           ))}
         </tbody>

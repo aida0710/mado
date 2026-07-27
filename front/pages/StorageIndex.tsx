@@ -1,10 +1,15 @@
-import {useCallback, useEffect, useState} from 'react'
+import {useCallback, useEffect, useMemo, useState} from 'react'
 import {Link} from 'react-router-dom'
 import {api} from '../lib/api/client'
 import {ConnectionSwitcher} from '../components/ConnectionSwitcher'
 import {ReadmeSearchPanel} from '../components/ReadmeSearchPanel'
 import {S3PathPanel} from '../components/S3PathPanel'
 import {CacheMeta} from '../components/CacheMeta'
+import {TagBadge} from '../components/TagBadge'
+import {TagPicker} from '../components/TagPicker'
+import {TagSearchPanel} from '../components/TagSearchPanel'
+import {TagFilterBar} from '../components/storage/TagFilterBar'
+import type {Tag} from '../lib/api/types'
 
 interface BucketRow {
     name: string;
@@ -53,6 +58,51 @@ export default function StorageIndex({connId}: Props) {
         refresh()
     }, [refresh])
 
+    const [allTags, setAllTags] = useState<Tag[]>([])
+    const [bucketTags, setBucketTags] = useState<Record<string, string[]>>({})
+    const [selectedTagIds, setSelectedTagIds] = useState<Set<string>>(() => new Set())
+
+    useEffect(() => { api.tags().then(setAllTags).catch(() => {}) }, [connId])
+
+    // storage_tag_assignments は (connection_id, bucket, target_kind, target_path) で
+    // 一意 — kind='bucket' の対象は「bucket カラムそのもの」で path は常に '' (Task 3)。
+    // つまりここで欲しいのは「複数バケットそれぞれの kind='bucket' タグ」であり、
+    // api.tagAssignments(connId, bucket, kind, paths) の「1 bucket 固定 + 複数 path の
+    // バッチ」という軸とは合わない。bucket 数ぶん並列 Promise.all で取得する
+    // (ラボ規模の bucket 数を想定。数百件規模になったら bucket 複数対応の別モードを検討)。
+    useEffect(() => {
+        let cancelled = false
+        Promise.all(buckets.map(b =>
+            api.tagAssignments(connId, b.name, 'bucket', ['']).then(m => [b.name, m[''] ?? []] as const),
+        )).then(entries => {
+            if (!cancelled) setBucketTags(Object.fromEntries(entries))
+        }).catch(() => {})
+        return () => { cancelled = true }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [connId, buckets.map(b => b.name).join(' ')])
+
+    const handleTagsChange = useCallback((bucketName: string, tagIds: string[]) => {
+        setBucketTags(prev => ({ ...prev, [bucketName]: tagIds }))
+    }, [])
+
+    const visibleTagIds = useMemo(() => new Set(Object.values(bucketTags).flat()), [bucketTags])
+    const filterCandidates = useMemo(
+        () => allTags.filter(t => visibleTagIds.has(t.id)),
+        [allTags, visibleTagIds],
+    )
+    const toggleTagFilter = useCallback((tagId: string) => {
+        setSelectedTagIds(prev => {
+            const next = new Set(prev)
+            if (next.has(tagId)) next.delete(tagId); else next.add(tagId)
+            return next
+        })
+    }, [])
+    const matchesSelectedTags = useCallback((bucketName: string): boolean => {
+        if (selectedTagIds.size === 0) return true
+        const ids = bucketTags[bucketName] ?? []
+        return ids.some(id => selectedTagIds.has(id))
+    }, [selectedTagIds, bucketTags])
+
     const toggleFavorite = async (name: string) => {
         const isFav = favorites.has(name)
         const next = new Set(favorites)
@@ -76,6 +126,9 @@ export default function StorageIndex({connId}: Props) {
         (favorites.has(b.name) ? favoriteRows : otherRows).push(b)
     }
 
+    const visibleFavoriteRows = favoriteRows.filter(b => matchesSelectedTags(b.name))
+    const visibleOtherRows = otherRows.filter(b => matchesSelectedTags(b.name))
+
     return (
         <section>
             <header className="page-head">
@@ -94,6 +147,13 @@ export default function StorageIndex({connId}: Props) {
             </header>
 
             <ReadmeSearchPanel connId={connId}/>
+            <TagSearchPanel connId={connId}/>
+            <TagFilterBar
+                tags={filterCandidates}
+                selected={selectedTagIds}
+                onToggle={toggleTagFilter}
+                onClear={() => setSelectedTagIds(new Set())}
+            />
             <S3PathPanel connId={connId}/>
 
             {error && <p className="error">{error}</p>}
@@ -104,40 +164,46 @@ export default function StorageIndex({connId}: Props) {
                 <p className="text-[13px] text-ink-7">バケットが見つかりません。</p>
             )}
 
-            {favoriteRows.length > 0 && (
+            {visibleFavoriteRows.length > 0 && (
                 <>
                     <h3 className={sectionTitleClass}>現在使っているバケット</h3>
                     <ul
                         className={listClass}
                         style={{borderTop: '1px solid var(--rule)'}}
                     >
-                        {favoriteRows.map(b => (
+                        {visibleFavoriteRows.map(b => (
                             <BucketLi
                                 key={b.name}
                                 connId={connId}
                                 bucket={b}
                                 inUse
                                 onToggle={() => toggleFavorite(b.name)}
+                                allTags={allTags}
+                                tagIds={bucketTags[b.name] ?? []}
+                                onTagsChange={handleTagsChange}
                             />
                         ))}
                     </ul>
                 </>
             )}
 
-            {otherRows.length > 0 && (
+            {visibleOtherRows.length > 0 && (
                 <>
                     <h3 className={sectionTitleClass}>その他のバケット</h3>
                     <ul
                         className={listClass}
                         style={{borderTop: '1px solid var(--rule)'}}
                     >
-                        {otherRows.map(b => (
+                        {visibleOtherRows.map(b => (
                             <BucketLi
                                 key={b.name}
                                 connId={connId}
                                 bucket={b}
                                 inUse={false}
                                 onToggle={() => toggleFavorite(b.name)}
+                                allTags={allTags}
+                                tagIds={bucketTags[b.name] ?? []}
+                                onTagsChange={handleTagsChange}
                             />
                         ))}
                     </ul>
@@ -148,11 +214,14 @@ export default function StorageIndex({connId}: Props) {
 }
 
 function BucketLi({
-                      connId, bucket, inUse, onToggle,
+                      connId, bucket, inUse, onToggle, allTags, tagIds, onTagsChange,
                   }: {
     connId: string; bucket: BucketRow; inUse: boolean; onToggle: () => void
+    allTags: Tag[]; tagIds: string[]; onTagsChange: (bucketName: string, tagIds: string[]) => void
 }) {
+    const [pickerOpen, setPickerOpen] = useState(false)
     const checkboxId = `use-${bucket.name}`
+    const tags = allTags.filter(t => tagIds.includes(t.id))
     return (
         <li className={liClass} style={{borderBottom: '1px solid var(--rule)'}}>
             <label
@@ -174,6 +243,7 @@ function BucketLi({
             >
                 {bucket.name}
             </Link>
+            {tags.map(t => <TagBadge key={t.id} tag={t} />)}
             {bucket.creationDate && (
                 <span
                     className="font-mono text-[11.5px] text-ink-7 shrink-0"
@@ -181,6 +251,17 @@ function BucketLi({
                 >
           {bucket.creationDate.slice(0, 10)}
         </span>
+            )}
+            <button type="button" className="ghost shrink-0" onClick={() => setPickerOpen(true)} aria-label="タグを編集">
+                <span aria-hidden>🏷</span>
+            </button>
+            {pickerOpen && (
+                <TagPicker
+                    connId={connId} bucket={bucket.name} kind="bucket" path="" label={bucket.name}
+                    allTags={allTags} assignedTagIds={tagIds}
+                    onChange={next => onTagsChange(bucket.name, next)}
+                    onClose={() => setPickerOpen(false)}
+                />
             )}
         </li>
     )
