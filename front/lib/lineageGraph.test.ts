@@ -3,6 +3,7 @@ import type { LineageLink } from './api/types'
 import {
   ancestorGenerations, collapseToBuckets, descendantGenerations,
   directChildren, directParents, edgesTouching, nodeKey, nodeKind, sameNode,
+  wouldCreateCycle, type LineageNode,
 } from './lineageGraph'
 
 function link(id: number, parent: [string, string], child: [string, string]): LineageLink {
@@ -96,5 +97,48 @@ describe('collapseToBuckets', () => {
 
   it('同一バケット内で閉じたリンクは除外する', () => {
     expect(collapseToBuckets([link(1, ['raw', 'a/'], ['raw', 'b/'])])).toEqual([])
+  })
+})
+
+// グラフ上でドラッグして繋ぐとき、ドロップ前に弾くための判定。
+// サーバ側 (409) と同じルールをクライアントでも持つ。
+describe('wouldCreateCycle', () => {
+  const n = (bucket: string): LineageNode => ({ bucket, path: '' })
+
+  it('自分自身へのリンクは閉路', () => {
+    expect(wouldCreateCycle([], n('a'), n('a'))).toBe(true)
+  })
+
+  it('A→B があるとき B→A は閉路', () => {
+    const edges = [link(1, ['a', ''], ['b', ''])]
+    expect(wouldCreateCycle(edges, n('b'), n('a'))).toBe(true)
+  })
+
+  it('A→B→C があるとき C→A は閉路', () => {
+    const edges = [link(1, ['a', ''], ['b', '']), link(2, ['b', ''], ['c', ''])]
+    expect(wouldCreateCycle(edges, n('c'), n('a'))).toBe(true)
+  })
+
+  // 複数の親 / 複数の子は閉路ではない。
+  it('N:N のファンイン / ファンアウトは閉路ではない', () => {
+    const edges = [link(1, ['a', ''], ['c', ''])]
+    expect(wouldCreateCycle(edges, n('b'), n('c'))).toBe(false)
+    expect(wouldCreateCycle(edges, n('a'), n('d'))).toBe(false)
+  })
+
+  // 合流して再び分岐する DAG (ダイヤモンド) も閉路ではない。
+  it('ダイヤモンドは閉路ではない', () => {
+    const edges = [
+      link(1, ['a', ''], ['b', '']),
+      link(2, ['a', ''], ['c', '']),
+      link(3, ['b', ''], ['d', '']),
+    ]
+    expect(wouldCreateCycle(edges, n('c'), n('d'))).toBe(false)
+  })
+
+  // すでに閉路があるデータでも停止すること (visited で畳む)。
+  it('既に閉路があっても停止する', () => {
+    const edges = [link(1, ['a', ''], ['b', '']), link(2, ['b', ''], ['a', ''])]
+    expect(wouldCreateCycle(edges, n('a'), n('c'))).toBe(false)
   })
 })

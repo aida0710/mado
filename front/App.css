@@ -1376,3 +1376,67 @@ pre { font-size: 12px; }
   cursor: pointer;
 }
 .storage-bucket__tab[aria-selected="true"] { color: var(--ink-12); border-bottom-color: var(--ink-12); }
+
+/* ────────────── 家系図 flow キャンバス (React Flow) ──────────────
+   ノードの実寸は LineageFlowCanvas の NODE_W / NODE_H と揃えること。
+   ずらすと dagre が引いた線とノードの位置がずれる。                    */
+.lineage-flow {
+  height: min(70vh, 620px);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-2);
+  background: var(--paper);
+  overflow: hidden;
+}
+.lineage-flow-node {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  box-sizing: border-box;
+  width: 240px;
+  height: 52px;
+  padding: 0 10px;
+  background: var(--paper);
+  border: 1px solid var(--color-rule-strong);
+  border-radius: var(--radius-1);
+  font: 400 12px/1.3 var(--font-mono);
+  color: var(--ink-11);
+}
+.lineage-flow-node__icon { flex: none; font-size: 13px; }
+.lineage-flow-node__text { display: flex; flex-direction: column; min-width: 0; gap: 1px; }
+/* パスは末尾ほど区別に効く (in/ mid/ out/ など) ので、溢れたら「先頭」を省略する。
+   direction:rtl で省略位置を行頭に寄せ、plaintext で中身の並び順は保つ。
+   全文は title 属性で読める。                                              */
+.lineage-flow-node__primary {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl;
+  unicode-bidi: plaintext;
+  text-align: left;
+}
+.lineage-flow-node__secondary {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+  color: var(--ink-7);
+}
+.lineage-flow-node[data-emphasize] .lineage-flow-node__secondary { color: var(--ink-3); }
+/* 「現在地」= 今開いているディレクトリ。反転して一目で分かるようにする。 */
+.lineage-flow-node[data-emphasize] {
+  background: var(--ink-12);
+  color: var(--paper);
+  border-color: var(--ink-12);
+  font-weight: 600;
+}
+/* React Flow の既定は青系。この UI のインク調に寄せる。 */
+.lineage-flow .react-flow__handle {
+  width: 8px;
+  height: 8px;
+  background: var(--paper);
+  border: 1px solid var(--ink-5);
+}
+.lineage-flow .react-flow__handle:hover { background: var(--ink-9); }
+.lineage-flow .react-flow__edge-path { stroke: var(--ink-5); stroke-width: 1.5; }
+.lineage-flow .react-flow__edge:hover .react-flow__edge-path { stroke: var(--ink-12); }
+.lineage-flow .react-flow__connection-path { stroke: var(--ink-9); stroke-width: 1.5; }

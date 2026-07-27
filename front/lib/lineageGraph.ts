@@ -1,5 +1,5 @@
 // データの家系図: ノード識別・グラフ走査・バケット集約の純関数群。
-// LineageView / LineageGraphCanvas はここでレイアウトを組み立ててから描画する。
+// LineageView / LineageFlowCanvas はここでレイアウトを組み立ててから描画する。
 
 import type { LineageLink } from './api/types'
 
@@ -108,4 +108,32 @@ export function collapseToBuckets(edges: LineageLink[]): BucketEdge[] {
     result.push({ parentBucket: e.parentBucket, childBucket: e.childBucket })
   }
   return result
+}
+
+// parent → child を足したら閉路になるかを判定する。
+//
+// サーバ側 (api/routes/storage-lineage.ts) も再帰 CTE で同じ判定をして 409 を
+// 返すが、グラフ上でドラッグして繋ぐ操作ではドロップ前に弾きたい。エッジは
+// すでに全件クライアントに載っているので、ここでローカルに判定できる。
+//
+// 閉路になるのは「child から親子方向に辿って parent へ到達できる」場合。
+// visited で訪問済みを畳むので、万一すでに閉路があるデータでも停止する。
+export function wouldCreateCycle(
+  edges: LineageLink[], parent: LineageNode, child: LineageNode,
+): boolean {
+  if (sameNode(parent, child)) return true
+  const visited = new Set<string>([nodeKey(child)])
+  const stack: LineageNode[] = [child]
+  while (stack.length > 0) {
+    const n = stack.pop() as LineageNode
+    if (sameNode(n, parent)) return true
+    for (const e of directChildren(edges, n)) {
+      const next: LineageNode = { bucket: e.childBucket, path: e.childPath }
+      const key = nodeKey(next)
+      if (visited.has(key)) continue
+      visited.add(key)
+      stack.push(next)
+    }
+  }
+  return false
 }

@@ -3,15 +3,20 @@
 // 2) スコープ切替 (現在地 / 全て / バケット単位) の状態を持つ
 // 3) ノードクリックでポップアップ、「＋ 親/子を追加」でピッカー付きの追加フローを開く
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../../../lib/api/client'
 import type { LineageLink } from '../../../lib/api/types'
 import { encPath } from '../../../lib/route'
 import {
-  ancestorGenerations, collapseToBuckets, descendantGenerations, type LineageNode,
+  ancestorGenerations, collapseToBuckets, descendantGenerations, nodeKey,
+  wouldCreateCycle, type LineageNode,
 } from '../../../lib/lineageGraph'
-import { LineageGraphCanvas, type LineageLayout } from './LineageGraphCanvas'
+import type { FlowEdge } from './LineageFlowCanvas'
+
+// React Flow は重いので、家系図タブを開いた人だけが払うよう別チャンクにする
+// (Monaco を抱える NoteEditPage と同じ方針)。
+const LineageFlowCanvas = lazy(() => import('./LineageFlowCanvas'))
 import { LineageNodePopup } from './LineageNodePopup'
 import { LineageLinkPicker } from './LineageLinkPicker'
 
@@ -79,35 +84,88 @@ export function LineageView({ connId, bucket, prefix }: Props) {
     }
   }
 
-  const layout: LineageLayout | null = useMemo(() => {
+  // スコープごとに「描くエッジ」を決める。ノードはエッジの端点から起こす
+  // (どのスコープでも「線で繋がっているものを描く」で統一できる)。
+  const flow = useMemo((): { nodes: LineageNode[]; edges: FlowEdge[] } | null => {
     if (!edges) return null
-    if (scope === 'current') {
-      return {
-        scope: 'current',
-        center,
-        ancestorGenerations: ancestorGenerations(edges, center),
-        descendantGenerations: descendantGenerations(edges, center),
-      }
-    }
+
+    let picked: FlowEdge[]
     if (scope === 'bucket') {
-      return {
-        scope: 'bucket',
-        edges: collapseToBuckets(edges).map((e, i) => ({
-          id: `${e.parentBucket}>${e.childBucket}:${i}`,
+      // バケット単位は複数リンクが 1 本に畳まれる。解除は束ねた id すべてに効く。
+      const byPair = new Map<string, FlowEdge>()
+      for (const e of edges) {
+        if (e.parentBucket === e.childBucket) continue
+        const key = `${e.parentBucket}>${e.childBucket}`
+        const hit = byPair.get(key)
+        if (hit) hit.ids.push(e.id)
+        else byPair.set(key, {
+          ids: [e.id],
           parent: { bucket: e.parentBucket, path: '' },
           child: { bucket: e.childBucket, path: '' },
-        })),
+        })
       }
-    }
-    return {
-      scope: 'all',
-      edges: edges.map(e => ({
-        id: String(e.id),
+      picked = [...byPair.values()]
+      // collapseToBuckets と同じ結果になることを前提にした畳み込み。
+      void collapseToBuckets
+    } else if (scope === 'current') {
+      // 現在地から辿れる範囲だけ。世代配列はノード集合を得るために使う。
+      const reachable = new Set<string>([nodeKey(center)])
+      for (const gen of [...ancestorGenerations(edges, center), ...descendantGenerations(edges, center)]) {
+        for (const n of gen) reachable.add(nodeKey(n))
+      }
+      picked = edges
+        .filter(e =>
+          reachable.has(nodeKey({ bucket: e.parentBucket, path: e.parentPath })) &&
+          reachable.has(nodeKey({ bucket: e.childBucket, path: e.childPath })))
+        .map(e => ({
+          ids: [e.id],
+          parent: { bucket: e.parentBucket, path: e.parentPath },
+          child: { bucket: e.childBucket, path: e.childPath },
+        }))
+    } else {
+      picked = edges.map(e => ({
+        ids: [e.id],
         parent: { bucket: e.parentBucket, path: e.parentPath },
         child: { bucket: e.childBucket, path: e.childPath },
-      })),
+      }))
     }
+
+    const nodeMap = new Map<string, LineageNode>()
+    for (const e of picked) {
+      nodeMap.set(nodeKey(e.parent), e.parent)
+      nodeMap.set(nodeKey(e.child), e.child)
+    }
+    // 現在地は線が 1 本も無くても必ず描く (「ここが今いる場所」を示すため)。
+    if (scope === 'current') nodeMap.set(nodeKey(center), center)
+
+    return { nodes: [...nodeMap.values()], edges: picked }
   }, [edges, scope, center])
+
+  // グラフ上でドラッグして繋いだとき。ピッカー経由の追加と違い編集者名を
+  // 都度聞かないので、保存済みの名前をそのまま使う (未設定なら入力を促す)。
+  const connectByDrag = useCallback(async (parent: LineageNode, child: LineageNode) => {
+    if (!editor) {
+      setError('先に「＋ 親を追加」から編集者名を登録してください。')
+      return
+    }
+    setError(null)
+    try {
+      await api.addLineageLink(connId, parent, child, editor)
+      refresh()
+    } catch (e) {
+      setError((e as Error).message)
+    }
+  }, [connId, editor, refresh])
+
+  const unlinkMany = useCallback(async (ids: number[]) => {
+    setError(null)
+    try {
+      for (const id of ids) await api.removeLineageLink(connId, id)
+      refresh()
+    } catch (e) {
+      setError((e as Error).message)
+    }
+  }, [connId, refresh])
 
   return (
     <section className="lineage-view">
@@ -134,10 +192,26 @@ export function LineageView({ connId, bucket, prefix }: Props) {
       </div>
 
       {error && <p className="filelist__error" role="alert">{error}</p>}
-      {!layout ? (
+      {!flow ? (
         <p className="lineage-canvas__empty">読み込み中…</p>
+      ) : flow.edges.length === 0 && flow.nodes.length <= 1 ? (
+        <p className="lineage-canvas__empty">
+          登録されたリンクがありません。「＋ 親を追加」/「＋ 子を追加」から繋いでください。
+        </p>
       ) : (
-        <LineageGraphCanvas layout={layout} onNodeClick={setPopupNode} />
+        <Suspense fallback={<p className="lineage-canvas__empty">読み込み中…</p>}>
+          <LineageFlowCanvas
+            nodes={flow.nodes}
+            edges={flow.edges}
+            center={scope === 'current' ? center : null}
+            onNodeClick={setPopupNode}
+            onNodeDoubleClick={goTo}
+            onEdgeClick={ids => { void unlinkMany(ids) }}
+            onConnect={(p, c) => { void connectByDrag(p, c) }}
+            onRejectCycle={() => setError('このリンクを追加すると循環します。')}
+            isCycle={(p, c) => wouldCreateCycle(edges ?? [], p, c)}
+          />
+        </Suspense>
       )}
 
       {popupNode && edges && (

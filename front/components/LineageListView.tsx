@@ -9,7 +9,7 @@ interface Props {
   connId: string
 }
 
-// LineageNodePopup / LineageGraphCanvas と同じ記号を使う。
+// LineageNodePopup / LineageFlowCanvas と同じ記号を使う。
 const KIND_ICON: Record<'bucket' | 'directory' | 'file', string> = {
   bucket: '📦', directory: '📁', file: '📄',
 }
