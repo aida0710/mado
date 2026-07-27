@@ -2,8 +2,38 @@ import { useEffect, useReducer, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../lib/api/client'
 import type { Tag, TagSearchResult } from '../lib/api/types'
-import { encPath, fileLinkToDirRedirect } from '../lib/route'
+import { encPath, fileLinkToDirRedirect, parseS3Path } from '../lib/route'
 import { TagBadge } from './TagBadge'
+import { ImportExportButtons } from './ImportExportButtons'
+import { downloadJson, type ImportSummary } from '../lib/jsonFile'
+
+// 「どの場所にどのタグが付いているか」の入出力形式。
+//
+// タグは id ではなく name で参照する。id は環境ごとの nanoid で、またいで
+// 意味を持たないため。対象は `s3://bucket/key` の 1 本のフルパスで書く
+// (家系図のエクスポートと同じ表記)。バケット直下は `s3://bucket/`、
+// ディレクトリは末尾スラッシュ付き、ファイルは無し — kind はパスから決まる
+// ので別フィールドにしない。
+//
+// tags には使われているタグの定義 (name + color) を同梱する。取り込み先に
+// 無いタグを作り直せるようにするため。
+interface TagAssignmentsExport {
+  mado: 'tag-assignments'
+  version: 1
+  tags: Array<{ name: string; color: string }>
+  assignments: Array<{ tag: string; target: string }>
+}
+
+function targetUri(hit: Hit): string {
+  return `s3://${hit.bucket}/${hit.path}`
+}
+
+// パスから対象種別を決める (nodeKind と同じ規約。TargetKind 名に合わせて
+// directory ではなく prefix を返す)。
+function kindOf(path: string): 'bucket' | 'prefix' | 'file' {
+  if (path === '') return 'bucket'
+  return path.endsWith('/') ? 'prefix' : 'file'
+}
 
 interface Props {
   connId: string
@@ -83,6 +113,86 @@ export function TagSearchView({ connId }: Props) {
     return () => { cancelled = true }
   }, [connId, selected])
 
+  // 取り込み先に無いタグが出たときの確認。onImport の途中で聞きたいので、
+  // ダイアログの応答を Promise で受け取る形にする。
+  const [pendingMissing, setPendingMissing] =
+    useState<{ names: string[]; resolve: (create: boolean) => void } | null>(null)
+  const askCreateMissing = (names: string[]) =>
+    new Promise<boolean>(resolve => setPendingMissing({ names, resolve }))
+  const answerMissing = (create: boolean) => {
+    pendingMissing?.resolve(create)
+    setPendingMissing(null)
+  }
+
+  const handleExport = async () => {
+    // tagSearch に全タグ ID を渡すと接続内の全割り当てが返る。
+    const hits = allTags.length === 0 ? [] : await api.tagSearch(connId, allTags.map(t => t.id))
+    const byId = new Map(allTags.map(t => [t.id, t]))
+    const usedIds = new Set(hits.map(h => h.tagId))
+    const body: TagAssignmentsExport = {
+      mado: 'tag-assignments',
+      version: 1,
+      tags: allTags.filter(t => usedIds.has(t.id)).map(t => ({ name: t.name, color: t.color })),
+      assignments: hits.map(h => ({ tag: byId.get(h.tagId)?.name ?? h.tagId, target: targetUri(h) })),
+    }
+    downloadJson('mado-tag-assignments.json', body)
+  }
+
+  const handleImport = async (data: unknown): Promise<ImportSummary> => {
+    const d = data as Partial<TagAssignmentsExport> | null
+    if (d?.mado !== 'tag-assignments' || d.version !== 1 || !Array.isArray(d.assignments)) {
+      throw new Error('mado のタグ割り当てのエクスポートファイルではありません。')
+    }
+
+    // 名前 → タグ。取り込み先に無い名前は、作ってよいか聞いてから作る。
+    let byName = new Map(allTags.map(t => [t.name, t]))
+    const wanted = [...new Set(d.assignments.map(a => a?.tag).filter((n): n is string => typeof n === 'string'))]
+    const missing = wanted.filter(n => !byName.has(n))
+    const summary: ImportSummary = { added: 0, skipped: 0, failed: [] }
+
+    if (missing.length > 0) {
+      const create = await askCreateMissing(missing)
+      if (!create) {
+        // 作らない場合、そのタグの割り当ては入れられないので失敗として数える。
+        summary.failed.push(`未登録のタグ: ${missing.join(', ')}`)
+      } else {
+        const colorOf = new Map((d.tags ?? []).map(t => [t.name, t.color]))
+        for (const name of missing) {
+          try {
+            const created = await api.createTag({ name, color: colorOf.get(name) ?? '#8e887b' })
+            byName = new Map(byName).set(name, created)
+          } catch (e) {
+            summary.failed.push(`${name}: ${(e as Error).message}`)
+          }
+        }
+      }
+    }
+
+    // 既存の割り当てはスキップする。PUT 自体は冪等 (ON CONFLICT DO NOTHING)
+    // だが、「何件が新規だったか」を出したいのでこちら側でも見る。
+    const known = [...byName.values()]
+    const current = known.length === 0 ? [] : await api.tagSearch(connId, known.map(t => t.id))
+    const existing = new Set(current.map(h => `${h.tagId}|${targetUri(h)}`))
+
+    for (const a of d.assignments) {
+      const tag = typeof a?.tag === 'string' ? byName.get(a.tag) : undefined
+      const parsed = typeof a?.target === 'string' ? parseS3Path(a.target) : null
+      if (!parsed) {
+        summary.failed.push(`対象として読めない項目があります: ${String(a?.target)}`)
+        continue
+      }
+      if (!tag) { summary.skipped++; continue }
+      if (existing.has(`${tag.id}|s3://${parsed.bucket}/${parsed.prefix}`)) { summary.skipped++; continue }
+      try {
+        await api.assignTag(connId, parsed.bucket, kindOf(parsed.prefix), parsed.prefix, tag.id)
+        summary.added++
+      } catch (e) {
+        summary.failed.push(`${a.target}: ${(e as Error).message}`)
+      }
+    }
+    return summary
+  }
+
   const toggle = (tagId: string) => {
     setSelected(prev => {
       const next = new Set(prev)
@@ -93,6 +203,39 @@ export function TagSearchView({ connId }: Props) {
 
   return (
     <section>
+      <div className="mt-1 flex flex-wrap items-center justify-end">
+        <ImportExportButtons
+          what="タグ割り当て"
+          onExport={() => { void handleExport() }}
+          onImport={handleImport}
+          onDone={() => setSelected(new Set(selected))}
+        />
+      </div>
+
+      {pendingMissing && (
+        <div className="modal-backdrop" role="presentation">
+          <button
+            type="button"
+            className="modal-backdrop__close-overlay"
+            onClick={() => answerMissing(false)}
+            aria-label="モーダルを閉じる"
+            tabIndex={-1}
+          />
+          <div className="modal modal--narrow" role="dialog" aria-modal="true" aria-labelledby="tag-missing-title">
+            <h3 id="tag-missing-title" className="lineage-add__title">未登録のタグがあります</h3>
+            <p className="lineage-add__target">{pendingMissing.names.join(' / ')}</p>
+            <p className="text-[12px] text-ink-7">
+              作成すると、これらのタグを登録したうえで割り当てを取り込みます。
+              作成しない場合、このタグの割り当ては取り込まれません。
+            </p>
+            <div className="modal-actions">
+              <button type="button" onClick={() => answerMissing(false)}>作成しない</button>
+              <button type="button" onClick={() => answerMissing(true)}>作成して取り込む</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {allTags.length === 0 ? (
         <p className="mt-4 text-[13px] text-ink-7">
           タグがまだありません。<Link to="/settings">Settings</Link> で作成してください。

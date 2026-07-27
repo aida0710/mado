@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -78,5 +78,95 @@ describe('TagSearchView', () => {
 
     expect(await screen.findByText(/タグがまだありません/)).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Settings' })).toHaveAttribute('href', '/settings')
+  })
+})
+
+// 「どの場所にどのタグが付いているか」の持ち運び。
+describe('TagSearchView タグ割り当ての入出力', () => {
+  const pickFile = (json: unknown) => {
+    const input = screen.getByLabelText('タグ割り当てをインポート') as HTMLInputElement
+    const file = new File([JSON.stringify(json)], 'x.json', { type: 'application/json' })
+    fireEvent.change(input, { target: { files: [file] } })
+  }
+
+  it('mado のファイルでなければ取り込まない', async () => {
+    vi.spyOn(api, 'tags').mockResolvedValue(tags)
+    vi.spyOn(api, 'tagSearch').mockResolvedValue([])
+    renderView()
+    await screen.findByLabelText('タグ割り当てをインポート')
+
+    pickFile({ hello: 'world' })
+    expect(await screen.findByRole('alert')).toHaveTextContent('エクスポートファイルではありません')
+  })
+
+  it('既知のタグの割り当てを assignTag で入れ、既存はスキップする', async () => {
+    vi.spyOn(api, 'tags').mockResolvedValue(tags)
+    // 1 回目 = インポート前の既存確認。't1' が既に bkt/a/ に付いている。
+    vi.spyOn(api, 'tagSearch').mockResolvedValue([
+      { tagId: 't1', bucket: 'bkt', kind: 'prefix', path: 'a/' },
+    ])
+    const assign = vi.spyOn(api, 'assignTag').mockResolvedValue(undefined)
+    renderView()
+    await screen.findByLabelText('タグ割り当てをインポート')
+
+    pickFile({
+      mado: 'tag-assignments', version: 1,
+      tags: [{ name: '処理前', color: '#00ff00' }],
+      assignments: [
+        { tag: '処理前', target: 's3://bkt/a/' },        // 既存 → スキップ
+        { tag: '処理前', target: 's3://bkt/b/c.txt' },   // 新規 (file)
+        { tag: '処理前', target: 's3://bkt2/' },         // 新規 (bucket)
+      ],
+    })
+
+    await waitFor(() => expect(assign).toHaveBeenCalledTimes(2))
+    // パスから種別が決まる: 末尾スラッシュなし=file、空=bucket。
+    expect(assign).toHaveBeenCalledWith('c1', 'bkt', 'file', 'b/c.txt', 't1')
+    expect(assign).toHaveBeenCalledWith('c1', 'bkt2', 'bucket', '', 't1')
+    expect(await screen.findByText('追加 2 件 / スキップ 1 件')).toBeInTheDocument()
+  })
+
+  // 取り込み先に無いタグは黙って作らず、作ってよいか聞く。
+  it('未登録のタグは確認してから作成する', async () => {
+    vi.spyOn(api, 'tags').mockResolvedValue(tags)
+    vi.spyOn(api, 'tagSearch').mockResolvedValue([])
+    const create = vi.spyOn(api, 'createTag').mockResolvedValue({ id: 't9', name: '新タグ', color: '#123456' })
+    const assign = vi.spyOn(api, 'assignTag').mockResolvedValue(undefined)
+    renderView()
+    await screen.findByLabelText('タグ割り当てをインポート')
+
+    pickFile({
+      mado: 'tag-assignments', version: 1,
+      tags: [{ name: '新タグ', color: '#123456' }],
+      assignments: [{ tag: '新タグ', target: 's3://bkt/x.txt' }],
+    })
+
+    expect(await screen.findByText('未登録のタグがあります')).toBeInTheDocument()
+    expect(create).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByRole('button', { name: '作成して取り込む' }))
+    // 同梱された色でそのまま作り直す。
+    await waitFor(() => expect(create).toHaveBeenCalledWith({ name: '新タグ', color: '#123456' }))
+    await waitFor(() => expect(assign).toHaveBeenCalledWith('c1', 'bkt', 'file', 'x.txt', 't9'))
+  })
+
+  it('作成しないを選ぶとそのタグの割り当ては入らない', async () => {
+    vi.spyOn(api, 'tags').mockResolvedValue(tags)
+    vi.spyOn(api, 'tagSearch').mockResolvedValue([])
+    const create = vi.spyOn(api, 'createTag')
+    const assign = vi.spyOn(api, 'assignTag')
+    renderView()
+    await screen.findByLabelText('タグ割り当てをインポート')
+
+    pickFile({
+      mado: 'tag-assignments', version: 1,
+      tags: [{ name: '新タグ', color: '#123456' }],
+      assignments: [{ tag: '新タグ', target: 's3://bkt/x.txt' }],
+    })
+
+    fireEvent.click(await screen.findByRole('button', { name: '作成しない' }))
+    await waitFor(() => expect(screen.getByText(/失敗 1 件/)).toBeInTheDocument())
+    expect(create).not.toHaveBeenCalled()
+    expect(assign).not.toHaveBeenCalled()
   })
 })
