@@ -5,6 +5,7 @@ import { ConnectionSwitcher } from '../components/ConnectionSwitcher'
 import { StorageBrowser } from '../components/StorageBrowser'
 import { ReadmeView } from '../components/ReadmeView'
 import { PreviewDrawer } from '../components/PreviewDrawer'
+import { LineageView } from '../components/storage/lineage/LineageView'
 import { fileLinkToDirRedirect } from '../lib/route'
 import { useDrawerResize } from '../lib/useDrawerResize'
 
@@ -60,6 +61,21 @@ export default function StorageBucket({ connId }: Props) {
   const { containerRef, onResizeStart, onResizeKeyDown, resetWidth, widthCustomized } =
     useDrawerResize(selected != null)
 
+  // 「一覧」/「家系図」タブは ?view=lineage で表現する。preview/entry と同様
+  // URL に持たせることで直リンク・戻る/進むが自然に効く。
+  const view = searchParams.get('view') === 'lineage' ? 'lineage' : 'list'
+  const setView = useCallback((v: 'lineage' | 'list') => {
+    setSearchParams(
+      prev => {
+        const next = new URLSearchParams(prev)
+        if (v === 'list') next.delete('view')
+        else next.set('view', v)
+        return next
+      },
+      { replace: false },
+    )
+  }, [setSearchParams])
+
   // ファイル直リンク (末尾が `/` でない URL) なら、親ディレクトリのリスト +
   // `?preview=<key>` にリダイレクトする。README に貼った Markdown リンクや
   // 別アプリで生成された URL から「ファイルそのものに飛んできた」ケースで、
@@ -76,26 +92,52 @@ export default function StorageBucket({ connId }: Props) {
         <Breadcrumb connId={connId} bucket={bucket} prefix={prefix} />
         <ConnectionSwitcher />
       </div>
-      {/* README はリスト幅に依存させない (常に full width) */}
-      <ReadmeView connId={connId} bucket={bucket} prefix={prefix} />
-      {/* リスト + preview drawer を横並び。drawer 幅は drawer 左端のハンドルで
-          リサイズでき、広げるとリストを圧縮せず上に重なる (useDrawerResize)。
-          ハンドルは drawer 内に置き、その高さに収める。README には影響しない。 */}
-      <div className="storage-list" ref={containerRef}>
-        <StorageBrowser connId={connId} bucket={bucket} prefix={prefix} onSelectFile={setSelected} />
-        <PreviewDrawer
-          connId={connId}
-          bucket={bucket}
-          k={selected}
-          entry={selectedEntry}
-          onEntryChange={setSelectedEntry}
-          onClose={() => setSelected(null)}
-          onResizeStart={onResizeStart}
-          onResizeKeyDown={onResizeKeyDown}
-          onResetWidth={resetWidth}
-          widthCustomized={widthCustomized}
-        />
-      </div>
+      <nav className="storage-bucket__tabs" role="tablist" aria-label="表示切り替え">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={view === 'list'}
+          className="storage-bucket__tab"
+          onClick={() => setView('list')}
+        >
+          一覧
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={view === 'lineage'}
+          className="storage-bucket__tab"
+          onClick={() => setView('lineage')}
+        >
+          🔗 家系図
+        </button>
+      </nav>
+      {view === 'lineage' ? (
+        <LineageView connId={connId} bucket={bucket} prefix={prefix} />
+      ) : (
+        <>
+          {/* README はリスト幅に依存させない (常に full width) */}
+          <ReadmeView connId={connId} bucket={bucket} prefix={prefix} />
+          {/* リスト + preview drawer を横並び。drawer 幅は drawer 左端のハンドルで
+              リサイズでき、広げるとリストを圧縮せず上に重なる (useDrawerResize)。
+              ハンドルは drawer 内に置き、その高さに収める。README には影響しない。 */}
+          <div className="storage-list" ref={containerRef}>
+            <StorageBrowser connId={connId} bucket={bucket} prefix={prefix} onSelectFile={setSelected} />
+            <PreviewDrawer
+              connId={connId}
+              bucket={bucket}
+              k={selected}
+              entry={selectedEntry}
+              onEntryChange={setSelectedEntry}
+              onClose={() => setSelected(null)}
+              onResizeStart={onResizeStart}
+              onResizeKeyDown={onResizeKeyDown}
+              onResetWidth={resetWidth}
+              widthCustomized={widthCustomized}
+            />
+          </div>
+        </>
+      )}
     </section>
   )
 }

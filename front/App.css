@@ -1162,7 +1162,8 @@ pre { font-size: 12px; }
 }
 .filelist__name:hover { background: var(--ink-1); color: var(--ink-12); }
 .filelist__icon { flex: 0 0 auto; font-size: 12px; opacity: 0.85; }
-.filelist__open {
+.filelist__open,
+.filelist__select {
   flex: 0 0 auto;
   background: transparent;
   border: 1px solid var(--rule);
@@ -1173,7 +1174,9 @@ pre { font-size: 12px; }
   border-radius: var(--radius-1);
   letter-spacing: 0.08em;
 }
-.filelist__open:hover { background: var(--paper); border-color: var(--color-rule-strong); color: var(--ink-12); }
+.filelist__open:hover,
+.filelist__select:hover:not(:disabled) { background: var(--paper); border-color: var(--color-rule-strong); color: var(--ink-12); }
+.filelist__select:disabled { opacity: 0.4; cursor: default; }
 
 .filelist__loading,
 .filelist__empty,
@@ -1190,3 +1193,186 @@ pre { font-size: 12px; }
   background: var(--ink-0);
   font-style: italic;
 }
+
+/* ====================================================================
+   家系図 — ノードポップアップ
+   ==================================================================== */
+.modal-backdrop--lineage-node { z-index: 55; }
+.modal--lineage-node {
+  width: min(480px, 100%);
+  max-width: 480px;
+  max-height: calc(100vh - var(--space-6));
+  display: flex;
+  flex-direction: column;
+}
+.lineage-popup__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding-bottom: var(--space-2);
+}
+.lineage-popup__title {
+  margin: 0;
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 600 13px/1.4 var(--font-mono);
+}
+.lineage-popup__body {
+  max-height: 40vh;
+  overflow: auto;
+}
+.lineage-popup__unsupported { font: 400 12px/1.5 var(--font-sans); color: var(--ink-7); }
+.lineage-popup__neighbours {
+  margin-top: var(--space-3);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--rule);
+}
+.lineage-popup__neighbour-list { margin: 0 0 var(--space-2); padding: 0; list-style: none; }
+.lineage-popup__neighbour {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: 4px 0;
+  font: 400 12px/1.4 var(--font-mono);
+}
+.lineage-popup__neighbour-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ====================================================================
+   家系図 — グラフ描画
+   ==================================================================== */
+.lineage-canvas {
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+  overflow-x: auto;
+  padding: var(--space-5);
+}
+.lineage-canvas__empty { padding: var(--space-4); font: 400 13px/1.5 var(--font-sans); color: var(--ink-7); }
+.lineage-column {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  flex: 0 0 auto;
+}
+.lineage-column--center { position: relative; }
+.lineage-node {
+  background: var(--paper);
+  border: 1px solid var(--color-rule-strong);
+  border-radius: var(--radius-1);
+  padding: 8px 12px;
+  font: 400 12px/1.3 var(--font-mono);
+  color: var(--ink-11);
+  cursor: pointer;
+  white-space: nowrap;
+  text-align: left;
+}
+.lineage-node:hover { background: var(--ink-1); }
+.lineage-node[data-emphasize] {
+  background: var(--ink-12);
+  color: var(--paper);
+  border-color: var(--ink-12);
+  font-weight: 600;
+}
+.lineage-edge-list { margin: 0; padding: var(--space-4); list-style: none; display: flex; flex-direction: column; gap: var(--space-2); }
+.lineage-edge-row { display: flex; align-items: center; gap: var(--space-2); }
+.lineage-edge-arrow { color: var(--ink-5); }
+
+/* ====================================================================
+   家系図 — リンク追加ピッカー
+   ==================================================================== */
+.modal-backdrop--lineage-picker { z-index: 55; }
+.modal--lineage-picker {
+  width: min(640px, 100%);
+  max-width: 640px;
+  max-height: calc(100vh - var(--space-6));
+  display: flex;
+  flex-direction: column;
+}
+.lineage-picker__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--rule);
+}
+.lineage-picker__title { margin: 0; font: 600 13px/1.3 var(--font-sans); }
+.lineage-picker__bucket-select { display: flex; align-items: center; gap: var(--space-2); font: 400 12px/1.3 var(--font-sans); }
+
+.filelist__label {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 8px 6px;
+  font: 400 13px/1.4 var(--font-mono);
+  color: var(--ink-11);
+}
+.filelist__select-current {
+  margin: var(--space-2) var(--space-3);
+  align-self: flex-start;
+  background: var(--ink-1);
+  border: 1px solid var(--color-rule-strong);
+  border-radius: var(--radius-1);
+  padding: 6px 12px;
+  font: 500 12px/1.3 var(--font-sans);
+  color: var(--ink-12);
+  cursor: pointer;
+}
+.filelist__select-current:disabled { opacity: 0.4; cursor: default; }
+
+/* ====================================================================
+   家系図 — ビュー全体 (ツールバー・追加モーダル)
+   ==================================================================== */
+.lineage-view { display: flex; flex-direction: column; gap: var(--space-3); }
+.lineage-view__toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+.lineage-view__scopes { display: flex; gap: 4px; }
+.lineage-view__scope-btn {
+  background: transparent;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-1);
+  padding: 5px 12px;
+  font: 400 12px/1.3 var(--font-sans);
+  color: var(--ink-9);
+  cursor: pointer;
+}
+.lineage-view__scope-btn[data-active] { background: var(--ink-12); color: var(--paper); border-color: var(--ink-12); }
+.lineage-view__add-actions { display: flex; gap: var(--space-2); }
+.lineage-add__title { margin: 0 0 var(--space-2); font: 600 13px/1.3 var(--font-sans); }
+.lineage-add__target { margin: 0 0 var(--space-3); font: 400 12px/1.4 var(--font-mono); color: var(--ink-9); }
+.lineage-add__editor { display: flex; flex-direction: column; gap: 4px; font: 400 12px/1.3 var(--font-sans); }
+
+/* ====================================================================
+   StorageBucket — 一覧 / 家系図 タブ
+   ==================================================================== */
+.storage-bucket__tabs { display: flex; gap: var(--space-2); margin: var(--space-2) 0; }
+.storage-bucket__tab {
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  padding: 6px 2px;
+  font: 500 12.5px/1.3 var(--font-sans);
+  color: var(--ink-7);
+  cursor: pointer;
+}
+.storage-bucket__tab[aria-selected="true"] { color: var(--ink-12); border-bottom-color: var(--ink-12); }
