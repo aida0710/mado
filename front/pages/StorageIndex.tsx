@@ -8,6 +8,7 @@ import {CacheMeta} from '../components/CacheMeta'
 import {TagBadge} from '../components/TagBadge'
 import {TagPicker} from '../components/TagPicker'
 import {TagPanel} from '../components/TagPanel'
+import {LineageListPanel} from '../components/LineageListPanel'
 import {useLineageEnabled} from '../lib/useLineageEnabled'
 import {CopyMenu, type MenuItem} from '../components/CopyMenu'
 import {absoluteUrl} from '../lib/route'
@@ -158,6 +159,7 @@ export default function StorageIndex({connId}: Props) {
                 onToggle={toggleTagFilter}
                 onClear={() => setSelectedTagIds(new Set())}
             />
+            {lineageEnabled && <LineageListPanel connId={connId}/>}
 
             {error && <p className="error">{error}</p>}
             {loading && buckets.length === 0 && (
