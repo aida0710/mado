@@ -1,4 +1,4 @@
-import { useEffect, useReducer, useState } from 'react'
+import { useEffect, useReducer } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../lib/api/client'
 import type { LineageLink } from '../lib/api/types'
@@ -8,9 +8,6 @@ import { encPath, fileLinkToDirRedirect } from '../lib/route'
 interface Props {
   connId: string
 }
-
-const headLabelClass =
-  'text-[10.5px] font-semibold uppercase tracking-[0.22em] text-ink-7'
 
 // LineageNodePopup / LineageGraphCanvas と同じ記号を使う。
 const KIND_ICON: Record<'bucket' | 'directory' | 'file', string> = {
@@ -67,10 +64,12 @@ function reducer(s: State, a: Action): State {
   }
 }
 
-// Storage (バケット一覧) に置く、接続内の家系図リンク一覧。
-// 既定は畳んだ状態 (TagPanel と揃える)。
-export function LineageListPanel({ connId }: Props) {
-  const [open, setOpen] = useState(false)
+// データ家系図。Storage (バケット一覧) からリンクで開く独立したビュー。
+//
+// 家系図ビュー本体は 1 ノードを中心に祖先/子孫を辿る作りなので、「どのリンクが
+// 登録されているか」を俯瞰できない。ここでは接続内の全リンクを素直に
+// 親 → 子 の一覧として出す。
+export function LineageListView({ connId }: Props) {
   const [state, dispatch] = useReducer(reducer, { links: null, error: null })
   const { links, error } = state
 
@@ -83,34 +82,21 @@ export function LineageListPanel({ connId }: Props) {
   }, [connId])
 
   return (
-    <section className="mt-3 mb-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          className="ghost"
-          onClick={() => setOpen(o => !o)}
-          aria-expanded={open}
-        >
-          <span aria-hidden>{open ? '▾' : '▸'}</span>
-          <span className={headLabelClass}>家系図</span>
-          {links !== null && (
-            <span className={headLabelClass}>({links.length})</span>
-          )}
-        </button>
-      </div>
+    <section>
+      {error && <p className="error mt-2">{error}</p>}
 
-      {open && (
+      {links !== null && links.length === 0 && !error && (
+        <p className="mt-4 text-[13px] text-ink-7">
+          リンクがまだありません。バケットやディレクトリの家系図タブから追加できます。
+        </p>
+      )}
+
+      {links !== null && links.length > 0 && (
         <>
-          {error && <p className="error mt-2">{error}</p>}
-
-          {links !== null && links.length === 0 && !error && (
-            <p className="mt-3 text-[12px] text-ink-7">
-              リンクがまだありません。バケットやディレクトリの家系図タブから追加できます。
-            </p>
-          )}
-
-          {links !== null && links.length > 0 && (
-            <ul className="m-0 mt-3 list-none p-0" style={{ borderTop: '1px solid var(--rule)' }}>
+          <p className="mt-1 text-[10.5px] font-semibold uppercase tracking-[0.22em] text-ink-7">
+            {links.length} 件
+          </p>
+          <ul className="m-0 mt-2 list-none p-0" style={{ borderTop: '1px solid var(--rule)' }}>
               {links.map(l => (
                 <li
                   key={l.id}
@@ -129,8 +115,7 @@ export function LineageListPanel({ connId }: Props) {
                   </div>
                 </li>
               ))}
-            </ul>
-          )}
+          </ul>
         </>
       )}
     </section>

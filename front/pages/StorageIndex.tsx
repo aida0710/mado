@@ -1,5 +1,5 @@
 import {useCallback, useEffect, useMemo, useState} from 'react'
-import {Link, useNavigate} from 'react-router-dom'
+import {Link, useNavigate, useSearchParams} from 'react-router-dom'
 import {api} from '../lib/api/client'
 import {ConnectionSwitcher} from '../components/ConnectionSwitcher'
 import {ReadmeSearchPanel} from '../components/ReadmeSearchPanel'
@@ -7,8 +7,8 @@ import {S3PathPanel} from '../components/S3PathPanel'
 import {CacheMeta} from '../components/CacheMeta'
 import {TagBadge} from '../components/TagBadge'
 import {TagPicker} from '../components/TagPicker'
-import {TagPanel} from '../components/TagPanel'
-import {LineageListPanel} from '../components/LineageListPanel'
+import {TagSearchView} from '../components/TagSearchView'
+import {LineageListView} from '../components/LineageListView'
 import {useLineageEnabled} from '../lib/useLineageEnabled'
 import {CopyMenu, type MenuItem} from '../components/CopyMenu'
 import {absoluteUrl} from '../lib/route'
@@ -33,8 +33,12 @@ const liClass =
 const linkClass =
     'block min-w-0 overflow-hidden text-ellipsis whitespace-nowrap font-semibold ' +
     'tracking-[-0.005em] text-ink-12 no-underline hover:underline underline-offset-[3px]'
+const subLinkClass =
+    'text-[12px] text-ink-9 no-underline hover:text-ink-12 hover:underline underline-offset-[3px]'
 
 export default function StorageIndex({connId}: Props) {
+    const [searchParams] = useSearchParams()
+    const indexHref = `/storage/${encodeURIComponent(connId)}/`
     const [buckets, setBuckets] = useState<BucketRow[]>([])
     // 関数形式: そうしないと毎レンダ new Set() が走って即破棄される。
     const [favorites, setFavorites] = useState<Set<string>>(() => new Set())
@@ -66,7 +70,6 @@ export default function StorageIndex({connId}: Props) {
     const lineageEnabled = useLineageEnabled()
     const [allTags, setAllTags] = useState<Tag[]>([])
     const [bucketTags, setBucketTags] = useState<Record<string, string[]>>({})
-    const [selectedTagIds, setSelectedTagIds] = useState<Set<string>>(() => new Set())
 
     useEffect(() => { api.tags().then(setAllTags).catch(() => {}) }, [connId])
 
@@ -91,21 +94,6 @@ export default function StorageIndex({connId}: Props) {
         setBucketTags(prev => ({ ...prev, [bucketName]: tagIds }))
     }, [])
 
-    // 候補は「表示中のバケットに出現するタグ」ではなく全タグ (TagPanel の
-    // 責務コメント参照 — 今の一覧に無いタグも選べる必要がある)。
-    const toggleTagFilter = useCallback((tagId: string) => {
-        setSelectedTagIds(prev => {
-            const next = new Set(prev)
-            if (next.has(tagId)) next.delete(tagId); else next.add(tagId)
-            return next
-        })
-    }, [])
-    const matchesSelectedTags = useCallback((bucketName: string): boolean => {
-        if (selectedTagIds.size === 0) return true
-        const ids = bucketTags[bucketName] ?? []
-        return ids.some(id => selectedTagIds.has(id))
-    }, [selectedTagIds, bucketTags])
-
     const toggleFavorite = async (name: string) => {
         const isFav = favorites.has(name)
         const next = new Set(favorites)
@@ -129,8 +117,26 @@ export default function StorageIndex({connId}: Props) {
         (favorites.has(b.name) ? favoriteRows : otherRows).push(b)
     }
 
-    const visibleFavoriteRows = favoriteRows.filter(b => matchesSelectedTags(b.name))
-    const visibleOtherRows = otherRows.filter(b => matchesSelectedTags(b.name))
+    // タグ検索 / データ家系図は ?view= で表現する。固定セグメント
+    // (/storage/:connId/tags) にすると "tags" という名前のバケットが
+    // 開けなくなるため — S3 のバケット名として普通にあり得る。
+    const view = searchParams.get('view')
+    if (view === 'tags' || view === 'lineage') {
+        return (
+            <section>
+                <header className="page-head">
+                    <h2>{view === 'tags' ? 'タグ検索' : 'データ家系図'}</h2>
+                    <ConnectionSwitcher/>
+                </header>
+                <p className="mt-1">
+                    <Link className={subLinkClass} to={indexHref}>← Storage</Link>
+                </p>
+                {view === 'tags'
+                    ? <TagSearchView connId={connId}/>
+                    : <LineageListView connId={connId}/>}
+            </section>
+        )
+    }
 
     return (
         <section>
@@ -151,15 +157,14 @@ export default function StorageIndex({connId}: Props) {
 
             <ReadmeSearchPanel connId={connId}/>
             <S3PathPanel connId={connId}/>
-            {/* 「探す」系 (README 全文検索 / S3 パス貼付) の下にまとめる。 */}
-            <TagPanel
-                connId={connId}
-                allTags={allTags}
-                selected={selectedTagIds}
-                onToggle={toggleTagFilter}
-                onClear={() => setSelectedTagIds(new Set())}
-            />
-            {lineageEnabled && <LineageListPanel connId={connId}/>}
+            {/* タグ検索 / データ家系図 は別ビューへのリンクにする。畳んだパネルとして
+                ここに積むと、README 検索・S3 パス貼付と合わせて一覧の前が混み合う。 */}
+            <nav className="mt-3 mb-4 flex flex-wrap items-center gap-x-4 gap-y-1">
+                <Link className={subLinkClass} to="?view=tags">タグ検索</Link>
+                {lineageEnabled && (
+                    <Link className={subLinkClass} to="?view=lineage">データ家系図</Link>
+                )}
+            </nav>
 
             {error && <p className="error">{error}</p>}
             {loading && buckets.length === 0 && (
@@ -169,14 +174,14 @@ export default function StorageIndex({connId}: Props) {
                 <p className="text-[13px] text-ink-7">バケットが見つかりません。</p>
             )}
 
-            {visibleFavoriteRows.length > 0 && (
+            {favoriteRows.length > 0 && (
                 <>
                     <h3 className={sectionTitleClass}>現在使っているバケット</h3>
                     <ul
                         className={listClass}
                         style={{borderTop: '1px solid var(--rule)'}}
                     >
-                        {visibleFavoriteRows.map(b => (
+                        {favoriteRows.map(b => (
                             <BucketLi
                                 key={b.name}
                                 connId={connId}
@@ -193,14 +198,14 @@ export default function StorageIndex({connId}: Props) {
                 </>
             )}
 
-            {visibleOtherRows.length > 0 && (
+            {otherRows.length > 0 && (
                 <>
                     <h3 className={sectionTitleClass}>その他のバケット</h3>
                     <ul
                         className={listClass}
                         style={{borderTop: '1px solid var(--rule)'}}
                     >
-                        {visibleOtherRows.map(b => (
+                        {otherRows.map(b => (
                             <BucketLi
                                 key={b.name}
                                 connId={connId}

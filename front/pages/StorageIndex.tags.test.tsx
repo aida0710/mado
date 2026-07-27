@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { api } from '../lib/api/client'
@@ -53,30 +53,40 @@ describe('StorageIndex タグ', () => {
     expect(badges.length).toBeGreaterThan(0)
   })
 
-  it('タグチップで絞り込むと一致しないバケットが隠れる', async () => {
-    vi.spyOn(api, 'buckets').mockResolvedValue({
-      buckets: [{ name: 'bkt-1', creationDate: null }, { name: 'bkt-2', creationDate: null }],
-    })
+  // タグ検索とデータ家系図は畳んだパネルをやめて別ビューへのリンクにした
+  // (一覧の前に積み上がってページが混み合っていたため)。
+  it('タグ検索とデータ家系図はリンクとして出す', async () => {
+    vi.spyOn(api, 'buckets').mockResolvedValue({ buckets: [{ name: 'bkt-1', creationDate: null }] })
     vi.spyOn(api, 'favorites').mockResolvedValue([])
-    vi.spyOn(api, 'tags').mockResolvedValue([{ id: 't1', name: '重要', color: '#ff0000' }])
-    // bkt-1 のみタグ付き。bucket 引数で分岐させ、path キー ('') で返す
-    // (StorageBrowser.tags.test.tsx と同じ mockImplementation パターン)。
-    vi.spyOn(api, 'tagAssignments').mockImplementation(async (_connId, bucket): Promise<Record<string, string[]>> =>
-      bucket === 'bkt-1' ? { '': ['t1'] } : {})
+    vi.spyOn(api, 'tags').mockResolvedValue([])
+    vi.spyOn(api, 'tagAssignments').mockResolvedValue({})
+    vi.spyOn(api, 'settings').mockResolvedValue({ lineage_enabled: 'true' })
     vi.spyOn(api, 'lastFetched', 'get').mockReturnValue({
       list: () => null, readme: () => null, tar: () => null, buckets: () => null,
     })
 
     renderIndex()
     await waitFor(() => expect(screen.getByText('bkt-1')).toBeInTheDocument())
-    expect(screen.getByText('bkt-2')).toBeInTheDocument()
 
-    // TagPanel は既定で畳んである。開いてからチップを押す。
-    fireEvent.click(await screen.findByRole('button', { name: /タグ/ }))
-    const panel = screen.getByRole('button', { name: /タグ/ }).closest('section') as HTMLElement
-    fireEvent.click(await within(panel).findByRole('button', { name: '重要' }))
+    expect(await screen.findByRole('link', { name: 'タグ検索' }))
+      .toHaveAttribute('href', '/?view=tags')
+    expect(screen.getByRole('link', { name: 'データ家系図' }))
+      .toHaveAttribute('href', '/?view=lineage')
+  })
 
-    expect(screen.getByText('bkt-1')).toBeInTheDocument()
-    expect(screen.queryByText('bkt-2')).not.toBeInTheDocument()
+  it('家系図が無効ならデータ家系図のリンクを出さない', async () => {
+    vi.spyOn(api, 'buckets').mockResolvedValue({ buckets: [{ name: 'bkt-1', creationDate: null }] })
+    vi.spyOn(api, 'favorites').mockResolvedValue([])
+    vi.spyOn(api, 'tags').mockResolvedValue([])
+    vi.spyOn(api, 'tagAssignments').mockResolvedValue({})
+    vi.spyOn(api, 'settings').mockResolvedValue({ lineage_enabled: 'false' })
+    vi.spyOn(api, 'lastFetched', 'get').mockReturnValue({
+      list: () => null, readme: () => null, tar: () => null, buckets: () => null,
+    })
+
+    renderIndex()
+    await waitFor(() =>
+      expect(screen.queryByRole('link', { name: 'データ家系図' })).not.toBeInTheDocument())
+    expect(screen.getByRole('link', { name: 'タグ検索' })).toBeInTheDocument()
   })
 })
