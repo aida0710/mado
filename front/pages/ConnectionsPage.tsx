@@ -138,10 +138,16 @@ export default function ConnectionsPage() {
             {connections.map(conn => (
               <li
                 key={conn.id}
-                className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-3 p-4"
+                className={
+                  // 狭い画面では縦積み (名前 + メタ → ボタン行)。横並びのままだと
+                  // shrink-0 のボタン群が幅を取り、左カラムが潰れて meta が細切れに
+                  // 改行される / 行ごとにボタンの折り返し位置が変わって不揃いになる。
+                  'flex flex-col gap-3 p-4 ' +
+                  'sm:flex-row sm:flex-wrap sm:items-baseline sm:justify-between sm:gap-x-6 sm:gap-y-3'
+                }
                 style={{ borderBottom: '1px solid var(--rule)' }}
               >
-                <div className="min-w-0 flex-1">
+                <div className="min-w-0 sm:flex-1">
                   <strong className="block text-[15px] font-semibold tracking-[0.005em] text-ink-12">
                     {conn.name}
                     {conn.isDefault ? (
@@ -154,8 +160,12 @@ export default function ConnectionsPage() {
                       </span>
                     ) : null}
                   </strong>
+                  {/* endpoint は空白を含まない長い 1 トークン (R2 の
+                      https://<32桁hash>.r2.cloudflarestorage.com 等) になりうる。
+                      既定の overflow-wrap では折り返せず画面外へはみ出すので
+                      wrap-anywhere で語中改行を許可する。 */}
                   <div
-                    className="mt-1 font-mono text-[12px] text-ink-7"
+                    className="mt-1 font-mono text-[12px] text-ink-7 wrap-anywhere"
                     style={{ letterSpacing: '0.01em' }}
                   >
                     {conn.endpoint} <span className="text-ink-3">·</span>{' '}
@@ -171,7 +181,8 @@ export default function ConnectionsPage() {
                     <span className="text-ink-5">list-{conn.listObjectsVersion}</span>
                   </div>
                 </div>
-                <div className="flex shrink-0 gap-2">
+                {/* 4 ボタンが 360px 幅に収まらないことがあるので折り返しを許可。 */}
+                <div className="flex flex-wrap gap-2 sm:shrink-0">
                   {!conn.isDefault && (
                     <button
                       className="ghost"
