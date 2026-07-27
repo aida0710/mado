@@ -1440,3 +1440,14 @@ pre { font-size: 12px; }
 .lineage-flow .react-flow__edge-path { stroke: var(--ink-5); stroke-width: 1.5; }
 .lineage-flow .react-flow__edge:hover .react-flow__edge-path { stroke: var(--ink-12); }
 .lineage-flow .react-flow__connection-path { stroke: var(--ink-9); stroke-width: 1.5; }
+/* ミニマップ。既定は白背景 + 白マスクでこの紙色の上では潰れて見えないので、
+   インクのトーンに寄せる。                                                 */
+.lineage-flow .react-flow__minimap {
+  background: var(--ink-0);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-1);
+}
+.lineage-flow .react-flow__minimap-mask {
+  fill: color-mix(in srgb, var(--ink-12) 10%, transparent);
+}
+.lineage-flow .react-flow__minimap-node { fill: var(--ink-5); stroke: none; }

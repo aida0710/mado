@@ -123,13 +123,24 @@ describe('LineageView', () => {
     ))
   })
 
-  it('編集者名が未登録ならドラッグ接続を保存せず案内を出す', async () => {
+  // グラフ上の操作だけで完結させるため、未登録のときはその場で聞く。
+  it('編集者名が未登録ならその場で聞いてから保存する', async () => {
     vi.mocked(api.lineageLinks).mockResolvedValue(edges)
+    vi.mocked(api.addLineageLink).mockResolvedValue(99)
     renderView()
 
     fireEvent.click(await screen.findByRole('button', { name: 'connect:drag' }))
-    expect(await screen.findByRole('alert')).toHaveTextContent('編集者名')
     expect(api.addLineageLink).not.toHaveBeenCalled()
+
+    fireEvent.change(await screen.findByLabelText('編集者名'), { target: { value: 'tanaka' } })
+    fireEvent.click(screen.getByRole('button', { name: 'リンクを追加' }))
+
+    await waitFor(() => expect(api.addLineageLink).toHaveBeenCalledWith(
+      'c1',
+      { bucket: 'raw', path: '2024-01/' },
+      { bucket: 'clean', path: 'v2/' },
+      'tanaka',
+    ))
   })
 
   // 閉路になる向きはドロップ前に弾く (サーバの 409 と同じルール)。
@@ -139,12 +150,17 @@ describe('LineageView', () => {
     expect(await screen.findByTestId('cycle')).toHaveTextContent('true')
   })
 
-  it('エッジをクリックすると removeLineageLink が呼ばれる', async () => {
+  // 1 クリックで消さない。必ず確認を挟む。
+  it('エッジをクリックすると確認を出し、解除で removeLineageLink を呼ぶ', async () => {
     vi.mocked(api.lineageLinks).mockResolvedValue(edges)
     vi.mocked(api.removeLineageLink).mockResolvedValue(undefined)
     renderView()
 
     fireEvent.click(await screen.findByRole('button', { name: 'edge:1' }))
+    expect(await screen.findByText('リンクを解除')).toBeInTheDocument()
+    expect(api.removeLineageLink).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByRole('button', { name: '解除' }))
     await waitFor(() => expect(api.removeLineageLink).toHaveBeenCalledWith('c1', 1))
     await waitFor(() => expect(api.lineageLinks).toHaveBeenCalledTimes(2))
   })

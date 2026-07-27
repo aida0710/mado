@@ -1,48 +1,20 @@
-import { useEffect, useReducer } from 'react'
-import { Link } from 'react-router-dom'
+import { lazy, Suspense, useCallback, useEffect, useReducer, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { api } from '../lib/api/client'
 import type { LineageLink } from '../lib/api/types'
-import { nodeKind } from '../lib/lineageGraph'
-import { encPath, fileLinkToDirRedirect } from '../lib/route'
+import { nodeKey, wouldCreateCycle, type LineageNode } from '../lib/lineageGraph'
+import { encPath } from '../lib/route'
+import type { FlowEdge } from './storage/lineage/LineageFlowCanvas'
+
+// React Flow は重いので家系図を開いた人だけが払うよう別チャンクにする
+// (バケット画面の LineageView と同じ扱い)。
+const LineageFlowCanvas = lazy(() => import('./storage/lineage/LineageFlowCanvas'))
 
 interface Props {
   connId: string
 }
 
-// LineageNodePopup / LineageFlowCanvas と同じ記号を使う。
-const KIND_ICON: Record<'bucket' | 'directory' | 'file', string> = {
-  bucket: '📦', directory: '📁', file: '📄',
-}
-
-// 家系図ビューは 1 ノードを中心に祖先/子孫を辿る作りなので、「どのリンクが
-// 登録されているか」を俯瞰できない。ここでは接続内の全リンクを素直に
-// 親 → 子 の一覧として出す。
-function nodeHref(connId: string, bucket: string, path: string): string {
-  const kind = nodeKind(path)
-  if (kind === 'bucket') return `/storage/${encodeURIComponent(connId)}/${encodeURIComponent(bucket)}/`
-  if (kind === 'directory') {
-    return `/storage/${encodeURIComponent(connId)}/${encodeURIComponent(bucket)}/${encPath(path)}`
-  }
-  return fileLinkToDirRedirect(connId, bucket, path)
-}
-
-function NodeLink({ connId, bucket, path }: { connId: string; bucket: string; path: string }) {
-  const kind = nodeKind(path)
-  return (
-    <Link
-      to={nodeHref(connId, bucket, path)}
-      className="inline-flex min-w-0 items-baseline gap-1.5 text-ink-12 no-underline hover:underline underline-offset-[3px]"
-    >
-      <span aria-hidden className="shrink-0">{KIND_ICON[kind]}</span>
-      <span
-        className="wrap-anywhere text-[12.5px]"
-        style={{ fontFamily: 'var(--font-mono)', letterSpacing: '0.005em' }}
-      >
-        {path === '' ? bucket : `${bucket}/${path}`}
-      </span>
-    </Link>
-  )
-}
+const LAST_EDITOR_KEY = 'dashboard.lastEditor'
 
 interface State {
   links: LineageLink[] | null
@@ -64,59 +36,180 @@ function reducer(s: State, a: Action): State {
   }
 }
 
-// データ家系図。Storage (バケット一覧) からリンクで開く独立したビュー。
+// データ家系図 (接続全体)。Storage からリンクで開く独立したビュー。
 //
-// 家系図ビュー本体は 1 ノードを中心に祖先/子孫を辿る作りなので、「どのリンクが
-// 登録されているか」を俯瞰できない。ここでは接続内の全リンクを素直に
-// 親 → 子 の一覧として出す。
+// バケット画面の家系図は「現在地」を中心に据えるが、こちらは中心を持たず
+// 接続内の全リンクをそのまま 1 枚のグラフにする。描画はバケット画面と同じ
+// LineageFlowCanvas を使うので、操作 (パン / ズーム / ドラッグ接続 /
+// エッジクリックで解除) も揃う。
 export function LineageListView({ connId }: Props) {
+  const navigate = useNavigate()
   const [state, dispatch] = useReducer(reducer, { links: null, error: null })
   const { links, error } = state
+  const [editor, setEditor] = useState(() => localStorage.getItem(LAST_EDITOR_KEY) ?? '')
+  const [saving, setSaving] = useState(false)
+  const [pendingConnect, setPendingConnect] = useState<{ parent: LineageNode; child: LineageNode } | null>(null)
+  const [pendingUnlink, setPendingUnlink] = useState<number[] | null>(null)
+  const [opError, setOpError] = useState<string | null>(null)
 
-  useEffect(() => {
-    let cancelled = false
+  const refresh = useCallback(() => {
     api.lineageLinks(connId)
-      .then(r => { if (!cancelled) dispatch({ type: 'ok', links: r }) })
-      .catch((e: Error) => { if (!cancelled) dispatch({ type: 'err', error: e.message }) })
-    return () => { cancelled = true }
+      .then(r => dispatch({ type: 'ok', links: r }))
+      .catch((e: Error) => dispatch({ type: 'err', error: e.message }))
   }, [connId])
+
+  useEffect(() => { refresh() }, [refresh])
+
+  const goTo = useCallback((n: LineageNode) => {
+    navigate(`/storage/${encodeURIComponent(connId)}/${encodeURIComponent(n.bucket)}/${encPath(n.path)}`)
+  }, [connId, navigate])
+
+  const saveLink = useCallback(async (parent: LineageNode, child: LineageNode, who: string) => {
+    setSaving(true)
+    setOpError(null)
+    try {
+      await api.addLineageLink(connId, parent, child, who)
+      localStorage.setItem(LAST_EDITOR_KEY, who)
+      setPendingConnect(null)
+      refresh()
+    } catch (e) {
+      setOpError((e as Error).message)
+    } finally {
+      setSaving(false)
+    }
+  }, [connId, refresh])
+
+  // 名前が保存済みならそのまま確定し、未登録のときだけ聞く。
+  const connectByDrag = useCallback((parent: LineageNode, child: LineageNode) => {
+    if (!editor) {
+      setPendingConnect({ parent, child })
+      return
+    }
+    void saveLink(parent, child, editor)
+  }, [editor, saveLink])
+
+  const unlinkMany = useCallback(async (ids: number[]) => {
+    setOpError(null)
+    try {
+      for (const id of ids) await api.removeLineageLink(connId, id)
+      setPendingUnlink(null)
+      refresh()
+    } catch (e) {
+      setOpError((e as Error).message)
+    }
+  }, [connId, refresh])
+
+  const flowEdges: FlowEdge[] = (links ?? []).map(l => ({
+    ids: [l.id],
+    parent: { bucket: l.parentBucket, path: l.parentPath },
+    child: { bucket: l.childBucket, path: l.childPath },
+  }))
+  const nodeMap = new Map<string, LineageNode>()
+  for (const e of flowEdges) {
+    nodeMap.set(nodeKey(e.parent), e.parent)
+    nodeMap.set(nodeKey(e.child), e.child)
+  }
+  const flowNodes = [...nodeMap.values()]
 
   return (
     <section>
       {error && <p className="error mt-2">{error}</p>}
+      {opError && <p className="error mt-2" role="alert">{opError}</p>}
+
+      {links !== null && (
+        <p className="mt-1 text-[10.5px] font-semibold uppercase tracking-[0.22em] text-ink-7">
+          {links.length} 件
+        </p>
+      )}
 
       {links !== null && links.length === 0 && !error && (
-        <p className="mt-4 text-[13px] text-ink-7">
-          リンクがまだありません。バケットやディレクトリの家系図タブから追加できます。
+        <p className="mt-3 text-[13px] text-ink-7">
+          リンクがまだありません。バケットの家系図タブから繋いでください。
         </p>
       )}
 
       {links !== null && links.length > 0 && (
-        <>
-          <p className="mt-1 text-[10.5px] font-semibold uppercase tracking-[0.22em] text-ink-7">
-            {links.length} 件
+        <div className="mt-2">
+          <Suspense fallback={<p className="lineage-canvas__empty">読み込み中…</p>}>
+            <LineageFlowCanvas
+              nodes={flowNodes}
+              edges={flowEdges}
+              center={null}
+              /* 接続全体では中心が無く、親子の詳細はバケット画面側で見るので
+                 シングルクリックのポップアップは持たない。 */
+              onNodeClick={() => {}}
+              onNodeDoubleClick={goTo}
+              onEdgeClick={setPendingUnlink}
+              onConnect={connectByDrag}
+              onRejectCycle={() => setOpError('このリンクを追加すると循環します。')}
+              isCycle={(p, c) => wouldCreateCycle(links, p, c)}
+            />
+          </Suspense>
+          <p className="mt-2 text-[12px] text-ink-7">
+            ノードをダブルクリックでその場所へ移動。ノード右端の ○ からドラッグでリンク追加、
+            エッジをクリックで解除。
           </p>
-          <ul className="m-0 mt-2 list-none p-0" style={{ borderTop: '1px solid var(--rule)' }}>
-              {links.map(l => (
-                <li
-                  key={l.id}
-                  className="px-1 py-2.5"
-                  style={{ borderBottom: '1px solid var(--rule)' }}
-                >
-                  {/* 狭い画面では 親 / 子 が縦積みになる。矢印は子と同じ塊にして
-                      「→ 子」で折り返す — 矢印だけが単独行に残ると、どちらへ
-                      向かっているのかが読み取りづらい。 */}
-                  <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                    <NodeLink connId={connId} bucket={l.parentBucket} path={l.parentPath} />
-                    <span className="inline-flex min-w-0 items-baseline gap-2">
-                      <span aria-hidden className="shrink-0 text-ink-5">→</span>
-                      <NodeLink connId={connId} bucket={l.childBucket} path={l.childPath} />
-                    </span>
-                  </div>
-                </li>
-              ))}
-          </ul>
-        </>
+        </div>
+      )}
+
+      {pendingConnect && (
+        <div className="modal-backdrop" role="presentation">
+          <button
+            type="button"
+            className="modal-backdrop__close-overlay"
+            onClick={() => setPendingConnect(null)}
+            aria-label="モーダルを閉じる"
+            tabIndex={-1}
+          />
+          <div className="modal modal--narrow" role="dialog" aria-modal="true" aria-labelledby="lineage-all-connect-title">
+            <h3 id="lineage-all-connect-title" className="lineage-add__title">リンクを追加</h3>
+            <p className="lineage-add__target">
+              {pendingConnect.parent.bucket}/{pendingConnect.parent.path}
+              {' → '}
+              {pendingConnect.child.bucket}/{pendingConnect.child.path}
+            </p>
+            <label className="lineage-add__editor">
+              <span className="label">編集者名</span>
+              <input
+                value={editor}
+                onChange={e => setEditor(e.target.value)}
+                placeholder="e.g. tanaka"
+                autoComplete="nickname"
+                aria-label="編集者名"
+              />
+            </label>
+            <div className="modal-actions">
+              <button type="button" onClick={() => setPendingConnect(null)} disabled={saving}>キャンセル</button>
+              <button
+                type="button"
+                disabled={saving || !editor}
+                onClick={() => void saveLink(pendingConnect.parent, pendingConnect.child, editor)}
+              >
+                {saving ? '保存中…' : 'リンクを追加'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {pendingUnlink && (
+        <div className="modal-backdrop" role="presentation">
+          <button
+            type="button"
+            className="modal-backdrop__close-overlay"
+            onClick={() => setPendingUnlink(null)}
+            aria-label="モーダルを閉じる"
+            tabIndex={-1}
+          />
+          <div className="modal modal--narrow" role="dialog" aria-modal="true" aria-labelledby="lineage-all-unlink-title">
+            <h3 id="lineage-all-unlink-title" className="lineage-add__title">リンクを解除</h3>
+            <p className="lineage-add__target">このリンクを解除します。</p>
+            <div className="modal-actions">
+              <button type="button" onClick={() => setPendingUnlink(null)}>キャンセル</button>
+              <button type="button" onClick={() => void unlinkMany(pendingUnlink)}>解除</button>
+            </div>
+          </div>
+        </div>
       )}
     </section>
   )

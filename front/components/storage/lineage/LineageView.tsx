@@ -45,6 +45,10 @@ export function LineageView({ connId, bucket, prefix }: Props) {
   const [pendingAdd, setPendingAdd] = useState<PendingAdd | null>(null)
   const [editor, setEditor] = useState(() => localStorage.getItem(LAST_EDITOR_KEY) ?? '')
   const [saving, setSaving] = useState(false)
+  // グラフ上のドラッグ接続で、編集者名が未登録のときに確認するための保留。
+  const [pendingConnect, setPendingConnect] = useState<{ parent: LineageNode; child: LineageNode } | null>(null)
+  // エッジのクリックは解除操作なので、必ず確認を挟む (1 クリックで消さない)。
+  const [pendingUnlink, setPendingUnlink] = useState<number[] | null>(null)
 
   const refresh = useCallback(() => {
     setError(null)
@@ -141,26 +145,36 @@ export function LineageView({ connId, bucket, prefix }: Props) {
     return { nodes: [...nodeMap.values()], edges: picked }
   }, [edges, scope, center])
 
-  // グラフ上でドラッグして繋いだとき。ピッカー経由の追加と違い編集者名を
-  // 都度聞かないので、保存済みの名前をそのまま使う (未設定なら入力を促す)。
-  const connectByDrag = useCallback(async (parent: LineageNode, child: LineageNode) => {
-    if (!editor) {
-      setError('先に「＋ 親を追加」から編集者名を登録してください。')
-      return
-    }
+  const saveLink = useCallback(async (parent: LineageNode, child: LineageNode, who: string) => {
+    setSaving(true)
     setError(null)
     try {
-      await api.addLineageLink(connId, parent, child, editor)
+      await api.addLineageLink(connId, parent, child, who)
+      localStorage.setItem(LAST_EDITOR_KEY, who)
+      setPendingConnect(null)
       refresh()
     } catch (e) {
       setError((e as Error).message)
+    } finally {
+      setSaving(false)
     }
-  }, [connId, editor, refresh])
+  }, [connId, refresh])
+
+  // グラフ上でドラッグして繋いだとき。名前が保存済みならそのまま確定し、
+  // 未登録のときだけ聞く — グラフ上の操作だけで完結させるため。
+  const connectByDrag = useCallback((parent: LineageNode, child: LineageNode) => {
+    if (!editor) {
+      setPendingConnect({ parent, child })
+      return
+    }
+    void saveLink(parent, child, editor)
+  }, [editor, saveLink])
 
   const unlinkMany = useCallback(async (ids: number[]) => {
     setError(null)
     try {
       for (const id of ids) await api.removeLineageLink(connId, id)
+      setPendingUnlink(null)
       refresh()
     } catch (e) {
       setError((e as Error).message)
@@ -192,12 +206,17 @@ export function LineageView({ connId, bucket, prefix }: Props) {
       </div>
 
       {error && <p className="filelist__error" role="alert">{error}</p>}
+      {/* リンクが 0 本でもキャンバスは出す。現在地のノードが 1 つ置かれるので、
+          そこからドラッグして最初のリンクを引ける (文言だけの空表示にすると
+          「どこから始めるのか」が分からない)。 */}
+      {flow && flow.edges.length === 0 && (
+        <p className="lineage-canvas__empty">
+          登録されたリンクがありません。ノード右端の ○ から別のノードへドラッグするか、
+          「＋ 親を追加」/「＋ 子を追加」で繋いでください。
+        </p>
+      )}
       {!flow ? (
         <p className="lineage-canvas__empty">読み込み中…</p>
-      ) : flow.edges.length === 0 && flow.nodes.length <= 1 ? (
-        <p className="lineage-canvas__empty">
-          登録されたリンクがありません。「＋ 親を追加」/「＋ 子を追加」から繋いでください。
-        </p>
       ) : (
         <Suspense fallback={<p className="lineage-canvas__empty">読み込み中…</p>}>
           <LineageFlowCanvas
@@ -206,8 +225,8 @@ export function LineageView({ connId, bucket, prefix }: Props) {
             center={scope === 'current' ? center : null}
             onNodeClick={setPopupNode}
             onNodeDoubleClick={goTo}
-            onEdgeClick={ids => { void unlinkMany(ids) }}
-            onConnect={(p, c) => { void connectByDrag(p, c) }}
+            onEdgeClick={setPendingUnlink}
+            onConnect={connectByDrag}
             onRejectCycle={() => setError('このリンクを追加すると循環します。')}
             isCycle={(p, c) => wouldCreateCycle(edges ?? [], p, c)}
           />
@@ -234,6 +253,70 @@ export function LineageView({ connId, bucket, prefix }: Props) {
           onCancel={() => setAddDirection(null)}
           onSelect={node => { setPendingAdd({ direction: addDirection, node }); setAddDirection(null) }}
         />
+      )}
+
+      {pendingConnect && (
+        <div className="modal-backdrop" role="presentation">
+          <button
+            type="button"
+            className="modal-backdrop__close-overlay"
+            onClick={() => setPendingConnect(null)}
+            aria-label="モーダルを閉じる"
+            tabIndex={-1}
+          />
+          <div className="modal modal--narrow" role="dialog" aria-modal="true" aria-labelledby="lineage-connect-title">
+            <h3 id="lineage-connect-title" className="lineage-add__title">リンクを追加</h3>
+            <p className="lineage-add__target">
+              {pendingConnect.parent.bucket}/{pendingConnect.parent.path}
+              {' → '}
+              {pendingConnect.child.bucket}/{pendingConnect.child.path}
+            </p>
+            <label className="lineage-add__editor">
+              <span className="label">編集者名</span>
+              <input
+                value={editor}
+                onChange={e => setEditor(e.target.value)}
+                placeholder="e.g. tanaka"
+                autoComplete="nickname"
+                aria-label="編集者名"
+              />
+            </label>
+            <div className="modal-actions">
+              <button type="button" onClick={() => setPendingConnect(null)} disabled={saving}>キャンセル</button>
+              <button
+                type="button"
+                disabled={saving || !editor}
+                onClick={() => void saveLink(pendingConnect.parent, pendingConnect.child, editor)}
+              >
+                {saving ? '保存中…' : 'リンクを追加'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {pendingUnlink && (
+        <div className="modal-backdrop" role="presentation">
+          <button
+            type="button"
+            className="modal-backdrop__close-overlay"
+            onClick={() => setPendingUnlink(null)}
+            aria-label="モーダルを閉じる"
+            tabIndex={-1}
+          />
+          <div className="modal modal--narrow" role="dialog" aria-modal="true" aria-labelledby="lineage-unlink-title">
+            <h3 id="lineage-unlink-title" className="lineage-add__title">リンクを解除</h3>
+            <p className="lineage-add__target">
+              {pendingUnlink.length > 1
+                ? `このバケット間の ${pendingUnlink.length} 本のリンクをまとめて解除します。`
+                : 'このリンクを解除します。'}
+            </p>
+            <div className="modal-actions">
+              <button type="button" onClick={() => setPendingUnlink(null)}>キャンセル</button>
+              <button type="button" onClick={() => void unlinkMany(pendingUnlink)}>解除</button>
+            </div>
+          </div>
+        </div>
       )}
 
       {pendingAdd && (
