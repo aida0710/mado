@@ -9,6 +9,7 @@ import {TagBadge} from '../components/TagBadge'
 import {TagPicker} from '../components/TagPicker'
 import {TagSearchView} from '../components/TagSearchView'
 import {LineageListView} from '../components/LineageListView'
+import {ViewBreadcrumb} from '../components/ViewBreadcrumb'
 import {useLineageEnabled} from '../lib/useLineageEnabled'
 import {CopyMenu, type MenuItem} from '../components/CopyMenu'
 import {absoluteUrl} from '../lib/route'
@@ -122,15 +123,14 @@ export default function StorageIndex({connId}: Props) {
     // 開けなくなるため — S3 のバケット名として普通にあり得る。
     const view = searchParams.get('view')
     if (view === 'tags' || view === 'lineage') {
+        const label = view === 'tags' ? 'タグ検索' : 'データ家系図'
         return (
             <section>
-                <header className="page-head">
-                    <h2>{view === 'tags' ? 'タグ検索' : 'データ家系図'}</h2>
+                {/* バケット画面 (Breadcrumb + ConnectionSwitcher) と同じ並びに揃える。 */}
+                <div className="flex items-center justify-between gap-3">
+                    <ViewBreadcrumb connId={connId} label={label} href={`${indexHref}?view=${view}`}/>
                     <ConnectionSwitcher/>
-                </header>
-                <p className="mt-1">
-                    <Link className={subLinkClass} to={indexHref}>← Storage</Link>
-                </p>
+                </div>
                 {view === 'tags'
                     ? <TagSearchView connId={connId}/>
                     : <LineageListView connId={connId}/>}
