@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { api } from '../lib/api/client'
 import { classifyEntry } from '../lib/api/mime'
 import { fmtSize, prettyPrintJson } from '../lib/format'
-import { tarEntryWebUrl } from '../lib/route'
+import { absoluteUrl, tarEntryWebUrl } from '../lib/route'
 import { copyToClipboard } from '../lib/clipboard'
 import { usePinnedPreviews } from '../lib/pinnedPreviews'
 import { TEXT_HEAD_BYTES } from '../lib/textSniff'
@@ -30,13 +30,15 @@ export function TarEntryModal({ connId, bucket, archiveKey, entry, onClose }: Pr
   const headUrl = api.tarEntryUrl(connId, bucket, archiveKey, entry.name, { maxBytes: TEXT_HEAD_BYTES })
   const { addPin } = usePinnedPreviews()
   // 人に送る用 (このエントリを開いた状態で復元される) と、curl / VLC 用の生データ。
+  // どちらもクリップボードに載せるので絶対 URL にする (相対のままだと受け取った
+  // 側でホストが分からない)。
   const copyItems: MenuItem[] = [
     {
       kind: 'copy',
       label: 'Web URL をコピー',
-      value: `${window.location.origin}${tarEntryWebUrl(connId, bucket, archiveKey, entry.name)}`,
+      value: absoluteUrl(tarEntryWebUrl(connId, bucket, archiveKey, entry.name)),
     },
-    { kind: 'copy', label: '生データ URL をコピー', value: url },
+    { kind: 'copy', label: '生データ URL をコピー', value: absoluteUrl(url) },
   ]
 
   // Escape で閉じる。

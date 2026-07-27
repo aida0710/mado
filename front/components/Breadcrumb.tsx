@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { useConnection } from '../lib/connectionContext'
-import { encPath } from '../lib/route'
+import { absoluteUrl, encPath } from '../lib/route'
 import { CopyMenu, type MenuItem } from './CopyMenu'
 
 // 現在の bucket+prefix から「1階層上」へ移動する:
@@ -40,7 +40,7 @@ export function Breadcrumb({
   const dirHref =
     `/storage/${encodeURIComponent(connId)}/${encodeURIComponent(bucket)}/${encPath(prefix)}`
   const copyItems = useMemo<MenuItem[]>(() => [
-    { kind: 'copy', label: 'Web URL をコピー', value: `${window.location.origin}${dirHref}` },
+    { kind: 'copy', label: 'Web URL をコピー', value: absoluteUrl(dirHref) },
     { kind: 'copy', label: 'S3 URL をコピー',  value: `s3://${bucket}/${prefix}` },
   ], [dirHref, bucket, prefix])
 
