@@ -86,6 +86,50 @@ describe('storage lineage links', () => {
     expect(res.status).toBe(400)
   })
 
+  // 循環の防止。N:N (複数の親 / 複数の子) は許すが、閉路は登録させない。
+  const post = (parent: object, child: object) =>
+    app.request(`/storage/${TEST_CONN_ID}/lineage-links`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ parent, child, editor: 'aida' }),
+    })
+
+  const A = { bucket: 'a', path: '' }
+  const B = { bucket: 'b', path: '' }
+  const C = { bucket: 'c', path: '' }
+
+  it('POST rejects a 2-node cycle (A->B then B->A)', async () => {
+    expect((await post(A, B)).status).toBe(200)
+    const res = await post(B, A)
+    expect(res.status).toBe(409)
+
+    // 弾かれた側は書き込まれていない。
+    const list = await (await app.request(`/storage/${TEST_CONN_ID}/lineage-links`)).json() as unknown[]
+    expect(list).toHaveLength(1)
+  })
+
+  it('POST rejects a longer cycle (A->B->C then C->A)', async () => {
+    await post(A, B)
+    await post(B, C)
+    expect((await post(C, A)).status).toBe(409)
+  })
+
+  // 同じノードに複数の親 / 複数の子がぶら下がるのは正当 (閉路ではない)。
+  it('POST allows N:N fan-in / fan-out', async () => {
+    expect((await post(A, C)).status).toBe(200)
+    expect((await post(B, C)).status).toBe(200)   // C に親が 2 つ
+    const D = { bucket: 'd', path: '' }
+    expect((await post(A, D)).status).toBe(200)   // A に子が 2 つ
+  })
+
+  // 合流して再び分岐する DAG (ダイヤモンド) は閉路ではないので通す。
+  it('POST allows a diamond (A->B, A->C, B->D, C->D)', async () => {
+    const D = { bucket: 'd', path: '' }
+    await post(A, B)
+    await post(A, C)
+    await post(B, D)
+    expect((await post(C, D)).status).toBe(200)
+  })
+
   it('DELETE removes the link', async () => {
     const created = await (await app.request(`/storage/${TEST_CONN_ID}/lineage-links`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },

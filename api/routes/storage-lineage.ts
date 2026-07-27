@@ -47,6 +47,33 @@ export function mountStorageLineageRoutes(app: Hono, deps: StorageLineageDeps): 
     if (parent.bucket === child.bucket && parent.path === child.path) {
       return c.json({ error: 'parent and child must differ' }, 400)
     }
+
+    // 循環の防止。parent → child を足すと閉路になるのは「child から親子方向に
+    // 辿って parent に到達できる」場合。child を起点に子孫を再帰的に集めて
+    // parent が含まれるかを見る。
+    //
+    // UNION (UNION ALL ではない) で訪問済みを畳むので、万一すでに閉路がある
+    // データでも再帰は停止する。
+    //
+    // 並行 POST が両方ともこの検査を通り、合わせて閉路になる可能性は残る。
+    // LAN 内で人手で繋ぐ運用なので、ここでは実用上の防止に留める
+    // (描画側は generations() の visited で閉路があっても無限ループしない)。
+    const cycle = await deps.pools.ro.query(
+      `WITH RECURSIVE reach(bucket, path) AS (
+         SELECT $2::text, $3::text
+         UNION
+         SELECT l.child_bucket, l.child_path
+           FROM storage_lineage_links l
+           JOIN reach r
+             ON l.parent_bucket = r.bucket AND l.parent_path = r.path
+          WHERE l.connection_id = $1
+       )
+       SELECT 1 FROM reach WHERE bucket = $4 AND path = $5 LIMIT 1`,
+      [connId, child.bucket, child.path, parent.bucket, parent.path],
+    )
+    if (cycle.rowCount && cycle.rowCount > 0) {
+      return c.json({ error: 'このリンクを追加すると循環します' }, 409)
+    }
     // ON CONFLICT DO UPDATE で重複登録を無害化しつつ、新規/既存いずれでも id を
     // 返す (フロントが「解除」ボタンへ即座に紐づける id を必要とするため)。
     // DO UPDATE は (DO NOTHING と違い) 衝突時も対象行をロックして必ず1行返す
