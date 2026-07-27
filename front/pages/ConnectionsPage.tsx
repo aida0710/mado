@@ -5,6 +5,7 @@ import type { Connection, ConnectionCreateInput, ConnectionUpdateInput } from '.
 import { ConnectionForm } from '../components/ConnectionForm'
 import { ConnectionDeleteConfirm } from '../components/ConnectionDeleteConfirm'
 import { TagsSettings } from '../components/TagsSettings'
+import { FeatureSettings } from '../components/FeatureSettings'
 import { About } from '../components/About'
 
 const sectionTitleClass =
@@ -208,6 +209,8 @@ export default function ConnectionsPage() {
       </section>
 
       <TagsSettings />
+
+      <FeatureSettings />
 
       <About />
 

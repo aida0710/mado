@@ -8,6 +8,7 @@ import { PreviewDrawer } from '../components/PreviewDrawer'
 import { LineageView } from '../components/storage/lineage/LineageView'
 import { fileLinkToDirRedirect } from '../lib/route'
 import { useDrawerResize } from '../lib/useDrawerResize'
+import { useLineageEnabled } from '../lib/useLineageEnabled'
 
 interface Props { connId: string }
 
@@ -63,7 +64,11 @@ export default function StorageBucket({ connId }: Props) {
 
   // 「一覧」/「家系図」タブは ?view=lineage で表現する。preview/entry と同様
   // URL に持たせることで直リンク・戻る/進むが自然に効く。
-  const view = searchParams.get('view') === 'lineage' ? 'lineage' : 'list'
+  //
+  // 家系図が Settings で無効なら、?view=lineage で直リンクされても一覧に倒す
+  // (タブが無いのに家系図が出ている、という迷子状態を作らない)。
+  const lineageEnabled = useLineageEnabled()
+  const view = lineageEnabled && searchParams.get('view') === 'lineage' ? 'lineage' : 'list'
   const setView = useCallback((v: 'lineage' | 'list') => {
     setSearchParams(
       prev => {
@@ -102,15 +107,17 @@ export default function StorageBucket({ connId }: Props) {
         >
           一覧
         </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={view === 'lineage'}
-          className="storage-bucket__tab"
-          onClick={() => setView('lineage')}
-        >
-          🔗 家系図
-        </button>
+        {lineageEnabled && (
+          <button
+            type="button"
+            role="tab"
+            aria-selected={view === 'lineage'}
+            className="storage-bucket__tab"
+            onClick={() => setView('lineage')}
+          >
+            🔗 家系図
+          </button>
+        )}
       </nav>
       {view === 'lineage' ? (
         <LineageView connId={connId} bucket={bucket} prefix={prefix} />

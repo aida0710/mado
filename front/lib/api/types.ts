@@ -229,3 +229,8 @@ export type LineageLink = z.infer<typeof LineageLink>
 export const LineageLinks = z.array(LineageLink)
 
 export const PostLineageLinkOk = z.object({ ok: z.literal(true), id: z.number() })
+
+// アプリ全体の設定。value は TEXT 固定で、型の解釈は呼び出し側の責務
+// (boolean 以外の設定が増えてもスキーマを変えずに済ませるため)。
+export const AppSettings = z.record(z.string(), z.string())
+export type AppSettings = z.infer<typeof AppSettings>
