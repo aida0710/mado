@@ -105,6 +105,11 @@ function layout(nodes: LineageNode[], edges: FlowEdge[], center?: LineageNode | 
       id: key,
       type: 'lineage',
       position: { x: pos.x - NODE_W / 2, y: pos.y - NODE_H / 2 },
+      // 実寸を明示する。ミニマップは渡したノード側の width/height を見るので
+      // (measured ではなく userNode)、省略すると nodeHasDimensions を通らず
+      // ノードの影が 1 つも描かれない。CSS の .lineage-flow-node と同値。
+      width: NODE_W,
+      height: NODE_H,
       data: {
         primary: n.path === '' ? n.bucket : n.path,
         secondary: n.path === '' ? null : n.bucket,
