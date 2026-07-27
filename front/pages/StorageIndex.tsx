@@ -142,17 +142,22 @@ export default function StorageIndex({connId}: Props) {
         <section>
             <header className="page-head">
                 <h2>Storage</h2>
-                <CacheMeta fetchedAt={api.lastFetched.buckets(connId)} />
-                <button
-                    className="ghost"
-                    onClick={forceRefresh}
-                    disabled={loading}
-                    title="キャッシュを破棄して再読み込み"
-                    aria-label="再読み込み"
-                >
-                    <span aria-hidden>↻</span>
-                </button>
-                <ConnectionSwitcher/>
+                {/* 右側の操作をひとまとめにして右寄せする。個別に並べると、
+                    狭い画面で CONN だけ次の行へ折り返ったとき行頭 (左) に落ち、
+                    そこから開くドロップダウンが画面外へはみ出す。 */}
+                <div className="ml-auto flex flex-wrap items-center justify-end gap-3">
+                    <CacheMeta fetchedAt={api.lastFetched.buckets(connId)} />
+                    <button
+                        className="ghost"
+                        onClick={forceRefresh}
+                        disabled={loading}
+                        title="キャッシュを破棄して再読み込み"
+                        aria-label="再読み込み"
+                    >
+                        <span aria-hidden>↻</span>
+                    </button>
+                    <ConnectionSwitcher/>
+                </div>
             </header>
 
             <ReadmeSearchPanel connId={connId}/>

@@ -12,21 +12,16 @@ import { downloadJson, type ImportSummary } from '../lib/jsonFile'
 // エクスポート形式。id / createdAt / createdBy は書き出さない — 取り込み先で
 // 採番・記録し直すため。リンクの同一性は親子のパスの組で決まる。
 //
-// v2 でノードを `s3://bucket/key` の 1 本のフルパスにした。v1 は bucket と
-// path が別フィールドに割れていて、バケット直下が path:"" になるなど、
-// 目で読んで手で直すのがつらかった。アプリ内の「S3 URL をコピー」や
+// ノードは `s3://bucket/key` の 1 本のフルパス。アプリ内の「S3 URL をコピー」や
 // `s3://bucket/key を貼付` と同じ表記で揃える。
 //
 // バケット直下は末尾スラッシュ付き (`s3://bucket/`)。ディレクトリも末尾
 // スラッシュを保つ。ファイルは付かない — nodeKind() の判定規則がそのまま乗る。
-interface LineageExportV2 {
+interface LineageExport {
   mado: 'lineage'
   version: 2
   links: Array<{ parent: string; child: string }>
 }
-
-// v1 (bucket / path が別フィールド) もインポートは受け付ける — すでに
-// 書き出したファイルを読めるようにするため。判定は handleImport 内で行う。
 
 function toS3Uri(n: LineageNode): string {
   return `s3://${n.bucket}/${n.path}`
@@ -135,7 +130,7 @@ export function LineageListView({ connId }: Props) {
   }, [connId, refresh])
 
   const handleExport = () => {
-    const body: LineageExportV2 = {
+    const body: LineageExport = {
       mado: 'lineage',
       version: 2,
       links: (links ?? []).map(l => ({
@@ -150,30 +145,15 @@ export function LineageListView({ connId }: Props) {
   // 「何件が新規だったか」を出したいのでこちら側でも見る。
   // 閉路になる組はサーバが 409 を返すので失敗として数える。
   const handleImport = async (data: unknown): Promise<ImportSummary> => {
-    // v1 と v2 は version が違うので交差型にすると never になる。ここは
-    // 形の検証が目的なので緩い型で受けて、下で 1 件ずつ判定する。
-    const d = data as { mado?: unknown; links?: unknown } | null
-    if (d?.mado !== 'lineage' || !Array.isArray(d.links)) {
-      throw new Error('mado の家系図のエクスポートファイルではありません。')
+    const d = data as Partial<LineageExport> | null
+    if (d?.mado !== 'lineage' || d.version !== 2 || !Array.isArray(d.links)) {
+      throw new Error('mado の家系図のエクスポートファイル (version 2) ではありません。')
     }
-    // v1 / v2 のどちらでも読めるようにここで 1 つの形へ寄せる。
-    const pairs: Array<{ parent: LineageNode; child: LineageNode } | null> =
-      (d.links as unknown[]).map(raw => {
-        const l = raw as Record<string, unknown>
-        if (typeof l?.parent === 'string' || typeof l?.child === 'string') {
-          const parent = fromS3Uri(l.parent)
-          const child = fromS3Uri(l.child)
-          return parent && child ? { parent, child } : null
-        }
-        if (typeof l?.parentBucket === 'string' && typeof l?.childBucket === 'string'
-          && typeof l?.parentPath === 'string' && typeof l?.childPath === 'string') {
-          return {
-            parent: { bucket: l.parentBucket, path: l.parentPath },
-            child: { bucket: l.childBucket, path: l.childPath },
-          }
-        }
-        return null
-      })
+    const pairs = d.links.map(l => {
+      const parent = fromS3Uri(l?.parent)
+      const child = fromS3Uri(l?.child)
+      return parent && child ? { parent, child } : null
+    })
 
     const key = (n: { parent: LineageNode; child: LineageNode }) =>
       `${nodeKey(n.parent)}>${nodeKey(n.child)}`

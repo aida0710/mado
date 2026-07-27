@@ -90,9 +90,14 @@ export function ConnectionSwitcher() {
               className={itemClass}
               onClick={() => { setOpen(false); navigate(`/storage/${encodeURIComponent(c.id)}/`) }}
             >
-              <span className="font-medium text-ink-12">{c.name}</span>
+              {/* 接続名とアドレスは行を分ける。1 行に並べると、狭い画面では
+                  名前の途中で折り返って「どこまでが名前か」が読めなくなる。 */}
+              <span className="block font-medium text-ink-12">{c.name}</span>
+              {/* endpoint は空白を含まない長い 1 トークン (R2 の
+                  https://<32桁hash>.r2.cloudflarestorage.com 等) になりうるので
+                  語中改行を許可する。 */}
               <span
-                className="ml-2 font-mono text-[11px] text-ink-7"
+                className="mt-0.5 block wrap-anywhere font-mono text-[11px] text-ink-7"
                 style={{ letterSpacing: '0.01em' }}
               >
                 {c.endpoint}

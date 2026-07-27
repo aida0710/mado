@@ -159,13 +159,11 @@ describe('LineageListView インポート / エクスポート', () => {
     await screen.findByText('0 件')
 
     await pickFile({ hello: 'world' })
-    expect(await screen.findByRole('alert')).toHaveTextContent('エクスポートファイルではありません')
+    expect(await screen.findByRole('alert')).toHaveTextContent('エクスポートファイル')
     expect(add).not.toHaveBeenCalled()
   })
 
-  // v2 は s3://bucket/key の 1 本のフルパス。別バケット間のリンクが多いので
-  // bucket と path が割れていると読みづらい。
-  it('v2 (s3:// フルパス) を取り込み、既存はスキップする', async () => {
+  it('s3:// のフルパスを取り込み、既存はスキップする', async () => {
     vi.spyOn(api, 'lineageLinks').mockResolvedValue([link(1, ['raw', ''], ['clean', 'v2/'])])
     const add = vi.spyOn(api, 'addLineageLink').mockResolvedValue(2)
     renderView()
@@ -186,21 +184,15 @@ describe('LineageListView インポート / エクスポート', () => {
     expect(await screen.findByText('追加 1 件 / スキップ 1 件')).toBeInTheDocument()
   })
 
-  // すでに書き出した v1 のファイルも読めるようにしておく。
-  it('v1 (bucket / path が別フィールド) も取り込める', async () => {
+  it('version 2 でなければ取り込まない', async () => {
     vi.spyOn(api, 'lineageLinks').mockResolvedValue([])
-    const add = vi.spyOn(api, 'addLineageLink').mockResolvedValue(2)
+    const add = vi.spyOn(api, 'addLineageLink')
     renderView()
     await screen.findByText('0 件')
 
-    await pickFile({
-      mado: 'lineage', version: 1,
-      links: [{ parentBucket: 'clean', parentPath: 'v2/', childBucket: 'out', childPath: 'f.csv' }],
-    })
-
-    await waitFor(() => expect(add).toHaveBeenCalledWith(
-      'c1', { bucket: 'clean', path: 'v2/' }, { bucket: 'out', path: 'f.csv' }, 'import',
-    ))
+    await pickFile({ mado: 'lineage', version: 1, links: [] })
+    expect(await screen.findByRole('alert')).toHaveTextContent('version 2')
+    expect(add).not.toHaveBeenCalled()
   })
 
   // 閉路はサーバが 409 を返す。取り込みは止めず、失敗として数える。
