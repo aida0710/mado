@@ -59,10 +59,12 @@ describe('ConnectionsPage の狭い画面向けレイアウト', () => {
 
 // 接続定義を環境間で持ち運ぶための入出力。
 describe('ConnectionsPage インポート / エクスポート', () => {
-  const pickFile = (json: unknown) => {
+  const pickFile = async (json: unknown, mode: '追記' | '置き換え' = '追記') => {
     const input = screen.getByLabelText('接続をインポート') as HTMLInputElement
     const file = new File([JSON.stringify(json)], 'x.json', { type: 'application/json' })
     fireEvent.change(input, { target: { files: [file] } })
+    // ファイルを選ぶと取り込み方法を聞かれる。既定は追記。
+    fireEvent.click(await screen.findByRole('button', { name: mode }))
   }
 
   it('mado のファイルでなければ取り込まない', async () => {
@@ -70,7 +72,7 @@ describe('ConnectionsPage インポート / エクスポート', () => {
     render(<MemoryRouter><ConnectionsPage /></MemoryRouter>)
     await screen.findByLabelText('接続をインポート')
 
-    pickFile({ hello: 'world' })
+    await pickFile({ hello: 'world' })
     expect(await screen.findByRole('alert')).toHaveTextContent('エクスポートファイルではありません')
   })
 
@@ -81,7 +83,7 @@ describe('ConnectionsPage インポート / エクスポート', () => {
     render(<MemoryRouter><ConnectionsPage /></MemoryRouter>)
     await screen.findByLabelText('接続をインポート')
 
-    pickFile({
+    await pickFile({
       mado: 'connections', version: 1,
       connections: [{
         name: 'r2', endpoint: 'https://e', region: 'auto',
@@ -100,7 +102,7 @@ describe('ConnectionsPage インポート / エクスポート', () => {
     render(<MemoryRouter><ConnectionsPage /></MemoryRouter>)
     await screen.findByLabelText('接続をインポート')
 
-    pickFile({
+    await pickFile({
       mado: 'connections', version: 1,
       connections: [{
         name: 'r2', endpoint: 'https://e', region: 'auto',

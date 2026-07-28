@@ -5,7 +5,7 @@ import type { Tag, TagSearchResult } from '../lib/api/types'
 import { encPath, fileLinkToDirRedirect, parseS3Path } from '../lib/route'
 import { TagBadge } from './TagBadge'
 import { ImportExportButtons } from './ImportExportButtons'
-import { downloadJson, type ImportSummary } from '../lib/jsonFile'
+import { downloadJson, type ImportMode, type ImportSummary } from '../lib/jsonFile'
 
 // 「どの場所にどのタグが付いているか」の入出力形式。
 //
@@ -138,7 +138,7 @@ export function TagSearchView({ connId }: Props) {
     downloadJson('mado-tag-assignments.json', body)
   }
 
-  const handleImport = async (data: unknown): Promise<ImportSummary> => {
+  const handleImport = async (data: unknown, mode: ImportMode): Promise<ImportSummary> => {
     const d = data as Partial<TagAssignmentsExport> | null
     if (d?.mado !== 'tag-assignments' || d.version !== 1 || !Array.isArray(d.assignments)) {
       throw new Error('mado のタグ割り当てのエクスポートファイルではありません。')
@@ -148,7 +148,7 @@ export function TagSearchView({ connId }: Props) {
     let byName = new Map(allTags.map(t => [t.name, t]))
     const wanted = [...new Set(d.assignments.map(a => a?.tag).filter((n): n is string => typeof n === 'string'))]
     const missing = wanted.filter(n => !byName.has(n))
-    const summary: ImportSummary = { added: 0, skipped: 0, failed: [] }
+    const summary: ImportSummary = { added: 0, skipped: 0, removed: 0, failed: [] }
 
     if (missing.length > 0) {
       const create = await askCreateMissing(missing)
@@ -173,6 +173,31 @@ export function TagSearchView({ connId }: Props) {
     const known = [...byName.values()]
     const current = known.length === 0 ? [] : await api.tagSearch(connId, known.map(t => t.id))
     const existing = new Set(current.map(h => `${h.tagId}|${targetUri(h)}`))
+
+    // 置き換え = 同期。ファイルに無い割り当てを外す。消えるのは
+    // storage_tag_assignments の行だけで、タグ定義そのものは残る。
+    if (mode === 'replace') {
+      const wanted = new Set(
+        d.assignments
+          .map(a => {
+            const tag = typeof a?.tag === 'string' ? byName.get(a.tag) : undefined
+            const parsed = typeof a?.target === 'string' ? parseS3Path(a.target) : null
+            return tag && parsed ? `${tag.id}|s3://${parsed.bucket}/${parsed.prefix}` : null
+          })
+          .filter((k): k is string => k !== null),
+      )
+      for (const h of current) {
+        const k = `${h.tagId}|${targetUri(h)}`
+        if (wanted.has(k)) continue
+        try {
+          await api.unassignTag(connId, h.bucket, h.kind, h.path, h.tagId)
+          summary.removed = (summary.removed ?? 0) + 1
+          existing.delete(k)
+        } catch (e) {
+          summary.failed.push(`${targetUri(h)}: ${(e as Error).message}`)
+        }
+      }
+    }
 
     for (const a of d.assignments) {
       const tag = typeof a?.tag === 'string' ? byName.get(a.tag) : undefined

@@ -41,10 +41,12 @@ describe('TagsSettings', () => {
 
 // 環境をまたいでタグ定義を持ち運ぶための入出力。
 describe('TagsSettings インポート / エクスポート', () => {
-  const pickFile = (json: unknown) => {
+  const pickFile = async (json: unknown, mode: '追記' | '置き換え' = '追記') => {
     const input = screen.getByLabelText('タグをインポート') as HTMLInputElement
     const file = new File([JSON.stringify(json)], 'x.json', { type: 'application/json' })
     fireEvent.change(input, { target: { files: [file] } })
+    // ファイルを選ぶと取り込み方法を聞かれる。既定は追記。
+    fireEvent.click(await screen.findByRole('button', { name: mode }))
   }
 
   it('mado のファイルでなければ取り込まない', async () => {
@@ -53,7 +55,7 @@ describe('TagsSettings インポート / エクスポート', () => {
     render(<TagsSettings />)
     await screen.findByLabelText('タグをインポート')
 
-    pickFile({ hello: 'world' })
+    await pickFile({ hello: 'world' })
     expect(await screen.findByRole('alert')).toHaveTextContent('エクスポートファイルではありません')
     expect(create).not.toHaveBeenCalled()
   })
@@ -66,7 +68,7 @@ describe('TagsSettings インポート / エクスポート', () => {
     render(<TagsSettings />)
     await screen.findByText('重要')
 
-    pickFile({
+    await pickFile({
       mado: 'tags', version: 1,
       tags: [
         { name: '重要', color: '#0000ff' },   // 既存 → スキップ (色が違っても上書きしない)

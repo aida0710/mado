@@ -3,7 +3,7 @@ import { api } from '../lib/api/client'
 import type { Tag } from '../lib/api/types'
 import { TagBadge } from './TagBadge'
 import { ImportExportButtons } from './ImportExportButtons'
-import { downloadJson, type ImportSummary } from '../lib/jsonFile'
+import { downloadJson, type ImportMode, type ImportSummary } from '../lib/jsonFile'
 
 // エクスポート形式。id は書き出さない — インポート先で採番するため
 // (id は nanoid で、環境をまたいで意味を持たない)。同一性は name で見る。
@@ -156,13 +156,30 @@ export function TagsSettings() {
 
   // 同名のタグは作り直さずスキップする (名前が UNIQUE で、色だけ違う場合に
   // 上書きすると既存の割り当ての見た目が黙って変わるため)。
-  const handleImport = async (data: unknown): Promise<ImportSummary> => {
+  const handleImport = async (data: unknown, mode: ImportMode): Promise<ImportSummary> => {
     const d = data as Partial<TagsExport>
     if (d?.mado !== 'tags' || !Array.isArray(d.tags)) {
       throw new Error('mado のタグのエクスポートファイルではありません。')
     }
     const existing = new Set(tags.map(t => t.name))
-    const summary: ImportSummary = { added: 0, skipped: 0, failed: [] }
+    const summary: ImportSummary = { added: 0, skipped: 0, removed: 0, failed: [] }
+
+    // 置き換え = 同期。ファイルに無いタグを消す。
+    // タグを消すと storage_tag_assignments の CASCADE でそのタグの割り当ても
+    // 一緒に消える (呼び出し側で警告を出している)。
+    if (mode === 'replace') {
+      const wanted = new Set(d.tags.map(t => t?.name).filter((n): n is string => typeof n === 'string'))
+      for (const t of tags) {
+        if (wanted.has(t.name)) continue
+        try {
+          await api.deleteTag(t.id)
+          summary.removed = (summary.removed ?? 0) + 1
+          existing.delete(t.name)
+        } catch (e) {
+          summary.failed.push(`${t.name}: ${(e as Error).message}`)
+        }
+      }
+    }
     for (const t of d.tags) {
       if (typeof t?.name !== 'string' || typeof t?.color !== 'string') {
         summary.failed.push('name / color が文字列でない項目があります')
@@ -190,6 +207,7 @@ export function TagsSettings() {
         <span className="inline-flex flex-wrap items-center gap-2">
           <ImportExportButtons
             what="タグ"
+            replaceWarning="削除されるタグに付いていた割り当ては、まとめて外れます (tag_id の連鎖削除)。"
             onExport={handleExport}
             onImport={handleImport}
             onDone={refresh}

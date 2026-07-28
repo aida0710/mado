@@ -7,7 +7,7 @@ import { encPath, parseS3Path } from '../lib/route'
 import type { FlowEdge } from './storage/lineage/LineageFlowCanvas'
 import { LineageNodePopup } from './storage/lineage/LineageNodePopup'
 import { ImportExportButtons } from './ImportExportButtons'
-import { downloadJson, type ImportSummary } from '../lib/jsonFile'
+import { downloadJson, type ImportMode, type ImportSummary } from '../lib/jsonFile'
 
 // エクスポート形式。id / createdAt / createdBy は書き出さない — 取り込み先で
 // 採番・記録し直すため。リンクの同一性は親子のパスの組で決まる。
@@ -144,7 +144,7 @@ export function LineageListView({ connId }: Props) {
   // 既存と同じ組はスキップする。POST 自体は冪等 (ON CONFLICT DO UPDATE) だが、
   // 「何件が新規だったか」を出したいのでこちら側でも見る。
   // 閉路になる組はサーバが 409 を返すので失敗として数える。
-  const handleImport = async (data: unknown): Promise<ImportSummary> => {
+  const handleImport = async (data: unknown, mode: ImportMode): Promise<ImportSummary> => {
     const d = data as Partial<LineageExport> | null
     if (d?.mado !== 'lineage' || d.version !== 2 || !Array.isArray(d.links)) {
       throw new Error('mado の家系図のエクスポートファイル (version 2) ではありません。')
@@ -162,7 +162,29 @@ export function LineageListView({ connId }: Props) {
       child: { bucket: l.childBucket, path: l.childPath },
     })))
     const who = editor || 'import'
-    const summary: ImportSummary = { added: 0, skipped: 0, failed: [] }
+    const summary: ImportSummary = { added: 0, skipped: 0, removed: 0, failed: [] }
+
+    // 置き換え = 同期。ファイルに無い既存リンクだけを消す (全消しはしない)。
+    // 消えるのは storage_lineage_links の行だけで、README / お気に入り等は
+    // 接続に紐づく別テーブルなので影響しない。
+    if (mode === 'replace') {
+      const wanted = new Set(pairs.filter(Boolean).map(p => key(p as { parent: LineageNode; child: LineageNode })))
+      for (const l of links ?? []) {
+        const k = key({
+          parent: { bucket: l.parentBucket, path: l.parentPath },
+          child: { bucket: l.childBucket, path: l.childPath },
+        })
+        if (wanted.has(k)) continue
+        try {
+          await api.removeLineageLink(connId, l.id)
+          summary.removed = (summary.removed ?? 0) + 1
+          existing.delete(k)
+        } catch (e) {
+          summary.failed.push(`解除に失敗: ${(e as Error).message}`)
+        }
+      }
+    }
+
     for (const pair of pairs) {
       if (!pair) {
         summary.failed.push('パスとして読めない項目があります')

@@ -30,12 +30,22 @@ export interface ImportSummary {
   added: number
   /** 既に存在していて何もしなかった件数。 */
   skipped: number
+  /** 置き換えモードで、ファイルに無いので消した件数。 */
+  removed?: number
   /** 失敗した項目のメッセージ (先頭数件だけ見せる想定)。 */
   failed: string[]
 }
 
 export function summaryText(s: ImportSummary): string {
   const parts = [`追加 ${s.added} 件`, `スキップ ${s.skipped} 件`]
+  if (s.removed) parts.push(`削除 ${s.removed} 件`)
   if (s.failed.length > 0) parts.push(`失敗 ${s.failed.length} 件`)
   return parts.join(' / ')
 }
+
+// 取り込み方法。
+// - append:  ファイルにあるものを足すだけ。既存は触らない
+// - replace: ファイルの内容に同期する。ファイルに無い既存は消す。
+//            「全消し → 入れ直し」ではないので、両方にあるものは
+//            id や作成者を保ったまま残る
+export type ImportMode = 'append' | 'replace'

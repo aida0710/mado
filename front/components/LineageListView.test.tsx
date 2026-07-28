@@ -145,11 +145,13 @@ describe('LineageListView', () => {
 
 // 環境をまたいでリンクを持ち運ぶための入出力。
 describe('LineageListView インポート / エクスポート', () => {
-  const pickFile = async (json: unknown) => {
+  const pickFile = async (json: unknown, mode: '追記' | '置き換え' = '追記') => {
     const input = screen.getByLabelText('家系図をインポート') as HTMLInputElement
     const file = new File([JSON.stringify(json)], 'x.json', { type: 'application/json' })
     // jsdom の File.text() は実装があるのでそのまま使える。
     fireEvent.change(input, { target: { files: [file] } })
+    // ファイルを選ぶと取り込み方法を聞かれる。既定は追記。
+    fireEvent.click(await screen.findByRole('button', { name: mode }))
   }
 
   it('mado のファイルでなければ取り込まない', async () => {
@@ -208,5 +210,56 @@ describe('LineageListView インポート / エクスポート', () => {
     })
 
     expect(await screen.findByText(/失敗 1 件/)).toBeInTheDocument()
+  })
+})
+
+// 置き換え = 同期。全消しではなく「ファイルに無い既存だけ消す」。
+describe('LineageListView 置き換え取り込み', () => {
+  const pickFile = async (json: unknown, mode: '追記' | '置き換え' = '追記') => {
+    const input = screen.getByLabelText('家系図をインポート') as HTMLInputElement
+    const file = new File([JSON.stringify(json)], 'x.json', { type: 'application/json' })
+    fireEvent.change(input, { target: { files: [file] } })
+    fireEvent.click(await screen.findByRole('button', { name: mode }))
+  }
+
+  it('ファイルに無い既存リンクを消し、両方にあるものは残す', async () => {
+    vi.spyOn(api, 'lineageLinks').mockResolvedValue([
+      link(1, ['raw', ''], ['clean', 'v2/']),   // ファイルにもある → 触らない
+      link(2, ['old', ''], ['gone', '']),        // ファイルに無い → 消す
+    ])
+    const remove = vi.spyOn(api, 'removeLineageLink').mockResolvedValue(undefined)
+    const add = vi.spyOn(api, 'addLineageLink').mockResolvedValue(3)
+    renderView()
+    await screen.findByText('2 件')
+
+    await pickFile({
+      mado: 'lineage', version: 2,
+      links: [
+        { parent: 's3://raw/', child: 's3://clean/v2/' },   // 既存 → スキップ
+        { parent: 's3://clean/v2/', child: 's3://out/f.csv' }, // 新規
+      ],
+    }, '置き換え')
+
+    await waitFor(() => expect(remove).toHaveBeenCalledWith('c1', 2))
+    // 両方にある id=1 は作り直さない。
+    expect(remove).toHaveBeenCalledTimes(1)
+    await waitFor(() => expect(add).toHaveBeenCalledTimes(1))
+    expect(await screen.findByText(/削除 1 件/)).toBeInTheDocument()
+  })
+
+  it('追記では既存を消さない', async () => {
+    vi.spyOn(api, 'lineageLinks').mockResolvedValue([link(2, ['old', ''], ['gone', ''])])
+    const remove = vi.spyOn(api, 'removeLineageLink').mockResolvedValue(undefined)
+    vi.spyOn(api, 'addLineageLink').mockResolvedValue(3)
+    renderView()
+    await screen.findByText('1 件')
+
+    await pickFile({
+      mado: 'lineage', version: 2,
+      links: [{ parent: 's3://a/', child: 's3://b/' }],
+    }, '追記')
+
+    await waitFor(() => expect(api.addLineageLink).toHaveBeenCalled())
+    expect(remove).not.toHaveBeenCalled()
   })
 })

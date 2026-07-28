@@ -83,10 +83,12 @@ describe('TagSearchView', () => {
 
 // 「どの場所にどのタグが付いているか」の持ち運び。
 describe('TagSearchView タグ割り当ての入出力', () => {
-  const pickFile = (json: unknown) => {
+  const pickFile = async (json: unknown, mode: '追記' | '置き換え' = '追記') => {
     const input = screen.getByLabelText('タグ割り当てをインポート') as HTMLInputElement
     const file = new File([JSON.stringify(json)], 'x.json', { type: 'application/json' })
     fireEvent.change(input, { target: { files: [file] } })
+    // ファイルを選ぶと取り込み方法を聞かれる。既定は追記。
+    fireEvent.click(await screen.findByRole('button', { name: mode }))
   }
 
   it('mado のファイルでなければ取り込まない', async () => {
@@ -95,7 +97,7 @@ describe('TagSearchView タグ割り当ての入出力', () => {
     renderView()
     await screen.findByLabelText('タグ割り当てをインポート')
 
-    pickFile({ hello: 'world' })
+    await pickFile({ hello: 'world' })
     expect(await screen.findByRole('alert')).toHaveTextContent('エクスポートファイルではありません')
   })
 
@@ -109,7 +111,7 @@ describe('TagSearchView タグ割り当ての入出力', () => {
     renderView()
     await screen.findByLabelText('タグ割り当てをインポート')
 
-    pickFile({
+    await pickFile({
       mado: 'tag-assignments', version: 1,
       tags: [{ name: '処理前', color: '#00ff00' }],
       assignments: [
@@ -135,7 +137,7 @@ describe('TagSearchView タグ割り当ての入出力', () => {
     renderView()
     await screen.findByLabelText('タグ割り当てをインポート')
 
-    pickFile({
+    await pickFile({
       mado: 'tag-assignments', version: 1,
       tags: [{ name: '新タグ', color: '#123456' }],
       assignments: [{ tag: '新タグ', target: 's3://bkt/x.txt' }],
@@ -158,7 +160,7 @@ describe('TagSearchView タグ割り当ての入出力', () => {
     renderView()
     await screen.findByLabelText('タグ割り当てをインポート')
 
-    pickFile({
+    await pickFile({
       mado: 'tag-assignments', version: 1,
       tags: [{ name: '新タグ', color: '#123456' }],
       assignments: [{ tag: '新タグ', target: 's3://bkt/x.txt' }],

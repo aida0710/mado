@@ -8,7 +8,7 @@ import { TagsSettings } from '../components/TagsSettings'
 import { FeatureSettings } from '../components/FeatureSettings'
 import { About } from '../components/About'
 import { ImportExportButtons } from '../components/ImportExportButtons'
-import { downloadJson, type ImportSummary } from '../lib/jsonFile'
+import { downloadJson, type ImportMode, type ImportSummary } from '../lib/jsonFile'
 
 // エクスポート形式。認証情報は空文字で書き出す。
 //
@@ -141,13 +141,34 @@ export default function ConnectionsPage() {
 
   // 同名の接続はスキップする。同じ名前が並ぶと Storage の CONN メニューで
   // 見分けがつかなくなるため。
-  const handleImport = async (data: unknown): Promise<ImportSummary> => {
+  const handleImport = async (data: unknown, mode: ImportMode): Promise<ImportSummary> => {
     const d = data as { mado?: unknown; connections?: unknown } | null
     if (d?.mado !== 'connections' || !Array.isArray(d.connections)) {
       throw new Error('mado の接続のエクスポートファイルではありません。')
     }
     const existing = new Set(connections.map(c => c.name))
-    const summary: ImportSummary = { added: 0, skipped: 0, failed: [] }
+    const summary: ImportSummary = { added: 0, skipped: 0, removed: 0, failed: [] }
+
+    // 置き換え = 同期。ファイルに無い接続を消す。ファイルに載っている接続は
+    // 作り直さないので、その README / お気に入り / タグ割り当て / 家系図リンクは
+    // そのまま残る。消える接続についてはそれらも CASCADE で一緒に消える。
+    if (mode === 'replace') {
+      const wanted = new Set(
+        (d.connections as unknown[])
+          .map(c => (c as Record<string, unknown>)?.name)
+          .filter((n): n is string => typeof n === 'string'),
+      )
+      for (const c of connections) {
+        if (wanted.has(c.name)) continue
+        try {
+          await api.deleteConnection(c.id)
+          summary.removed = (summary.removed ?? 0) + 1
+          existing.delete(c.name)
+        } catch (e) {
+          summary.failed.push(`${c.name}: ${(e as Error).message}`)
+        }
+      }
+    }
     for (const raw of d.connections as unknown[]) {
       const c = raw as Record<string, unknown>
       if (typeof c?.name !== 'string' || typeof c?.endpoint !== 'string' || typeof c?.region !== 'string') {
@@ -192,7 +213,13 @@ export default function ConnectionsPage() {
         >
           <h3 className={sectionTitleClass}>オブジェクトストレージ接続先の管理</h3>
           <span className="inline-flex flex-wrap items-center gap-2">
-            <ImportExportButtons what="接続" onExport={handleExport} onImport={handleImport} onDone={refresh} />
+            <ImportExportButtons
+              what="接続"
+              replaceWarning="削除される接続の README・お気に入り・タグ割り当て・家系図リンクも、まとめて消えます (connection_id の連鎖削除)。ファイルに載っている接続は作り直さないので、それらは残ります。"
+              onExport={handleExport}
+              onImport={handleImport}
+              onDone={refresh}
+            />
             <button className="ghost" onClick={() => dispatch({ type: 'openAdd' })}>
               <span aria-hidden>+</span> 追加
             </button>
