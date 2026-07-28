@@ -6,6 +6,7 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../../../lib/api/client'
+import { getEditorName, setEditorName } from '../../../lib/editorName'
 import type { LineageLink } from '../../../lib/api/types'
 import { encPath } from '../../../lib/route'
 import {
@@ -30,7 +31,6 @@ type Scope = 'current' | 'all' | 'bucket'
 type Direction = 'parent' | 'child'
 interface PendingAdd { direction: Direction; node: LineageNode }
 
-const LAST_EDITOR_KEY = 'dashboard.lastEditor'
 const SCOPE_LABEL: Record<Scope, string> = { current: '現在地', all: '全て', bucket: 'バケット単位' }
 
 export function LineageView({ connId, bucket, prefix }: Props) {
@@ -43,7 +43,7 @@ export function LineageView({ connId, bucket, prefix }: Props) {
   const [popupNode, setPopupNode] = useState<LineageNode | null>(null)
   const [addDirection, setAddDirection] = useState<Direction | null>(null)
   const [pendingAdd, setPendingAdd] = useState<PendingAdd | null>(null)
-  const [editor, setEditor] = useState(() => localStorage.getItem(LAST_EDITOR_KEY) ?? '')
+  const [editor, setEditor] = useState(() => getEditorName())
   const [saving, setSaving] = useState(false)
   // グラフ上のドラッグ接続で、編集者名が未登録のときに確認するための保留。
   const [pendingConnect, setPendingConnect] = useState<{ parent: LineageNode; child: LineageNode } | null>(null)
@@ -78,7 +78,7 @@ export function LineageView({ connId, bucket, prefix }: Props) {
       const parent = pendingAdd.direction === 'parent' ? pendingAdd.node : center
       const child = pendingAdd.direction === 'parent' ? center : pendingAdd.node
       await api.addLineageLink(connId, parent, child, editor)
-      localStorage.setItem(LAST_EDITOR_KEY, editor)
+      setEditorName(editor)
       setPendingAdd(null)
       refresh()
     } catch (e) {
@@ -150,7 +150,7 @@ export function LineageView({ connId, bucket, prefix }: Props) {
     setError(null)
     try {
       await api.addLineageLink(connId, parent, child, who)
-      localStorage.setItem(LAST_EDITOR_KEY, who)
+      setEditorName(who)
       setPendingConnect(null)
       refresh()
     } catch (e) {

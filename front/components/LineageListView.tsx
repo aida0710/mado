@@ -1,6 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useReducer, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../lib/api/client'
+import { getEditorName, setEditorName } from '../lib/editorName'
 import type { LineageLink } from '../lib/api/types'
 import { nodeKey, wouldCreateCycle, type LineageNode } from '../lib/lineageGraph'
 import { encPath, parseS3Path } from '../lib/route'
@@ -43,7 +44,6 @@ interface Props {
   connId: string
 }
 
-const LAST_EDITOR_KEY = 'dashboard.lastEditor'
 
 interface State {
   links: LineageLink[] | null
@@ -75,7 +75,7 @@ export function LineageListView({ connId }: Props) {
   const navigate = useNavigate()
   const [state, dispatch] = useReducer(reducer, { links: null, error: null })
   const { links, error } = state
-  const [editor, setEditor] = useState(() => localStorage.getItem(LAST_EDITOR_KEY) ?? '')
+  const [editor, setEditor] = useState(() => getEditorName())
   const [saving, setSaving] = useState(false)
   const [pendingConnect, setPendingConnect] = useState<{ parent: LineageNode; child: LineageNode } | null>(null)
   const [pendingUnlink, setPendingUnlink] = useState<number[] | null>(null)
@@ -99,7 +99,7 @@ export function LineageListView({ connId }: Props) {
     setOpError(null)
     try {
       await api.addLineageLink(connId, parent, child, who)
-      localStorage.setItem(LAST_EDITOR_KEY, who)
+      setEditorName(who)
       setPendingConnect(null)
       refresh()
     } catch (e) {

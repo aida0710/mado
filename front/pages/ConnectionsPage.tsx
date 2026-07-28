@@ -6,6 +6,7 @@ import { ConnectionForm } from '../components/ConnectionForm'
 import { ConnectionDeleteConfirm } from '../components/ConnectionDeleteConfirm'
 import { TagsSettings } from '../components/TagsSettings'
 import { FeatureSettings } from '../components/FeatureSettings'
+import { SignatureSettings } from '../components/SignatureSettings'
 import { About } from '../components/About'
 import { ImportExportButtons } from '../components/ImportExportButtons'
 import { downloadJson, type ImportMode, type ImportSummary } from '../lib/jsonFile'
@@ -319,6 +320,8 @@ export default function ConnectionsPage() {
       </section>
 
       <TagsSettings />
+
+      <SignatureSettings />
 
       <FeatureSettings />
 

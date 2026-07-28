@@ -12,7 +12,6 @@ import { EditorShell } from './EditorShell'
 // MemoryRouter ではなく createMemoryRouter で wrap する。
 function shellWith(props: {
   initialBody?: string
-  initialEditor?: string
   onSave?: (b: string, e: string) => Promise<void>
   onSaved?: () => void
   onCancel?: () => void
@@ -20,7 +19,6 @@ function shellWith(props: {
 }) {
   const {
     initialBody = '',
-    initialEditor = '',
     onSave = async () => {},
     onSaved = () => {},
     onCancel = () => {},
@@ -34,7 +32,6 @@ function shellWith(props: {
         <EditorShell
           title="Edit"
           initialBody={initialBody}
-          initialEditor={initialEditor}
           onSave={onSave}
           onSaved={onSaved}
           onCancel={onCancel}
@@ -56,6 +53,9 @@ function shellWith(props: {
 
 beforeEach(() => {
   localStorage.clear()
+  // 署名名が未設定だと保存ボタンが無効なので、設定済みの状態を既定にする。
+  // 「署名設定から初期化する」テストだけは自分で入れ直す。
+  localStorage.setItem('dashboard.lastEditor', 'tanaka')
 })
 afterEach(() => {
   vi.restoreAllMocks()
@@ -67,7 +67,9 @@ describe('EditorShell — saving', () => {
     const onSaved = vi.fn()
     const user = userEvent.setup()
 
-    render(shellWith({ initialBody: 'hello', initialEditor: '', onSave, onSaved }))
+    // 署名名が未設定の状態から、その場で入力して保存するケース。
+    localStorage.clear()
+    render(shellWith({ initialBody: 'hello', onSave, onSaved }))
 
     await user.type(screen.getByLabelText('編集者名'), 'tanaka')
     await user.click(screen.getByRole('button', { name: '保存' }))
@@ -81,21 +83,22 @@ describe('EditorShell — saving', () => {
     const onSave = vi.fn().mockRejectedValue(new Error('boom'))
     const onSaved = vi.fn()
     const user = userEvent.setup()
-    render(shellWith({ initialBody: 'hello', initialEditor: 'tanaka', onSave, onSaved }))
+    render(shellWith({ initialBody: 'hello', onSave, onSaved }))
 
     await user.click(screen.getByRole('button', { name: '保存' }))
     expect(onSaved).not.toHaveBeenCalled()
     expect(await screen.findByText(/boom/)).toBeTruthy()
   })
 
-  it('prefills editor name from localStorage when initialEditor is empty', () => {
+  it('prefills editor name from the signature setting', () => {
     localStorage.setItem('dashboard.lastEditor', 'sato')
-    render(shellWith({ initialBody: '', initialEditor: '' }))
+    render(shellWith({ initialBody: '' }))
     expect((screen.getByLabelText('編集者名') as HTMLInputElement).value).toBe('sato')
   })
 
   it('disables 保存 until the editor name is provided', () => {
-    render(shellWith({ initialBody: 'hello', initialEditor: '' }))
+    localStorage.clear()   // 署名名が未設定の状態
+    render(shellWith({ initialBody: 'hello' }))
     const save = screen.getByRole('button', { name: '保存' }) as HTMLButtonElement
     expect(save.disabled).toBe(true)
   })
@@ -107,7 +110,7 @@ describe('EditorShell — leave warning', () => {
     const user = userEvent.setup()
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
 
-    render(shellWith({ initialBody: 'hello', initialEditor: 'tanaka', onCancel }))
+    render(shellWith({ initialBody: 'hello', onCancel }))
     await user.click(screen.getByRole('button', { name: 'キャンセル' }))
 
     // dirty=false なので confirm は呼ばれない
@@ -120,7 +123,7 @@ describe('EditorShell — leave warning', () => {
     const user = userEvent.setup()
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
 
-    render(shellWith({ initialBody: 'hello', initialEditor: 'tanaka', onCancel }))
+    render(shellWith({ initialBody: 'hello', onCancel }))
     // body を編集 → dirty
     const ta = screen.getByLabelText('Markdown body')
     await user.click(ta)
@@ -136,7 +139,7 @@ describe('EditorShell — leave warning', () => {
     const user = userEvent.setup()
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
 
-    render(shellWith({ initialBody: 'hello', initialEditor: 'tanaka', onCancel }))
+    render(shellWith({ initialBody: 'hello', onCancel }))
     const ta = screen.getByLabelText('Markdown body')
     await user.click(ta)
     await user.type(ta, '!')
@@ -151,7 +154,7 @@ describe('EditorShell — leave warning', () => {
     const removeSpy = vi.spyOn(window, 'removeEventListener')
     const user = userEvent.setup()
 
-    render(shellWith({ initialBody: 'hello', initialEditor: 'tanaka' }))
+    render(shellWith({ initialBody: 'hello' }))
     // 初期は dirty=false → beforeunload は登録されていない
     expect(
       addSpy.mock.calls.some(([type]) => type === 'beforeunload'),
@@ -176,7 +179,7 @@ describe('EditorShell — leave warning', () => {
 
 describe('EditorShell — layout', () => {
   it('renders 1-pane when leftPane is omitted', () => {
-    const { container } = render(shellWith({ initialBody: '', initialEditor: '' }))
+    const { container } = render(shellWith({ initialBody: '' }))
     const section = container.querySelector('.editpage')!
     expect(section.classList.contains('editpage--two-pane')).toBe(false)
     expect(container.querySelector('.editpage__sidebar')).toBeNull()
@@ -186,7 +189,6 @@ describe('EditorShell — layout', () => {
     const { container } = render(
       shellWith({
         initialBody: '',
-        initialEditor: '',
         leftPane: <div data-testid="left-pane">sidebar</div>,
       }),
     )
@@ -196,7 +198,7 @@ describe('EditorShell — layout', () => {
   })
 
   it('does not render the sidebar toggle button when leftPane is omitted', () => {
-    render(shellWith({ initialBody: '', initialEditor: '' }))
+    render(shellWith({ initialBody: '' }))
     expect(screen.queryByRole('button', { name: /ファイル参照/ })).toBeNull()
   })
 
@@ -205,7 +207,6 @@ describe('EditorShell — layout', () => {
     const { container } = render(
       shellWith({
         initialBody: '',
-        initialEditor: '',
         leftPane: <div data-testid="left-pane">sidebar</div>,
       }),
     )

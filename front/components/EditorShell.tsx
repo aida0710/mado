@@ -13,13 +13,13 @@
 //   - 保存成功直後は justSavedRef で 1 度だけ素通しさせる (保存→ホーム遷移を阻害しない)
 
 import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { getEditorName, setEditorName } from '../lib/editorName'
 import { useBlocker } from 'react-router-dom'
 
 interface Props {
   kicker?: string
   title: string
   initialBody: string
-  initialEditor: string
   onSave: (body: string, editor: string) => Promise<void>
   onSaved: () => void
   onCancel: () => void
@@ -29,14 +29,15 @@ interface Props {
 }
 
 export function EditorShell({
-  kicker, title, initialBody, initialEditor,
+  kicker, title, initialBody,
   onSave, onSaved, onCancel,
   leftPane, children,
 }: Props) {
   const [body, setBody] = useState(() => initialBody)
-  const [editor, setEditor] = useState(
-    () => initialEditor || localStorage.getItem('dashboard.lastEditor') || '',
-  )
+  // 署名欄は常に「自分の署名名」(Settings で設定、この端末だけ) で初期化する。
+  // 以前は前回の編集者名 (サーバーの last_editor) を入れていたため、他人が
+  // 書いた README を開くとその人の名前のまま保存されてしまっていた。
+  const [editor, setEditor] = useState(() => getEditorName())
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   // モバイル時の sidebar (= ファイル参照ペイン) の開閉。デスクトップでは CSS により
@@ -48,7 +49,10 @@ export function EditorShell({
   // 古い値が残るので、ref で同期更新する。
   const justSavedRef = useRef(false)
 
-  const dirty = body !== initialBody || editor !== initialEditor
+  // 署名欄の初期値は自分の名前なので、editor の比較は「開いた時点の値」と行う。
+  // initialEditor (前回の編集者) と比べると、開いただけで dirty になってしまう。
+  const openedEditorRef = useRef(editor)
+  const dirty = body !== initialBody || editor !== openedEditorRef.current
 
   // 1. ブラウザレベル離脱 (タブ閉じ / リロード / 外部 URL 遷移)
   useEffect(() => {
@@ -81,7 +85,8 @@ export function EditorShell({
     setError(null)
     try {
       await onSave(body, editor)
-      localStorage.setItem('dashboard.lastEditor', editor)
+      // 署名欄をその場で書き換えた場合は、それを自分の署名名として覚える。
+      setEditorName(editor)
       justSavedRef.current = true
       onSaved()
     } catch (e) {

@@ -72,7 +72,6 @@ export default function ReadmeEditPage({ connId }: Props) {
       kicker={`README — ${kickerLocation}`}
       title="README を編集"
       initialBody={data.exists ? data.body : ''}
-      initialEditor={data.exists && data.last_editor ? data.last_editor : ''}
       onSave={(body, editor) =>
         api.putReadme(connId, bucket, prefix, body, editor).then(() => undefined)
       }

@@ -39,7 +39,6 @@ export default function NoteEditPage() {
       kicker="Team note — edit"
       title="ノートを編集"
       initialBody={data.exists ? data.body : ''}
-      initialEditor={data.exists && data.last_editor ? data.last_editor : ''}
       onSave={(body, editor) =>
         api.putNote('home', body, editor).then(() => undefined)
       }
