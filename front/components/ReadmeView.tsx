@@ -8,6 +8,7 @@ import type { z } from 'zod'
 import { Readme } from '../lib/api/types'
 import { encPath } from '../lib/route'
 import { CacheMeta } from './CacheMeta'
+import { useCapabilities } from '../lib/useCapabilities'
 
 // 履歴ビューワは「ボタンを押した後にだけ」マウントされる。
 // React.lazy() で別チャンクに分け、初回ロード時の JS / CSS 量を絞る。
@@ -24,6 +25,7 @@ interface Props {
 }
 
 export function ReadmeView({ connId, bucket, prefix }: Props) {
+  const caps = useCapabilities(connId)
   const [data, setData] = useState<ReadmeData | null>(null)
   const [historyOpen, setHistoryOpen] = useState(false)
   // README プレビューは普段は 15 行で打ち切り。長い時だけ「すべて表示」が出る。
@@ -37,8 +39,10 @@ export function ReadmeView({ connId, bucket, prefix }: Props) {
   // forceRefresh: 🔄 ボタンから呼ぶ。キャッシュを破棄してから fetch する
   // (例: 他人がダッシュボード経由で編集した、aws cli で直接書き換えた、等)。
   const refresh = useCallback(() => {
+    // 読み込みが無効な接続では GET すら投げない (投げても 403)。
+    if (!caps.readmeRead) return
     api.readme(connId, bucket, prefix).then(setData).catch(() => setData({ exists: false }))
-  }, [connId, bucket, prefix])
+  }, [connId, bucket, prefix, caps.readmeRead])
 
   const forceRefresh = useCallback(() => {
     api.invalidateReadme(connId, bucket, prefix)
@@ -66,6 +70,8 @@ export function ReadmeView({ connId, bucket, prefix }: Props) {
     return () => ro.disconnect()
   }, [currentBody, expanded])
 
+  // 読み込みが無効なら README セクションごと出さない。
+  if (!caps.readmeRead) return null
   if (!data) return null
 
   // 編集ページへの URL — bucket は単一セグメントなので encodeURIComponent で十分。
@@ -81,10 +87,12 @@ export function ReadmeView({ connId, bucket, prefix }: Props) {
       <header className="flex flex-wrap items-baseline gap-x-4 gap-y-2 mb-3">
         <p className="kicker m-0">S3 README</p>
         <span className="ml-auto flex items-center gap-2">
-          <Link className="ghost" to={editHref}>
-            <span aria-hidden>✎</span>
-            {data.exists ? '編集' : '作成'}
-          </Link>
+          {caps.readmeWrite && (
+            <Link className="ghost" to={editHref}>
+              <span aria-hidden>✎</span>
+              {data.exists ? '編集' : '作成'}
+            </Link>
+          )}
           <button
             className="ghost"
             onClick={() => setHistoryOpen(true)}

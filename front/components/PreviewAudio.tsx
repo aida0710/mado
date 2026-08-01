@@ -5,6 +5,7 @@ import type { MediaAnalyze } from '../lib/api/types'
 import { formatAudioInfoLines } from '../lib/audioInfo'
 import { useAudioSrc } from '../lib/useAudioSrc'
 import { Waveform } from './Waveform'
+import { useCapabilities } from '../lib/useCapabilities'
 
 type Analyze = z.infer<typeof MediaAnalyze>
 
@@ -22,6 +23,7 @@ export function PreviewAudio({ connId, bucket, k, entryPath }: Props) {
   const [analyzing, setAnalyzing] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [progress, setProgress] = useState(0)
+  const caps = useCapabilities(connId)
 
   // tar 内エントリは blob 化して取得する (シークバーが現在位置に巻き戻る不具合の
   // 対策)。詳細は useAudioSrc のコメントを参照。
@@ -32,7 +34,11 @@ export function PreviewAudio({ connId, bucket, k, entryPath }: Props) {
   // で揃えない — effect 内の同期 setState は react-hooks/set-state-in-effect が
   // 検出するカスケード再レンダーの原因になるため。
   // 長尺はレスポンスまで時間がかかる — アンマウントで abort して ffmpeg を止める。
+  //
+  // 音声情報が無効な接続では解析そのものを呼ばない。解析はファイル全体を読むので、
+  // ここで止めないと「オフにしたのに毎回フル DL される」ことになる。
   useEffect(() => {
+    if (!caps.audioInfo) return
     const ctl = new AbortController()
     api.mediaAnalyze(connId, bucket, k, { entryPath, signal: ctl.signal })
       .then(r => setAnalyze(r))
@@ -41,7 +47,7 @@ export function PreviewAudio({ connId, bucket, k, entryPath }: Props) {
       })
       .finally(() => setAnalyzing(false))
     return () => ctl.abort()
-  }, [connId, bucket, k, entryPath])
+  }, [connId, bucket, k, entryPath, caps.audioInfo])
 
   // 再生ヘッド追従 (rAF)。timeupdate はイベント間隔が粗く波形上でカクつく。
   useEffect(() => {
@@ -65,12 +71,14 @@ export function PreviewAudio({ connId, bucket, k, entryPath }: Props) {
       {srcLoading && <p className="m-0 text-[12px] text-ink-7">音声を取得中…</p>}
       {srcError && <p className="m-0 text-[12px] text-ink-7">音声を取得できません: {srcError}</p>}
       {src && <audio ref={audioRef} className="w-full" src={src} controls preload="metadata" />}
-      {analyzing && <p className="m-0 text-[12px] text-ink-7">解析中…</p>}
+      {/* analyzing は初期値 true のまま据え置く (effect 内の同期 setState は
+          react-hooks/set-state-in-effect に引っかかる) ので、権限側で出し分ける。 */}
+      {analyzing && caps.audioInfo && <p className="m-0 text-[12px] text-ink-7">解析中…</p>}
       {error && <p className="m-0 text-[12px] text-ink-7">波形を表示できません: {error}</p>}
       {analyze && analyze.peaks.length > 0 && (
         <Waveform peaks={analyze.peaks} progress={progress} onSeek={onSeek} />
       )}
-      {analyze?.hasSpectrogram && (
+      {analyze?.hasSpectrogram && caps.audioSpectrogram && (
         <img
           className="w-full"
           src={api.spectrogramUrl(connId, analyze.cacheKey)}

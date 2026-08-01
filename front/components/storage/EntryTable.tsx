@@ -8,6 +8,7 @@ import { fmtSize } from '../../lib/format'
 import { absoluteUrl, encPath } from '../../lib/route'
 import { usePlayerDeck } from '../../lib/playerDeck'
 import { usePinnedPreviews } from '../../lib/pinnedPreviews'
+import { useCapabilities } from '../../lib/useCapabilities'
 import type { Tag } from '../../lib/api/types'
 import { CopyMenu, type MenuItem } from '../CopyMenu'
 import { TagBadge } from '../TagBadge'
@@ -70,10 +71,11 @@ const dirRowClass =
 // スキップできる。各行は items: MenuItem[] を内部で useMemo して
 // CopyMenu の memo を活かす。
 const DirRow = memo(function DirRow({
-  d, prefix, connId, bucket, allTags, tagIds, onTagsChange,
+  d, prefix, connId, bucket, allTags, tagIds, onTagsChange, tagsEnabled,
 }: {
   d: string; prefix: string; connId: string; bucket: string
   allTags: Tag[]; tagIds: string[]; onTagsChange?: (path: string, tagIds: string[]) => void
+  tagsEnabled: boolean
 }) {
   const [pickerOpen, setPickerOpen] = useState(false)
   // 表示は現ディレクトリ基準で末尾を切る。検索中は effectivePrefix が
@@ -82,12 +84,14 @@ const DirRow = memo(function DirRow({
   const dirHref = `/storage/${encodeURIComponent(connId)}/${encodeURIComponent(bucket)}/${encPath(d)}`
   const dirS3Url = `s3://${bucket}/${d}`
   const dirWebUrl = absoluteUrl(dirHref)
-  const tags = allTags.filter(t => tagIds.includes(t.id))
+  const tags = tagsEnabled ? allTags.filter(t => tagIds.includes(t.id)) : []
   const items = useMemo<MenuItem[]>(() => [
     { kind: 'copy', label: 'Web URL をコピー', value: dirWebUrl },
     { kind: 'copy', label: 'S3 URL をコピー', value: dirS3Url },
-    { kind: 'action', label: 'タグを編集', onSelect: () => setPickerOpen(true) },
-  ], [dirWebUrl, dirS3Url])
+    ...(tagsEnabled
+      ? [{ kind: 'action' as const, label: 'タグを編集', onSelect: () => setPickerOpen(true) }]
+      : []),
+  ], [dirWebUrl, dirS3Url, tagsEnabled])
   return (
     <>
       <tr className={dirRowClass} style={{ borderBottom: '1px solid var(--rule)' }}>
@@ -126,7 +130,7 @@ const DirRow = memo(function DirRow({
 })
 
 const FileRow = memo(function FileRow({
-  f, prefix, connId, bucket, onSelectFile, allTags, tagIds, onTagsChange,
+  f, prefix, connId, bucket, onSelectFile, allTags, tagIds, onTagsChange, tagsEnabled,
 }: {
   f: FileEntry
   prefix: string
@@ -134,6 +138,7 @@ const FileRow = memo(function FileRow({
   bucket: string
   onSelectFile?: (key: string) => void
   allTags: Tag[]; tagIds: string[]; onTagsChange?: (path: string, tagIds: string[]) => void
+  tagsEnabled: boolean
 }) {
   const deck = usePlayerDeck()
   const pinned = usePinnedPreviews()
@@ -157,9 +162,11 @@ const FileRow = memo(function FileRow({
   const downloadUrl = api.downloadUrl(connId, bucket, f.key)
   const filename = f.key.split('/').pop() ?? 'file'
   const isAudio = classify(f.key) === 'audio'
-  const tags = allTags.filter(t => tagIds.includes(t.id))
+  const caps = useCapabilities(connId)
+  const tags = tagsEnabled ? allTags.filter(t => tagIds.includes(t.id)) : []
   const items = useMemo<MenuItem[]>(() => [
-    ...(isAudio ? [{
+    // デッキ (同期再生) は音声本体を読むので preview 権限が要る。
+    ...(isAudio && caps.preview ? [{
       kind: 'action' as const,
       label: 'デッキに追加',
       onSelect: () => deck.addTrack({
@@ -174,11 +181,15 @@ const FileRow = memo(function FileRow({
       label: 'ピン留め',
       onSelect: () => pinned.addPin({ connId, bucket, key: f.key }),
     },
-    { kind: 'action' as const, label: 'タグを編集', onSelect: () => setPickerOpen(true) },
-    { kind: 'download', label: 'このファイルをダウンロード', href: downloadUrl, filename },
+    ...(tagsEnabled
+      ? [{ kind: 'action' as const, label: 'タグを編集', onSelect: () => setPickerOpen(true) }]
+      : []),
+    ...(caps.download
+      ? [{ kind: 'download' as const, label: 'このファイルをダウンロード', href: downloadUrl, filename }]
+      : []),
     { kind: 'copy',     label: 'Web URL をコピー',           value: webUrl },
     { kind: 'copy',     label: 'S3 URL をコピー',            value: s3Url },
-  ], [isAudio, deck, pinned, connId, bucket, f.key, downloadUrl, webUrl, s3Url, filename])
+  ], [isAudio, caps.preview, caps.download, tagsEnabled, deck, pinned, connId, bucket, f.key, downloadUrl, webUrl, s3Url, filename])
   return (
     <>
       <tr
@@ -230,22 +241,25 @@ const FileRow = memo(function FileRow({
 // <sm では table を card list に切替。table の横スクロールでは長いキー名が
 // 一行に収まらず読みにくいので、カード上で 2 段組 (name / meta) に展開する。
 const DirCard = memo(function DirCard({
-  d, prefix, connId, bucket, allTags, tagIds, onTagsChange,
+  d, prefix, connId, bucket, allTags, tagIds, onTagsChange, tagsEnabled,
 }: {
   d: string; prefix: string; connId: string; bucket: string
   allTags: Tag[]; tagIds: string[]; onTagsChange?: (path: string, tagIds: string[]) => void
+  tagsEnabled: boolean
 }) {
   const [pickerOpen, setPickerOpen] = useState(false)
   const tail = d.startsWith(prefix) ? d.slice(prefix.length) : d
   const dirHref = `/storage/${encodeURIComponent(connId)}/${encodeURIComponent(bucket)}/${encPath(d)}`
   const dirS3Url = `s3://${bucket}/${d}`
   const dirWebUrl = absoluteUrl(dirHref)
-  const tags = allTags.filter(t => tagIds.includes(t.id))
+  const tags = tagsEnabled ? allTags.filter(t => tagIds.includes(t.id)) : []
   const items = useMemo<MenuItem[]>(() => [
     { kind: 'copy', label: 'Web URL をコピー', value: dirWebUrl },
     { kind: 'copy', label: 'S3 URL をコピー', value: dirS3Url },
-    { kind: 'action', label: 'タグを編集', onSelect: () => setPickerOpen(true) },
-  ], [dirWebUrl, dirS3Url])
+    ...(tagsEnabled
+      ? [{ kind: 'action' as const, label: 'タグを編集', onSelect: () => setPickerOpen(true) }]
+      : []),
+  ], [dirWebUrl, dirS3Url, tagsEnabled])
   return (
     <li
       className="transition-colors hover:bg-ink-0 focus-within:bg-ink-1"
@@ -277,7 +291,7 @@ const DirCard = memo(function DirCard({
 })
 
 const FileCard = memo(function FileCard({
-  f, prefix, connId, bucket, onSelectFile, allTags, tagIds, onTagsChange,
+  f, prefix, connId, bucket, onSelectFile, allTags, tagIds, onTagsChange, tagsEnabled,
 }: {
   f: FileEntry
   prefix: string
@@ -285,6 +299,7 @@ const FileCard = memo(function FileCard({
   bucket: string
   onSelectFile?: (key: string) => void
   allTags: Tag[]; tagIds: string[]; onTagsChange?: (path: string, tagIds: string[]) => void
+  tagsEnabled: boolean
 }) {
   const deck = usePlayerDeck()
   const pinned = usePinnedPreviews()
@@ -305,9 +320,11 @@ const FileCard = memo(function FileCard({
   const downloadUrl = api.downloadUrl(connId, bucket, f.key)
   const filename = f.key.split('/').pop() ?? 'file'
   const isAudio = classify(f.key) === 'audio'
-  const tags = allTags.filter(t => tagIds.includes(t.id))
+  const caps = useCapabilities(connId)
+  const tags = tagsEnabled ? allTags.filter(t => tagIds.includes(t.id)) : []
   const items = useMemo<MenuItem[]>(() => [
-    ...(isAudio ? [{
+    // デッキ (同期再生) は音声本体を読むので preview 権限が要る。
+    ...(isAudio && caps.preview ? [{
       kind: 'action' as const,
       label: 'デッキに追加',
       onSelect: () => deck.addTrack({
@@ -322,11 +339,15 @@ const FileCard = memo(function FileCard({
       label: 'ピン留め',
       onSelect: () => pinned.addPin({ connId, bucket, key: f.key }),
     },
-    { kind: 'action' as const, label: 'タグを編集', onSelect: () => setPickerOpen(true) },
-    { kind: 'download', label: 'このファイルをダウンロード', href: downloadUrl, filename },
+    ...(tagsEnabled
+      ? [{ kind: 'action' as const, label: 'タグを編集', onSelect: () => setPickerOpen(true) }]
+      : []),
+    ...(caps.download
+      ? [{ kind: 'download' as const, label: 'このファイルをダウンロード', href: downloadUrl, filename }]
+      : []),
     { kind: 'copy',     label: 'Web URL をコピー',           value: webUrl },
     { kind: 'copy',     label: 'S3 URL をコピー',            value: s3Url },
-  ], [isAudio, deck, pinned, connId, bucket, f.key, downloadUrl, webUrl, s3Url, filename])
+  ], [isAudio, caps.preview, caps.download, tagsEnabled, deck, pinned, connId, bucket, f.key, downloadUrl, webUrl, s3Url, filename])
   return (
     <li
       className="cursor-pointer transition-colors hover:bg-ink-0 focus-within:bg-ink-1"
@@ -389,13 +410,15 @@ interface Props {
   bucket: string
   onSelectFile?: (key: string) => void
   allTags?: Tag[]
+  /** タグ機能の全体トグル (Settings → 機能)。false ならタグ関連の導線を出さない。 */
+  tagsEnabled?: boolean
   tagsByPath?: Record<string, string[]>
   onTagsChange?: (path: string, tagIds: string[]) => void
 }
 
 export function EntryTable({
   dirs, files, prefix, connId, bucket, onSelectFile,
-  allTags = [], tagsByPath = {}, onTagsChange,
+  allTags = [], tagsByPath = {}, onTagsChange, tagsEnabled = true,
 }: Props) {
   const isCompact = useIsCompact()
   if (isCompact) {
@@ -408,6 +431,7 @@ export function EntryTable({
           <DirCard
             key={d} d={d} prefix={prefix} connId={connId} bucket={bucket}
             allTags={allTags} tagIds={tagsByPath[d] ?? []} onTagsChange={onTagsChange}
+            tagsEnabled={tagsEnabled}
           />
         ))}
         {files.map(f => (
@@ -419,6 +443,7 @@ export function EntryTable({
             bucket={bucket}
             onSelectFile={onSelectFile}
             allTags={allTags} tagIds={tagsByPath[f.key] ?? []} onTagsChange={onTagsChange}
+            tagsEnabled={tagsEnabled}
           />
         ))}
       </ul>
@@ -440,6 +465,7 @@ export function EntryTable({
             <DirRow
               key={d} d={d} prefix={prefix} connId={connId} bucket={bucket}
               allTags={allTags} tagIds={tagsByPath[d] ?? []} onTagsChange={onTagsChange}
+            tagsEnabled={tagsEnabled}
             />
           ))}
           {files.map(f => (
@@ -451,6 +477,7 @@ export function EntryTable({
               bucket={bucket}
               onSelectFile={onSelectFile}
               allTags={allTags} tagIds={tagsByPath[f.key] ?? []} onTagsChange={onTagsChange}
+            tagsEnabled={tagsEnabled}
             />
           ))}
         </tbody>

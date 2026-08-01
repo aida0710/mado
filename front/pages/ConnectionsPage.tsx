@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useReducer } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../lib/api/client'
-import type { Connection, ConnectionCreateInput, ConnectionUpdateInput } from '../lib/api/types'
+import { ALL_CAPABILITIES_ON, CAPABILITY_UI } from '../lib/api/types'
+import type { Capabilities, Connection, ConnectionCreateInput, ConnectionUpdateInput } from '../lib/api/types'
 import { ConnectionForm } from '../components/ConnectionForm'
 import { ConnectionDeleteConfirm } from '../components/ConnectionDeleteConfirm'
 import { TagsSettings } from '../components/TagsSettings'
@@ -10,6 +11,8 @@ import { SignatureSettings } from '../components/SignatureSettings'
 import { About } from '../components/About'
 import { ImportExportButtons } from '../components/ImportExportButtons'
 import { downloadJson, type ImportMode, type ImportSummary } from '../lib/jsonFile'
+import { useTagsEnabled } from '../lib/useFeatureEnabled'
+import { invalidateCapabilitiesCache } from '../lib/useCapabilities'
 
 // エクスポート形式。認証情報は空文字で書き出す。
 //
@@ -28,7 +31,24 @@ interface ConnectionsExport {
     secretAccessKey: string
     forcePathStyle: boolean
     listObjectsVersion: 'v1' | 'v2'
+    // 権限も持ち回す。省略されたファイル (v1 初期のエクスポート) は全許可扱い。
+    capabilities?: Partial<Capabilities>
   }>
+}
+
+/** インポートしたファイルの capabilities を Capabilities に正規化する。
+ *  boolean 以外 / 未知のキーは無視し、欠けているキーは既定 (許可) にする。 */
+function sanitizeCapabilities(raw: unknown): Capabilities {
+  const out = { ...ALL_CAPABILITIES_ON }
+  if (raw && typeof raw === 'object') {
+    for (const { key } of CAPABILITY_UI) {
+      const v = (raw as Record<string, unknown>)[key]
+      if (typeof v === 'boolean') out[key] = v
+    }
+  }
+  // 壊れたファイルで「編集だけ有効」が来ると API が 400 を返すので先に整える。
+  if (!out.readmeRead) out.readmeWrite = false
+  return out
 }
 
 const sectionTitleClass =
@@ -87,11 +107,15 @@ function reducer(s: State, a: Action): State {
 }
 
 export default function ConnectionsPage() {
+  const tagsEnabled = useTagsEnabled()
   const [state, dispatch] = useReducer(reducer, initial)
   const { connections, loading, error, adding, editing, deleting } = state
 
   const refresh = useCallback(() => {
     dispatch({ type: 'startLoad' })
+    // 権限を読むために接続一覧をセッション内でメモしているので、
+    // 接続を触ったらそちらも捨てる (ピン留めカードが古い権限で描かれないように)。
+    invalidateCapabilitiesCache()
     api.listConnections()
       .then(rows => dispatch({ type: 'loadOk', rows }))
       .catch((e: Error) => dispatch({ type: 'loadErr', error: e.message }))
@@ -135,6 +159,7 @@ export default function ConnectionsPage() {
         secretAccessKey: '',
         forcePathStyle: c.forcePathStyle,
         listObjectsVersion: c.listObjectsVersion,
+        capabilities: c.capabilities,
       })),
     }
     downloadJson('mado-connections.json', body)
@@ -191,6 +216,7 @@ export default function ConnectionsPage() {
           secretAccessKey: String(c.secretAccessKey),
           forcePathStyle: c.forcePathStyle !== false,
           listObjectsVersion: c.listObjectsVersion === 'v1' ? 'v1' : 'v2',
+          capabilities: sanitizeCapabilities(c.capabilities),
         })
         existing.add(c.name)
         summary.added++
@@ -292,6 +318,17 @@ export default function ConnectionsPage() {
                     {' '}<span className="text-ink-3">·</span>{' '}
                     <span className="text-ink-5">list-{conn.listObjectsVersion}</span>
                   </div>
+                  {/* 制限がかかっている接続は一覧から分かるようにする
+                      (編集モーダルを開かないと分からないと、事故の原因になる)。 */}
+                  {CAPABILITY_UI.some(({ key }) => !conn.capabilities[key]) && (
+                    <div className="mt-1 text-[12px] text-ink-7">
+                      制限:{' '}
+                      {CAPABILITY_UI
+                        .filter(({ key }) => !conn.capabilities[key])
+                        .map(({ label }) => label)
+                        .join(' / ')}
+                    </div>
+                  )}
                 </div>
                 {/* 4 ボタンが 360px 幅に収まらないことがあるので折り返しを許可。 */}
                 <div className="flex flex-wrap gap-2 sm:shrink-0">
@@ -319,7 +356,7 @@ export default function ConnectionsPage() {
         )}
       </section>
 
-      <TagsSettings />
+      {tagsEnabled && <TagsSettings />}
 
       <SignatureSettings />
 

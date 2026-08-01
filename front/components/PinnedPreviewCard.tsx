@@ -4,6 +4,7 @@ import { basename, fullEntryLabel, prettyPrintJson } from '../lib/format'
 import { TEXT_HEAD_BYTES } from '../lib/textSniff'
 import { useSniffedText } from '../lib/useSniffedText'
 import { usePinnedPreviews, type PinnedItem } from '../lib/pinnedPreviews'
+import { useCapabilities } from '../lib/useCapabilities'
 import { CopyablePath } from './CopyablePath'
 import { PreviewImage } from './PreviewImage'
 import { PreviewAudio } from './PreviewAudio'
@@ -86,6 +87,8 @@ function PinnedPreviewBody({ item }: { item: PinnedItem }) {
 export function PinnedPreviewCard({ item }: { item: PinnedItem }) {
   const { removePin } = usePinnedPreviews()
   const { connId, bucket, key, entryPath } = item
+  // ピンカードは <Routes> の外 (BottomDock) に居るので connId を明示して引く。
+  const caps = useCapabilities(connId)
   const fullPath = fullEntryLabel(key, entryPath)
   const filename = basename(entryPath ?? key)
   const downloadUrl = entryPath != null
@@ -104,16 +107,19 @@ export function PinnedPreviewCard({ item }: { item: PinnedItem }) {
           className="min-w-0 flex-1 text-[12px] text-ink-11"
           style={{ fontFamily: 'var(--font-mono)' }}
         />
-        <a
-          className="ghost no-underline"
-          href={downloadUrl}
-          download={filename}
-          aria-label={`${filename} をダウンロード`}
-          title="ダウンロード"
-        >
-          <span aria-hidden>↓</span>
-          <span className="text-[10.5px] font-semibold uppercase tracking-[0.18em]">DL</span>
-        </a>
+        {/* tar エントリのダウンロードは archive 権限側 (中身の取り出し) が担当する。 */}
+        {(entryPath != null ? caps.archive : caps.download) && (
+          <a
+            className="ghost no-underline"
+            href={downloadUrl}
+            download={filename}
+            aria-label={`${filename} をダウンロード`}
+            title="ダウンロード"
+          >
+            <span aria-hidden>↓</span>
+            <span className="text-[10.5px] font-semibold uppercase tracking-[0.18em]">DL</span>
+          </a>
+        )}
         <button
           type="button"
           className="ghost"

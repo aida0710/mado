@@ -13,6 +13,10 @@ vi.mock('../lib/api/client', () => ({
     // このテストファイルはタグの挙動自体は検証しないので、空を返すだけにしておく。
     tags: vi.fn(() => Promise.resolve([])),
     tagAssignments: vi.fn(() => Promise.resolve({})),
+    // タグの全体トグル (useTagsEnabled) が読む設定。既定 (未設定 = 有効) を返す。
+    settings: vi.fn(() => Promise.resolve({})),
+    // 接続ごとの権限 (useCapabilities)。ここでは全許可の 1 件を返す。
+    listConnections: vi.fn(() => Promise.resolve([])),
     // CacheMeta は fetchedAt が null なら描画しないので、テストでは固定で null を返す。
     lastFetched: { list: vi.fn(() => null) },
   },

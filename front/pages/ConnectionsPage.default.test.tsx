@@ -3,6 +3,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import ConnectionsPage from './ConnectionsPage'
 import { api } from '../lib/api/client'
+import { ALL_CAPABILITIES_ON } from '../lib/api/types'
 
 vi.mock('../lib/api/client', async importOriginal => {
   const mod = await importOriginal<typeof import('../lib/api/client')>()
@@ -20,6 +21,7 @@ afterEach(() => vi.clearAllMocks())
 const conn = (id: string, isDefault: boolean) => ({
   id, name: id, endpoint: 'http://e', region: 'r', accessKeyIdMasked: 'x…y',
   forcePathStyle: false, listObjectsVersion: 'v2' as const,
+  capabilities: ALL_CAPABILITIES_ON,
   createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z', isDefault,
 })
 

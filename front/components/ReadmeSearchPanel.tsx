@@ -2,6 +2,7 @@ import { useEffect, useReducer, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../lib/api/client'
 import { encPath } from '../lib/route'
+import { useCapabilities } from '../lib/useCapabilities'
 
 interface Props {
   connId: string
@@ -60,6 +61,7 @@ const SEARCH_DEBOUNCE_MS = 250
 // 接続内の README 全文検索パネル。input ≥ 2 文字で debounce してリクエスト。
 // 結果は最新版のみ対象、クリックでその prefix へ遷移する。
 export function ReadmeSearchPanel({ connId }: Props) {
+  const caps = useCapabilities(connId)
   const [state, dispatch] = useReducer(reducer, initial)
   const { q, hits, loading, error } = state
 
@@ -100,6 +102,9 @@ export function ReadmeSearchPanel({ connId }: Props) {
       if (debounceRef.current != null) window.clearTimeout(debounceRef.current)
     }
   }, [])
+
+  // 読み込みが無効な接続では README 検索の意味が無いのでパネルごと隠す。
+  if (!caps.readmeRead) return null
 
   return (
     <section className="mt-3 mb-4">

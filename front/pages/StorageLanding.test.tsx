@@ -3,6 +3,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import StorageLanding from './StorageLanding'
 import { api } from '../lib/api/client'
+import { ALL_CAPABILITIES_ON } from '../lib/api/types'
 
 vi.mock('../lib/api/client', async importOriginal => {
   const mod = await importOriginal<typeof import('../lib/api/client')>()
@@ -14,6 +15,7 @@ afterEach(() => vi.clearAllMocks())
 const conn = (id: string, createdAt: string, isDefault = false) => ({
   id, name: id, endpoint: 'http://e', region: 'r', accessKeyIdMasked: 'x…y',
   forcePathStyle: true, listObjectsVersion: 'v2' as const,
+  capabilities: ALL_CAPABILITIES_ON,
   createdAt, updatedAt: createdAt, isDefault,
 })
 

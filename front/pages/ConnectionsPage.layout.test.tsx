@@ -3,6 +3,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import ConnectionsPage from './ConnectionsPage'
 import { api } from '../lib/api/client'
+import { ALL_CAPABILITIES_ON } from '../lib/api/types'
 
 vi.mock('../lib/api/client', async importOriginal => {
   const mod = await importOriginal<typeof import('../lib/api/client')>()
@@ -19,6 +20,7 @@ const LONG_ENDPOINT = 'https://07d0626c8c662f767b2d07796dc0d087.r2.cloudflaresto
 const conn = {
   id: 'r2', name: 'cloudflare r2', endpoint: LONG_ENDPOINT, region: 'auto',
   accessKeyIdMasked: '20a1…7a30', forcePathStyle: true, listObjectsVersion: 'v2' as const,
+  capabilities: ALL_CAPABILITIES_ON,
   createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z', isDefault: false,
 }
 
@@ -111,10 +113,12 @@ describe('ConnectionsPage インポート / エクスポート', () => {
       }],
     })
 
+    // capabilities を持たない (v1 初期の) エクスポートは全許可として取り込む。
     await waitFor(() => expect(create).toHaveBeenCalledWith({
       name: 'r2', endpoint: 'https://e', region: 'auto',
       accessKeyId: 'AKIA', secretAccessKey: 'sec',
       forcePathStyle: true, listObjectsVersion: 'v2',
+      capabilities: ALL_CAPABILITIES_ON,
     }))
     expect(await screen.findByText('追加 1 件 / スキップ 0 件')).toBeInTheDocument()
   })
