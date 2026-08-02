@@ -1,18 +1,24 @@
-// AWS SDK / S3 / nginx-proxy 由来のエラーを、ユーザに見せても害がない
-// 短いメッセージと意味のある HTTP status に翻訳する。
+// AWS SDK / S3 / nginx-proxy 由来のエラーを、意味のある HTTP status と
+// 「原因を追える」メッセージに翻訳する。
+//
+// 以前は短い定型文だけを返していたが、それだと切り分けができなかった:
+//   ・403 が「credentials か bucket permissions を確認」としか出ず、
+//     アクセスキーが違うのか ListBucket 権限が無いのか分からない
+//   ・XML の deserialize 失敗を一律「一時的なプロキシエラー」と断定して
+//     いたが、実際には R2 の権限不足など恒久的な設定ミスのことがある
+// そこで、こちらの解釈に加えて S3 側が返した生のコードとメッセージを
+// 必ず添える。
 //
 // ハマりがちなケース:
-//
 // - S3 アップストリームが nginx の HTML 502 ページを返す → AWS SDK の XML
 //   パーサが「Expected closing tag 'hr' instead of 'body'」で死亡。
-//   error.message に「Deserialization」を含む or error.$response を持つ。
 // - S3 が普通に 5xx を返した → error.$metadata.httpStatusCode が 5xx。
-// - 認証エラー (期限切れ、削除されたユーザ等) → 403 が来る。
+// - 認証 / 権限エラー → 403。
 
 interface SdkErrorLike {
   name?: string
   message?: string
-  $metadata?: { httpStatusCode?: number }
+  $metadata?: { httpStatusCode?: number; requestId?: string }
   $response?: unknown
 }
 
@@ -21,22 +27,43 @@ export interface ExplainedError {
   message: string
 }
 
+// 生メッセージの上限。SignatureDoesNotMatch は canonical request 全文を
+// 抱えることがあり、そのまま出すと画面が埋まる。
+const MAX_DETAIL = 400
+
+// S3 が返したコード / メッセージ / requestId を 1 行にまとめる。
+// これが無いと「何が起きたか」がユーザにも我々にも分からない。
+function detailOf(err: SdkErrorLike): string {
+  const code = err.name && err.name !== 'Error' ? err.name : undefined
+  const raw = err.message?.trim()
+  const head = code && raw && raw !== code ? `${code}: ${raw}`
+    : code ?? raw ?? 'no detail'
+  const rid = err.$metadata?.requestId
+  const withRid = rid ? `${head} (requestId=${rid})` : head
+  return withRid.length > MAX_DETAIL ? `${withRid.slice(0, MAX_DETAIL)}…` : withRid
+}
+
 export function explainStorageError(e: unknown): ExplainedError | null {
   const err = e as SdkErrorLike
   const status = err.$metadata?.httpStatusCode
+  const detail = detailOf(err)
 
   // NoSuchKey 系。呼び出し元で個別ハンドルしてないものはここで 404。
   if (err.name === 'NoSuchKey' || status === 404) {
-    return { status: 404, message: 'not found' }
+    return { status: 404, message: `見つかりません (HTTP 404) — ${detail}` }
   }
 
   // S3 5xx (アップストリーム障害) — リトライ済の上で来てる。
   if (status && status >= 500) {
-    return { status: 502, message: `S3 upstream error (HTTP ${status})` }
+    return {
+      status: 502,
+      message: `ストレージ側がエラーを返しました (HTTP ${status}) — ${detail}`,
+    }
   }
 
-  // SDK の XML deserialize 失敗。S3 の前段プロキシが HTML エラーページを
-  // 返したケース。ユーザには 502 として「一時的なプロキシエラーかも」と。
+  // SDK の XML deserialize 失敗。プロキシの HTML エラーページのことも、
+  // S3 互換の実装差 / 権限不足で想定外の応答が返ることもある。原因を
+  // 決めつけず、見たままを出して確認先だけ挙げる。
   if (
     err.message?.includes('Deserialization') ||
     err.message?.includes('Expected closing tag') ||
@@ -44,15 +71,24 @@ export function explainStorageError(e: unknown): ExplainedError | null {
   ) {
     return {
       status: 502,
-      message: 'S3 upstream returned non-XML response (likely transient proxy error)',
+      message:
+        `ストレージの応答を解釈できませんでした — ${detail}。` +
+        'S3 互換でない応答 (プロキシの HTML エラーページ、権限不足時の独自応答など) ' +
+        'が返っている可能性があります。エンドポイント / path-style / ' +
+        'ListObjects バージョンの設定を確認してください。',
     }
   }
 
-  // S3 403 (認証 / 権限) — 設定ミスを示唆。
+  // 403 (認証 / 権限)。アクセスキー自体が違うのか、権限が足りないのかは
+  // S3 のコードで分かるので detail を必ず添える
+  // (InvalidAccessKeyId / SignatureDoesNotMatch / AccessDenied など)。
   if (status === 403) {
     return {
       status: 502,
-      message: 'S3 access denied (check credentials and bucket permissions)',
+      message:
+        `アクセスが拒否されました (HTTP 403) — ${detail}。` +
+        'アクセスキーと、そのキーに付いた権限 (一覧取得には ListBucket 相当が要ります)、' +
+        'バケット名 / リージョン / エンドポイントを確認してください。',
     }
   }
 
@@ -61,5 +97,8 @@ export function explainStorageError(e: unknown): ExplainedError | null {
     return null
   }
 
-  return { status: 500, message: (err.message ?? 'storage error').slice(0, 200) }
+  return {
+    status: 500,
+    message: `ストレージエラー${status ? ` (HTTP ${status})` : ''} — ${detail}`,
+  }
 }
