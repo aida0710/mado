@@ -1,75 +1,38 @@
 import { describe, expect, it } from 'vitest'
 import { explainStorageError } from './storageError.js'
 
+// 方針: こちらで原因の解釈や助言は書かない。status とストレージが返した
+// コード / 生メッセージだけを出す。
 describe('explainStorageError', () => {
-  it('NoSuchKey → 404', () => {
-    const r = explainStorageError({ name: 'NoSuchKey' })
-    expect(r?.status).toBe(404)
-    expect(r?.message).toContain('NoSuchKey')
+  it('NoSuchKey → 404。コードをそのまま出す', () => {
+    const r = explainStorageError({ name: 'NoSuchKey', $metadata: { httpStatusCode: 404 } })
+    expect(r).toEqual({ status: 404, message: 'HTTP 404 — NoSuchKey' })
   })
 
-  it('$metadata.httpStatusCode 404 → 404', () => {
-    expect(explainStorageError({ $metadata: { httpStatusCode: 404 } })?.status).toBe(404)
-  })
-
-  it('S3 5xx upstream → 502。HTTP status を含める', () => {
-    const r = explainStorageError({ $metadata: { httpStatusCode: 503 } })
+  it('upstream 5xx → 502。HTTP status を頭に付ける', () => {
+    const r = explainStorageError({ $metadata: { httpStatusCode: 503 }, message: 'Service Unavailable' })
     expect(r?.status).toBe(502)
-    expect(r?.message).toContain('HTTP 503')
-  })
-
-  // 原因を決めつけない。以前は一律「一時的なプロキシエラー」と書いていたが、
-  // R2 の権限不足など恒久的な設定ミスでも同じ経路に来る。
-  it('XML deserialize 失敗 → 502。生メッセージと確認先を出す', () => {
-    const r = explainStorageError({
-      message: "Expected closing tag 'hr' instead of closing tag 'body'.:6:1",
-    })
-    expect(r?.status).toBe(502)
-    expect(r?.message).toContain("Expected closing tag 'hr'")
-    expect(r?.message).toContain('エンドポイント')
-    expect(r?.message).not.toContain('一時的')
-  })
-
-  it('コード不明で $response だけ付いている → 解釈できなかった扱い', () => {
-    const r = explainStorageError({ $response: { body: '...' } })
-    expect(r?.status).toBe(502)
-    expect(r?.message).toContain('解釈できません')
-  })
-
-  // ストレージが正しく返したエラーを「解釈できませんでした」と言わない。
-  // R2 は資格情報の不備をこの形で返してくる。
-  it('$response 付きでもエラーコードがあれば、ストレージが返したエラーとして扱う', () => {
-    const r = explainStorageError({
-      name: 'InvalidArgument',
-      message: 'Credential access key has length 21, should be 32',
-      $response: { body: '...' },
-    })
-    expect(r?.message).toContain('InvalidArgument')
-    expect(r?.message).toContain('should be 32')
-    expect(r?.message).not.toContain('解釈できません')
+    expect(r?.message).toBe('HTTP 503 — Service Unavailable')
   })
 
   // 403 は「キーが違う」のか「権限が足りない」のかで対処が変わる。
-  // S3 のコードをそのまま出さないと切り分けられない。
-  it('403 → S3 のエラーコードと生メッセージを含める', () => {
+  // コードをそのまま出さないと切り分けられない。
+  it('403 → コードと生メッセージをそのまま出す', () => {
     const r = explainStorageError({
       name: 'AccessDenied',
       message: 'Access Denied',
       $metadata: { httpStatusCode: 403 },
     })
-    expect(r?.status).toBe(502)
-    expect(r?.message).toContain('AccessDenied')
-    expect(r?.message).toContain('Access Denied')
-    expect(r?.message).toContain('ListBucket')
+    expect(r).toEqual({ status: 502, message: 'HTTP 403 — AccessDenied: Access Denied' })
   })
 
-  it('403 でもコードが違えばそのコードが出る', () => {
+  it('コードと生メッセージが同じなら重ねない', () => {
     const r = explainStorageError({
-      name: 'InvalidAccessKeyId',
-      message: 'The AWS Access Key Id you provided does not exist in our records.',
+      name: 'AccessDenied',
+      message: 'AccessDenied',
       $metadata: { httpStatusCode: 403 },
     })
-    expect(r?.message).toContain('InvalidAccessKeyId')
+    expect(r?.message).toBe('HTTP 403 — AccessDenied')
   })
 
   // requestId はストレージ側に問い合わせるときの手がかりになる。
@@ -78,7 +41,26 @@ describe('explainStorageError', () => {
       name: 'AccessDenied',
       $metadata: { httpStatusCode: 403, requestId: 'abc123' },
     })
-    expect(r?.message).toContain('requestId=abc123')
+    expect(r?.message).toBe('HTTP 403 — AccessDenied — requestId=abc123')
+  })
+
+  // 実機 (R2 に不正な資格情報) で出た形。助言を足すと実態とずれるので出さない。
+  it('$metadata が無くても $response 付きなら S3 由来として扱う', () => {
+    const r = explainStorageError({
+      name: 'InvalidArgument',
+      message: 'Credential access key has length 21, should be 32',
+      $response: { body: '...' },
+    })
+    expect(r?.message).toBe('InvalidArgument: Credential access key has length 21, should be 32')
+  })
+
+  // パーサの例外文がそのまま来る。原因を決めつけず、見たままを出す。
+  it('XML パース失敗はパーサの文面をそのまま出す', () => {
+    const r = explainStorageError({
+      message: "Expected closing tag 'hr' instead of closing tag 'body'.:6:1",
+    })
+    expect(r?.message).toBe("Expected closing tag 'hr' instead of closing tag 'body'.:6:1")
+    expect(r?.message).not.toMatch(/一時的|確認してください/)
   })
 
   it('明らかに S3 関連でないエラー → null (呼び出し元に判断委譲)', () => {
@@ -87,13 +69,12 @@ describe('explainStorageError', () => {
   })
 
   // SignatureDoesNotMatch は canonical request 全文を抱えることがある。
-  it('生メッセージが長すぎるときは切り詰める', () => {
+  it('長すぎるときは切り詰める', () => {
     const r = explainStorageError({
       $metadata: { httpStatusCode: 400 },
       message: 'x'.repeat(2000),
     })
-    expect(r?.status).toBe(500)
-    expect(r?.message.length).toBeLessThan(600)
-    expect(r?.message).toContain('…')
+    expect(r?.message.length).toBeLessThanOrEqual(401)
+    expect(r?.message.endsWith('…')).toBe(true)
   })
 })
