@@ -62,13 +62,18 @@ export function explainStorageError(e: unknown): ExplainedError | null {
   }
 
   // SDK の XML deserialize 失敗。プロキシの HTML エラーページのことも、
-  // S3 互換の実装差 / 権限不足で想定外の応答が返ることもある。原因を
-  // 決めつけず、見たままを出して確認先だけ挙げる。
-  if (
-    err.message?.includes('Deserialization') ||
-    err.message?.includes('Expected closing tag') ||
-    err.$response != null
-  ) {
+  // S3 互換の実装差で想定外の応答が返ることもある。原因を決めつけず、
+  // 見たままを出して確認先だけ挙げる。
+  //
+  // $response が付いていても、エラーコード (err.name) が取れているなら
+  // それは「ストレージが正しく返したエラー」であってパース失敗ではない。
+  // 例: R2 の InvalidArgument: Credential access key has length 21。
+  // ここに流すと「応答を解釈できませんでした」という誤った見出しが付く。
+  const parseFailed =
+    err.message?.includes('Deserialization') === true ||
+    err.message?.includes('Expected closing tag') === true
+  const hasS3Code = !!err.name && err.name !== 'Error'
+  if (parseFailed || (err.$response != null && !hasS3Code)) {
     return {
       status: 502,
       message:

@@ -30,8 +30,23 @@ describe('explainStorageError', () => {
     expect(r?.message).not.toContain('一時的')
   })
 
-  it('$response が付いてる SDK エラー → 502', () => {
-    expect(explainStorageError({ $response: { body: '...' } })?.status).toBe(502)
+  it('コード不明で $response だけ付いている → 解釈できなかった扱い', () => {
+    const r = explainStorageError({ $response: { body: '...' } })
+    expect(r?.status).toBe(502)
+    expect(r?.message).toContain('解釈できません')
+  })
+
+  // ストレージが正しく返したエラーを「解釈できませんでした」と言わない。
+  // R2 は資格情報の不備をこの形で返してくる。
+  it('$response 付きでもエラーコードがあれば、ストレージが返したエラーとして扱う', () => {
+    const r = explainStorageError({
+      name: 'InvalidArgument',
+      message: 'Credential access key has length 21, should be 32',
+      $response: { body: '...' },
+    })
+    expect(r?.message).toContain('InvalidArgument')
+    expect(r?.message).toContain('should be 32')
+    expect(r?.message).not.toContain('解釈できません')
   })
 
   // 403 は「キーが違う」のか「権限が足りない」のかで対処が変わる。
