@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest'
 import { Breadcrumb } from './Breadcrumb'
 import { ConnectionContext } from '../lib/connectionContext'
 import type { Connection } from '../lib/api/types'
+import { ALL_CAPABILITIES_ON } from '../lib/api/types'
 
 const conn: Connection = {
   id: 'c1',
@@ -14,6 +15,7 @@ const conn: Connection = {
   accessKeyIdMasked: '****',
   forcePathStyle: true,
   listObjectsVersion: 'v2',
+  capabilities: ALL_CAPABILITIES_ON,
   createdAt: '2026-01-01T00:00:00.000Z',
   updatedAt: '2026-01-01T00:00:00.000Z',
   isDefault: false,

@@ -13,12 +13,54 @@ const httpsAgent = new HttpsAgent({ keepAlive: true, maxSockets: 50 })
 
 export type ListObjectsVersion = 'v1' | 'v2'
 
+/** 接続ごとに許可する操作。既定はすべて true (= マイグレーション前と同じ挙動)。
+ *
+ *  認証が無い前提のツールなので、これはアクセス制御ではなく **誤操作の防止**。
+ *  Deep Archive のように GetObject 自体が失敗する / 課金されるバケットや、
+ *  書き戻したくない本番バケットを登録した接続で、危険な導線を閉じるためにある。
+ *  UI で隠すだけだと共有 Web URL を直に叩けてしまうので、API 側でも
+ *  lib/capabilityGuard.ts が 403 で止める。 */
+export interface Capabilities {
+  /** バケット / オブジェクトの一覧 (`/buckets`, `/list`)。 */
+  list: boolean
+  /** テキスト / 画像 / 音声のプレビュー (`/preview/text|image|audio`)。 */
+  preview: boolean
+  /** 元ファイルのダウンロード (`/preview/raw`)。 */
+  download: boolean
+  /** tar / tar.gz / tar.xz の中身を開く (`/preview/tar`, `/preview/tar-entry`)。 */
+  archive: boolean
+  /** 音声情報・波形の解析 (`/media/analyze`)。ファイル全体を読むので重い。 */
+  audioInfo: boolean
+  /** スペクトログラムの表示 (`/media/spectrogram`)。 */
+  audioSpectrogram: boolean
+  /** README の読み込み (S3 の `README.md` を GetObject)。 */
+  readmeRead: boolean
+  /** README の編集 (S3 の `README.md` を PutObject)。readmeRead 必須。 */
+  readmeWrite: boolean
+}
+
+export type Capability = keyof Capabilities
+
+/** capability のキー一覧 (UI の並び順もこの順に揃える)。 */
+export const CAPABILITY_KEYS: readonly Capability[] = [
+  'list', 'preview', 'download', 'archive',
+  'audioInfo', 'audioSpectrogram', 'readmeRead', 'readmeWrite',
+] as const
+
+/** connection_settings 上のキー名。権限以外の接続別設定と混ざらないよう
+ *  `cap.` 名前空間に置く。 */
+export function capabilitySettingKey(cap: Capability): string {
+  return `cap.${cap}`
+}
+
 /** 接続行から読み出した API 設定。S3Client では表現できない (= 呼ぶコマンドが
  *  違う等) サーバ依存のパラメータをここに集約する。 */
 export interface ConnectionConfig {
   /** ListObjects に v1 (Marker/NextMarker) と v2 (ContinuationToken/StartAfter) の
    *  どちらを使うか。DDN 製や古い NetApp 等は v1 only、AWS/R2/MinIO は v2 推奨。 */
   listObjectsVersion: ListObjectsVersion
+  /** この接続で許可されている操作。 */
+  capabilities: Capabilities
 }
 
 export interface StorageFactory {
@@ -57,7 +99,29 @@ interface DbRow {
   secret_access_key_enc: string
   force_path_style: boolean
   list_objects_version: ListObjectsVersion
+  settings: Record<string, string>
 }
+
+/** connection_settings の key/value → Capabilities。
+ *
+ *  **行が無いキーは既定 (有効)**。'false' と明示されたときだけ無効にする。
+ *  これにより、マイグレーション直後 (テーブルが空) の挙動が適用前と一致し、
+ *  既存接続へのバックフィルが要らない。connections.ts のレスポンス組み立てからも
+ *  使うので export する。 */
+export function settingsToCapabilities(settings: Record<string, string>): Capabilities {
+  const out = {} as Capabilities
+  for (const cap of CAPABILITY_KEYS) {
+    out[cap] = settings[capabilitySettingKey(cap)] !== 'false'
+  }
+  return out
+}
+
+/** 接続行と connection_settings を 1 往復で読むための SQL 断片。
+ *  設定が 0 件でも `{}` になるよう COALESCE する。 */
+export const CONNECTION_SETTINGS_SUBQUERY = `
+  COALESCE((SELECT jsonb_object_agg(s.key, s.value)
+              FROM connection_settings s
+             WHERE s.connection_id = c.id), '{}'::jsonb) AS settings`
 
 export function createStorageFactory(deps: StorageFactoryDeps): StorageFactory {
   // client と connection 設定 (list_objects_version 等) を 1 entry にまとめて
@@ -70,9 +134,10 @@ export function createStorageFactory(deps: StorageFactoryDeps): StorageFactory {
     if (cached) return cached
 
     const r = await deps.pools.ro.query<DbRow>(
-      `SELECT endpoint, region, access_key_id_enc, secret_access_key_enc,
-              force_path_style, list_objects_version
-         FROM storage_connections WHERE id = $1`,
+      `SELECT c.endpoint, c.region, c.access_key_id_enc, c.secret_access_key_enc,
+              c.force_path_style, c.list_objects_version,
+              ${CONNECTION_SETTINGS_SUBQUERY}
+         FROM storage_connections c WHERE c.id = $1`,
       [connId],
     )
     const row = r.rows[0]
@@ -99,7 +164,10 @@ export function createStorageFactory(deps: StorageFactoryDeps): StorageFactory {
     })
     const entry: CachedEntry = {
       client,
-      config: { listObjectsVersion: row.list_objects_version },
+      config: {
+        listObjectsVersion: row.list_objects_version,
+        capabilities: settingsToCapabilities(row.settings),
+      },
     }
     cache.set(connId, entry)
     return entry

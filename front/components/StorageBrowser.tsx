@@ -7,6 +7,7 @@ import { EntryTable } from './storage/EntryTable'
 import { Pager } from './storage/Pager'
 import { SearchBar } from './storage/SearchBar'
 import { TagFilterBar } from './storage/TagFilterBar'
+import { useTagsEnabled } from '../lib/useFeatureEnabled'
 
 interface Props {
   connId: string
@@ -84,6 +85,7 @@ function reducer(s: State, a: Action): State {
 }
 
 export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) {
+  const tagsEnabled = useTagsEnabled()
   const [state, dispatch] = useReducer(reducer, initial)
   const { q, submittedQ, recursive, page, history, pageIdx, loading, error } = state
 
@@ -190,9 +192,13 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
   const [fileTags, setFileTags] = useState<Record<string, string[]>>({})
   const [selectedTagIds, setSelectedTagIds] = useState<Set<string>>(new Set())
 
-  useEffect(() => { api.tags().then(setAllTags).catch(() => {}) }, [connId])
+  useEffect(() => {
+    if (!tagsEnabled) return
+    api.tags().then(setAllTags).catch(() => {})
+  }, [connId, tagsEnabled])
 
   useEffect(() => {
+    if (!tagsEnabled) return
     let cancelled = false
     Promise.all([
       api.tagAssignments(connId, bucket, 'prefix', dirs),
@@ -205,7 +211,7 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
     return () => { cancelled = true }
     // dirs/files は毎レンダ新しい配列参照になるため、実際の中身 (キー結合) で比較する。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [connId, bucket, dirs.join(' '), files.map(f => f.key).join(' ')])
+  }, [connId, bucket, tagsEnabled, dirs.join(' '), files.map(f => f.key).join(' ')])
 
   const handleTagsChange = useCallback((path: string, tagIds: string[]) => {
     setDirTags(prev => (path in prev || dirs.includes(path)) ? { ...prev, [path]: tagIds } : prev)
@@ -288,12 +294,14 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
         aria-busy={loading}
         className={loading ? 'pointer-events-none opacity-60 transition-opacity' : 'transition-opacity'}
       >
-        <TagFilterBar
-          tags={filterCandidates}
-          selected={selectedTagIds}
-          onToggle={toggleTagFilter}
-          onClear={() => setSelectedTagIds(new Set())}
-        />
+        {tagsEnabled && (
+          <TagFilterBar
+            tags={filterCandidates}
+            selected={selectedTagIds}
+            onToggle={toggleTagFilter}
+            onClear={() => setSelectedTagIds(new Set())}
+          />
+        )}
         <EntryTable
           dirs={visibleDirs}
           files={visibleFiles}
@@ -304,6 +312,7 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
           allTags={allTags}
           tagsByPath={tagsByPath}
           onTagsChange={handleTagsChange}
+          tagsEnabled={tagsEnabled}
         />
 
         {isEmpty && !error && (

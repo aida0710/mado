@@ -8,7 +8,7 @@ import { PreviewDrawer } from '../components/PreviewDrawer'
 import { LineageView } from '../components/storage/lineage/LineageView'
 import { fileLinkToDirRedirect } from '../lib/route'
 import { useDrawerResize } from '../lib/useDrawerResize'
-import { useLineageEnabled } from '../lib/useLineageEnabled'
+import { useLineageEnabled } from '../lib/useFeatureEnabled'
 
 interface Props { connId: string }
 

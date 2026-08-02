@@ -10,6 +10,7 @@ import type { z } from 'zod'
 import { api } from '../lib/api/client'
 import { encPath } from '../lib/route'
 import type { Readme } from '../lib/api/types'
+import { useCapabilities } from '../lib/useCapabilities'
 import { EditorShell } from '../components/EditorShell'
 import { InsertableFileList, type InsertableEntry } from '../components/InsertableFileList'
 import {
@@ -30,20 +31,26 @@ export default function ReadmeEditPage({ connId }: Props) {
   const prefix = splat === '' ? '' : splat.endsWith('/') ? splat : splat + '/'
 
   const navigate = useNavigate()
+  const caps = useCapabilities(connId)
   const [data, setData] = useState<ReadmeData | null>(null)
   const editorRef = useRef<MonacoMarkdownEditorHandle>(null)
 
   useEffect(() => {
-    if (!bucket) return
+    if (!bucket || !caps.readmeWrite) return
     let cancelled = false
     api.readme(connId, bucket, prefix)
       .then(r => { if (!cancelled) setData(r) })
       .catch(() => { if (!cancelled) setData({ exists: false }) })
     return () => { cancelled = true }
-  }, [connId, bucket, prefix])
+  }, [connId, bucket, prefix, caps.readmeWrite])
 
   if (!bucket) {
     return <p className="text-[13px] text-ink-7">bucket がありません</p>
+  }
+  // 導線は ReadmeView 側で隠しているが、URL を直に開かれた場合の受け皿。
+  // 実際の遮断は API 側 (PUT が 403) が担う。
+  if (!caps.readmeWrite) {
+    return <p className="text-[13px] text-ink-7">この接続では README の編集が無効になっています。</p>
   }
   if (!data) {
     return <p className="text-[13px] text-ink-7">読み込み中…</p>

@@ -1,5 +1,8 @@
 import { useReducer } from 'react'
+import { ALL_CAPABILITIES_ON, CAPABILITY_UI } from '../lib/api/types'
 import type {
+  Capabilities,
+  Capability,
   Connection,
   ConnectionCreateInput,
   ConnectionUpdateInput,
@@ -23,15 +26,17 @@ interface FormState {
   secretAccessKey: string
   forcePathStyle: boolean
   listObjectsVersion: ListObjectsVersion
+  capabilities: Capabilities
   showSecret: boolean
   saving: boolean
   error: string | null
 }
 
-type FieldName = Exclude<keyof FormState, 'saving' | 'error'>
+type FieldName = Exclude<keyof FormState, 'saving' | 'error' | 'capabilities'>
 
 type Action =
   | { type: 'setField'; field: FieldName; value: FormState[FieldName] }
+  | { type: 'toggleCapability'; cap: Capability; value: boolean }
   | { type: 'startSave' }
   | { type: 'saveFailed'; error: string }
   | { type: 'saveDone' }
@@ -41,6 +46,13 @@ function reducer(state: FormState, action: Action): FormState {
   switch (action.type) {
     case 'setField':
       return { ...state, [action.field]: action.value }
+    case 'toggleCapability': {
+      const capabilities = { ...state.capabilities, [action.cap]: action.value }
+      // README の編集は読み込み必須 (API も 400 で弾く)。読み込みを切ったら
+      // 編集も一緒に落として、保存してから怒られるのを防ぐ。
+      if (action.cap === 'readmeRead' && !action.value) capabilities.readmeWrite = false
+      return { ...state, capabilities }
+    }
     case 'startSave':
       return { ...state, saving: true, error: null }
     case 'saveFailed':
@@ -61,6 +73,7 @@ function initialState(current: Connection | null): FormState {
     secretAccessKey: '',
     forcePathStyle: current?.forcePathStyle ?? true,
     listObjectsVersion: current?.listObjectsVersion ?? 'v2',
+    capabilities: current?.capabilities ?? ALL_CAPABILITIES_ON,
     showSecret: false,
     saving: false,
     error: null,
@@ -74,7 +87,7 @@ export function ConnectionForm({ mode, onClose }: Props) {
   const [state, dispatch] = useReducer(reducer, current, initialState)
   const {
     name, endpoint, region, accessKeyId, secretAccessKey,
-    forcePathStyle, listObjectsVersion, showSecret, saving, error,
+    forcePathStyle, listObjectsVersion, capabilities, showSecret, saving, error,
   } = state
 
   const titleId = 'connection-form-title'
@@ -108,6 +121,7 @@ export function ConnectionForm({ mode, onClose }: Props) {
           secretAccessKey,
           forcePathStyle,
           listObjectsVersion,
+          capabilities,
         }
         await mode.onSubmit(input)
       } else {
@@ -118,6 +132,12 @@ export function ConnectionForm({ mode, onClose }: Props) {
         if (region.trim() !== cur.region) input.region = region.trim()
         if (forcePathStyle !== cur.forcePathStyle) input.forcePathStyle = forcePathStyle
         if (listObjectsVersion !== cur.listObjectsVersion) input.listObjectsVersion = listObjectsVersion
+        // 権限も差分。変えたトグルだけ送る (API 側も差分更新)。
+        const capChanges: Partial<Capabilities> = {}
+        for (const { key } of CAPABILITY_UI) {
+          if (capabilities[key] !== cur.capabilities[key]) capChanges[key] = capabilities[key]
+        }
+        if (Object.keys(capChanges).length > 0) input.capabilities = capChanges
         if (accessKeyId.trim()) input.accessKeyId = accessKeyId.trim()
         if (secretAccessKey) input.secretAccessKey = secretAccessKey
         await mode.onSubmit(input)
@@ -265,6 +285,38 @@ export function ConnectionForm({ mode, onClose }: Props) {
             </div>
           </label>
         </fieldset>
+
+        {/* 接続ごとの権限。認証のあるツールではないのでアクセス制御ではなく
+            誤操作の防止 — Deep Archive のように「一覧は見たいが本体には触りたく
+            ない」接続で危険な導線を閉じるためのもの。UI で隠すだけでなく API 側も
+            403 で止める。 */}
+        <fieldset className="modal-field">
+          <legend className="label">この接続で許可する操作</legend>
+          <small className="mb-1 block text-ink-7">
+            オフにすると画面から導線が消え、共有 URL を直接開いても 403 になります。
+            既定はすべて許可です。
+          </small>
+          {CAPABILITY_UI.map(({ key, label, help }) => {
+            // README 編集は読み込みが前提 (API も 400 で弾く)。
+            const disabled = key === 'readmeWrite' && !capabilities.readmeRead
+            return (
+              <label className="modal-choice" key={key}>
+                <input
+                  type="checkbox"
+                  aria-label={label}
+                  checked={capabilities[key]}
+                  disabled={disabled}
+                  onChange={e => dispatch({ type: 'toggleCapability', cap: key, value: e.target.checked })}
+                />
+                <div>
+                  <strong>{label}</strong>
+                  <small>{help}</small>
+                </div>
+              </label>
+            )
+          })}
+        </fieldset>
+
         {error && <p className="error" aria-live="polite">{error}</p>}
         <div className="modal-actions">
           <button onClick={onClose} disabled={saving}>キャンセル</button>

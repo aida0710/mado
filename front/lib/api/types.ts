@@ -116,6 +116,57 @@ export const FavoriteBuckets = z.array(z.string())
 export const ListObjectsVersion = z.enum(['v1', 'v2'])
 export type ListObjectsVersion = z.infer<typeof ListObjectsVersion>
 
+// 接続ごとに許可する操作 (api/storage.ts の Capabilities と 1:1)。
+//
+// 認証の無いツールなのでアクセス制御ではなく **誤操作の防止**。Glacier Deep
+// Archive のように GetObject 自体が失敗する / 復元課金が発生するバケットや、
+// 書き戻したくない本番バケットを登録した接続で、危険な導線を閉じるためにある。
+// UI で隠すのは導線を消すためで、実際の遮断は API 側 (403) が担う。
+export const Capabilities = z.object({
+  list: z.boolean(),
+  preview: z.boolean(),
+  download: z.boolean(),
+  archive: z.boolean(),
+  audioInfo: z.boolean(),
+  audioSpectrogram: z.boolean(),
+  readmeRead: z.boolean(),
+  readmeWrite: z.boolean(),
+})
+export type Capabilities = z.infer<typeof Capabilities>
+export type Capability = keyof Capabilities
+
+/** 全許可 — 新規接続の初期値であり、既定値そのもの
+ *  (API 側も connection_settings に行が無ければ全許可を返す)。 */
+export const ALL_CAPABILITIES_ON: Capabilities = {
+  list: true, preview: true, download: true, archive: true,
+  audioInfo: true, audioSpectrogram: true, readmeRead: true, readmeWrite: true,
+}
+
+/** 設定画面での表示順とラベル。api/lib/capabilityGuard.ts の
+ *  CAPABILITY_LABELS と文言を揃えること (403 のメッセージに出る)。 */
+export const CAPABILITY_UI: ReadonlyArray<{
+  key: Capability
+  label: string
+  help: string
+}> = [
+  { key: 'list',             label: 'バケット / オブジェクトの一覧',
+    help: '接続の基本機能。オフにするとこの接続では何も見られなくなります (完全に凍結したいとき用)。' },
+  { key: 'preview',          label: 'ファイルのプレビュー (テキスト / 画像 / 音声)',
+    help: 'ファイル本体を読みます。Deep Archive など GetObject が失敗する / 課金されるバケットではオフに。' },
+  { key: 'download',         label: 'ファイルのダウンロード',
+    help: '行メニューやプレビューの DL ボタン。オフにするとボタンが消え、共有 URL を直接叩いても 403 になります。' },
+  { key: 'archive',          label: '圧縮ファイル (tar / tar.gz / tar.xz) を開く',
+    help: '中身の一覧と個別エントリのプレビュー。tar.gz / tar.xz はアーカイブ全体を読むので重いです。' },
+  { key: 'audioInfo',        label: '音声情報・波形の表示',
+    help: 'ファイル全体をダウンロードして解析します。大きい音声が多い接続では負荷が大きくなります。' },
+  { key: 'audioSpectrogram', label: 'スペクトログラムの表示',
+    help: '「音声情報・波形」がオフのときは解析自体が走らないので、こちらも表示されません。' },
+  { key: 'readmeRead',       label: 'README の読み込み',
+    help: '各ディレクトリの README.md を S3 から読みます (Mado 側の DB ではなくバケットの実体)。' },
+  { key: 'readmeWrite',      label: 'README の編集',
+    help: 'README.md をバケットに書き戻します。読み込みがオフだと選べません。' },
+]
+
 export const Connection = z.object({
   id: z.string(),
   name: z.string(),
@@ -124,6 +175,7 @@ export const Connection = z.object({
   accessKeyIdMasked: z.string(),
   forcePathStyle: z.boolean(),
   listObjectsVersion: ListObjectsVersion,
+  capabilities: Capabilities,
   createdAt: z.string(),
   updatedAt: z.string(),
   isDefault: z.boolean(),
@@ -142,9 +194,11 @@ export interface ConnectionCreateInput {
   secretAccessKey: string
   forcePathStyle: boolean
   listObjectsVersion: ListObjectsVersion
+  capabilities: Capabilities
 }
 
 // PUT /api/internal/connections/:id — 部分更新。認証情報フィールドを省略すると既存の値が保持される。
+// capabilities も差分 — 変えたキーだけ送る。
 export interface ConnectionUpdateInput {
   name?: string
   endpoint?: string
@@ -153,6 +207,7 @@ export interface ConnectionUpdateInput {
   secretAccessKey?: string
   forcePathStyle?: boolean
   listObjectsVersion?: ListObjectsVersion
+  capabilities?: Partial<Capabilities>
 }
 
 export const NoteAbsent  = z.object({ exists: z.literal(false) })

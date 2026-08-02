@@ -2,6 +2,7 @@ import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerE
 import { api } from '../lib/api/client'
 import { classify } from '../lib/api/mime'
 import { usePinnedPreviews } from '../lib/pinnedPreviews'
+import { useCapabilities } from '../lib/useCapabilities'
 import { PreviewText } from './PreviewText'
 import { PreviewImage } from './PreviewImage'
 import { PreviewAudio } from './PreviewAudio'
@@ -32,6 +33,7 @@ export function PreviewDrawer({
   entry, onEntryChange,
 }: Props) {
   const { pins, addPin } = usePinnedPreviews()
+  const caps = useCapabilities(connId)
   if (!k) return null
   const kind = classify(k)
   const filename = k.split('/').pop() ?? 'file'
@@ -79,16 +81,18 @@ export function PreviewDrawer({
             <span aria-hidden>📌</span>
           </button>
         )}
-        <a
-          className="ghost no-underline"
-          href={api.downloadUrl(connId, bucket, k)}
-          download={filename}
-          aria-label={`${filename} をダウンロード`}
-          title="ダウンロード"
-        >
-          <span aria-hidden>↓</span>
-          <span className="text-[10.5px] font-semibold uppercase tracking-[0.18em]">DL</span>
-        </a>
+        {caps.download && (
+          <a
+            className="ghost no-underline"
+            href={api.downloadUrl(connId, bucket, k)}
+            download={filename}
+            aria-label={`${filename} をダウンロード`}
+            title="ダウンロード"
+          >
+            <span aria-hidden>↓</span>
+            <span className="text-[10.5px] font-semibold uppercase tracking-[0.18em]">DL</span>
+          </a>
+        )}
         <button
           className="ghost"
           onClick={onClose}
@@ -103,14 +107,22 @@ export function PreviewDrawer({
             本文の切り替えは useSniffedText が url をキーに持つので key に依存しない。 */}
         {/* 画像 / 音声 / アーカイブ以外はすべてテキストとして開こうとする。
             中身がバイナリなら PreviewText 側が「プレビュー非対応」を出す。 */}
-        {kind === 'unknown' && (
+        {/* 権限で閉じられている種別は理由を出す。無言で空になると
+            「壊れている」と誤解されるため。 */}
+        {((kind === 'archive' && !caps.archive) || (kind !== 'archive' && !caps.preview)) && (
+          <p className="p-3 text-[13px] text-ink-7">
+            この接続では{kind === 'archive' ? '圧縮ファイルを開くこと' : 'ファイルのプレビュー'}が
+            無効になっています (Settings → 接続で変更できます)。
+          </p>
+        )}
+        {kind === 'unknown' && caps.preview && (
           <PreviewText key={`${connId}|${bucket}|${k}`} connId={connId} bucket={bucket} k={k} />
         )}
-        {kind === 'image' && <PreviewImage connId={connId} bucket={bucket} k={k} />}
-        {kind === 'audio' && (
+        {kind === 'image' && caps.preview && <PreviewImage connId={connId} bucket={bucket} k={k} />}
+        {kind === 'audio' && caps.preview && (
           <PreviewAudio key={`${connId}|${bucket}|${k}`} connId={connId} bucket={bucket} k={k} />
         )}
-        {kind === 'archive' && (
+        {kind === 'archive' && caps.archive && (
           <PreviewArchive
             // ファイル切替時に内部 state (offset / pageSize) を一括リセットする。
             key={`${connId}|${bucket}|${k}`}

@@ -7,6 +7,8 @@ import { createPools, closePools } from './db.js'
 import { createCrypto } from './crypto.js'
 import { createStorageFactory } from './storage.js'
 import { requireSafeOrigin } from './lib/originCheck.js'
+import { requireCapability } from './lib/capabilityGuard.js'
+import type { Capability } from './storage.js'
 import { explainStorageError } from './lib/storageError.js'
 import { mountStorageListRoutes } from './routes/storage-list.js'
 import { mountStorageReadmeRoutes } from './routes/storage-readme.js'
@@ -35,6 +37,28 @@ app.get('/healthz', c => c.text('ok'))
 
 const api = new Hono()
 api.use('*', requireSafeOrigin(env.ALLOWED_ORIGINS))
+
+// 接続ごとの権限ガード。「どのエンドポイントがどの権限に属するか」をここ 1 箇所に
+// 集約する (ルートハンドラ側には権限の知識を持たせない)。
+// Hono は登録順に実行するので、必ずルートの mount より前に登録すること。
+const cap = (k: Capability) => requireCapability(k, storageFactory.getConnectionConfig)
+api.use('/storage/:connId/buckets',           cap('list'))
+api.use('/storage/:connId/list',              cap('list'))
+api.use('/storage/:connId/preview/text',      cap('preview'))
+api.use('/storage/:connId/preview/image',     cap('preview'))
+api.use('/storage/:connId/preview/audio',     cap('preview'))
+api.use('/storage/:connId/preview/raw',       cap('download'))
+api.use('/storage/:connId/preview/tar',       cap('archive'))
+api.use('/storage/:connId/preview/tar-entry', cap('archive'))
+api.use('/storage/:connId/media/analyze',     cap('audioInfo'))
+api.use('/storage/:connId/media/spectrogram', cap('audioSpectrogram'))
+// README は同じパスで GET = 読み込み / PUT = 編集。メソッドごとに権限が違う。
+api.on('GET', '/storage/:connId/readme',      cap('readmeRead'))
+api.on('PUT', '/storage/:connId/readme',      cap('readmeWrite'))
+api.use('/storage/:connId/readme/history',    cap('readmeRead'))
+api.use('/storage/:connId/readme/history/:id', cap('readmeRead'))
+api.use('/storage/:connId/readmes/search',    cap('readmeRead'))
+
 mountConnectionsRoutes(api, {
   pools,
   crypto,
