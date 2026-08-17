@@ -7,11 +7,10 @@ import { FeatureSettings } from './FeatureSettings'
 afterEach(() => vi.restoreAllMocks())
 
 describe('FeatureSettings', () => {
-  it('設定が無ければ両方とも有効として出す', async () => {
+  it('設定が無ければ有効として出す', async () => {
     vi.spyOn(api, 'settings').mockResolvedValue({})
     render(<FeatureSettings />)
-    expect(await screen.findByRole('checkbox', { name: '家系図タブを表示する' })).toBeChecked()
-    expect(screen.getByRole('checkbox', { name: 'タグを表示する' })).toBeChecked()
+    expect(await screen.findByRole('checkbox', { name: 'タグを表示する' })).toBeChecked()
   })
 
   it("'false' の設定を反映する", async () => {
@@ -19,7 +18,6 @@ describe('FeatureSettings', () => {
     render(<FeatureSettings />)
     await waitFor(() =>
       expect(screen.getByRole('checkbox', { name: 'タグを表示する' })).not.toBeChecked())
-    expect(screen.getByRole('checkbox', { name: '家系図タブを表示する' })).toBeChecked()
   })
 
   it('トグルすると該当キーだけを保存する', async () => {

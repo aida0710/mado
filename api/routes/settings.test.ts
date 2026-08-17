@@ -16,7 +16,7 @@ beforeEach(async () => {
   // 消えない。マイグレーションの初期値と同じ状態に戻す。
   await pools.rw.query('TRUNCATE app_settings')
   await pools.rw.query(
-    `INSERT INTO app_settings(key, value) VALUES ('lineage_enabled', 'true')`,
+    `INSERT INTO app_settings(key, value) VALUES ('tags_enabled', 'true')`,
   )
 })
 afterAll(() => closePools(pools))
@@ -25,11 +25,11 @@ describe('app settings', () => {
   it('GET /settings returns all settings as a key-value map', async () => {
     const res = await app.request('/settings')
     expect(res.status).toBe(200)
-    expect(await res.json()).toEqual({ lineage_enabled: 'true' })
+    expect(await res.json()).toEqual({ tags_enabled: 'true' })
   })
 
   it('PUT /settings/:key updates the value', async () => {
-    const res = await app.request('/settings/lineage_enabled', {
+    const res = await app.request('/settings/tags_enabled', {
       method: 'PUT',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ value: 'false' }),
@@ -38,12 +38,12 @@ describe('app settings', () => {
     expect(await res.json()).toEqual({ ok: true })
 
     expect(await (await app.request('/settings')).json())
-      .toEqual({ lineage_enabled: 'false' })
+      .toEqual({ tags_enabled: 'false' })
   })
 
   it('PUT is idempotent (upsert, not duplicate rows)', async () => {
     for (const v of ['false', 'false', 'true']) {
-      await app.request('/settings/lineage_enabled', {
+      await app.request('/settings/tags_enabled', {
         method: 'PUT',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ value: v }),
@@ -52,7 +52,7 @@ describe('app settings', () => {
     const r = await pools.ro.query('SELECT count(*)::int AS n FROM app_settings')
     expect(r.rows[0].n).toBe(1)
     expect(await (await app.request('/settings')).json())
-      .toEqual({ lineage_enabled: 'true' })
+      .toEqual({ tags_enabled: 'true' })
   })
 
   // 未知のキーを弾く。UI のタイプミスや古いクライアントが設定表を汚さないように。
@@ -68,7 +68,7 @@ describe('app settings', () => {
   })
 
   it('PUT rejects a non-string value', async () => {
-    const res = await app.request('/settings/lineage_enabled', {
+    const res = await app.request('/settings/tags_enabled', {
       method: 'PUT',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ value: false }),
@@ -76,6 +76,6 @@ describe('app settings', () => {
     expect(res.status).toBe(400)
     // 値は変わらない。
     expect(await (await app.request('/settings')).json())
-      .toEqual({ lineage_enabled: 'true' })
+      .toEqual({ tags_enabled: 'true' })
   })
 })

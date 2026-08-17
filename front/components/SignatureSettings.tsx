@@ -41,7 +41,7 @@ export function SignatureSettings() {
         {saved && <span className="text-[12px] text-ink-7">保存しました</span>}
       </label>
       <p className="px-1 text-[12px] text-ink-7">
-        README・共有ノートの編集者、家系図リンクの作成者として記録されます。
+        README・共有ノートの編集者として記録されます。
         <strong>この端末にだけ保存され</strong>、他の人には影響しません。
       </p>
     </section>

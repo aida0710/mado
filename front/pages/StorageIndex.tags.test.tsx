@@ -55,14 +55,14 @@ describe('StorageIndex タグ', () => {
     expect(badges.length).toBeGreaterThan(0)
   })
 
-  // タグ検索とデータ家系図は畳んだパネルをやめて別ビューへのリンクにした
+  // タグ検索は畳んだパネルをやめて別ビューへのリンクにした
   // (一覧の前に積み上がってページが混み合っていたため)。
-  it('タグ検索とデータ家系図はリンクとして出す', async () => {
+  it('タグ検索はリンクとして出す', async () => {
     vi.spyOn(api, 'buckets').mockResolvedValue({ buckets: [{ name: 'bkt-1', creationDate: null }] })
     vi.spyOn(api, 'favorites').mockResolvedValue([])
     vi.spyOn(api, 'tags').mockResolvedValue([])
     vi.spyOn(api, 'tagAssignments').mockResolvedValue({})
-    vi.spyOn(api, 'settings').mockResolvedValue({ lineage_enabled: 'true' })
+    vi.spyOn(api, 'settings').mockResolvedValue({})
     vi.spyOn(api, 'lastFetched', 'get').mockReturnValue({
       list: () => null, readme: () => null, tar: () => null, buckets: () => null,
     })
@@ -72,23 +72,21 @@ describe('StorageIndex タグ', () => {
 
     expect(await screen.findByRole('link', { name: 'タグ検索' }))
       .toHaveAttribute('href', '/?view=tags')
-    expect(screen.getByRole('link', { name: 'データ家系図' }))
-      .toHaveAttribute('href', '/?view=lineage')
   })
 
-  it('家系図が無効ならデータ家系図のリンクを出さない', async () => {
+  it('タグが無効ならタグ検索のリンクを出さない', async () => {
     vi.spyOn(api, 'buckets').mockResolvedValue({ buckets: [{ name: 'bkt-1', creationDate: null }] })
     vi.spyOn(api, 'favorites').mockResolvedValue([])
     vi.spyOn(api, 'tags').mockResolvedValue([])
     vi.spyOn(api, 'tagAssignments').mockResolvedValue({})
-    vi.spyOn(api, 'settings').mockResolvedValue({ lineage_enabled: 'false' })
+    vi.spyOn(api, 'settings').mockResolvedValue({ tags_enabled: 'false' })
     vi.spyOn(api, 'lastFetched', 'get').mockReturnValue({
       list: () => null, readme: () => null, tar: () => null, buckets: () => null,
     })
 
     renderIndex()
     await waitFor(() =>
-      expect(screen.queryByRole('link', { name: 'データ家系図' })).not.toBeInTheDocument())
-    expect(screen.getByRole('link', { name: 'タグ検索' })).toBeInTheDocument()
+      expect(screen.queryByRole('link', { name: 'タグ検索' })).not.toBeInTheDocument())
+    expect(screen.getByText('bkt-1')).toBeInTheDocument()
   })
 })

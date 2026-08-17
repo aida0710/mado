@@ -31,12 +31,12 @@ const conn: Connection = {
   isDefault: false,
 }
 
-function mountWithOneBucket({ lineageEnabled = true }: { lineageEnabled?: boolean } = {}) {
+function mountWithOneBucket() {
   vi.spyOn(api, 'buckets').mockResolvedValue({ buckets: [{ name: 'bkt-1', creationDate: null }] })
   vi.spyOn(api, 'favorites').mockResolvedValue([])
   vi.spyOn(api, 'tags').mockResolvedValue([])
   vi.spyOn(api, 'tagAssignments').mockResolvedValue({})
-  vi.spyOn(api, 'settings').mockResolvedValue({ lineage_enabled: lineageEnabled ? 'true' : 'false' })
+  vi.spyOn(api, 'settings').mockResolvedValue({})
   vi.spyOn(api, 'lastFetched', 'get').mockReturnValue({
     list: () => null, readme: () => null, tar: () => null, buckets: () => null,
   })
@@ -94,28 +94,6 @@ describe('StorageIndex バケット行の ⋯ メニュー', () => {
     await user.click(screen.getByRole('menuitem', { name: 'タグを編集' }))
 
     expect(await screen.findByRole('dialog')).toBeInTheDocument()
-  })
-
-  // バケットの中に入らないと家系図タブに辿り着けなかったので、一覧から直接開けるようにした。
-  it('家系図が有効ならメニューから開ける', async () => {
-    const user = userEvent.setup()
-    mountWithOneBucket()
-    await waitFor(() => expect(screen.getByText('bkt-1')).toBeInTheDocument())
-
-    await user.click(screen.getByRole('button', { name: 'アクション' }))
-    expect(await screen.findByRole('menuitem', { name: '家系図を開く' })).toBeInTheDocument()
-  })
-
-  it('家系図が無効ならメニューに出さない', async () => {
-    const user = userEvent.setup()
-    mountWithOneBucket({ lineageEnabled: false })
-    await waitFor(() => expect(screen.getByText('bkt-1')).toBeInTheDocument())
-
-    await user.click(screen.getByRole('button', { name: 'アクション' }))
-    await waitFor(() =>
-      expect(screen.queryByRole('menuitem', { name: '家系図を開く' })).not.toBeInTheDocument())
-    // 他の項目は残る。
-    expect(screen.getByRole('menuitem', { name: 'タグを編集' })).toBeInTheDocument()
   })
 
   // 名前の文字列だけが当たり判定だと狭くて押しづらいので、行全体をリンクにしている。

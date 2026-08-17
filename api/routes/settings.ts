@@ -14,7 +14,7 @@ export interface SettingsDeps {
 
 // 書き込みを許すキーの許可リスト。未知のキーを弾いて、UI のタイプミスや
 // 古いクライアントが設定表を汚さないようにする。
-const WRITABLE_KEYS = new Set(['lineage_enabled', 'tags_enabled'])
+const WRITABLE_KEYS = new Set(['tags_enabled'])
 
 export function mountSettingsRoutes(app: Hono, deps: SettingsDeps): void {
   app.get('/settings', async c => {

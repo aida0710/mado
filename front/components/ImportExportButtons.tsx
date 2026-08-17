@@ -2,7 +2,7 @@ import { useId, useRef, useState } from 'react'
 import { readJsonFile, summaryText, type ImportMode, type ImportSummary } from '../lib/jsonFile'
 
 interface Props {
-  /** 対象名 (例: 接続 / タグ / 家系図)。隠し input の aria-label に使う。
+  /** 対象名 (例: 接続 / タグ)。隠し input の aria-label に使う。
    *  1 画面に複数置くとボタン名だけでは区別がつかないため。 */
   what: string
   /** エクスポート押下時。ファイルの組み立てと保存は呼び出し側。 */
@@ -17,7 +17,7 @@ interface Props {
   importLabel?: string
 }
 
-// タグ / 家系図で共通のインポート・エクスポート導線。
+// 接続 / タグで共通のインポート・エクスポート導線。
 // <input type="file"> は見た目を揃えにくいので隠し、ボタンから click() で開く。
 export function ImportExportButtons({
   what, onExport, onImport, onDone, replaceWarning,
@@ -102,7 +102,7 @@ export function ImportExportButtons({
             tabIndex={-1}
           />
           <div className="modal modal--narrow" role="dialog" aria-modal="true" aria-labelledby="import-mode-title">
-            <h3 id="import-mode-title" className="lineage-add__title">{what}の取り込み方法</h3>
+            <h3 id="import-mode-title" className="modal-prompt__title">{what}の取り込み方法</h3>
             <p className="text-[12.5px] text-ink-11">
               <strong>追記</strong> — ファイルにあるものを足します。既存はそのまま残ります。
             </p>

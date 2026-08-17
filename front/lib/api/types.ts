@@ -271,20 +271,6 @@ export const TagSearchHit = z.object({
 export const TagSearchResult = z.array(TagSearchHit)
 export type TagSearchResult = z.infer<typeof TagSearchResult>
 
-export const LineageLink = z.object({
-  id: z.number(),
-  parentBucket: z.string(),
-  parentPath: z.string(),
-  childBucket: z.string(),
-  childPath: z.string(),
-  createdBy: z.string(),
-  createdAt: z.string(),
-})
-export type LineageLink = z.infer<typeof LineageLink>
-export const LineageLinks = z.array(LineageLink)
-
-export const PostLineageLinkOk = z.object({ ok: z.literal(true), id: z.number() })
-
 // アプリ全体の設定。value は TEXT 固定で、型の解釈は呼び出し側の責務
 // (boolean 以外の設定が増えてもスキーマを変えずに済ませるため)。
 export const AppSettings = z.record(z.string(), z.string())

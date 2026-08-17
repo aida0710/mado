@@ -60,7 +60,7 @@ Glacier Deep Archive のように **一覧には出るが `GetObject` すると�
 
 Settings の接続一覧には、制限のかかっている接続に「制限: …」が表示されます。
 
-タグと家系図は接続ごとではなく **Mado 全体**の表示トグルです (Settings → 機能)。オフにしても登録済みのタグ / 家系図リンクは消えません。
+タグは接続ごとではなく **Mado 全体**の表示トグルです (Settings → 機能)。オフにしても登録済みのタグは消えません。
 
 <img width="567" height="767" alt="image" src="https://github.com/user-attachments/assets/e01ab4e2-6139-4f5c-b459-c7c40136ef48" />
 

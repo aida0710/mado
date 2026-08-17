@@ -15,7 +15,6 @@ import { mountStorageReadmeRoutes } from './routes/storage-readme.js'
 import { mountStoragePreviewRoutes } from './routes/storage-preview.js'
 import { mountStorageMediaRoutes } from './routes/storage-media.js'
 import { mountStorageFavoritesRoutes } from './routes/storage-favorites.js'
-import { mountStorageLineageRoutes } from './routes/storage-lineage.js'
 import { mountConnectionsRoutes } from './routes/connections.js'
 import { mountNotesRoutes } from './routes/notes.js'
 import { mountStorageTagsRoutes } from './routes/storage-tags.js'
@@ -76,7 +75,6 @@ mountStorageMediaRoutes(api, {
   env,
 })
 mountStorageFavoritesRoutes(api, { pools })
-mountStorageLineageRoutes(api, { pools })
 mountSettingsRoutes(api, { pools })
 mountNotesRoutes(api, { pools })
 mountStorageTagsRoutes(api, { pools })

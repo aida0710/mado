@@ -1,5 +1,5 @@
 import {useCallback, useEffect, useMemo, useState} from 'react'
-import {Link, useNavigate, useSearchParams} from 'react-router-dom'
+import {Link, useSearchParams} from 'react-router-dom'
 import {api} from '../lib/api/client'
 import {ConnectionSwitcher} from '../components/ConnectionSwitcher'
 import {ReadmeSearchPanel} from '../components/ReadmeSearchPanel'
@@ -8,9 +8,8 @@ import {CacheMeta} from '../components/CacheMeta'
 import {TagBadge} from '../components/TagBadge'
 import {TagPicker} from '../components/TagPicker'
 import {TagSearchView} from '../components/TagSearchView'
-import {LineageListView} from '../components/LineageListView'
 import {ViewBreadcrumb} from '../components/ViewBreadcrumb'
-import {useLineageEnabled, useTagsEnabled} from '../lib/useFeatureEnabled'
+import {useTagsEnabled} from '../lib/useFeatureEnabled'
 import {CopyMenu, type MenuItem} from '../components/CopyMenu'
 import {absoluteUrl} from '../lib/route'
 import type {Tag} from '../lib/api/types'
@@ -68,7 +67,6 @@ export default function StorageIndex({connId}: Props) {
         refresh()
     }, [refresh])
 
-    const lineageEnabled = useLineageEnabled()
     const tagsEnabled = useTagsEnabled()
     const [allTags, setAllTags] = useState<Tag[]>([])
     const [bucketTags, setBucketTags] = useState<Record<string, string[]>>({})
@@ -119,25 +117,19 @@ export default function StorageIndex({connId}: Props) {
         (favorites.has(b.name) ? favoriteRows : otherRows).push(b)
     }
 
-    // タグ検索 / データ家系図は ?view= で表現する。固定セグメント
+    // タグ検索は ?view=tags で表現する。固定セグメント
     // (/storage/:connId/tags) にすると "tags" という名前のバケットが
     // 開けなくなるため — S3 のバケット名として普通にあり得る。
-    const rawView = searchParams.get('view')
     // 無効にした機能は URL を直に開かれても一覧へ倒す。
-    const view = (rawView === 'tags' && !tagsEnabled) || (rawView === 'lineage' && !lineageEnabled)
-        ? null : rawView
-    if (view === 'tags' || view === 'lineage') {
-        const label = view === 'tags' ? 'タグ検索' : 'データ家系図'
+    if (searchParams.get('view') === 'tags' && tagsEnabled) {
         return (
             <section>
                 {/* バケット画面 (Breadcrumb + ConnectionSwitcher) と同じ並びに揃える。 */}
                 <div className="flex items-center justify-between gap-3">
-                    <ViewBreadcrumb connId={connId} label={label} href={`${indexHref}?view=${view}`}/>
+                    <ViewBreadcrumb connId={connId} label="タグ検索" href={`${indexHref}?view=tags`}/>
                     <ConnectionSwitcher/>
                 </div>
-                {view === 'tags'
-                    ? <TagSearchView connId={connId}/>
-                    : <LineageListView connId={connId}/>}
+                <TagSearchView connId={connId}/>
             </section>
         )
     }
@@ -166,16 +158,13 @@ export default function StorageIndex({connId}: Props) {
 
             <ReadmeSearchPanel connId={connId}/>
             <S3PathPanel connId={connId}/>
-            {/* タグ検索 / データ家系図 は別ビューへのリンクにする。畳んだパネルとして
+            {/* タグ検索は別ビューへのリンクにする。畳んだパネルとして
                 ここに積むと、README 検索・S3 パス貼付と合わせて一覧の前が混み合う。 */}
-            <nav className="mt-3 mb-4 flex flex-wrap items-center gap-x-4 gap-y-1">
-                {tagsEnabled && (
+            {tagsEnabled && (
+                <nav className="mt-3 mb-4 flex flex-wrap items-center gap-x-4 gap-y-1">
                     <Link className={subLinkClass} to="?view=tags">タグ検索</Link>
-                )}
-                {lineageEnabled && (
-                    <Link className={subLinkClass} to="?view=lineage">データ家系図</Link>
-                )}
-            </nav>
+                </nav>
+            )}
 
             {error && <p className="error">{error}</p>}
             {loading && buckets.length === 0 && (
@@ -202,7 +191,6 @@ export default function StorageIndex({connId}: Props) {
                                 allTags={allTags}
                                 tagIds={bucketTags[b.name] ?? []}
                                 onTagsChange={handleTagsChange}
-                                lineageEnabled={lineageEnabled}
                                 tagsEnabled={tagsEnabled}
                             />
                         ))}
@@ -227,7 +215,6 @@ export default function StorageIndex({connId}: Props) {
                                 allTags={allTags}
                                 tagIds={bucketTags[b.name] ?? []}
                                 onTagsChange={handleTagsChange}
-                                lineageEnabled={lineageEnabled}
                                 tagsEnabled={tagsEnabled}
                             />
                         ))}
@@ -239,14 +226,12 @@ export default function StorageIndex({connId}: Props) {
 }
 
 function BucketLi({
-                      connId, bucket, inUse, onToggle, allTags, tagIds, onTagsChange, lineageEnabled, tagsEnabled,
+                      connId, bucket, inUse, onToggle, allTags, tagIds, onTagsChange, tagsEnabled,
                   }: {
     connId: string; bucket: BucketRow; inUse: boolean; onToggle: () => void
     allTags: Tag[]; tagIds: string[]; onTagsChange: (bucketName: string, tagIds: string[]) => void
-    lineageEnabled: boolean
     tagsEnabled: boolean
 }) {
-    const navigate = useNavigate()
     const [pickerOpen, setPickerOpen] = useState(false)
     const checkboxId = `use-${bucket.name}`
     const tags = tagsEnabled ? allTags.filter(t => tagIds.includes(t.id)) : []
@@ -257,15 +242,9 @@ function BucketLi({
         ...(tagsEnabled
             ? [{kind: 'action' as const, label: 'タグを編集', onSelect: () => setPickerOpen(true)}]
             : []),
-        // 家系図はバケット自身をノードにできる (prefix='' が bucket ノード)。
-        // ここからバケットの家系図へ直接入れるようにする — 従来はバケットの中に
-        // 入らないとタブに辿り着けなかった。Settings で無効なら出さない。
-        ...(lineageEnabled
-            ? [{kind: 'action' as const, label: '家系図を開く', onSelect: () => navigate(`${bucketHref}?view=lineage`)}]
-            : []),
         {kind: 'copy', label: 'Web URL をコピー', value: absoluteUrl(bucketHref)},
         {kind: 'copy', label: 'S3 URL をコピー', value: `s3://${bucket.name}/`},
-    ], [bucketHref, bucket.name, lineageEnabled, tagsEnabled, navigate])
+    ], [bucketHref, bucket.name, tagsEnabled])
     return (
         <li className={`${liClass} relative`} style={{borderBottom: '1px solid var(--rule)'}}>
             {/* チェックボックスと ⋯ は行リンクの上に出す (下の after:inset-0 が

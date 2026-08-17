@@ -176,7 +176,7 @@ export default function ConnectionsPage() {
     const summary: ImportSummary = { added: 0, skipped: 0, removed: 0, failed: [] }
 
     // 置き換え = 同期。ファイルに無い接続を消す。ファイルに載っている接続は
-    // 作り直さないので、その README / お気に入り / タグ割り当て / 家系図リンクは
+    // 作り直さないので、その README / お気に入り / タグ割り当ては
     // そのまま残る。消える接続についてはそれらも CASCADE で一緒に消える。
     if (mode === 'replace') {
       const wanted = new Set(
@@ -242,7 +242,7 @@ export default function ConnectionsPage() {
           <span className="inline-flex flex-wrap items-center gap-2">
             <ImportExportButtons
               what="接続"
-              replaceWarning="削除される接続の README・お気に入り・タグ割り当て・家系図リンクも、まとめて消えます (connection_id の連鎖削除)。ファイルに載っている接続は作り直さないので、それらは残ります。"
+              replaceWarning="削除される接続の README・お気に入り・タグ割り当ても、まとめて消えます (connection_id の連鎖削除)。ファイルに載っている接続は作り直さないので、それらは残ります。"
               onExport={handleExport}
               onImport={handleImport}
               onDone={refresh}

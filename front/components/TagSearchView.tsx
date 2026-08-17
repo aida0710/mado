@@ -11,7 +11,7 @@ import { downloadJson, type ImportMode, type ImportSummary } from '../lib/jsonFi
 //
 // タグは id ではなく name で参照する。id は環境ごとの nanoid で、またいで
 // 意味を持たないため。対象は `s3://bucket/key` の 1 本のフルパスで書く
-// (家系図のエクスポートと同じ表記)。バケット直下は `s3://bucket/`、
+// バケット直下は `s3://bucket/`、
 // ディレクトリは末尾スラッシュ付き、ファイルは無し — kind はパスから決まる
 // ので別フィールドにしない。
 //
@@ -247,8 +247,8 @@ export function TagSearchView({ connId }: Props) {
             tabIndex={-1}
           />
           <div className="modal modal--narrow" role="dialog" aria-modal="true" aria-labelledby="tag-missing-title">
-            <h3 id="tag-missing-title" className="lineage-add__title">未登録のタグがあります</h3>
-            <p className="lineage-add__target">{pendingMissing.names.join(' / ')}</p>
+            <h3 id="tag-missing-title" className="modal-prompt__title">未登録のタグがあります</h3>
+            <p className="modal-prompt__target">{pendingMissing.names.join(' / ')}</p>
             <p className="text-[12px] text-ink-7">
               作成すると、これらのタグを登録したうえで割り当てを取り込みます。
               作成しない場合、このタグの割り当ては取り込まれません。

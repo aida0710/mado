@@ -23,7 +23,7 @@ function renderCrumb() {
   return render(
     <MemoryRouter>
       <ConnectionContext.Provider value={conn}>
-        <ViewBreadcrumb connId="c1" label="データ家系図" href="/storage/c1/?view=lineage" />
+        <ViewBreadcrumb connId="c1" label="タグ検索" href="/storage/c1/?view=tags" />
       </ConnectionContext.Provider>
     </MemoryRouter>,
   )
@@ -33,7 +33,7 @@ describe('ViewBreadcrumb', () => {
   it('接続名 › 現在地 を出す', () => {
     renderCrumb()
     expect(screen.getByRole('link', { name: 'mdx' })).toHaveAttribute('href', '/storage/c1/')
-    expect(screen.getByText('データ家系図')).toBeInTheDocument()
+    expect(screen.getByText('タグ検索')).toBeInTheDocument()
   })
 
   it('↑ はバケット一覧へ戻る', () => {
@@ -52,12 +52,12 @@ describe('ViewBreadcrumb', () => {
 
     await user.click(screen.getByRole('menuitem', { name: /Web URL をコピー/ }))
     expect(copyToClipboard)
-      .toHaveBeenCalledWith(`${window.location.origin}/storage/c1/?view=lineage`)
+      .toHaveBeenCalledWith(`${window.location.origin}/storage/c1/?view=tags`)
   })
 
   // 現在地を自分自身へのリンクにしない。
   it('現在地はリンクにしない', () => {
     renderCrumb()
-    expect(screen.queryByRole('link', { name: 'データ家系図' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'タグ検索' })).not.toBeInTheDocument()
   })
 })

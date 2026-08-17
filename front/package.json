@@ -12,13 +12,11 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@dagrejs/dagre": "^3.0.0",
     "@fontsource-variable/newsreader": "^5.2.10",
     "@fontsource-variable/public-sans": "^5.2.7",
     "@fontsource/ibm-plex-mono": "^5.2.7",
     "@fontsource/noto-sans-jp": "^5.2.9",
     "@monaco-editor/react": "^4.7.0",
-    "@xyflow/react": "^12.11.2",
     "monaco-editor": "^0.52.2",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",

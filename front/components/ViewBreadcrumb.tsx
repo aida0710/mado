@@ -4,7 +4,7 @@ import { useConnection } from '../lib/connectionContext'
 import { absoluteUrl } from '../lib/route'
 import { CopyMenu, type MenuItem } from './CopyMenu'
 
-// Storage 配下の「バケットではないビュー」(タグ検索 / データ家系図) 用のパンくず。
+// Storage 配下の「バケットではないビュー」(タグ検索など) 用のパンくず。
 // バケット画面の Breadcrumb と同じ見た目・同じ並び (↑ / ⧉ / 接続名 › 現在地) に
 // 揃えて、どの画面でも現在地の読み方が変わらないようにする。
 //
@@ -20,7 +20,7 @@ export function ViewBreadcrumb({
   connId, label, href,
 }: {
   connId: string
-  /** 現在地の表示名 (例: データ家系図) */
+  /** 現在地の表示名 (例: タグ検索) */
   label: string
   /** 現在地の URL。⧉ でコピーする Web URL の元にする */
   href: string
