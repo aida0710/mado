@@ -33,3 +33,10 @@ docker compose -f compose.prod.yaml up -d --build
 
 echo "==> docker compose -f compose.prod.yaml ps"
 docker compose -f compose.prod.yaml ps
+
+# 毎回 --build するので BuildKit のキャッシュが際限なく積み上がる。実際に
+# 1 度ディスクを使い切って (48G 中 47G、build cache だけで 16.85GB) デプロイが
+# "no space left on device" で落ちたので、1 週間より古い分だけ毎回落とす。
+# until=168h なので直近のビルドのキャッシュは残り、通常のデプロイは速いまま。
+echo "==> docker builder prune -f --filter until=168h"
+docker builder prune -f --filter until=168h
