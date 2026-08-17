@@ -151,15 +151,23 @@ export function createStorageFactory(deps: StorageFactoryDeps): StorageFactory {
         secretAccessKey: deps.crypto.decrypt(row.secret_access_key_enc),
       },
       forcePathStyle: row.force_path_style,
-      // 明示的に keep-alive を効かせる。さらに maxAttempts=2 にして「成功するまでの
-      // 隠れたリトライ」を短く切る (DDN 製ストレージ等で初回 200 が遅延する時に
-      // SDK 内で数秒の指数バックオフ + 再試行を踏むケースを回避)。
-      maxAttempts: 2,
+      // 明示的に keep-alive を効かせる。リトライは 1 回だけ (= 再試行なし)。
+      // ここで遅いのは「サーバが応答を作るのに時間がかかる」ケースであって、
+      // 投げ直せば速くなる類の失敗ではない。maxAttempts=2 だと socketTimeout を
+      // 2 回踏んで失敗までの時間がちょうど倍になるだけなので 1 に落とす。
+      maxAttempts: 1,
       requestHandler: new NodeHttpHandler({
         httpAgent,
         httpsAgent,
         connectionTimeout: 5_000,
-        socketTimeout:    30_000,
+        // Delimiter 付き ListObjects は、実装によってはバケット全体を走査して
+        // CommonPrefixes を組み立てる。mdx のオブジェクトストレージ上の巨大な
+        // バケットでは prefix の絞り込みに関係なく毎回 28〜35 秒かかり、
+        // 30 秒では成否が運任せになっていた (28 秒なら成功、31 秒なら 500)。
+        // 実測に対して余裕を持たせる。nginx 側は proxy_read_timeout 300s なので
+        // ここが律速。待たされること自体はフロントの stale-while-revalidate が
+        // 隠すので、まず「成功させる」ことを優先する。
+        socketTimeout:    90_000,
       }),
     })
     const entry: CachedEntry = {
