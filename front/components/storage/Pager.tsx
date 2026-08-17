@@ -13,6 +13,8 @@ interface Props {
   entryCount: number
   /** このページのデータが S3 から取得された時刻。null = まだロードしてない / invalidate 直後。 */
   fetchedAt?: Date | null
+  /** 期限切れキャッシュを表示したまま裏で再取得中か。 */
+  revalidating?: boolean
   onPrev: () => void
   onNext: () => void
   onGoto: (idx: number) => void
@@ -24,7 +26,7 @@ interface Props {
 // S3 は前方向 cursor しか返さないので任意ページジャンプは「訪問済み」のみ。
 export function Pager({
   pageIdx, history, hasNext, cursorStuck, loading, isEmpty,
-  totalLabel, entryCount, fetchedAt, onPrev, onNext, onGoto, onRefresh,
+  totalLabel, entryCount, fetchedAt, revalidating, onPrev, onNext, onGoto, onRefresh,
 }: Props) {
   return (
     <>
@@ -122,7 +124,7 @@ export function Pager({
         {fetchedAt && (
           <>
             {' · '}
-            <CacheMeta fetchedAt={fetchedAt} />
+            <CacheMeta fetchedAt={fetchedAt} revalidating={revalidating} />
           </>
         )}
       </p>

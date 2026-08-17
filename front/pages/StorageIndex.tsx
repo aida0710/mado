@@ -1,4 +1,4 @@
-import {useCallback, useEffect, useMemo, useState} from 'react'
+import {useCallback, useEffect, useMemo, useRef, useState} from 'react'
 import {Link, useSearchParams} from 'react-router-dom'
 import {api} from '../lib/api/client'
 import {ConnectionSwitcher} from '../components/ConnectionSwitcher'
@@ -44,17 +44,36 @@ export default function StorageIndex({connId}: Props) {
     const [favorites, setFavorites] = useState<Set<string>>(() => new Set())
     const [error, setError] = useState<string | null>(null)
     const [loading, setLoading] = useState(false)
+    // 期限切れキャッシュを表示したまま裏でバケット一覧を再取得中か。
+    const [revalidating, setRevalidating] = useState(false)
+    // 遅い応答が接続切替をまたいで届いたときに別接続のバケットを描かないための gate。
+    const sessionRef = useRef(0)
 
     const refresh = useCallback(() => {
         setLoading(true)
         setError(null)
-        Promise.all([api.buckets(connId), api.favorites(connId)])
+        const sid = ++sessionRef.current
+        const current = (): boolean => sessionRef.current === sid
+        Promise.all([
+            api.buckets(connId, {
+                // 期限切れキャッシュが返ってきたときだけ呼ばれる。
+                onRevalidate: fresh => {
+                    if (!current()) return
+                    setRevalidating(true)
+                    fresh
+                        .then(r => { if (current()) { setBuckets(r.buckets); setRevalidating(false) } })
+                        .catch(() => { if (current()) setRevalidating(false) })
+                },
+            }),
+            api.favorites(connId),
+        ])
             .then(([bucketsRes, favs]) => {
+                if (!current()) return
                 setBuckets(bucketsRes.buckets)
                 setFavorites(new Set(favs))
             })
-            .catch((e: Error) => setError(e.message))
-            .finally(() => setLoading(false))
+            .catch((e: Error) => { if (current()) setError(e.message) })
+            .finally(() => { if (current()) setLoading(false) })
     }, [connId])
 
     const forceRefresh = useCallback(() => {
@@ -142,7 +161,7 @@ export default function StorageIndex({connId}: Props) {
                     狭い画面で CONN だけ次の行へ折り返ったとき行頭 (左) に落ち、
                     そこから開くドロップダウンが画面外へはみ出す。 */}
                 <div className="ml-auto flex flex-wrap items-center justify-end gap-3">
-                    <CacheMeta fetchedAt={api.lastFetched.buckets(connId)} />
+                    <CacheMeta fetchedAt={api.lastFetched.buckets(connId)} revalidating={revalidating} />
                     <button
                         className="ghost"
                         onClick={forceRefresh}

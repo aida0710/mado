@@ -122,13 +122,13 @@ describe('StorageBrowser - directory row', () => {
     await screen.findByRole('link', { name: /jp\// })
     expect(listMock).toHaveBeenCalledTimes(1)
     // 初回呼び出しの prefix は 'voice/'、再帰オフ
-    expect(listMock.mock.calls[0]).toEqual(['c1', 'b1', 'voice/', {}, { recursive: false }])
+    expect(listMock.mock.calls[0]).toEqual(['c1', 'b1', 'voice/', {}, { recursive: false, onRevalidate: expect.any(Function) }])
 
     // 検索 input に 'j' を入力 → debounce 後に 2 回目の list が走る
     await user.type(screen.getByLabelText('ディレクトリ内検索'), 'j')
     await waitFor(() => expect(listMock).toHaveBeenCalledTimes(2), { timeout: 1000 })
     // 2 回目の prefix は 'voice/' + 'j' = 'voice/j'
-    expect(listMock.mock.calls[1]).toEqual(['c1', 'b1', 'voice/j', {}, { recursive: false }])
+    expect(listMock.mock.calls[1]).toEqual(['c1', 'b1', 'voice/j', {}, { recursive: false, onRevalidate: expect.any(Function) }])
   })
 
   it('passes recursive=true to api.list when the recursive checkbox is toggled', async () => {
@@ -149,12 +149,12 @@ describe('StorageBrowser - directory row', () => {
     const user = userEvent.setup()
     renderBrowser('voice/')
     await screen.findByRole('link', { name: /jp\// })
-    expect(listMock.mock.calls[0]).toEqual(['c1', 'b1', 'voice/', {}, { recursive: false }])
+    expect(listMock.mock.calls[0]).toEqual(['c1', 'b1', 'voice/', {}, { recursive: false, onRevalidate: expect.any(Function) }])
 
     // 再帰チェックを ON → 同じ prefix で recursive: true で再 fetch
     await user.click(screen.getByLabelText('再帰検索'))
     await waitFor(() => expect(listMock).toHaveBeenCalledTimes(2))
-    expect(listMock.mock.calls[1]).toEqual(['c1', 'b1', 'voice/', {}, { recursive: true }])
+    expect(listMock.mock.calls[1]).toEqual(['c1', 'b1', 'voice/', {}, { recursive: true, onRevalidate: expect.any(Function) }])
   })
 
   it('enables the "次" pager button when the response carries a next cursor', async () => {
@@ -206,7 +206,7 @@ describe('StorageBrowser - directory row', () => {
     // (DDN 製などの S3 互換で cursor が進まない問題への防衛)。
     await waitFor(() => expect(listMock).toHaveBeenCalledTimes(2))
     expect(listMock.mock.calls[1]).toEqual([
-      'c1', 'b1', 'voice/', { continuation: 'tok1' }, { recursive: false, force: true },
+      'c1', 'b1', 'voice/', { continuation: 'tok1' }, { recursive: false, force: true, onRevalidate: expect.any(Function) },
     ])
 
     // 表示が page 2 の中身 (b.mp3) に置き換わる
@@ -241,14 +241,14 @@ describe('StorageBrowser - directory row', () => {
     const user = userEvent.setup()
     renderBrowser('voice/')
     await screen.findByText(/p1\.mp3/)
-    expect(listMock.mock.calls[0]).toEqual(['c1', 'b1', 'voice/', {}, { recursive: false }])
+    expect(listMock.mock.calls[0]).toEqual(['c1', 'b1', 'voice/', {}, { recursive: false, onRevalidate: expect.any(Function) }])
 
     // p1 → p2: cursor は p1 が返した tok-after-p1。forward navigation は force:true。
     await user.click(screen.getByRole('button', { name: '次のページへ' }))
     await screen.findByText(/p2\.mp3/)
     expect(listMock).toHaveBeenCalledTimes(2)
     expect(listMock.mock.calls[1]).toEqual([
-      'c1', 'b1', 'voice/', { continuation: 'tok-after-p1' }, { recursive: false, force: true },
+      'c1', 'b1', 'voice/', { continuation: 'tok-after-p1' }, { recursive: false, force: true, onRevalidate: expect.any(Function) },
     ])
     // p1 の表示は消えている
     expect(screen.queryByText(/p1\.mp3/)).toBeNull()
@@ -258,7 +258,7 @@ describe('StorageBrowser - directory row', () => {
     await screen.findByText(/p3\.mp3/)
     expect(listMock).toHaveBeenCalledTimes(3)
     expect(listMock.mock.calls[2]).toEqual([
-      'c1', 'b1', 'voice/', { continuation: 'tok-after-p2' }, { recursive: false, force: true },
+      'c1', 'b1', 'voice/', { continuation: 'tok-after-p2' }, { recursive: false, force: true, onRevalidate: expect.any(Function) },
     ])
     expect(screen.queryByText(/p2\.mp3/)).toBeNull()
   })
@@ -289,7 +289,7 @@ describe('StorageBrowser - directory row', () => {
     await user.click(screen.getByRole('button', { name: '次のページへ' }))
     await screen.findByText(/p2\.mp3/)
     expect(listMock.mock.calls[1]).toEqual([
-      'c1', 'b1', 'voice/', { startAfter: 'voice/p1.mp3' }, { recursive: false, force: true },
+      'c1', 'b1', 'voice/', { startAfter: 'voice/p1.mp3' }, { recursive: false, force: true, onRevalidate: expect.any(Function) },
     ])
   })
 
@@ -325,7 +325,7 @@ describe('StorageBrowser - directory row', () => {
     expect(listMock).toHaveBeenCalledTimes(2)
     // page 2 の fetch は force:true で呼ばれている
     expect(listMock.mock.calls[1]).toEqual([
-      'c1', 'b1', 'voice/', { continuation: 'STUCK' }, { recursive: false, force: true },
+      'c1', 'b1', 'voice/', { continuation: 'STUCK' }, { recursive: false, force: true, onRevalidate: expect.any(Function) },
     ])
 
     // page 2 で nextContinuation=STUCK が再来 → cursor が進まない → 「次」disable

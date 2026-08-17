@@ -10,6 +10,12 @@
 //  - ブラウザリロード越しでも MDX への重い fetch (7〜24 秒) を繰り返したくない。
 //    persistKey を渡したインスタンスは値を localStorage にも書き出し、TTL 内なら
 //    リロード後の初回 get で hydrate する。
+//  - TTL 切れのたびに数十秒待たされるのが辛い。onRevalidate を渡した呼び出しは
+//    stale-while-revalidate になり、期限切れの値を即返しつつ裏で loader を回す
+//    (S3 のディレクトリ/オブジェクトは増えることはあっても消えにくいので、
+//     一瞬古い一覧を見せる不利益より待たされない利益の方が大きい)。
+//    コールバックを渡さない呼び出しは従来どおり blocking のままなので、
+//    UI 側で更新を受け取る配線をしていない画面が古いまま固まることはない。
 
 interface Entry<V> {
   // キャッシュ済みの値 (両方が undefined なのは初期化エラーで delete 済みのケース)。
@@ -45,36 +51,85 @@ export class TTLCache<V> {
   }
 
   /**
-   * キャッシュにヒットすれば即返す。in-flight があれば待つ。
-   * どちらも無ければ localStorage を確認、それでも無ければ loader() を呼ぶ。
+   * TTL 内の値があれば即返す。無ければ localStorage から hydrate、それも無ければ
+   * loader() を呼ぶ。in-flight があれば相乗りする。
    * loader が reject したらエントリを削除する (= 次回再試行)。
+   *
+   * onRevalidate を渡すと stale-while-revalidate になる: 期限切れの値があるときは
+   * それを即返し、裏で走らせた fetch の Promise を (get が返る前に同期的に)
+   * コールバックへ渡す。呼び出し側はそれを await して新しい値で描き直す。
+   * 期限切れの値が無いときや、そもそもコールバックを渡さないときの挙動は従来通り。
    */
-  async get(key: string, loader: () => Promise<V>): Promise<V> {
+  async get(
+    key: string,
+    loader: () => Promise<V>,
+    onRevalidate?: (fresh: Promise<V>) => void,
+  ): Promise<V> {
     const now = Date.now()
-    const cur = this.store.get(key)
-    if (cur) {
-      if (cur.promise) return cur.promise
-      if (cur.value !== undefined && now < cur.expiresAt) return cur.value
+    let entry = this.store.get(key)
+    if (entry?.value !== undefined && now < entry.expiresAt) return entry.value
+
+    // in-memory に無ければ localStorage を確認して hydrate。
+    // 期限切れでも捨てずに拾う — SWR の stale 供給元になる。
+    if (!entry) {
+      const persisted = this.readPersisted(key)
+      if (persisted) {
+        entry = { value: persisted.value, expiresAt: persisted.expiresAt }
+        this.store.set(key, entry)
+        if (now < entry.expiresAt) return persisted.value
+      }
     }
-    // in-memory に無ければ localStorage を確認して hydrate
-    const persisted = this.readPersisted(key)
-    if (persisted && now < persisted.expiresAt) {
-      this.store.set(key, { value: persisted.value, expiresAt: persisted.expiresAt })
-      return persisted.value
+
+    // ここに来るのは「値が無い」か「値はあるが期限切れ」。
+    if (entry?.value !== undefined && onRevalidate) {
+      // 進行中の revalidate があれば相乗り、無ければ起動する。
+      onRevalidate(entry.promise ?? this.startRevalidate(key, entry, loader))
+      return entry.value
     }
-    // どこにも無いので fetch
+    if (entry?.promise) return entry.promise
+
+    // blocking fetch。値が確定するまで value を持たない (getFetchedAt は null)。
     const promise = loader()
-    this.store.set(key, { promise, expiresAt: now + this.ttlMs })
+    const pending: Entry<V> = { promise, expiresAt: now + this.ttlMs }
+    this.store.set(key, pending)
     try {
       const value = await promise
-      const entry: Entry<V> = { value, expiresAt: Date.now() + this.ttlMs }
-      this.store.set(key, entry)
-      this.writePersisted(key, value, entry.expiresAt)
+      // 待っている間に invalidate されていたら書き戻さない。
+      // 呼び出し元には返すが、キャッシュには残さない (次の get は再取得する)。
+      if (this.store.get(key) === pending) this.commit(key, value)
       return value
     } catch (e) {
-      this.store.delete(key)
+      if (this.store.get(key) === pending) this.store.delete(key)
       throw e
     }
+  }
+
+  /**
+   * 裏側の再取得を開始する。stale な value / expiresAt は据え置き
+   * (= 表示中の「取得 HH:mm」が更新完了まで古い時刻のままになる)。
+   * 失敗したら promise だけ外して stale を残す — 次の get で再試行される。
+   */
+  private startRevalidate(key: string, entry: Entry<V>, loader: () => Promise<V>): Promise<V> {
+    const promise = loader()
+    entry.promise = promise
+    promise.then(
+      value => {
+        // 走っている間に invalidate されていたら着弾を捨てる。書き戻すと
+        // アップロード/削除で消したはずの古い一覧が復活してしまう。
+        if (this.store.get(key) === entry) this.commit(key, value)
+      },
+      () => {
+        if (this.store.get(key) === entry) entry.promise = undefined
+      },
+    )
+    return promise
+  }
+
+  /** 確定した値でエントリを差し替え、永続層にも書き出す。 */
+  private commit(key: string, value: V): void {
+    const expiresAt = Date.now() + this.ttlMs
+    this.store.set(key, { value, expiresAt })
+    this.writePersisted(key, value, expiresAt)
   }
 
   /** 該当キーの「値が確定したタイムスタンプ」(epoch ms)。値が無いか
@@ -142,13 +197,9 @@ export class TTLCache<V> {
     try {
       const raw = localStorage.getItem(sk)
       if (!raw) return null
-      const parsed = JSON.parse(raw) as PersistedEntry<V>
-      // 期限切れは即削除して null 返却 (次回 get で fresh fetch)
-      if (Date.now() >= parsed.expiresAt) {
-        localStorage.removeItem(sk)
-        return null
-      }
-      return parsed
+      // 期限切れでもそのまま返す。捨てるかどうかは get 側の判断
+      // (SWR ならリロード直後の初期表示に使い、そうでなければ blocking fetch で上書き)。
+      return JSON.parse(raw) as PersistedEntry<V>
     } catch {
       // 壊れたエントリは破棄
       try { localStorage.removeItem(sk) } catch { /* ignore */ }

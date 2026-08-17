@@ -764,6 +764,21 @@ pre { font-size: 12px; }
   font-variant-numeric: tabular-nums;
 }
 
+/* 期限切れキャッシュを表示したまま裏で再取得している間だけ出る。
+   点滅させると視線を奪うので、ゆっくりした呼吸だけにとどめる。 */
+.cache-meta__revalidating {
+  animation: cache-meta-breathe 1.6s ease-in-out infinite;
+}
+
+@keyframes cache-meta-breathe {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cache-meta__revalidating { animation: none; }
+}
+
 /* ====================================================================
    Markdown body — react-markdown 出力をくるむラッパー (.markdown-body)
    ==================================================================== */

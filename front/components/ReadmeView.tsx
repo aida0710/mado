@@ -27,6 +27,11 @@ interface Props {
 export function ReadmeView({ connId, bucket, prefix }: Props) {
   const caps = useCapabilities(connId)
   const [data, setData] = useState<ReadmeData | null>(null)
+  // 期限切れキャッシュを表示したまま裏で再取得中か (stale-while-revalidate)。
+  const [revalidating, setRevalidating] = useState(false)
+  // 遅い応答が prefix 切替をまたいで届いたときに別ディレクトリの README を
+  // 描かないための gate。SWR で応答が数十秒後に届きうるので必須。
+  const sessionRef = useRef(0)
   const [historyOpen, setHistoryOpen] = useState(false)
   // README プレビューは普段は 15 行で打ち切り。長い時だけ「すべて表示」が出る。
   // フォントサイズは HomePage と同じ (`.markdown-body` のベース 17px) — ここでは
@@ -41,7 +46,21 @@ export function ReadmeView({ connId, bucket, prefix }: Props) {
   const refresh = useCallback(() => {
     // 読み込みが無効な接続では GET すら投げない (投げても 403)。
     if (!caps.readmeRead) return
-    api.readme(connId, bucket, prefix).then(setData).catch(() => setData({ exists: false }))
+    const sid = ++sessionRef.current
+    const current = (): boolean => sessionRef.current === sid
+    api.readme(connId, bucket, prefix, {
+      // 期限切れキャッシュが返ってきたときだけ呼ばれる。stale をそのまま出しつつ、
+      // 到着した最新で差し替える (失敗したら stale のまま「更新中」だけ消す)。
+      onRevalidate: fresh => {
+        if (!current()) return
+        setRevalidating(true)
+        fresh
+          .then(r => { if (current()) { setData(r); setRevalidating(false) } })
+          .catch(() => { if (current()) setRevalidating(false) })
+      },
+    })
+      .then(r => { if (current()) setData(r) })
+      .catch(() => { if (current()) setData({ exists: false }) })
   }, [connId, bucket, prefix, caps.readmeRead])
 
   const forceRefresh = useCallback(() => {
@@ -109,7 +128,7 @@ export function ReadmeView({ connId, bucket, prefix }: Props) {
           >
             <span aria-hidden>↻</span>
           </button>
-          <CacheMeta fetchedAt={api.lastFetched.readme(connId, bucket, prefix)} />
+          <CacheMeta fetchedAt={api.lastFetched.readme(connId, bucket, prefix)} revalidating={revalidating} />
           {data.exists && data.last_editor && (
             <span className="text-[12px] text-ink-7">
               last by <span className="font-medium text-ink-11">{data.last_editor}</span>

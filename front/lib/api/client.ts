@@ -39,6 +39,8 @@ const API_BASE = '/api/internal'
 //   list / readme / buckets: MDX のレイテンシが 7〜24 秒と高く、ディレクトリ階層や
 //              README の増減は緩いのでリロード越しのキャッシュ効果が大きい。
 //   UI で「取得 HH:mm」を薄く表示してキャッシュ鮮度を可視化 (api.lastFetched.*)。
+//   TTL 切れ後は onRevalidate 付きで呼ぶことで stale-while-revalidate になる
+//   (古い一覧を即表示 →「更新中…」→ 到着したら差し替え)。
 //   変更時は対応する invalidateXxx() を明示的に呼んで破棄する設計
 //   (アップロード/削除/編集等のミューテーション + UI の 🔄 refresh ボタン)。
 const CACHE_TTL_MS      = 5 * 60 * 1000
@@ -64,6 +66,15 @@ if (typeof localStorage !== 'undefined') {
     }
     for (const k of victims) localStorage.removeItem(k)
   } catch { /* silent */ }
+}
+
+// 長 TTL のキャッシュを引く API が共通で受け取るオプション。
+// onRevalidate を渡すと stale-while-revalidate になり、期限切れのキャッシュを
+// 即返しつつ裏で再取得する。呼び出し側はこのコールバックに渡された Promise を
+// await して新しい値で描き直し、その間 UI に「更新中」を出す (CacheMeta)。
+// 渡さなければ従来通り、期限切れなら取得完了まで待つ。
+export interface Revalidatable<T> {
+  onRevalidate?: (fresh: Promise<T>) => void
 }
 
 // キャッシュキー作成。'|' は S3 のキー / prefix では出現しないため衝突しない。
@@ -167,9 +178,11 @@ export const api = {
     )
   },
 
-  buckets: (connId: string) =>
-    bucketsCache.get(k('buckets', connId), () =>
-      getJson(`${API_BASE}/storage/${encodeURIComponent(connId)}/buckets`, ListBuckets),
+  buckets: (connId: string, opts: Revalidatable<z.infer<typeof ListBuckets>> = {}) =>
+    bucketsCache.get(
+      k('buckets', connId),
+      () => getJson(`${API_BASE}/storage/${encodeURIComponent(connId)}/buckets`, ListBuckets),
+      opts.onRevalidate,
     ),
 
   invalidateBuckets: (connId: string): void => {
@@ -181,7 +194,7 @@ export const api = {
     bucket: string,
     prefix: string,
     cursor: { continuation?: string; startAfter?: string } = {},
-    opts: { recursive?: boolean; force?: boolean } = {},
+    opts: { recursive?: boolean; force?: boolean } & Revalidatable<z.infer<typeof StorageList>> = {},
   ) => {
     // recursive フラグもキャッシュキーに含める (= 通常 list と再帰 list は別エントリ)。
     // prefix の後ろに置くので invalidateList の prefix-match invalidation はそのまま有効。
@@ -190,14 +203,16 @@ export const api = {
     // DDN 製などの S3 互換は ContinuationToken / 最終キーを進めずに返してくることがあり、
     // そのとき同じ cursor で別ページを取りに行く想定の cache が衝突して前ページが返る。
     if (opts.force) listCache.invalidate(cacheKey)
-    return listCache.get(cacheKey, () =>
-      getJson(buildUrl(`${API_BASE}/storage/${encodeURIComponent(connId)}/list`, {
+    return listCache.get(
+      cacheKey,
+      () => getJson(buildUrl(`${API_BASE}/storage/${encodeURIComponent(connId)}/list`, {
         bucket,
         prefix,
         continuation: cursor.continuation,
         startAfter: cursor.startAfter,
         recursive: opts.recursive ? '1' : undefined,
       }), StorageList),
+      opts.onRevalidate,
     )
   },
 
@@ -206,9 +221,16 @@ export const api = {
     listCache.invalidatePrefix(k('list', connId, bucket, prefix))
   },
 
-  readme: (connId: string, bucket: string, prefix: string) =>
-    readmeCache.get(k('readme', connId, bucket, prefix), () =>
-      getJson(buildUrl(`${API_BASE}/storage/${encodeURIComponent(connId)}/readme`, { bucket, prefix }), Readme),
+  readme: (
+    connId: string,
+    bucket: string,
+    prefix: string,
+    opts: Revalidatable<z.infer<typeof Readme>> = {},
+  ) =>
+    readmeCache.get(
+      k('readme', connId, bucket, prefix),
+      () => getJson(buildUrl(`${API_BASE}/storage/${encodeURIComponent(connId)}/readme`, { bucket, prefix }), Readme),
+      opts.onRevalidate,
     ),
 
   invalidateReadme: (connId: string, bucket: string, prefix: string): void => {

@@ -38,6 +38,9 @@ interface State {
   pageIdx: number
   loading: boolean
   error: string | null
+  // 期限切れキャッシュを表示したまま裏で再取得中 (stale-while-revalidate)。
+  // loading とは別軸: 画面には既にデータが出ているので操作は止めない。
+  revalidating: boolean
 }
 
 type Action =
@@ -49,6 +52,9 @@ type Action =
   | { type: 'startNext'; cursor: Cursor }
   | { type: 'loadOk'; page: ListResp }
   | { type: 'loadErr'; error: string }
+  | { type: 'revalidateStart' }
+  | { type: 'revalidateOk'; page: ListResp }
+  | { type: 'revalidateFail' }
 
 const initial: State = {
   q: '',
@@ -59,6 +65,7 @@ const initial: State = {
   pageIdx: 0,
   loading: true,
   error: null,
+  revalidating: false,
 }
 
 // 注: page は reset 時にもクリアしない。前ページの dirs/files は応答到着まで
@@ -72,22 +79,30 @@ function reducer(s: State, a: Action): State {
     case 'setRecursive':
       return { ...s, recursive: a.r }
     case 'identityReset':
-      return { ...s, history: [{}], pageIdx: 0, loading: true, error: null }
+      return { ...s, history: [{}], pageIdx: 0, loading: true, error: null, revalidating: false }
     case 'startGoto':
-      return { ...s, pageIdx: a.idx, loading: true, error: null }
+      return { ...s, pageIdx: a.idx, loading: true, error: null, revalidating: false }
     case 'startNext':
-      return { ...s, history: [...s.history, a.cursor], pageIdx: s.pageIdx + 1, loading: true, error: null }
+      return { ...s, history: [...s.history, a.cursor], pageIdx: s.pageIdx + 1, loading: true, error: null, revalidating: false }
     case 'loadOk':
+      // stale の可能性があるので revalidating はここでは触らない
       return { ...s, page: a.page, loading: false }
     case 'loadErr':
-      return { ...s, error: a.error, loading: false }
+      return { ...s, error: a.error, loading: false, revalidating: false }
+    case 'revalidateStart':
+      return { ...s, revalidating: true }
+    case 'revalidateOk':
+      return { ...s, page: a.page, revalidating: false }
+    // 再取得に失敗しても表示中の stale は残す — 画面を壊さず「更新中」を消すだけ。
+    case 'revalidateFail':
+      return { ...s, revalidating: false }
   }
 }
 
 export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) {
   const tagsEnabled = useTagsEnabled()
   const [state, dispatch] = useReducer(reducer, initial)
-  const { q, submittedQ, recursive, page, history, pageIdx, loading, error } = state
+  const { q, submittedQ, recursive, page, history, pageIdx, loading, error, revalidating } = state
 
   // 並行 fetch (素早い prefix 切替 / 検索キー入力 / ページャ連打) で stale 応答を
   // 反映しないように「セッション ID」で gate する。bump → 以前の Promise は捨てる。
@@ -103,7 +118,25 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
   //  cache key 衝突で前ページのデータが返ってしまう問題への防衛)。
   const load = useCallback((cursor: Cursor, opts: { force?: boolean } = {}) => {
     const sid = ++sessionRef.current
-    api.list(connId, bucket, effectivePrefix, cursor, { recursive, force: opts.force })
+    api.list(connId, bucket, effectivePrefix, cursor, {
+      recursive,
+      force: opts.force,
+      // 期限切れキャッシュが返ってきたときだけ呼ばれる。表示は stale のまま進み、
+      // ここで受け取った Promise が解決したら差し替える。
+      onRevalidate: fresh => {
+        if (sessionRef.current !== sid) return
+        dispatch({ type: 'revalidateStart' })
+        fresh
+          .then(r => {
+            if (sessionRef.current !== sid) return
+            dispatch({ type: 'revalidateOk', page: r })
+          })
+          .catch(() => {
+            if (sessionRef.current !== sid) return
+            dispatch({ type: 'revalidateFail' })
+          })
+      },
+    })
       .then(r => {
         if (sessionRef.current !== sid) return
         dispatch({ type: 'loadOk', page: r })
@@ -335,6 +368,7 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
           totalLabel={totalLabel}
           entryCount={dirs.length + files.length}
           fetchedAt={api.lastFetched.list(connId, bucket, effectivePrefix, history[pageIdx] ?? {}, { recursive })}
+          revalidating={revalidating}
           onPrev={prev}
           onNext={next}
           onGoto={goto}
