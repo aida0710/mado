@@ -8,8 +8,8 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/internal.js",
     "lint": "eslint .",
-    "test": "vitest run",
-    "test:watch": "vitest"
+    "test": "node --env-file-if-exists=../.env ./node_modules/vitest/vitest.mjs run",
+    "test:watch": "node --env-file-if-exists=../.env ./node_modules/vitest/vitest.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1039.0",
