@@ -1,5 +1,3 @@
-import { CacheMeta } from '../CacheMeta'
-
 type Cursor = { continuation?: string; startAfter?: string }
 
 interface Props {
@@ -11,10 +9,6 @@ interface Props {
   isEmpty: boolean
   totalLabel: string
   entryCount: number
-  /** このページのデータが S3 から取得された時刻。null = まだロードしてない / invalidate 直後。 */
-  fetchedAt?: Date | null
-  /** 期限切れキャッシュを表示したまま裏で再取得中か。 */
-  revalidating?: boolean
   onPrev: () => void
   onNext: () => void
   onGoto: (idx: number) => void
@@ -26,7 +20,7 @@ interface Props {
 // S3 は前方向 cursor しか返さないので任意ページジャンプは「訪問済み」のみ。
 export function Pager({
   pageIdx, history, hasNext, cursorStuck, loading, isEmpty,
-  totalLabel, entryCount, fetchedAt, revalidating, onPrev, onNext, onGoto, onRefresh,
+  totalLabel, entryCount, onPrev, onNext, onGoto, onRefresh,
 }: Props) {
   return (
     <>
@@ -107,7 +101,7 @@ export function Pager({
       </nav>
 
       {/* 件数 / 現ページ表示。空ディレクトリのときは件数を出さない。
-          最後にキャッシュ取得時刻を薄く添える。 */}
+          キャッシュ取得時刻はここではなくテーブルヘッダ上の CacheBanner が出す。 */}
       <p
         className="text-center text-[11px] text-ink-7 tabular-nums"
         style={{ letterSpacing: '0.02em' }}
@@ -119,12 +113,6 @@ export function Pager({
             <span style={{ fontFamily: 'var(--font-mono)' }}>
               {entryCount} 件
             </span>
-          </>
-        )}
-        {fetchedAt && (
-          <>
-            {' · '}
-            <CacheMeta fetchedAt={fetchedAt} revalidating={revalidating} />
           </>
         )}
       </p>

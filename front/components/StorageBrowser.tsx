@@ -4,6 +4,7 @@ import { api } from '../lib/api/client'
 import { StorageList } from '../lib/api/types'
 import type { Tag } from '../lib/api/types'
 import { EntryTable } from './storage/EntryTable'
+import { CacheBanner } from './storage/CacheBanner'
 import { Pager } from './storage/Pager'
 import { SearchBar } from './storage/SearchBar'
 import { TagFilterBar } from './storage/TagFilterBar'
@@ -335,6 +336,12 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
             onClear={() => setSelectedTagIds(new Set())}
           />
         )}
+        {/* 「いつのデータか」はテーブルヘッダの真上に置く。ページャの隅では
+            視線が届かず、古いキャッシュを最新だと思って見てしまうため。 */}
+        <CacheBanner
+          fetchedAt={api.lastFetched.list(connId, bucket, effectivePrefix, history[pageIdx] ?? {}, { recursive })}
+          revalidating={revalidating}
+        />
         <EntryTable
           dirs={visibleDirs}
           files={visibleFiles}
@@ -367,8 +374,6 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
           isEmpty={isEmpty}
           totalLabel={totalLabel}
           entryCount={dirs.length + files.length}
-          fetchedAt={api.lastFetched.list(connId, bucket, effectivePrefix, history[pageIdx] ?? {}, { recursive })}
-          revalidating={revalidating}
           onPrev={prev}
           onNext={next}
           onGoto={goto}
