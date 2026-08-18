@@ -11,6 +11,7 @@ import { requireCapability } from './lib/capabilityGuard.js'
 import type { Capability } from './storage.js'
 import { explainStorageError } from './lib/storageError.js'
 import { mountStorageListRoutes } from './routes/storage-list.js'
+import { createResponseCache } from './lib/storage-cache.js'
 import { mountStorageReadmeRoutes } from './routes/storage-readme.js'
 import { mountStoragePreviewRoutes } from './routes/storage-preview.js'
 import { mountStorageMediaRoutes } from './routes/storage-media.js'
@@ -29,6 +30,10 @@ const env = loadEnv()
 const pools = createPools({ rw: env.DATABASE_URL_RW, ro: env.DATABASE_URL_RO })
 const crypto = createCrypto(env.ENCRYPTION_KEY)
 const storageFactory = createStorageFactory({ pools, crypto })
+
+// 応答キャッシュは書き込みを伴うので rw プールを使う。書き込み先は
+// storage_response_cache の 1 テーブルのみ (spec の「ロールについての判断」)。
+const responseCache = createResponseCache(pools.rw)
 
 const app = new Hono()
 app.use('*', logger())
@@ -66,6 +71,7 @@ mountConnectionsRoutes(api, {
 mountStorageListRoutes(api, {
   getStorage: storageFactory.getStorage,
   getConnectionConfig: storageFactory.getConnectionConfig,
+  cache: responseCache,
 })
 mountStorageReadmeRoutes(api, { getStorage: storageFactory.getStorage, pools })
 mountStoragePreviewRoutes(api, { getStorage: storageFactory.getStorage, env })

@@ -6,6 +6,7 @@ import {
 import type { Hono } from 'hono'
 import { resolveStorageOrFail, type GetStorage } from './_connId.js'
 import type { ConnectionConfig } from '../storage.js'
+import type { CacheScope, ResponseCache } from '../lib/storage-cache.js'
 
 export interface StorageListDeps {
   getStorage: GetStorage
@@ -13,6 +14,9 @@ export interface StorageListDeps {
    *  V1 only サーバ (DDN 製のオブジェクトストレージ等) には v1、
    *  それ以外 (AWS/R2/MinIO) は v2 を使う。 */
   getConnectionConfig: (connId: string) => Promise<ConnectionConfig>
+  /** /list と /buckets の応答キャッシュ。失敗は内部で握りつぶされるので
+   *  呼び出し側は try/catch を書かない。 */
+  cache: ResponseCache
 }
 
 /** ディレクトリを開いたとき (prefix が `/` 終わり) に S3 互換実装が返す
@@ -37,6 +41,13 @@ export function mountStorageListRoutes(app: Hono, deps: StorageListDeps): void {
     const t1 = Date.now()
     if (r instanceof Response) return r
     const storage = r
+    const scope: CacheScope = { kind: 'buckets', connId: c.req.param('connId') }
+    const refresh = c.req.query('refresh') === '1'
+    if (!refresh) {
+      const hit = await deps.cache.get(scope)
+      if (hit) return c.json(hit)
+    }
+
     const out = await storage.send(new ListBucketsCommand({}))
     const t2 = Date.now()
     console.log(JSON.stringify({
@@ -47,12 +58,14 @@ export function mountStorageListRoutes(app: Hono, deps: StorageListDeps): void {
       total_ms: t2 - t0,
       bucketCount: out.Buckets?.length ?? 0,
     }))
-    return c.json({
+    const body = {
       buckets: (out.Buckets ?? []).map(b => ({
         name: b.Name!,
         creationDate: b.CreationDate?.toISOString() ?? null,
       })),
-    })
+    }
+    await deps.cache.set(scope, body)
+    return c.json(body)
   })
 
   app.get('/storage/:connId/list', async c => {
@@ -69,6 +82,15 @@ export function mountStorageListRoutes(app: Hono, deps: StorageListDeps): void {
     // これは UI 側の「再帰検索」チェックボックスから来る。CommonPrefixes は
     // 空になるので結果は全部 Contents に並ぶ。
     const recursive = c.req.query('recursive') === '1'
+
+    const scope: CacheScope = {
+      kind: 'list', connId, bucket, prefix, recursive, continuation, startAfter,
+    }
+    const refresh = c.req.query('refresh') === '1'
+    if (!refresh) {
+      const hit = await deps.cache.get(scope)
+      if (hit) return c.json(hit)
+    }
 
     const config = await deps.getConnectionConfig(connId)
     const useV1 = config.listObjectsVersion === 'v1'
@@ -96,7 +118,7 @@ export function mountStorageListRoutes(app: Hono, deps: StorageListDeps): void {
       const fallbackKey = !explicitNext && truncated && rawContents.length > 0
         ? rawContents[rawContents.length - 1].Key ?? null
         : null
-      return c.json({
+      const body = {
         directories: (out.CommonPrefixes ?? [])
           .map(p => p.Prefix!)
           .filter(Boolean),
@@ -110,7 +132,9 @@ export function mountStorageListRoutes(app: Hono, deps: StorageListDeps): void {
         // V1 には continuation token 概念が無い。pagination は marker (= startAfter) で。
         nextContinuation: null,
         nextStartAfter: explicitNext ?? fallbackKey,
-      })
+      }
+      await deps.cache.set(scope, body)
+      return c.json(body)
     }
 
     // V2 経路 (既定): 既存挙動を保持。
@@ -138,7 +162,7 @@ export function mountStorageListRoutes(app: Hono, deps: StorageListDeps): void {
     const fallbackKey = !realToken && truncated && rawContents.length > 0
       ? rawContents[rawContents.length - 1].Key ?? null
       : null
-    return c.json({
+    const body = {
       directories: (out.CommonPrefixes ?? [])
         .map(p => p.Prefix!)
         .filter(Boolean),
@@ -151,6 +175,8 @@ export function mountStorageListRoutes(app: Hono, deps: StorageListDeps): void {
         })),
       nextContinuation: realToken,
       nextStartAfter: fallbackKey,
-    })
+    }
+    await deps.cache.set(scope, body)
+    return c.json(body)
   })
 }

@@ -8,6 +8,7 @@ import { Hono } from 'hono'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { mountStorageListRoutes } from './storage-list.js'
 import type { ConnectionConfig, ListObjectsVersion } from '../storage.js'
+import type { ResponseCache } from '../lib/storage-cache.js'
 
 const storageMock = mockClient(S3Client)
 const storage = new S3Client({})
@@ -21,8 +22,30 @@ const getConnectionConfig = async (): Promise<ConnectionConfig> => ({
   listObjectsVersion,
 })
 
+// 既定は素通し (常に miss、書き込みは捨てる) のキャッシュ。
+// 個々のテストで差し替えられるよう、可変変数を経由して渡す。
+function passthroughCache(): ResponseCache {
+  return {
+    get: async () => null,
+    set: async () => {},
+    invalidateScope: async () => {},
+    invalidateConnection: async () => {},
+  }
+}
+
+let cache: ResponseCache = passthroughCache()
+
 const app = new Hono()
-mountStorageListRoutes(app, { getStorage, getConnectionConfig })
+mountStorageListRoutes(app, {
+  getStorage,
+  getConnectionConfig,
+  cache: {
+    get: s => cache.get(s),
+    set: (s, p) => cache.set(s, p),
+    invalidateScope: (c, b, p) => cache.invalidateScope(c, b, p),
+    invalidateConnection: c => cache.invalidateConnection(c),
+  },
+})
 
 interface ListResponse {
   directories: string[]
@@ -34,6 +57,7 @@ interface ListResponse {
 beforeEach(() => {
   storageMock.reset()
   listObjectsVersion = 'v2'
+  cache = passthroughCache()
 })
 
 const FULL_KEY =
@@ -90,5 +114,61 @@ describe('GET /storage/:connId/list — directory prefix (末尾スラッシュ)
     expect(res.status).toBe(200)
     const body = (await res.json()) as ListResponse
     expect(body.files.map(f => f.key)).toEqual(['foo/bar/a.txt'])
+  })
+})
+
+
+describe('サーバー側キャッシュ', () => {
+  it('hit したら S3 を呼ばずにキャッシュの中身を返す', async () => {
+    const cached = { directories: ['cached/'], files: [], nextContinuation: null, nextStartAfter: null }
+    cache = { ...passthroughCache(), get: async () => cached }
+
+    const res = await app.request(`/storage/${TEST_CONN_ID}/list?bucket=b1`)
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual(cached)
+    expect(storageMock.calls()).toHaveLength(0)
+  })
+
+  it('miss なら S3 を呼び、その応答を set する', async () => {
+    storageMock.on(ListObjectsV2Command).resolves({
+      CommonPrefixes: [{ Prefix: 'b1/dir/' }], Contents: [], IsTruncated: false,
+    })
+    const sets: unknown[] = []
+    cache = { ...passthroughCache(), set: async (_s, p) => { sets.push(p) } }
+
+    const res = await app.request(`/storage/${TEST_CONN_ID}/list?bucket=b1`)
+    expect(res.status).toBe(200)
+    expect(storageMock.calls()).toHaveLength(1)
+    expect(sets).toHaveLength(1)
+    expect((sets[0] as { directories: string[] }).directories).toEqual(['b1/dir/'])
+  })
+
+  it('refresh=1 なら hit があっても無視して S3 を呼ぶ', async () => {
+    storageMock.on(ListObjectsV2Command).resolves({
+      CommonPrefixes: [{ Prefix: 'b1/fresh/' }], Contents: [], IsTruncated: false,
+    })
+    let getCalled = false
+    cache = {
+      ...passthroughCache(),
+      get: async () => {
+        getCalled = true
+        return { directories: ['stale/'], files: [], nextContinuation: null, nextStartAfter: null }
+      },
+    }
+
+    const res = await app.request(`/storage/${TEST_CONN_ID}/list?bucket=b1&refresh=1`)
+    const body = await res.json() as { directories: string[] }
+    expect(body.directories).toEqual(['b1/fresh/'])
+    expect(getCalled).toBe(false)
+    expect(storageMock.calls()).toHaveLength(1)
+  })
+
+  it('/buckets も同じくキャッシュを引く', async () => {
+    const cached = { buckets: [{ name: 'from-cache', creationDate: null }] }
+    cache = { ...passthroughCache(), get: async () => cached }
+
+    const res = await app.request(`/storage/${TEST_CONN_ID}/buckets`)
+    expect(await res.json()).toEqual(cached)
+    expect(storageMock.calls()).toHaveLength(0)
   })
 })
