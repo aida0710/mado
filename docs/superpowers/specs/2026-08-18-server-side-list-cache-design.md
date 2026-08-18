@@ -140,7 +140,9 @@ GRANT SELECT ON storage_response_cache TO dashboard_ro;
 
 ## 期限切れ行の掃除
 
-定期ジョブは置かない。行は `cache_key` で UPSERT されるので、同じページを再訪すれば上書きされ、増加は「閲覧された異なるページ数」で頭打ちになる。読み出し時に期限切れを見つけたらその行を削除する。
+定期ジョブは置かない。行は `cache_key` で UPSERT されるので、同じページを再訪すれば上書きされ、増加は「閲覧された異なるページ数」で頭打ちになる。
+
+読み出し時に期限切れ行を明示的に削除することはしない。miss と判定した後に S3 から取り直して UPSERT すれば同じ行が上書きされるため、削除は冗長な書き込みになるだけである。読み出しの SQL は `expires_at > now()` で弾くので、期限切れ行が返ることはない。
 
 二度と訪れないページの行は残るが、1 行あたり数 KB なので実害はない。数百 MB 規模まで育つようなら定期 `DELETE FROM storage_response_cache WHERE expires_at < now()` を `media-worker` に足す。
 
