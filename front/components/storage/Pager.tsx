@@ -12,15 +12,15 @@ interface Props {
   onPrev: () => void
   onNext: () => void
   onGoto: (idx: number) => void
-  onRefresh: () => void
 }
 
 // ページャ + 件数表示 + cursor stuck 案内。
-// 戻る / 訪問済みページ番号 / 次 / 再読み込み を一列に並べる。
+// 戻る / 訪問済みページ番号 / 次 を一列に並べる。
+// 再読み込みはテーブルヘッダ上の CacheBanner が持つ (取得時刻と同じ場所に集約)。
 // S3 は前方向 cursor しか返さないので任意ページジャンプは「訪問済み」のみ。
 export function Pager({
   pageIdx, history, hasNext, cursorStuck, loading, isEmpty,
-  totalLabel, entryCount, onPrev, onNext, onGoto, onRefresh,
+  totalLabel, entryCount, onPrev, onNext, onGoto,
 }: Props) {
   return (
     <>
@@ -84,20 +84,6 @@ export function Pager({
           次 →
         </button>
 
-        <button
-          type="button"
-          onClick={onRefresh}
-          disabled={loading}
-          className={
-            'cursor-pointer rounded-1 bg-paper px-2.5 py-1 ' +
-            'transition-colors hover:bg-ink-1 disabled:cursor-default disabled:opacity-40'
-          }
-          style={{ border: '1px solid var(--color-rule-strong)' }}
-          title="キャッシュを破棄して再読み込み"
-          aria-label="再読み込み"
-        >
-          <span aria-hidden>↻</span>
-        </button>
       </nav>
 
       {/* 件数 / 現ページ表示。空ディレクトリのときは件数を出さない。

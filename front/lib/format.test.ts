@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { prettyPrintJson } from './format'
+import { fmtCacheAge, prettyPrintJson } from './format'
 
 describe('prettyPrintJson', () => {
   it('.json は minify されていても整形する', () => {
@@ -22,5 +22,38 @@ describe('prettyPrintJson', () => {
 
   it('拡張子の大小文字を問わない', () => {
     expect(prettyPrintJson('A.JSON', '{"a":1}')).toBe('{\n  "a": 1\n}')
+  })
+})
+
+describe('fmtCacheAge', () => {
+  const NOW = new Date('2026-08-18T16:14:00+09:00')
+
+  it('絶対時刻は YYYY/MM/DD HH:mm', () => {
+    expect(fmtCacheAge(NOW, NOW)).toMatch(/^2026\/08\/18 16:14\(/)
+  })
+
+  it('1 分未満は「たった今」', () => {
+    const d = new Date(NOW.getTime() - 30_000)
+    expect(fmtCacheAge(d, NOW)).toContain('(たった今)')
+  })
+
+  it('60 分未満は n分前', () => {
+    const d = new Date(NOW.getTime() - 5 * 60_000)
+    expect(fmtCacheAge(d, NOW)).toContain('(5分前)')
+  })
+
+  it('24 時間未満は n時間前', () => {
+    const d = new Date(NOW.getTime() - 2 * 60 * 60_000)
+    expect(fmtCacheAge(d, NOW)).toContain('(2時間前)')
+  })
+
+  it('24 時間以上は n日前', () => {
+    const d = new Date(NOW.getTime() - 3 * 24 * 60 * 60_000)
+    expect(fmtCacheAge(d, NOW)).toContain('(3日前)')
+  })
+
+  it('境界: ちょうど 60 分は 1時間前', () => {
+    const d = new Date(NOW.getTime() - 60 * 60_000)
+    expect(fmtCacheAge(d, NOW)).toContain('(1時間前)')
   })
 })

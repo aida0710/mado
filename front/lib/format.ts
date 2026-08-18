@@ -32,6 +32,25 @@ export function fmtAgo(iso: string): string {
   return `${d}d ago`
 }
 
+// 一覧ヘッダ上の CacheBanner 用。「2026/08/18 16:14(2時間前)」のように
+// 絶対時刻と相対時刻を併記する。絶対時刻だけだと「古いのか」が瞬時に分からず、
+// 相対時刻だけだと正確な時点が分からないので両方出す。
+//
+// now を引数に取るのはテストのため。呼び出し側は省略してよい。
+export function fmtCacheAge(d: Date, now: Date = new Date()): string {
+  const abs = d.toLocaleString('ja-JP', {
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  })
+  const min = Math.floor((now.getTime() - d.getTime()) / 60_000)
+  const rel =
+    min < 1  ? 'たった今'
+    : min < 60 ? `${min}分前`
+    : min < 60 * 24 ? `${Math.floor(min / 60)}時間前`
+    : `${Math.floor(min / (60 * 24))}日前`
+  return `${abs}(${rel})`
+}
+
 // キャッシュの「いつ取得したか」表示用。長 TTL (6h) 内なら同日なので時刻のみ、
 // 日付が変わってしまった場合は MM/DD HH:mm で日付も出す。
 export function fmtCacheTime(d: Date): string {

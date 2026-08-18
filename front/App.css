@@ -810,6 +810,27 @@ pre { font-size: 12px; }
   to   { opacity: 1; }
 }
 
+.cache-banner__refresh {
+  flex: none;
+  cursor: pointer;
+  border: 1px solid var(--color-rule-strong);
+  border-radius: var(--radius-1);
+  background: var(--paper);
+  color: var(--ink-9);
+  padding: 1px 7px 2px;
+  font-size: 13px;
+  line-height: 1.2;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+.cache-banner__refresh:hover:not(:disabled) {
+  background: var(--ink-1);
+  color: var(--ink-12);
+}
+.cache-banner__refresh:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+
 .cache-banner__at {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;

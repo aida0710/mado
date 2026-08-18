@@ -345,6 +345,7 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
         <CacheBanner
           fetchedAt={api.lastFetched.list(connId, bucket, effectivePrefix, history[pageIdx] ?? {}, { recursive })}
           revalidating={revalidating}
+          onRefresh={forceRefresh}
         />
         <EntryTable
           dirs={visibleDirs}
@@ -381,7 +382,6 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
           onPrev={prev}
           onNext={next}
           onGoto={goto}
-          onRefresh={forceRefresh}
         />
       </div>
     </div>
