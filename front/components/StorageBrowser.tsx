@@ -328,9 +328,14 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
 
       {error && <p className="error">{error}</p>}
 
+      {/* 読み込み中も操作は塞がない。↻ はサーバーキャッシュを貫通するので
+          dataset では 35 秒かかり、その間ずっと触れないのは実用に耐えない。
+          表示中の一覧を触っても困らない: プレビューはオブジェクトキーで開くので
+          一覧の入れ替わりと独立で、ディレクトリ遷移は sessionRef が進行中の
+          応答を破棄する。薄さは「更新中である」ことの合図として残す。 */}
       <div
         aria-busy={loading}
-        className={loading ? 'pointer-events-none opacity-60 transition-opacity' : 'transition-opacity'}
+        className={loading ? 'opacity-60 transition-opacity' : 'transition-opacity'}
       >
         {tagsEnabled && (
           <TagFilterBar

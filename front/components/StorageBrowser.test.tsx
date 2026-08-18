@@ -397,3 +397,27 @@ describe('force と refresh の分離', () => {
     expect(opts.refresh).toBeUndefined()
   })
 })
+
+describe('更新中の操作', () => {
+  // ↻ はサーバーキャッシュを貫通するので dataset では 35 秒かかる。その間
+  // 前の一覧は画面に残っているのに触れない、という状態を避ける。
+  it('読み込み中でも一覧のクリックを塞がない', async () => {
+    const listMock = api.list as ReturnType<typeof vi.fn>
+    listMock.mockResolvedValueOnce({
+      directories: ['voice/jp/'], files: [], nextContinuation: null, nextStartAfter: null,
+    })
+    // 2 回目 (↻) は解決させず、読み込み中のまま留める
+    listMock.mockImplementationOnce(() => new Promise(() => {}))
+
+    const user = userEvent.setup()
+    renderBrowser('voice/')
+    await screen.findByRole('link', { name: /jp\// })
+
+    await user.click(screen.getByRole('button', { name: '再読み込み' }))
+    await waitFor(() => expect(listMock).toHaveBeenCalledTimes(2))
+
+    // 読み込み中でも一覧は操作可能なままであること
+    const link = screen.getByRole('link', { name: /jp\// })
+    expect(link.closest('[aria-busy]')).not.toHaveClass('pointer-events-none')
+  })
+})
