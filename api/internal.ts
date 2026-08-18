@@ -66,14 +66,20 @@ api.use('/storage/:connId/readmes/search',    cap('readmeRead'))
 mountConnectionsRoutes(api, {
   pools,
   crypto,
-  invalidate: storageFactory.invalidate,
+  invalidate: (id: string) => {
+    storageFactory.invalidate(id)
+    // endpoint や list_objects_version が変われば応答が変わるので、
+    // この接続の一覧キャッシュは全部捨てる。await しないのは既存の
+    // invalidate が同期シグネチャのため (失敗は内部でログ済み)。
+    void responseCache.invalidateConnection(id)
+  },
 })
 mountStorageListRoutes(api, {
   getStorage: storageFactory.getStorage,
   getConnectionConfig: storageFactory.getConnectionConfig,
   cache: responseCache,
 })
-mountStorageReadmeRoutes(api, { getStorage: storageFactory.getStorage, pools })
+mountStorageReadmeRoutes(api, { getStorage: storageFactory.getStorage, pools, cache: responseCache })
 mountStoragePreviewRoutes(api, { getStorage: storageFactory.getStorage, env })
 mountStorageMediaRoutes(api, {
   getStorage: storageFactory.getStorage,

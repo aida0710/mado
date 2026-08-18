@@ -6,6 +6,7 @@ import {
 import type { Hono } from 'hono'
 import { z } from 'zod'
 import type { Pools } from '../db.js'
+import type { ResponseCache } from '../lib/storage-cache.js'
 import { resolveStorageOrFail, type GetStorage } from './_connId.js'
 
 // GET/PUT はどちらも意図的に認証なし。`editor` は自己申告制 (オナーシステム)。
@@ -15,6 +16,9 @@ import { resolveStorageOrFail, type GetStorage } from './_connId.js'
 export interface StorageReadmeDeps {
   getStorage: GetStorage
   pools: Pools
+  /** 一覧の応答キャッシュ。README.md の作成/更新で一覧の中身が変わるため、
+   *  書き込み後に該当 prefix を捨てる。失敗は内部で握りつぶされる。 */
+  cache: ResponseCache
 }
 
 const PutBody = z.object({
@@ -96,6 +100,11 @@ export function mountStorageReadmeRoutes(app: Hono, deps: StorageReadmeDeps): vo
     } catch (e) {
       return c.json({ error: (e as Error).message }, 500)
     }
+
+    // README.md が一覧に現れる / 消えるので、この prefix の一覧キャッシュを捨てる。
+    // meta の書き込みが後で失敗しても S3 の実体は変わっているため、
+    // トランザクションの前 = PUT 成功直後に捨てるのが正しい。
+    await deps.cache.invalidateScope(connId, bucket, prefix)
 
     // Storage PUT 成功。続けて history (append) と meta (upsert) を 1 トランザクションで
     // 同期させる。両方落ちたときも同じ状態 (rollback) になり、片方だけが残る

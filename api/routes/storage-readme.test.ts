@@ -10,6 +10,7 @@ import { Hono } from 'hono'
 import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import { createPools, closePools, type Pools } from '../db.js'
 import { mountStorageReadmeRoutes } from './storage-readme.js'
+import type { ResponseCache } from '../lib/storage-cache.js'
 
 const RW = process.env.DATABASE_URL_RW_TEST
   ?? 'postgres://dashboard_rw:CHANGEME@localhost:5432/dashboard_test'
@@ -31,11 +32,33 @@ async function seedConnection(p: Pools, id: string): Promise<void> {
   )
 }
 
+// 差し替え可能な fake キャッシュ (storage-list.test.ts と同じ形)。
+function passthroughCache(): ResponseCache {
+  return {
+    get: async () => null,
+    set: async () => {},
+    invalidateScope: async () => {},
+    invalidateConnection: async () => {},
+  }
+}
+
+let cache: ResponseCache = passthroughCache()
+
 const app = new Hono()
-mountStorageReadmeRoutes(app, { getStorage, pools })
+mountStorageReadmeRoutes(app, {
+  getStorage,
+  pools,
+  cache: {
+    get: s => cache.get(s),
+    set: (s, p) => cache.set(s, p),
+    invalidateScope: (c, b, p) => cache.invalidateScope(c, b, p),
+    invalidateConnection: c => cache.invalidateConnection(c),
+  },
+})
 
 beforeEach(async () => {
   storageMock.reset()
+  cache = passthroughCache()
   // CASCADE で接続シードと一緒に storage_readme_meta もクリアされる。
   await pools.rw.query('TRUNCATE storage_connections CASCADE')
   await seedConnection(pools, TEST_CONN_ID)
@@ -351,5 +374,26 @@ describe('connection-not-found behaviour', () => {
     const res = await localApp.request('/storage/missing0001/readme?bucket=b')
     expect(res.status).toBe(404)
     expect(await res.json()).toEqual({ error: 'connection not found' })
+  })
+})
+
+
+describe('PUT /storage/:connId/readme — 一覧キャッシュの無効化', () => {
+  it('README を書いたら同 prefix の一覧キャッシュを消す', async () => {
+    await seedConnection(pools, TEST_CONN_ID)
+    const invalidated: [string, string, string][] = []
+    cache = {
+      ...passthroughCache(),
+      invalidateScope: async (c, b, p) => { invalidated.push([c, b, p]) },
+    }
+
+    storageMock.on(PutObjectCommand).resolves({})
+    const res = await app.request(`/storage/${TEST_CONN_ID}/readme`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ bucket: 'b1', prefix: 'p/', body: '# hello', editor: 'tester' }),
+    })
+    expect(res.status).toBe(200)
+    expect(invalidated).toEqual([[TEST_CONN_ID, 'b1', 'p/']])
   })
 })
