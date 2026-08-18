@@ -117,11 +117,12 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
   // force=true で forward navigation 時にキャッシュをバイパスする
   // (DDN 製などの S3 互換が cursor を進めずに同じトークンを返してくるとき、
   //  cache key 衝突で前ページのデータが返ってしまう問題への防衛)。
-  const load = useCallback((cursor: Cursor, opts: { force?: boolean } = {}) => {
+  const load = useCallback((cursor: Cursor, opts: { force?: boolean; refresh?: boolean } = {}) => {
     const sid = ++sessionRef.current
     api.list(connId, bucket, effectivePrefix, cursor, {
       recursive,
       force: opts.force,
+      refresh: opts.refresh,
       // 期限切れキャッシュが返ってきたときだけ呼ばれる。表示は stale のまま進み、
       // ここで受け取った Promise が解決したら差し替える。
       onRevalidate: fresh => {
@@ -210,10 +211,13 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
   }
 
   // 当該ディレクトリ全体のキャッシュを破棄して 1 ページ目から再 fetch。
+  // refresh:true でサーバー側キャッシュも貫通する。これが無いとユーザーは
+  // 最大 24 時間 古いデータから逃げられない。ページ送りの force とは別物で、
+  // あちらを貫通させると dataset では 1 ページ送るのに 35 秒かかる。
   const forceRefresh = (): void => {
     api.invalidateList(connId, bucket, prefix)
     dispatch({ type: 'identityReset' })
-    load({})
+    load({}, { refresh: true })
   }
 
   const dirs = page?.directories ?? []

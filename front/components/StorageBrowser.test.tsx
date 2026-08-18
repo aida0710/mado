@@ -360,3 +360,40 @@ describe('StorageBrowser - directory row', () => {
     expect(s3Item).toHaveAttribute('title', 's3://b1/voice/jp/')
   })
 })
+
+describe('force と refresh の分離', () => {
+  it('↻ はサーバーキャッシュを貫通させる (refresh: true)', async () => {
+    const listMock = api.list as ReturnType<typeof vi.fn>
+    listMock.mockResolvedValue({
+      directories: [], files: [], nextContinuation: null, nextStartAfter: null,
+    })
+    const user = userEvent.setup()
+    renderBrowser('voice/')
+    await waitFor(() => expect(listMock).toHaveBeenCalledTimes(1))
+
+    await user.click(screen.getByRole('button', { name: '再読み込み' }))
+    await waitFor(() => expect(listMock).toHaveBeenCalledTimes(2))
+    expect(listMock.mock.calls[1][4]).toMatchObject({ refresh: true })
+  })
+
+  it('ページ送りはサーバーキャッシュを貫通させない (force のみ)', async () => {
+    const listMock = api.list as ReturnType<typeof vi.fn>
+    listMock.mockResolvedValueOnce({
+      directories: [], files: [{ key: 'voice/p1.mp3', size: 1, lastModified: null }],
+      nextContinuation: 'tok1', nextStartAfter: null,
+    })
+    listMock.mockResolvedValueOnce({
+      directories: [], files: [{ key: 'voice/p2.mp3', size: 1, lastModified: null }],
+      nextContinuation: null, nextStartAfter: null,
+    })
+    const user = userEvent.setup()
+    renderBrowser('voice/')
+    await screen.findByText(/p1\.mp3/)
+
+    await user.click(screen.getByRole('button', { name: '次のページへ' }))
+    await screen.findByText(/p2\.mp3/)
+    const opts = listMock.mock.calls[1][4] as { force?: boolean; refresh?: boolean }
+    expect(opts.force).toBe(true)
+    expect(opts.refresh).toBeUndefined()
+  })
+})

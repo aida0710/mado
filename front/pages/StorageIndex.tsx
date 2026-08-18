@@ -49,13 +49,16 @@ export default function StorageIndex({connId}: Props) {
     // 遅い応答が接続切替をまたいで届いたときに別接続のバケットを描かないための gate。
     const sessionRef = useRef(0)
 
-    const refresh = useCallback(() => {
+    // opts.refresh は ↻ からのみ true。通常のロードで貫通させると
+    // サーバーキャッシュの意味が無くなる。
+    const refresh = useCallback((opts: { refresh?: boolean } = {}) => {
         setLoading(true)
         setError(null)
         const sid = ++sessionRef.current
         const current = (): boolean => sessionRef.current === sid
         Promise.all([
             api.buckets(connId, {
+                refresh: opts.refresh,
                 // 期限切れキャッシュが返ってきたときだけ呼ばれる。
                 onRevalidate: fresh => {
                     if (!current()) return
@@ -79,7 +82,7 @@ export default function StorageIndex({connId}: Props) {
     const forceRefresh = useCallback(() => {
         api.invalidateBuckets(connId)
         api.invalidateFavorites(connId)
-        refresh()
+        refresh({ refresh: true })
     }, [connId, refresh])
 
     useEffect(() => {

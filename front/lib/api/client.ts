@@ -178,10 +178,18 @@ export const api = {
     )
   },
 
-  buckets: (connId: string, opts: Revalidatable<z.infer<typeof ListBuckets>> = {}) =>
+  buckets: (
+    connId: string,
+    opts: { refresh?: boolean } & Revalidatable<z.infer<typeof ListBuckets>> = {},
+  ) =>
     bucketsCache.get(
       k('buckets', connId),
-      () => getJson(`${API_BASE}/storage/${encodeURIComponent(connId)}/buckets`, ListBuckets),
+      () => getJson(
+        buildUrl(`${API_BASE}/storage/${encodeURIComponent(connId)}/buckets`, {
+          refresh: opts.refresh ? '1' : undefined,
+        }),
+        ListBuckets,
+      ),
       opts.onRevalidate,
     ),
 
@@ -194,7 +202,8 @@ export const api = {
     bucket: string,
     prefix: string,
     cursor: { continuation?: string; startAfter?: string } = {},
-    opts: { recursive?: boolean; force?: boolean } & Revalidatable<z.infer<typeof StorageList>> = {},
+    opts: { recursive?: boolean; force?: boolean; refresh?: boolean }
+      & Revalidatable<z.infer<typeof StorageList>> = {},
   ) => {
     // recursive フラグもキャッシュキーに含める (= 通常 list と再帰 list は別エントリ)。
     // prefix の後ろに置くので invalidateList の prefix-match invalidation はそのまま有効。
@@ -211,6 +220,7 @@ export const api = {
         continuation: cursor.continuation,
         startAfter: cursor.startAfter,
         recursive: opts.recursive ? '1' : undefined,
+        refresh: opts.refresh ? '1' : undefined,
       }), StorageList),
       opts.onRevalidate,
     )
