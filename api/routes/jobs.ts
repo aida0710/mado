@@ -15,7 +15,9 @@ export function mountJobRoutes(app: Hono, deps: JobRoutesDeps): void {
     const kind = c.req.query('kind')
     const dedupKey = c.req.query('dedupKey')
     if (!kind || !dedupKey) return c.json({ error: 'kind and dedupKey are required' }, 400)
-    const job = await deps.store.latestDone(kind, dedupKey)
+    // 実行中があればそれを返す。リロードした UI が走査中のジョブへ
+    // 再接続できるようにするため (完了済みだけだと見失う)。
+    const job = await deps.store.activeOrLatest(kind, dedupKey)
     return job ? c.json(job) : c.json({ error: 'not found' }, 404)
   })
 

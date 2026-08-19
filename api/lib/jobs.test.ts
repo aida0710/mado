@@ -207,3 +207,50 @@ describe('pruneFinished', () => {
     expect(await store.pruneFinished(0)).toBe(0)
   })
 })
+
+describe('activeOrLatest', () => {
+  // リロードで jobId を失っても実行中のジョブに再接続できるようにする。
+  it('実行中があればそれを返す (完了済みより優先)', async () => {
+    const old = await store.enqueue('k', 'd', {})
+    await pools.rw.query(
+      `UPDATE jobs SET status='done', result='{"n":1}', finished_at=now() WHERE id=$1`, [old])
+    const active = await store.enqueue('k', 'd', {})
+
+    const job = await store.activeOrLatest('k', 'd')
+    expect(job!.id).toBe(active)
+    expect(job!.status).toBe('queued')
+  })
+
+  it('running も拾う', async () => {
+    const id = await store.enqueue('k', 'd', {})
+    await store.claim()
+    const job = await store.activeOrLatest('k', 'd')
+    expect(job!.id).toBe(id)
+    expect(job!.status).toBe('running')
+  })
+
+  it('実行中が無ければ最後に成功したジョブ', async () => {
+    const id = await store.enqueue('k', 'd', {})
+    await pools.rw.query(
+      `UPDATE jobs SET status='done', result='{"n":2}', finished_at=now() WHERE id=$1`, [id])
+    const job = await store.activeOrLatest('k', 'd')
+    expect(job!.id).toBe(id)
+    expect(job!.result).toEqual({ n: 2 })
+  })
+
+  // 失敗やキャンセルを「最新」として出すと、古い成功結果が見えなくなる。
+  it('error / canceled は拾わず、その前の done を返す', async () => {
+    const ok = await store.enqueue('k', 'd', {})
+    await pools.rw.query(
+      `UPDATE jobs SET status='done', result='{"n":3}', finished_at=now() - interval '1 hour' WHERE id=$1`, [ok])
+    const bad = await store.enqueue('k', 'd', {})
+    await pools.rw.query(`UPDATE jobs SET status='canceled', finished_at=now() WHERE id=$1`, [bad])
+
+    const job = await store.activeOrLatest('k', 'd')
+    expect(job!.id).toBe(ok)
+  })
+
+  it('何も無ければ null', async () => {
+    expect(await store.activeOrLatest('k', 'nope')).toBeNull()
+  })
+})

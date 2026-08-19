@@ -237,6 +237,8 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
   const [scanOpen, setScanOpen] = useState(false)
   // 走査済みなら数字をバナーにそのまま出す。押すまで見えないのはもったいない。
   const [scanResult, setScanResult] = useState<ScanResult | null>(null)
+  // 実行中の走査があるか。リロードしても worker 側で走り続けるので拾い直す。
+  const [scanRunning, setScanRunning] = useState(false)
 
   useEffect(() => {
     if (!tagsEnabled) return
@@ -267,9 +269,16 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
     api.latestScan(connId, bucket, effectivePrefix)
       .then(job => {
         if (cancelled) return
-        setScanResult(job ? ScanResultSchema.parse(job.result) : null)
+        const active = job?.status === 'queued' || job?.status === 'running'
+        setScanRunning(active)
+        // 実行中は result が null なので parse しない。
+        setScanResult(job && !active ? ScanResultSchema.parse(job.result) : null)
       })
-      .catch(() => { if (!cancelled) setScanResult(null) })
+      .catch(() => {
+        if (cancelled) return
+        setScanRunning(false)
+        setScanResult(null)
+      })
     return () => { cancelled = true }
   }, [connId, bucket, effectivePrefix])
 
@@ -373,7 +382,13 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
           fetchedAt={api.lastFetched.list(connId, bucket, effectivePrefix, history[pageIdx] ?? {}, { recursive })}
           revalidating={revalidating}
           onRefresh={forceRefresh}
-          trailing={<ScanSummary result={scanResult} onOpen={() => setScanOpen(true)} />}
+          trailing={
+            <ScanSummary
+              result={scanResult}
+              running={scanRunning}
+              onOpen={() => setScanOpen(true)}
+            />
+          }
         />
         {scanOpen && (
           <ScanModal
@@ -381,7 +396,7 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
             bucket={bucket}
             prefix={effectivePrefix}
             onClose={() => setScanOpen(false)}
-            onResult={setScanResult}
+            onResult={r => { setScanResult(r); setScanRunning(false) }}
           />
         )}
         <EntryTable

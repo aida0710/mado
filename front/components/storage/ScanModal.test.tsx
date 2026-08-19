@@ -113,3 +113,30 @@ describe('刷新後の表示', () => {
     expect(container.querySelector('.scan-figures')).not.toBeNull()
   })
 })
+
+describe('リロード後の再接続', () => {
+  // 走査はサーバー側 (worker) で走り続ける。リロードで jobId を失っても
+  // 実行中のジョブを引き当てて進捗に戻れること。
+  it('開いた時点で実行中なら、そのまま進捗を出す', async () => {
+    mock(api.latestScan).mockResolvedValue({
+      id: 42, status: 'running', progress: { kind: 'count', done: 88000 }, result: null,
+    })
+    mock(api.getJob).mockResolvedValue({
+      id: 42, status: 'running', progress: { kind: 'count', done: 92000 }, result: null,
+    })
+    render(<ScanModal connId="c1" bucket="b1" prefix="p/" onClose={() => {}} />)
+    expect(await screen.findByText('走査済み')).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: '中止' })).toBeInTheDocument()
+    // 走査する ボタンは出ない (二重投入の入口を作らない)
+    expect(screen.queryByRole('button', { name: '走査する' })).toBeNull()
+  })
+
+  it('実行中の結果は parse しない (result が null なので)', async () => {
+    mock(api.latestScan).mockResolvedValue({
+      id: 42, status: 'queued', progress: null, result: null,
+    })
+    mock(api.getJob).mockResolvedValue({ id: 42, status: 'queued', progress: null, result: null })
+    render(<ScanModal connId="c1" bucket="b1" prefix="p/" onClose={() => {}} />)
+    expect(await screen.findByText('走査済み')).toBeInTheDocument()
+  })
+})

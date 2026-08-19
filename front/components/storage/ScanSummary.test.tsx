@@ -36,3 +36,18 @@ describe('ScanSummary', () => {
     expect(screen.getByTitle(/途中まで/)).toBeInTheDocument()
   })
 })
+
+describe('走査中', () => {
+  it('走査中はその旨を出し、押せば開ける', async () => {
+    const onOpen = vi.fn()
+    render(<ScanSummary result={null} running onOpen={onOpen} />)
+    const btn = screen.getByRole('button', { name: /走査中/ })
+    await userEvent.click(btn)
+    expect(onOpen).toHaveBeenCalledTimes(1)
+  })
+
+  it('前回の結果があっても走査中を優先して伝える', () => {
+    render(<ScanSummary result={RESULT} running onOpen={() => {}} />)
+    expect(screen.getByRole('button', { name: /走査中/ })).toBeInTheDocument()
+  })
+})

@@ -63,12 +63,23 @@ export function ScanModal({ connId, bucket, prefix, onClose, onResult }: Props) 
   const [loaded, setLoaded] = useState(false)
   const timer = useRef<number | null>(null)
 
-  // 開いた直後に保存済みの結果を引く。
+  // 開いた直後に、実行中のジョブか保存済みの結果を引く。
+  //
+  // 走査は worker で走るのでリロードしても止まらないが、jobId は state なので
+  // 失われる。実行中を引き当てて進捗へ戻れるようにする (これが無いと
+  // 「走査中なのに『まだ走査していません』と出る」状態になる)。
   useEffect(() => {
     let cancelled = false
     api.latestScan(connId, bucket, prefix)
       .then(job => {
         if (cancelled || !job) return
+        if (job.status === 'queued' || job.status === 'running') {
+          // 実行中は result が null なので parse しない。
+          setJobId(job.id)
+          setRunning(true)
+          if (job.progress && job.progress.kind === 'count') setScanned(job.progress.done)
+          return
+        }
         setResult(ScanResultSchema.parse(job.result))
         setScannedAt(job.finishedAt ?? null)
       })
