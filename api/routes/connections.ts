@@ -7,6 +7,8 @@ import {
   CONNECTION_SETTINGS_SUBQUERY,
   capabilitySettingKey,
   settingsToCapabilities,
+  settingsToScanEnabled,
+  settingsToListCacheTtlSec,
   type Capabilities,
 } from '../storage.js'
 
@@ -70,6 +72,22 @@ const CapabilitiesPatch = CapabilitiesBody.partial()
  *  「行が無い = 既定 (有効)」なので、既定に戻すだけなら DELETE でもよいが、
  *  設定画面で明示的に入れた値がそのまま行として見えるほうが追いやすいので
  *  true も書き込む。 */
+/** connection_settings への素の key/value 書き込み (権限以外の接続別設定)。 */
+async function upsertSettings(
+  q: { query: (sql: string, values: unknown[]) => Promise<unknown> },
+  connId: string,
+  entries: ReadonlyArray<readonly [string, string]>,
+): Promise<void> {
+  if (entries.length === 0) return
+  await q.query(
+    `INSERT INTO connection_settings (connection_id, key, value)
+       SELECT $1, k, v FROM UNNEST($2::text[], $3::text[]) AS t(k, v)
+     ON CONFLICT (connection_id, key)
+     DO UPDATE SET value = EXCLUDED.value, updated_at = now()`,
+    [connId, entries.map(e => e[0]), entries.map(e => e[1])],
+  )
+}
+
 async function upsertCapabilities(
   q: { query: (sql: string, values: unknown[]) => Promise<unknown> },
   connId: string,
@@ -111,6 +129,9 @@ const UpdateBody = z.object({
   forcePathStyle: z.boolean().optional(),
   listObjectsVersion: ListObjectsVersionEnum.optional(),
   capabilities: CapabilitiesPatch.optional(),
+  // 走査の可否と一覧キャッシュ TTL も connection_settings 側 (capabilities と同じ)。
+  scanEnabled: z.boolean().optional(),
+  listCacheTtlSec: z.number().int().positive().optional(),
 })
 
 interface ConnectionRow {
@@ -148,6 +169,8 @@ function toMasked(row: ConnectionRow) {
     listObjectsVersion: row.list_objects_version,
     isDefault: row.is_default,
     capabilities: settingsToCapabilities(row.settings),
+    scanEnabled: settingsToScanEnabled(row.settings),
+    listCacheTtlSec: settingsToListCacheTtlSec(row.settings),
     createdAt: row.created_at.toISOString(),
     updatedAt: row.updated_at.toISOString(),
   }
@@ -263,7 +286,17 @@ export function mountConnectionsRoutes(app: Hono, deps: ConnectionsDeps): void {
     const capKeys = (Object.keys(caps) as Array<keyof Capabilities>)
       .filter(k => caps[k] !== undefined)
 
-    if (sets.length === 0 && capKeys.length === 0) {
+    // 走査可否と一覧キャッシュ TTL も同じテーブル。key は名前空間を持たない
+    // (cap.* は権限専用の接頭辞なので、こちらは素の名前で置く)。
+    const extraSettings: Array<readonly [string, string]> = []
+    if (u.scanEnabled !== undefined) {
+      extraSettings.push(['scan_enabled', u.scanEnabled ? 'true' : 'false'])
+    }
+    if (u.listCacheTtlSec !== undefined) {
+      extraSettings.push(['list_cache_ttl_sec', String(u.listCacheTtlSec)])
+    }
+
+    if (sets.length === 0 && capKeys.length === 0 && extraSettings.length === 0) {
       // 更新するフィールドがない — 現在の行をそのまま返す。
       const r = await deps.pools.ro.query<ConnectionRow>(
         `${SELECT_CONN} WHERE c.id = $1`, [id],
@@ -308,6 +341,7 @@ export function mountConnectionsRoutes(app: Hono, deps: ConnectionsDeps): void {
         }
       }
       await upsertCapabilities(client, id, caps)
+      await upsertSettings(client, id, extraSettings)
 
       const r = await client.query<ConnectionRow>(`${SELECT_CONN} WHERE c.id = $1`, [id])
       await client.query('COMMIT')

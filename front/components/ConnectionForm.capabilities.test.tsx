@@ -9,6 +9,8 @@ const conn: Connection = {
   id: 'c1', name: 'primary', endpoint: 'https://s3.example.com/', region: 'auto',
   accessKeyIdMasked: 'AKIA…2345', forcePathStyle: true, listObjectsVersion: 'v2',
   capabilities: ALL_CAPABILITIES_ON,
+  scanEnabled: true,
+  listCacheTtlSec: 86400,
   createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z', isDefault: false,
 }
 

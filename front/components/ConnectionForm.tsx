@@ -27,6 +27,10 @@ interface FormState {
   forcePathStyle: boolean
   listObjectsVersion: ListObjectsVersion
   capabilities: Capabilities
+  /** 配下の走査を許可するか。 */
+  scanEnabled: boolean
+  /** 一覧キャッシュの保持秒数。 */
+  listCacheTtlSec: number
   showSecret: boolean
   saving: boolean
   error: string | null
@@ -74,6 +78,8 @@ function initialState(current: Connection | null): FormState {
     forcePathStyle: current?.forcePathStyle ?? true,
     listObjectsVersion: current?.listObjectsVersion ?? 'v2',
     capabilities: current?.capabilities ?? ALL_CAPABILITIES_ON,
+    scanEnabled: current?.scanEnabled ?? true,
+    listCacheTtlSec: current?.listCacheTtlSec ?? 86400,
     showSecret: false,
     saving: false,
     error: null,
@@ -88,6 +94,8 @@ export function ConnectionForm({ mode, onClose }: Props) {
   const {
     name, endpoint, region, accessKeyId, secretAccessKey,
     forcePathStyle, listObjectsVersion, capabilities, showSecret, saving, error,
+    scanEnabled,
+    listCacheTtlSec,
   } = state
 
   const titleId = 'connection-form-title'
@@ -138,6 +146,8 @@ export function ConnectionForm({ mode, onClose }: Props) {
           if (capabilities[key] !== cur.capabilities[key]) capChanges[key] = capabilities[key]
         }
         if (Object.keys(capChanges).length > 0) input.capabilities = capChanges
+        if (scanEnabled !== cur.scanEnabled) input.scanEnabled = scanEnabled
+        if (listCacheTtlSec !== cur.listCacheTtlSec) input.listCacheTtlSec = listCacheTtlSec
         if (accessKeyId.trim()) input.accessKeyId = accessKeyId.trim()
         if (secretAccessKey) input.secretAccessKey = secretAccessKey
         await mode.onSubmit(input)
@@ -315,6 +325,43 @@ export function ConnectionForm({ mode, onClose }: Props) {
               </label>
             )
           })}
+        </fieldset>
+
+        <fieldset className="modal-field">
+          <legend>この接続の動作</legend>
+          <label className="modal-choice">
+            <input
+              type="checkbox"
+              aria-label="配下の走査を許可する"
+              checked={scanEnabled}
+              onChange={e => dispatch({ type: 'setField', field: 'scanEnabled', value: e.target.checked })}
+            />
+            <div>
+              <strong>配下の走査を許可する</strong>
+              <small>
+                ディレクトリ配下のオブジェクト数・サイズを数えます。54 万キー規模の
+                バケットでは数分かかるので、走らせたくない接続ではオフに。
+              </small>
+            </div>
+          </label>
+          <label className="modal-choice">
+            <input
+              type="number"
+              min={1}
+              aria-label="一覧キャッシュの保持秒数"
+              value={listCacheTtlSec}
+              onChange={e => dispatch({
+                type: 'setField', field: 'listCacheTtlSec', value: Number(e.target.value),
+              })}
+            />
+            <div>
+              <strong>一覧キャッシュの保持 (秒)</strong>
+              <small>
+                既定 86400 (24 時間)。この接続の一覧をサーバー側で何秒保持するか。
+                更新が激しい接続は短くします。
+              </small>
+            </div>
+          </label>
         </fieldset>
 
         {error && <p className="error" aria-live="polite">{error}</p>}

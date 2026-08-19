@@ -88,3 +88,51 @@ describe('createStorageFactory の権限読み出し', () => {
     }
   })
 })
+
+describe('接続ごとの走査可否とキャッシュ TTL', () => {
+  it('設定が無ければ走査は許可、TTL は 24 時間', async () => {
+    await insertConnection('conn000010')
+    const f = createStorageFactory({ pools, crypto })
+    try {
+      const cfg = await f.getConnectionConfig('conn000010')
+      expect(cfg.scanEnabled).toBe(true)
+      expect(cfg.listCacheTtlSec).toBe(86400)
+    } finally {
+      await f.close()
+    }
+  })
+
+  it("scan_enabled='false' で走査が無効になる", async () => {
+    await insertConnection('conn000011')
+    await pools.rw.query(
+      `INSERT INTO connection_settings (connection_id, key, value) VALUES ($1, 'scan_enabled', 'false')`,
+      ['conn000011'],
+    )
+    const f = createStorageFactory({ pools, crypto })
+    try {
+      expect((await f.getConnectionConfig('conn000011')).scanEnabled).toBe(false)
+    } finally {
+      await f.close()
+    }
+  })
+
+  it('list_cache_ttl_sec が反映され、壊れた値は既定に倒す', async () => {
+    await insertConnection('conn000012')
+    await pools.rw.query(
+      `INSERT INTO connection_settings (connection_id, key, value) VALUES ($1, 'list_cache_ttl_sec', '300')`,
+      ['conn000012'],
+    )
+    await insertConnection('conn000013')
+    await pools.rw.query(
+      `INSERT INTO connection_settings (connection_id, key, value) VALUES ($1, 'list_cache_ttl_sec', 'いいかんじ')`,
+      ['conn000013'],
+    )
+    const f = createStorageFactory({ pools, crypto })
+    try {
+      expect((await f.getConnectionConfig('conn000012')).listCacheTtlSec).toBe(300)
+      expect((await f.getConnectionConfig('conn000013')).listCacheTtlSec).toBe(86400)
+    } finally {
+      await f.close()
+    }
+  })
+})

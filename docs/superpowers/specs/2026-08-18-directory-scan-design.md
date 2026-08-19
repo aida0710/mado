@@ -128,39 +128,24 @@ interface ScanResult {
 
 **TTL による自動再走査は行わない。** 走査は重い操作なので、期限切れをきっかけに勝手に走らせない。結果には走査時刻を出し、鮮度はユーザーに判断させる。
 
-## バケット設定
+## 接続設定
 
-設定は現在 `app_settings` (全体) と `connection_settings` (接続ごと) の 2 階層で、バケット単位が無い。`connection_settings` と同じ key/value 形式で追加する。
-
-`db/migrations/018_bucket_settings.sql`:
-
-```sql
-CREATE TABLE IF NOT EXISTS bucket_settings (
-  connection_id TEXT        NOT NULL REFERENCES storage_connections(id) ON DELETE CASCADE,
-  bucket        TEXT        NOT NULL,
-  key           TEXT        NOT NULL,
-  value         TEXT        NOT NULL,
-  updated_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
-  PRIMARY KEY (connection_id, bucket, key),
-  CHECK (length(key) BETWEEN 1 AND 64)
-);
-
-ALTER TABLE bucket_settings OWNER TO dashboard_rw;
-GRANT SELECT ON bucket_settings TO dashboard_ro;
-```
+設定は `app_settings` (全体) と `connection_settings` (接続ごと) の 2 階層。当初はバケット単位の `bucket_settings` を作ったが、**接続単位に移した** (`019_drop_bucket_settings.sql` で DROP)。
 
 | key | 既定 | 用途 |
 | --- | --- | --- |
-| `scan_enabled` | `true` | `false` なら走査ボタンを出さず、API も 403 で止める |
-| `list_cache_ttl_sec` | `86400` | 一覧キャッシュの TTL。更新の激しいバケットは短く |
+| `scan_enabled` | `true` | `false` なら走査ボタンを出さず、`POST` も 403 |
+| `list_cache_ttl_sec` | `86400` | 一覧キャッシュの TTL |
+
+接続単位にした利点は、`getConnectionConfig` のキャッシュ (S3Client と同じ 1 行) に相乗りできること。バケット単位のときは `/list` のたびに設定を引く DB アクセスが 1 回増えていたが、それが無くなった。あわせて `storage-list.ts` の `getListCacheTtlSec` という専用の依存も削除できた (ルートは元々 `getConnectionConfig` を呼んでいる)。
+
+代償として、**同じ接続内のバケットを個別に扱えない**。`dataset` だけ走査を禁止して他は許可、ということはできない。必要になったらバケット単位を「接続設定の上書き」として足す。
 
 `scan_enabled` は UI で隠すだけでなく **API 側でも 403** にする。共有 URL を直に叩けるため、UI を隠すだけでは意味がない (`connection_capabilities` と同じ考え方)。
 
-止めるのは **`POST` (走査の実行) だけ**。`GET` (保存済み結果の閲覧) は通す。`scan_enabled=false` は「重い走査を新たに走らせない」ためのガードであって、過去に取った結果を隠す意味は無い。バケットを禁止に切り替えた後も、それ以前の集計は読めるべきである。
+止めるのは **`POST` (走査の実行) だけ**。`GET` (保存済み結果の閲覧) は通す。「重い走査を新たに走らせない」ためのガードであって、過去に取った結果を隠す意味は無い。
 
-`list_cache_ttl_sec` は `storage-cache.ts` の `set` が参照する。未設定なら現状どおり 24 時間。
-
-Settings 画面はバケット一覧から各バケットの設定を開く形にする。
+UI は接続の編集フォーム (`ConnectionForm`) に、権限トグルと同じ場所・同じ流儀で並べる。
 
 ## UI
 

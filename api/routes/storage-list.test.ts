@@ -20,6 +20,9 @@ const TEST_CONN_ID = 'testconn01'
 let listObjectsVersion: ListObjectsVersion = 'v2'
 const getConnectionConfig = async (): Promise<ConnectionConfig> => ({
   listObjectsVersion,
+  capabilities: {} as never,
+  scanEnabled: true,
+  listCacheTtlSec: 86400,
 })
 
 // 既定は素通し (常に miss、書き込みは捨てる) のキャッシュ。
@@ -39,7 +42,6 @@ const app = new Hono()
 mountStorageListRoutes(app, {
   getStorage,
   getConnectionConfig,
-  getListCacheTtlSec: async () => 86400,
   cache: {
     get: s => cache.get(s),
     set: (s, p) => cache.set(s, p),

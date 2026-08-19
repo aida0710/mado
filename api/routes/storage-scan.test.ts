@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { mountStorageScanRoutes, scanDedupKey, SCAN_KIND } from './storage-scan.js'
 import type { JobStore } from '../lib/jobs.js'
-import { DEFAULT_BUCKET_SETTINGS } from '../lib/bucket-settings.js'
+import type { ConnectionConfig } from '../storage.js'
 
 let enqueued: Array<[string, string, unknown]> = []
 let scanEnabled = true
@@ -17,7 +17,12 @@ const store = {
 const app = new Hono()
 mountStorageScanRoutes(app, {
   store,
-  bucketSettings: { get: async () => ({ ...DEFAULT_BUCKET_SETTINGS, scanEnabled }) },
+  getConnectionConfig: async () => ({
+    listObjectsVersion: 'v2',
+    capabilities: {} as never,
+    scanEnabled,
+    listCacheTtlSec: 86400,
+  } as ConnectionConfig),
 })
 
 beforeEach(() => { enqueued = []; scanEnabled = true })
@@ -41,7 +46,7 @@ describe('POST /storage/:connId/scan', () => {
     expect((await app.request('/storage/c1/scan', { method: 'POST' })).status).toBe(400)
   })
 
-  it('scan_enabled=false なら 403 で投入しない', async () => {
+  it('接続の scan_enabled=false なら 403 で投入しない', async () => {
     scanEnabled = false
     const res = await app.request('/storage/c1/scan?bucket=b1&prefix=p/', { method: 'POST' })
     expect(res.status).toBe(403)

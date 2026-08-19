@@ -17,8 +17,6 @@ export interface StorageListDeps {
   /** /list と /buckets の応答キャッシュ。失敗は内部で握りつぶされるので
    *  呼び出し側は try/catch を書かない。 */
   cache: ResponseCache
-  /** バケットごとの一覧キャッシュ TTL (秒)。未設定なら既定の 24 時間。 */
-  getListCacheTtlSec: (connId: string, bucket: string) => Promise<number>
 }
 
 /** ディレクトリを開いたとき (prefix が `/` 終わり) に S3 互換実装が返す
@@ -135,7 +133,7 @@ export function mountStorageListRoutes(app: Hono, deps: StorageListDeps): void {
         nextContinuation: null,
         nextStartAfter: explicitNext ?? fallbackKey,
       }
-      await deps.cache.set(scope, body, (await deps.getListCacheTtlSec(connId, bucket)) * 1000)
+      await deps.cache.set(scope, body, config.listCacheTtlSec * 1000)
       return c.json(body)
     }
 
@@ -178,7 +176,7 @@ export function mountStorageListRoutes(app: Hono, deps: StorageListDeps): void {
       nextContinuation: realToken,
       nextStartAfter: fallbackKey,
     }
-    await deps.cache.set(scope, body, (await deps.getListCacheTtlSec(connId, bucket)) * 1000)
+    await deps.cache.set(scope, body, config.listCacheTtlSec * 1000)
     return c.json(body)
   })
 }

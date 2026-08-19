@@ -7,7 +7,6 @@ import {S3PathPanel} from '../components/S3PathPanel'
 import {CacheMeta} from '../components/CacheMeta'
 import {TagBadge} from '../components/TagBadge'
 import {TagPicker} from '../components/TagPicker'
-import {BucketSettingsPanel} from '../components/BucketSettingsPanel'
 import {TagSearchView} from '../components/TagSearchView'
 import {ViewBreadcrumb} from '../components/ViewBreadcrumb'
 import {useTagsEnabled} from '../lib/useFeatureEnabled'
@@ -256,7 +255,6 @@ function BucketLi({
     tagsEnabled: boolean
 }) {
     const [pickerOpen, setPickerOpen] = useState(false)
-    const [settingsOpen, setSettingsOpen] = useState(false)
     const checkboxId = `use-${bucket.name}`
     const tags = tagsEnabled ? allTags.filter(t => tagIds.includes(t.id)) : []
     // バケット直下を指す URL。パンくず (prefix='') と同じ形に揃えるので
@@ -268,7 +266,6 @@ function BucketLi({
             : []),
         {kind: 'copy', label: 'Web URL をコピー', value: absoluteUrl(bucketHref)},
         {kind: 'copy', label: 'S3 URL をコピー', value: `s3://${bucket.name}/`},
-        {kind: 'action', label: '設定', onSelect: () => setSettingsOpen(o => !o)},
     ], [bucketHref, bucket.name, tagsEnabled])
     return (
         <li className={`${liClass} relative`} style={{borderBottom: '1px solid var(--rule)'}}>
@@ -321,13 +318,6 @@ function BucketLi({
                     onChange={next => onTagsChange(bucket.name, next)}
                     onClose={() => setPickerOpen(false)}
                 />
-            )}
-            {/* 走査の許可と一覧キャッシュ TTL。行の下に開く (別画面にすると
-                「どのバケットの設定か」が分かりにくくなる)。 */}
-            {settingsOpen && (
-                <div className="basis-full pl-1 pt-2 relative z-[1]">
-                    <BucketSettingsPanel connId={connId} bucket={bucket.name}/>
-                </div>
             )}
         </li>
     )

@@ -61,6 +61,12 @@ export interface ConnectionConfig {
   listObjectsVersion: ListObjectsVersion
   /** この接続で許可されている操作。 */
   capabilities: Capabilities
+  /** 配下の走査 (storage.scan ジョブ) を許可するか。既定 true。
+   *  巨大バケットを抱える接続で、重い走査を投入させないためのガード。 */
+  scanEnabled: boolean
+  /** 一覧キャッシュ (storage_response_cache) の保持秒数。既定 86400 (24 時間)。
+   *  更新の激しい接続は短くする。 */
+  listCacheTtlSec: number
 }
 
 export interface StorageFactory {
@@ -100,6 +106,18 @@ interface DbRow {
   force_path_style: boolean
   list_objects_version: ListObjectsVersion
   settings: Record<string, string>
+}
+
+/** 走査を許可するか。'false' だけを無効とみなす (capabilities と同じ約束)。 */
+export function settingsToScanEnabled(settings: Record<string, string>): boolean {
+  return settings['scan_enabled'] !== 'false'
+}
+
+/** 一覧キャッシュの保持秒数。壊れた値や 0 以下は既定に倒す。 */
+export const DEFAULT_LIST_CACHE_TTL_SEC = 86400
+export function settingsToListCacheTtlSec(settings: Record<string, string>): number {
+  const n = Number(settings['list_cache_ttl_sec'])
+  return Number.isFinite(n) && n > 0 ? n : DEFAULT_LIST_CACHE_TTL_SEC
 }
 
 /** connection_settings の key/value → Capabilities。
@@ -175,6 +193,8 @@ export function createStorageFactory(deps: StorageFactoryDeps): StorageFactory {
       config: {
         listObjectsVersion: row.list_objects_version,
         capabilities: settingsToCapabilities(row.settings),
+        scanEnabled: settingsToScanEnabled(row.settings),
+        listCacheTtlSec: settingsToListCacheTtlSec(row.settings),
       },
     }
     cache.set(connId, entry)

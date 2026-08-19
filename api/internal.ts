@@ -13,10 +13,8 @@ import { explainStorageError } from './lib/storageError.js'
 import { mountStorageListRoutes } from './routes/storage-list.js'
 import { createResponseCache } from './lib/storage-cache.js'
 import { createJobStore } from './lib/jobs.js'
-import { createBucketSettings } from './lib/bucket-settings.js'
 import { mountJobRoutes } from './routes/jobs.js'
 import { mountStorageScanRoutes } from './routes/storage-scan.js'
-import { mountBucketSettingsRoutes } from './routes/bucket-settings.js'
 import { mountStorageReadmeRoutes } from './routes/storage-readme.js'
 import { mountStoragePreviewRoutes } from './routes/storage-preview.js'
 import { mountStorageMediaRoutes } from './routes/storage-media.js'
@@ -40,7 +38,6 @@ const storageFactory = createStorageFactory({ pools, crypto })
 // storage_response_cache の 1 テーブルのみ (spec の「ロールについての判断」)。
 const responseCache = createResponseCache(pools.rw)
 const jobStore = createJobStore(pools)
-const bucketSettings = createBucketSettings(pools)
 
 const app = new Hono()
 app.use('*', logger())
@@ -85,8 +82,6 @@ mountStorageListRoutes(api, {
   getStorage: storageFactory.getStorage,
   getConnectionConfig: storageFactory.getConnectionConfig,
   cache: responseCache,
-  getListCacheTtlSec: async (connId, bucket) =>
-    (await bucketSettings.get(connId, bucket)).listCacheTtlSec,
 })
 mountStorageReadmeRoutes(api, { getStorage: storageFactory.getStorage, pools, cache: responseCache })
 mountStoragePreviewRoutes(api, { getStorage: storageFactory.getStorage, env })
@@ -96,8 +91,7 @@ mountStorageMediaRoutes(api, {
   env,
 })
 mountJobRoutes(api, { store: jobStore })
-mountStorageScanRoutes(api, { store: jobStore, bucketSettings })
-mountBucketSettingsRoutes(api, { bucketSettings })
+mountStorageScanRoutes(api, { store: jobStore, getConnectionConfig: storageFactory.getConnectionConfig })
 mountStorageFavoritesRoutes(api, { pools })
 mountSettingsRoutes(api, { pools })
 mountNotesRoutes(api, { pools })

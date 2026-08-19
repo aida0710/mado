@@ -176,6 +176,10 @@ export const Connection = z.object({
   forcePathStyle: z.boolean(),
   listObjectsVersion: ListObjectsVersion,
   capabilities: Capabilities,
+  /** 配下の走査を許可するか。巨大バケットを抱える接続でのガード。 */
+  scanEnabled: z.boolean(),
+  /** 一覧キャッシュの保持秒数。既定 86400 (24 時間)。 */
+  listCacheTtlSec: z.number(),
   createdAt: z.string(),
   updatedAt: z.string(),
   isDefault: z.boolean(),
@@ -208,6 +212,8 @@ export interface ConnectionUpdateInput {
   forcePathStyle?: boolean
   listObjectsVersion?: ListObjectsVersion
   capabilities?: Partial<Capabilities>
+  scanEnabled?: boolean
+  listCacheTtlSec?: number
 }
 
 export const NoteAbsent  = z.object({ exists: z.literal(false) })
@@ -311,8 +317,3 @@ export type Job = z.infer<typeof Job>
 
 export const StartScanOk = z.object({ jobId: z.number() })
 
-export const BucketSettings = z.object({
-  scanEnabled: z.boolean(),
-  listCacheTtlSec: z.number(),
-})
-export type BucketSettings = z.infer<typeof BucketSettings>

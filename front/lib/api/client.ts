@@ -23,7 +23,6 @@ import {
   TarPreview,
   Job,
   StartScanOk,
-  BucketSettings,
 } from './types'
 import type { ConnectionCreateInput, ConnectionUpdateInput, TagCreateInput, TagUpdateInput, TargetKind } from './types'
 import { TTLCache } from './cache'
@@ -646,23 +645,6 @@ export const api = {
 
   cancelJob: async (id: number): Promise<void> => {
     await mutateJson(`${API_BASE}/jobs/${id}/cancel`, { method: 'POST' }, null)
-  },
-
-  // ── バケット単位の設定 ──
-  bucketSettings: (connId: string, bucket: string) =>
-    getJson(
-      buildUrl(`${API_BASE}/storage/${encodeURIComponent(connId)}/bucket-settings`, { bucket }),
-      BucketSettings,
-    ),
-
-  setBucketSetting: async (
-    connId: string, bucket: string, key: string, value: string,
-  ): Promise<void> => {
-    await mutateJson(
-      buildUrl(`${API_BASE}/storage/${encodeURIComponent(connId)}/bucket-settings`, { bucket }),
-      { method: 'PUT', body: { key, value } },
-      null,
-    )
   },
 
   // 該当キャッシュエントリが「いつ S3 から取得されたか」を Date で返す。

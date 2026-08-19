@@ -1,6 +1,6 @@
 import type { Hono } from 'hono'
-import type { BucketSettings } from '../lib/bucket-settings.js'
 import type { JobStore } from '../lib/jobs.js'
+import type { ConnectionConfig } from '../storage.js'
 
 // 走査ジョブの投入 (spec: 2026-08-18-directory-scan-design.md)。
 // 汎用の POST /jobs は作らない。任意の kind と payload を外から投げられる口は
@@ -15,7 +15,10 @@ export function scanDedupKey(connId: string, bucket: string, prefix: string): st
 
 export interface StorageScanDeps {
   store: JobStore
-  bucketSettings: { get(connId: string, bucket: string): Promise<BucketSettings> }
+  /** 走査の可否は接続設定 (connection_settings の scan_enabled) で決まる。
+   *  getConnectionConfig は S3Client と同じ 1 行にキャッシュされるので、
+   *  投入のたびに DB を引かない。 */
+  getConnectionConfig: (connId: string) => Promise<ConnectionConfig>
 }
 
 export function mountStorageScanRoutes(app: Hono, deps: StorageScanDeps): void {
@@ -26,9 +29,9 @@ export function mountStorageScanRoutes(app: Hono, deps: StorageScanDeps): void {
     const prefix = c.req.query('prefix') ?? ''
 
     // UI がボタンを隠していても共有 URL を直に叩けるので API 側でも止める。
-    const settings = await deps.bucketSettings.get(connId, bucket)
-    if (!settings.scanEnabled) {
-      return c.json({ error: `このバケットでは走査が無効になっています: ${bucket}` }, 403)
+    const config = await deps.getConnectionConfig(connId)
+    if (!config.scanEnabled) {
+      return c.json({ error: 'この接続では走査が無効になっています' }, 403)
     }
 
     const jobId = await deps.store.enqueue(
