@@ -10,6 +10,10 @@ import { createCrypto } from './crypto.js'
 import { createStorageFactory } from './storage.js'
 import { MediaAnalyzeError } from './lib/media-analyze.js'
 import { createMediaService, type AnalyzeRequest } from './lib/media-service.js'
+import { createJobStore } from './lib/jobs.js'
+import { createJobRunner } from './lib/job-runner.js'
+import { createScanHandler } from './lib/scan-handler.js'
+import { SCAN_KIND } from './routes/storage-scan.js'
 
 // LAN ダッシュボード: 1 つのストリーム teardown 起因の未捕捉例外で全ユーザーの
 // リクエストを巻き添えにしない。root cause は都度直す前提の最後の砦 (ログは大声で)。
@@ -25,6 +29,18 @@ const service = createMediaService({
   getStorage: storageFactory.getStorage,
   getConnectionConfig: storageFactory.getConnectionConfig,
   env,
+})
+
+const jobStore = createJobStore(pools)
+const jobRunner = createJobRunner({
+  store: jobStore,
+  // 新しいジョブ種別はここに 1 行足す。
+  handlers: {
+    [SCAN_KIND]: createScanHandler({
+      getStorage: storageFactory.getStorage,
+      getConnectionConfig: storageFactory.getConnectionConfig,
+    }),
+  },
 })
 
 const app = new Hono()
@@ -62,10 +78,43 @@ const cleanupTimer = setInterval(() => {
 }, 60 * 60 * 1000)
 cleanupTimer.unref()
 
+// ── ジョブループ ──
+// queued が無ければ 2 秒待つだけなので DB への負荷は無視できる。
+// 起動直後に DB が未到達でも worker を殺さない (旧実装の方針を踏襲)。
+let jobLoopStopping = false
+async function jobLoop(): Promise<void> {
+  for (;;) {
+    if (jobLoopStopping) return
+    try {
+      const ran = await jobRunner.runOnce()
+      if (!ran) await new Promise(r => setTimeout(r, 2000))
+    } catch (e) {
+      console.error('job loop error', e)
+      await new Promise(r => setTimeout(r, 5000))
+    }
+  }
+}
+void jobLoop()
+
+// worker が落ちたまま running で残ったジョブを拾い直す。
+// attempts >= 3 のものは error に落として無限再投入を防ぐ。
+const staleTimer = setInterval(() => {
+  jobStore.requeueStale(120, 3).catch(e => console.error('requeueStale error', e))
+}, 60_000)
+staleTimer.unref()
+
+// 完了ジョブの掃除。最新の done は結果ストアを兼ねるので残る。
+const pruneTimer = setInterval(() => {
+  jobStore.pruneFinished(7).catch(e => console.error('pruneFinished error', e))
+}, 24 * 60 * 60 * 1000)
+pruneTimer.unref()
+void jobStore.pruneFinished(7).catch(() => {})
+
 let shuttingDown = false
 const shutdown = async (): Promise<void> => {
   if (shuttingDown) return
   shuttingDown = true
+  jobLoopStopping = true
   setTimeout(() => process.exit(1), 10_000).unref()
   await new Promise<void>(resolve => server.close(() => resolve()))
   await storageFactory.close()
