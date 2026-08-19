@@ -85,6 +85,8 @@ mountStorageListRoutes(api, {
   getStorage: storageFactory.getStorage,
   getConnectionConfig: storageFactory.getConnectionConfig,
   cache: responseCache,
+  getListCacheTtlSec: async (connId, bucket) =>
+    (await bucketSettings.get(connId, bucket)).listCacheTtlSec,
 })
 mountStorageReadmeRoutes(api, { getStorage: storageFactory.getStorage, pools, cache: responseCache })
 mountStoragePreviewRoutes(api, { getStorage: storageFactory.getStorage, env })

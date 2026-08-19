@@ -39,6 +39,7 @@ const app = new Hono()
 mountStorageListRoutes(app, {
   getStorage,
   getConnectionConfig,
+  getListCacheTtlSec: async () => 86400,
   cache: {
     get: s => cache.get(s),
     set: (s, p) => cache.set(s, p),

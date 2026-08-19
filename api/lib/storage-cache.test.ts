@@ -99,3 +99,17 @@ describe('createResponseCache', () => {
     await expect(cache.invalidateConnection('c1')).resolves.toBeUndefined()
   })
 })
+
+describe('TTL の上書き (バケットごとの list_cache_ttl_sec 用)', () => {
+  it('set の第 3 引数で TTL を上書きできる', async () => {
+    const { db, calls } = fakeDb()
+    await createResponseCache(db, 86_400_000).set(SCOPE, { ok: true }, 300_000)
+    expect(calls[0].values[5]).toBe(300_000)
+  })
+
+  it('第 3 引数を省略すると既定の TTL を使う', async () => {
+    const { db, calls } = fakeDb()
+    await createResponseCache(db, 86_400_000).set(SCOPE, { ok: true })
+    expect(calls[0].values[5]).toBe(86_400_000)
+  })
+})

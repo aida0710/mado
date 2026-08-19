@@ -52,7 +52,8 @@ export interface Queryable {
 
 export interface ResponseCache {
   get(scope: CacheScope): Promise<unknown | null>
-  set(scope: CacheScope, payload: unknown): Promise<void>
+  /** ttlMs を渡すと既定を上書きする (バケットごとの list_cache_ttl_sec 用)。 */
+  set(scope: CacheScope, payload: unknown, ttlMs?: number): Promise<void>
   invalidateScope(connId: string, bucket: string, prefix: string): Promise<void>
   invalidateConnection(connId: string): Promise<void>
 }
@@ -81,7 +82,7 @@ export function createResponseCache(db: Queryable, ttlMs: number = LIST_CACHE_TT
       }
     },
 
-    async set(scope, payload) {
+    async set(scope, payload, overrideTtlMs) {
       try {
         // 期限切れ行は次回の取得時にこの UPSERT で上書きされるので、
         // 読み出し時の掃除も定期ジョブも要らない。
@@ -99,7 +100,7 @@ export function createResponseCache(db: Queryable, ttlMs: number = LIST_CACHE_TT
             scope.bucket ?? '',
             scope.prefix ?? '',
             JSON.stringify(payload),
-            ttlMs,
+            overrideTtlMs ?? ttlMs,
           ],
         )
       } catch (e) {
