@@ -17,6 +17,7 @@ const conn = (id: string, createdAt: string, isDefault = false) => ({
   forcePathStyle: true, listObjectsVersion: 'v2' as const,
   capabilities: ALL_CAPABILITIES_ON,
   createdAt, updatedAt: createdAt, isDefault,
+  scanEnabled: true, listCacheTtlSec: 86400,
 })
 
 function renderLanding() {

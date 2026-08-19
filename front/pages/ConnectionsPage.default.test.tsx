@@ -23,6 +23,7 @@ const conn = (id: string, isDefault: boolean) => ({
   forcePathStyle: false, listObjectsVersion: 'v2' as const,
   capabilities: ALL_CAPABILITIES_ON,
   createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z', isDefault,
+  scanEnabled: true, listCacheTtlSec: 86400,
 })
 
 describe('ConnectionsPage デフォルト切り替え', () => {

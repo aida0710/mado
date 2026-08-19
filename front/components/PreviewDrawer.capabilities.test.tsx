@@ -19,6 +19,7 @@ function renderDrawer(caps: Partial<Capabilities>, k = 'a/b.txt') {
     accessKeyIdMasked: 'AKIA…2345', forcePathStyle: true, listObjectsVersion: 'v2',
     capabilities: { ...ALL_CAPABILITIES_ON, ...caps },
     createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z', isDefault: false,
+    scanEnabled: true, listCacheTtlSec: 86400,
   }
   return render(
     <ConnectionContext.Provider value={conn}>

@@ -22,6 +22,7 @@ const conn = {
   accessKeyIdMasked: '20a1…7a30', forcePathStyle: true, listObjectsVersion: 'v2' as const,
   capabilities: ALL_CAPABILITIES_ON,
   createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z', isDefault: false,
+  scanEnabled: true, listCacheTtlSec: 86400,
 }
 
 // jsdom はレイアウトを行わないので「実際にはみ出すか」は測れない。ここでは
