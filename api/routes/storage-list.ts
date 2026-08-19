@@ -11,7 +11,7 @@ import type { CacheScope, ResponseCache } from '../lib/storage-cache.js'
 export interface StorageListDeps {
   getStorage: GetStorage
   /** 接続ごとの API 設定 (list_objects_version 等) を返す。
-   *  V1 only サーバ (DDN 製のオブジェクトストレージ等) には v1、
+   *  V1 only の S3 互換サーバ には v1、
    *  それ以外 (AWS/R2/MinIO) は v2 を使う。 */
   getConnectionConfig: (connId: string) => Promise<ConnectionConfig>
   /** /list と /buckets の応答キャッシュ。失敗は内部で握りつぶされるので
@@ -96,7 +96,7 @@ export function mountStorageListRoutes(app: Hono, deps: StorageListDeps): void {
     const useV1 = config.listObjectsVersion === 'v1'
 
     // V1 / V2 で送るパラメータも応答の cursor フィールドも違うので、ここで分岐する。
-    // V1 (?marker=…&prefix=…&delimiter=/): DDN 製や古い NetApp 等の V1 only サーバ。
+    // V1 (?marker=…&prefix=…&delimiter=/): V1 only の S3 互換サーバ。
     //   応答に <NextMarker> が入る (Delimiter 指定時)。Delimiter 無しでは
     //   IsTruncated=true でも NextMarker 無しになることがあり、その場合は
     //   最後のキーで marker フォールバックする (s3cmd と同じ手法)。
@@ -149,7 +149,7 @@ export function mountStorageListRoutes(app: Hono, deps: StorageListDeps): void {
       StartAfter: continuation ? undefined : startAfter,
       MaxKeys: 100,
     }))
-    // DDN 製などの S3 互換は IsTruncated=true を返すのに
+    // 一部の S3 互換実装は IsTruncated=true を返すのに
     // NextContinuationToken を返さないことがある。その場合に最終キーで
     // フォールバック。AWS 公式 S3 では NextContinuationToken が常に入る
     // ので nextStartAfter は null のままになる。

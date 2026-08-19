@@ -1,6 +1,6 @@
 -- /list と /buckets の応答キャッシュ (spec: 2026-08-18-server-side-list-cache-design.md)
 --
--- mdx の dataset バケット (547,259 キー) は Delimiter 付き ListObjects に 35 秒
+-- ある巨大なバケット (547,259 キー) は Delimiter 付き ListObjects に 35 秒
 -- かかる。s3cmd でも同じ時間なのでアプリ側に改善余地はなく、応答を共有して
 -- 「誰か一人が開けば全員速い」状態にするのがこのテーブルの目的。
 --

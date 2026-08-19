@@ -9,7 +9,7 @@ import { ALL_CAPABILITIES_ON } from '../lib/api/types'
 
 const conn: Connection = {
   id: 'c1',
-  name: 'mdx',
+  name: 'lab-storage',
   endpoint: 'https://example.com',
   region: 'auto',
   accessKeyIdMasked: '****',

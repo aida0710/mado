@@ -100,7 +100,7 @@ Expected: FAIL — `Failed to resolve import "./storage-cache.js"`
 ```sql
 -- /list と /buckets の応答キャッシュ (spec: 2026-08-18-server-side-list-cache-design.md)
 --
--- mdx の dataset バケット (547,259 キー) は Delimiter 付き ListObjects に 35 秒
+-- ある巨大なバケット (547,259 キー) は Delimiter 付き ListObjects に 35 秒
 -- かかる。s3cmd でも同じ時間なのでアプリ側に改善余地はなく、応答を共有して
 -- 「誰か一人が開けば全員速い」状態にするのがこのテーブルの目的。
 --
@@ -135,7 +135,7 @@ import { createHash } from 'node:crypto'
 
 // /list と /buckets の応答キャッシュ。
 //
-// 目的は「誰か一人が開けば全員速い」状態を作ること。mdx の dataset バケットは
+// 目的は「誰か一人が開けば全員速い」状態を作ること。ある巨大なバケットは
 // Delimiter 付き ListObjects に 35 秒かかり (547,259 キーの線形走査。s3cmd でも
 // 同じなのでアプリ側に改善余地はない)、クライアント側の localStorage キャッシュ
 // はブラウザごとにしか効かないため、人数分・端末分だけ 35 秒が発生していた。
@@ -963,7 +963,7 @@ git push origin main
 `db/init/00-init.sh` はボリューム初回作成時にしか走らないので、**稼働中の DB には手動適用が必要**。`db/README.md` の手順に従い、先にバックアップを取る。
 
 ```bash
-ssh mdxuser@mado.mdx.internal -i ~/.ssh/mdx-dataset-acc \
+ssh <user>@<deploy-host> -i ~/.ssh/<deploy-key> \
   'cd ~/mado && docker compose -f compose.prod.yaml exec -T postgres \
      pg_dump -U postgres -d dashboard > ~/dashboard-backup-$(date +%Y%m%d-%H%M).sql'
 ```
@@ -971,7 +971,7 @@ ssh mdxuser@mado.mdx.internal -i ~/.ssh/mdx-dataset-acc \
 デプロイ (= `git pull`) でマイグレーションファイルがホストに届いてから適用する。
 
 ```bash
-ssh mdxuser@mado.mdx.internal -i ~/.ssh/mdx-dataset-acc \
+ssh <user>@<deploy-host> -i ~/.ssh/<deploy-key> \
   'cd ~/mado && git pull origin main && docker compose -f compose.prod.yaml exec -T postgres \
      psql -v ON_ERROR_STOP=1 -U postgres -d dashboard -f /migrations/016_storage_response_cache.sql'
 ```
@@ -981,7 +981,7 @@ Expected: `CREATE TABLE` / `CREATE INDEX` × 2 / `ALTER TABLE` / `GRANT`
 - [ ] **Step 4: デプロイ**
 
 ```bash
-ssh mdxuser@mado.mdx.internal -i ~/.ssh/mdx-dataset-acc 'cd ~/mado && ./deploy.sh'
+ssh <user>@<deploy-host> -i ~/.ssh/<deploy-key> 'cd ~/mado && ./deploy.sh'
 ```
 
 Expected: exit 0。`| tail` を挟まないこと (終了コードが握り潰される)
@@ -991,7 +991,7 @@ Expected: exit 0。`| tail` を挟まないこと (終了コードが握り潰�
 ホスト上で以下を順に実行し、spec の受け入れ基準を満たすことを確認する。
 
 ```bash
-ssh mdxuser@mado.mdx.internal -i ~/.ssh/mdx-dataset-acc '
+ssh <user>@<deploy-host> -i ~/.ssh/<deploy-key> '
 U=http://localhost/api/internal/storage/mW5dNSSMcQ/list
 curl -s -o /dev/null -w "1回目 (S3 まで)      -> %{http_code} (%{time_total}s)\n" --max-time 120 "$U?bucket=dataset"
 curl -s -o /dev/null -w "2回目 (キャッシュ)    -> %{http_code} (%{time_total}s)\n" --max-time 120 "$U?bucket=dataset"
@@ -1009,7 +1009,7 @@ Expected:
 - [ ] **Step 6: キャッシュ行が入っていることを確認**
 
 ```bash
-ssh mdxuser@mado.mdx.internal -i ~/.ssh/mdx-dataset-acc '
+ssh <user>@<deploy-host> -i ~/.ssh/<deploy-key> '
 cd ~/mado && docker compose -f compose.prod.yaml exec -T postgres psql -U postgres -d dashboard -Atc \
   "SELECT count(*), pg_size_pretty(pg_total_relation_size(\$\$storage_response_cache\$\$)) FROM storage_response_cache;"'
 ```

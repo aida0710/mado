@@ -1248,7 +1248,7 @@ import { createScanAccumulator } from './scan.js'
 
 // storage.scan ハンドラ (spec: 2026-08-18-directory-scan-design.md)。
 //
-// Delimiter は付けない。区切り付きは CommonPrefixes の計算が重く、mdx の
+// Delimiter は付けない。区切り付きは CommonPrefixes の計算が重く、上流の
 // dataset バケットでは prefix に関係なく 28〜35 秒かかる。付けなければ
 // 0.095 秒 / ページで、547,259 キーでも約 223 秒 (実測)。
 //
@@ -2625,11 +2625,11 @@ git push origin main
 - [ ] **Step 3: 本番 DB のバックアップとマイグレーション適用**
 
 ```bash
-ssh mdxuser@mado.mdx.internal -i ~/.ssh/mdx-dataset-acc \
+ssh <user>@<deploy-host> -i ~/.ssh/<deploy-key> \
   'cd ~/mado && docker compose -f compose.prod.yaml exec -T postgres \
      pg_dump -U postgres -d dashboard > ~/dashboard-backup-$(date +%Y%m%d-%H%M).sql'
 
-ssh mdxuser@mado.mdx.internal -i ~/.ssh/mdx-dataset-acc \
+ssh <user>@<deploy-host> -i ~/.ssh/<deploy-key> \
   'cd ~/mado && git pull origin main && for f in 017_jobs 018_bucket_settings; do
      docker compose -f compose.prod.yaml exec -T postgres \
        psql -v ON_ERROR_STOP=1 -U postgres -d dashboard -f /migrations/$f.sql
@@ -2640,14 +2640,14 @@ Expected: `CREATE TABLE` / `CREATE INDEX` / `ALTER TABLE` / `GRANT` が両方の
 - [ ] **Step 4: デプロイ**
 
 ```bash
-ssh mdxuser@mado.mdx.internal -i ~/.ssh/mdx-dataset-acc 'cd ~/mado && ./deploy.sh'
+ssh <user>@<deploy-host> -i ~/.ssh/<deploy-key> 'cd ~/mado && ./deploy.sh'
 ```
 Expected: exit 0。`| tail` を挟まないこと (終了コードが握り潰される)
 
 - [ ] **Step 5: 受け入れ確認**
 
 ```bash
-ssh mdxuser@mado.mdx.internal -i ~/.ssh/mdx-dataset-acc '
+ssh <user>@<deploy-host> -i ~/.ssh/<deploy-key> '
 C=mW5dNSSMcQ
 # 1. 小さいバケット
 J=$(curl -s -X POST "http://localhost/api/internal/storage/$C/scan?bucket=trash" | sed "s/[^0-9]//g")
@@ -2667,7 +2667,7 @@ Expected:
 - [ ] **Step 6: `dataset` の走査を完走させる**
 
 ```bash
-ssh mdxuser@mado.mdx.internal -i ~/.ssh/mdx-dataset-acc '
+ssh <user>@<deploy-host> -i ~/.ssh/<deploy-key> '
 for i in $(seq 1 40); do
   s=$(curl -s "http://localhost/api/internal/jobs/<JOB_ID>" | node -e "let s=\"\";process.stdin.on(\"data\",d=>s+=d).on(\"end\",()=>{const j=JSON.parse(s);console.log(j.status, j.progress?j.progress.done:0)})")
   echo "$s"
@@ -2680,7 +2680,7 @@ Expected: 約 4 分で `done`。`result.objectCount` が **547,259**、`result.t
 - [ ] **Step 7: `scan_enabled=false` のガードを確認**
 
 ```bash
-ssh mdxuser@mado.mdx.internal -i ~/.ssh/mdx-dataset-acc '
+ssh <user>@<deploy-host> -i ~/.ssh/<deploy-key> '
 cd ~/mado && docker compose -f compose.prod.yaml exec -T postgres psql -U postgres -d dashboard -c \
   "INSERT INTO bucket_settings (connection_id, bucket, key, value) VALUES (\$\$mW5dNSSMcQ\$\$, \$\$dataset\$\$, \$\$scan_enabled\$\$, \$\$false\$\$) ON CONFLICT (connection_id, bucket, key) DO UPDATE SET value = EXCLUDED.value;"
 curl -s -o /dev/null -w "POST scan -> %{http_code}\n" -X POST "http://localhost/api/internal/storage/mW5dNSSMcQ/scan?bucket=dataset"
@@ -2692,7 +2692,7 @@ Expected: `POST` が 403、`GET latest` は 200 (過去の結果は読める)
 - [ ] **Step 8: 設定を戻す**
 
 ```bash
-ssh mdxuser@mado.mdx.internal -i ~/.ssh/mdx-dataset-acc \
+ssh <user>@<deploy-host> -i ~/.ssh/<deploy-key> \
   'cd ~/mado && docker compose -f compose.prod.yaml exec -T postgres psql -U postgres -d dashboard -c \
      "DELETE FROM bucket_settings WHERE key = '"'"'scan_enabled'"'"';"'
 ```

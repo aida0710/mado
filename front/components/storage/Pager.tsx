@@ -105,7 +105,7 @@ export function Pager({
 
       {/* server が IsTruncated=true なのに cursor を進めずに返してきた場合の案内。
           よくある原因は ListObjects v2 を理解しないサーバ
-          (DDN 製のオブジェクトストレージ等) で、設定 → 接続 →
+          (V1 only の S3 互換実装) で、設定 → 接続 →
           ListObjects API バージョンを v1 に切り替えると直る。 */}
       {cursorStuck && (
         <p className="mt-1 text-center text-[11px] text-ink-7">
@@ -113,7 +113,7 @@ export function Pager({
           <br />
           設定の <strong>ListObjects API バージョン</strong>{' '}
           を <span className="font-mono">v1</span> に切り替えてみてください
-          (DDN 製のオブジェクトストレージ等、V1 only サーバで起こります)。
+          (V1 only の S3 互換サーバで起こります)。
         </p>
       )}
     </>

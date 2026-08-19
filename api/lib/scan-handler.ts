@@ -7,7 +7,7 @@ import { createScanAccumulator } from './scan.js'
 
 // storage.scan ハンドラ (spec: 2026-08-18-directory-scan-design.md)。
 //
-// Delimiter は付けない。区切り付きは CommonPrefixes の計算が重く、mdx の
+// Delimiter は付けない。区切り付きは CommonPrefixes の計算が重く、一部の S3 互換ストレージの
 // dataset バケットでは prefix に関係なく 28〜35 秒かかる。付けなければ
 // 0.095 秒 / ページで、547,259 キーでも約 223 秒 (実測)。
 //

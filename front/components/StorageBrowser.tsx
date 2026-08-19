@@ -118,7 +118,7 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
 
   // 単一ページ取得 (replace)。
   // force=true で forward navigation 時にキャッシュをバイパスする
-  // (DDN 製などの S3 互換が cursor を進めずに同じトークンを返してくるとき、
+  // (一部の S3 互換実装が cursor を進めずに同じトークンを返してくるとき、
   //  cache key 衝突で前ページのデータが返ってしまう問題への防衛)。
   const load = useCallback((cursor: Cursor, opts: { force?: boolean; refresh?: boolean } = {}) => {
     const sid = ++sessionRef.current
@@ -314,7 +314,7 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
   }, [setSelectedTagIds])
 
   // hasNext は「次がある」だけでなく「server が cursor を進めるか」も判定する。
-  // DDN 製などの S3 互換は IsTruncated=true でも ContinuationToken / 最終キーが
+  // 一部の S3 互換実装は IsTruncated=true でも ContinuationToken / 最終キーが
   // 進まないことがあり、その状態で「次」を押しても同じデータしか返らないため
   // 末尾扱いにして disable する。
   const hasNext = (() => {

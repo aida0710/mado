@@ -205,7 +205,7 @@ describe('StorageBrowser - directory row', () => {
 
     // 2 回目の list は cursor: { continuation: 'tok1' } で呼ばれる。
     // forward navigation なので force:true で cache を bypass する
-    // (DDN 製などの S3 互換で cursor が進まない問題への防衛)。
+    // (一部の S3 互換実装で cursor が進まない問題への防衛)。
     await waitFor(() => expect(listMock).toHaveBeenCalledTimes(2))
     expect(listMock.mock.calls[1]).toEqual([
       'c1', 'b1', 'voice/', { continuation: 'tok1' }, { recursive: false, force: true, onRevalidate: expect.any(Function) },
@@ -265,9 +265,9 @@ describe('StorageBrowser - directory row', () => {
     expect(screen.queryByText(/p2\.mp3/)).toBeNull()
   })
 
-  it('uses the DDN startAfter fallback when the response carries no continuation token', async () => {
+  it('uses the startAfter fallback when the response carries no continuation token', async () => {
     const listMock = api.list as ReturnType<typeof vi.fn>
-    // DDN 製などの S3 互換は IsTruncated=true でも nextContinuation を返さない
+    // 一部の S3 互換実装は IsTruncated=true でも nextContinuation を返さない
     // ことがあり、backend は最終キーを nextStartAfter にフォールバックさせる。
     listMock.mockResolvedValueOnce({
       directories: [],
@@ -305,7 +305,7 @@ describe('StorageBrowser - directory row', () => {
       nextStartAfter: null,
     })
     // 2 ページ目: cursor='STUCK' で取りに行ったあと、server が同じ 'STUCK' を返してきた
-    // (DDN 製などの S3 互換でしばしば見られるバグ)。ここで「次」を押せても
+    // (一部の S3 互換実装でしばしば見られるバグ)。ここで「次」を押せても
     // 同じ cursor で再 fetch するだけなので末尾扱いに落としたい。
     listMock.mockResolvedValueOnce({
       directories: [],

@@ -14,7 +14,7 @@ export const StorageFile = z.object({
   lastModified: z.string().nullable(),
 })
 // nextContinuation: AWS 公式 S3 等で次ページ取得用の opaque トークン。
-// nextStartAfter:   DDN 製などの S3 互換が NextContinuationToken を返さない
+// nextStartAfter:   一部の S3 互換実装が NextContinuationToken を返さない
 //                   ときのフォールバック。最終キーを次ページの StartAfter に使う。
 // 同時に両方 set されることはない (server 側で前者を優先)。
 export const StorageList = z.object({
@@ -109,7 +109,7 @@ export const FavoriteBuckets = z.array(z.string())
 
 // listObjectsVersion: 接続先 S3 サーバへの ListObjects API バージョン。
 // 'v2' (既定): AWS / R2 / MinIO 等の正式な S3-compatible 実装向け。
-// 'v1':        DDN 製のオブジェクトストレージや古い NetApp StorageGRID 等、
+// 'v1':        ListObjectsV2 を理解しない古い S3 互換実装、
 //              V1 only のサーバ向け。V2 を理解しないため ?start-after= が
 //              無視され、毎回先頭ページが返ってきてしまう。s3cmd は元々 V1
 //              を使うので動く。

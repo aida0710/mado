@@ -260,7 +260,7 @@ export function ConnectionForm({ mode, onClose }: Props) {
         </fieldset>
 
         {/* ListObjects API バージョン: V2 を理解しないサーバ
-            (DDN 製のオブジェクトストレージ等) は v1 を選ぶ。 */}
+            (V1 only の S3 互換実装) は v1 を選ぶ。 */}
         <fieldset className="modal-field">
           <legend className="label">ListObjects API バージョン</legend>
           <label className="modal-choice">
@@ -289,7 +289,7 @@ export function ConnectionForm({ mode, onClose }: Props) {
             <div>
               <strong>v1</strong>
               <small>
-                DDN 製のオブジェクトストレージや古い NetApp StorageGRID 等、
+                ListObjectsV2 を理解しない古い S3 互換実装、
                 V2 を理解しないサーバ向け (ページが進まないときに切り替え)。
               </small>
             </div>

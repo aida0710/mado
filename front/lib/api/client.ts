@@ -38,7 +38,7 @@ const API_BASE = '/api/internal'
 //              localStorage に貯める価値が薄い (容量も大きい)。in-flight dedup と
 //              ページャ内の前後ボタン用にのみ in-memory cache を残す。
 // 長 TTL (6 時間) — localStorage 永続化:
-//   list / readme / buckets: MDX のレイテンシが 7〜24 秒と高く、ディレクトリ階層や
+//   list / readme / buckets: 上流のレイテンシが 7〜24 秒と高く、ディレクトリ階層や
 //              README の増減は緩いのでリロード越しのキャッシュ効果が大きい。
 //   UI で「取得 HH:mm」を薄く表示してキャッシュ鮮度を可視化 (api.lastFetched.*)。
 //   TTL 切れ後は onRevalidate 付きで呼ぶことで stale-while-revalidate になる
@@ -211,7 +211,7 @@ export const api = {
     // prefix の後ろに置くので invalidateList の prefix-match invalidation はそのまま有効。
     const cacheKey = k('list', connId, bucket, prefix, opts.recursive ? 'r' : '', cursor.continuation, cursor.startAfter)
     // force=true は「forward navigation で同じ cache key に到達して停滞する」現象の防衛。
-    // DDN 製などの S3 互換は ContinuationToken / 最終キーを進めずに返してくることがあり、
+    // 一部の S3 互換実装は ContinuationToken / 最終キーを進めずに返してくることがあり、
     // そのとき同じ cursor で別ページを取りに行く想定の cache が衝突して前ページが返る。
     if (opts.force) listCache.invalidate(cacheKey)
     return listCache.get(

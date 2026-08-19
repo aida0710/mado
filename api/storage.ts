@@ -7,7 +7,7 @@ import type { CryptoModule } from './crypto.js'
 
 // すべての S3Client で共有する keep-alive 付き agent。
 // AWS SDK v3 はバージョンによってデフォルトの keep-alive 挙動が違うため、
-// 明示的に設定して LAN MinIO / DDN 製ストレージ等の TLS ハンドシェイク往復を抑える。
+// 明示的に設定して LAN MinIO / 一部の S3 互換実装の TLS ハンドシェイク往復を抑える。
 const httpAgent  = new HttpAgent({  keepAlive: true, maxSockets: 50 })
 const httpsAgent = new HttpsAgent({ keepAlive: true, maxSockets: 50 })
 
@@ -57,7 +57,7 @@ export function capabilitySettingKey(cap: Capability): string {
  *  違う等) サーバ依存のパラメータをここに集約する。 */
 export interface ConnectionConfig {
   /** ListObjects に v1 (Marker/NextMarker) と v2 (ContinuationToken/StartAfter) の
-   *  どちらを使うか。DDN 製や古い NetApp 等は v1 only、AWS/R2/MinIO は v2 推奨。 */
+   *  どちらを使うか。一部の互換実装は v1 only、AWS/R2/MinIO は v2 推奨。 */
   listObjectsVersion: ListObjectsVersion
   /** この接続で許可されている操作。 */
   capabilities: Capabilities
@@ -179,8 +179,8 @@ export function createStorageFactory(deps: StorageFactoryDeps): StorageFactory {
         httpsAgent,
         connectionTimeout: 5_000,
         // Delimiter 付き ListObjects は、実装によってはバケット全体を走査して
-        // CommonPrefixes を組み立てる。mdx のオブジェクトストレージ上の巨大な
-        // バケットでは prefix の絞り込みに関係なく毎回 28〜35 秒かかり、
+        // CommonPrefixes を組み立てる。ある S3 互換ストレージの巨大なバケットでは
+        // prefix の絞り込みに関係なく毎回 28〜35 秒かかり、
         // 30 秒では成否が運任せになっていた (28 秒なら成功、31 秒なら 500)。
         // 実測に対して余裕を持たせる。nginx 側は proxy_read_timeout 300s なので
         // ここが律速。待たされること自体はフロントの stale-while-revalidate が

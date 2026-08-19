@@ -13,7 +13,7 @@ vi.mock('../lib/clipboard', () => ({ copyToClipboard: vi.fn(async () => true) })
 afterEach(() => vi.clearAllMocks())
 
 const conn: Connection = {
-  id: 'c1', name: 'mdx', endpoint: 'https://e', region: 'r',
+  id: 'c1', name: 'lab-storage', endpoint: 'https://e', region: 'r',
   accessKeyIdMasked: '****', forcePathStyle: true, listObjectsVersion: 'v2',
   capabilities: ALL_CAPABILITIES_ON,
   createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z', isDefault: false,
@@ -33,7 +33,7 @@ function renderCrumb() {
 describe('ViewBreadcrumb', () => {
   it('接続名 › 現在地 を出す', () => {
     renderCrumb()
-    expect(screen.getByRole('link', { name: 'mdx' })).toHaveAttribute('href', '/storage/c1/')
+    expect(screen.getByRole('link', { name: 'lab-storage' })).toHaveAttribute('href', '/storage/c1/')
     expect(screen.getByText('タグ検索')).toBeInTheDocument()
   })
 
