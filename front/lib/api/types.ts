@@ -310,3 +310,9 @@ export const Job = z.object({
 export type Job = z.infer<typeof Job>
 
 export const StartScanOk = z.object({ jobId: z.number() })
+
+export const BucketSettings = z.object({
+  scanEnabled: z.boolean(),
+  listCacheTtlSec: z.number(),
+})
+export type BucketSettings = z.infer<typeof BucketSettings>

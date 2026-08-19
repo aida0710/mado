@@ -16,6 +16,7 @@ import { createJobStore } from './lib/jobs.js'
 import { createBucketSettings } from './lib/bucket-settings.js'
 import { mountJobRoutes } from './routes/jobs.js'
 import { mountStorageScanRoutes } from './routes/storage-scan.js'
+import { mountBucketSettingsRoutes } from './routes/bucket-settings.js'
 import { mountStorageReadmeRoutes } from './routes/storage-readme.js'
 import { mountStoragePreviewRoutes } from './routes/storage-preview.js'
 import { mountStorageMediaRoutes } from './routes/storage-media.js'
@@ -94,6 +95,7 @@ mountStorageMediaRoutes(api, {
 })
 mountJobRoutes(api, { store: jobStore })
 mountStorageScanRoutes(api, { store: jobStore, bucketSettings })
+mountBucketSettingsRoutes(api, { bucketSettings })
 mountStorageFavoritesRoutes(api, { pools })
 mountSettingsRoutes(api, { pools })
 mountNotesRoutes(api, { pools })
