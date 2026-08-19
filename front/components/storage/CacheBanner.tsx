@@ -24,6 +24,8 @@ interface Props {
   revalidating: boolean
   /** ↻ を押したとき。キャッシュを破棄してサーバーごと取り直す。 */
   onRefresh: () => void
+  /** Σ を押したとき。配下のオブジェクト数・サイズを集計するモーダルを開く。 */
+  onScan?: () => void
 }
 
 // 相対時刻 ("2時間前") は時間が経つと嘘になる。タブを開きっぱなしにしても
@@ -37,7 +39,7 @@ function useMinuteTick(): void {
   }, [])
 }
 
-export function CacheBanner({ fetchedAt, revalidating, onRefresh }: Props) {
+export function CacheBanner({ fetchedAt, revalidating, onRefresh, onScan }: Props) {
   useMinuteTick()
 
   return (
@@ -62,6 +64,17 @@ export function CacheBanner({ fetchedAt, revalidating, onRefresh }: Props) {
             </time>
             に取得した情報です
           </span>
+        )}
+        {onScan && (
+          <button
+            type="button"
+            className="cache-banner__refresh"
+            onClick={onScan}
+            title="配下のオブジェクト数とサイズを集計する"
+            aria-label="配下を集計"
+          >
+            <span aria-hidden>Σ</span>
+          </button>
         )}
         {revalidating && (
           <span className="cache-banner__status" aria-live="polite">

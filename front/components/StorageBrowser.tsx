@@ -5,6 +5,7 @@ import { StorageList } from '../lib/api/types'
 import type { Tag } from '../lib/api/types'
 import { EntryTable } from './storage/EntryTable'
 import { CacheBanner } from './storage/CacheBanner'
+import { ScanModal } from './storage/ScanModal'
 import { Pager } from './storage/Pager'
 import { SearchBar } from './storage/SearchBar'
 import { TagFilterBar } from './storage/TagFilterBar'
@@ -229,6 +230,9 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
   const [dirTags, setDirTags] = useState<Record<string, string[]>>({})
   const [fileTags, setFileTags] = useState<Record<string, string[]>>({})
   const [selectedTagIds, setSelectedTagIds] = useState<Set<string>>(new Set())
+  // 走査は「いま開いているディレクトリ」だけを対象にする (README と同じスコープ)。
+  // 行の ⋯ から任意のサブディレクトリを走査する導線は作らない。
+  const [scanOpen, setScanOpen] = useState(false)
 
   useEffect(() => {
     if (!tagsEnabled) return
@@ -351,7 +355,16 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
           fetchedAt={api.lastFetched.list(connId, bucket, effectivePrefix, history[pageIdx] ?? {}, { recursive })}
           revalidating={revalidating}
           onRefresh={forceRefresh}
+          onScan={() => setScanOpen(true)}
         />
+        {scanOpen && (
+          <ScanModal
+            connId={connId}
+            bucket={bucket}
+            prefix={effectivePrefix}
+            onClose={() => setScanOpen(false)}
+          />
+        )}
         <EntryTable
           dirs={visibleDirs}
           files={visibleFiles}

@@ -21,6 +21,8 @@ import {
   TagSearchResult,
   AppSettings,
   TarPreview,
+  Job,
+  StartScanOk,
 } from './types'
 import type { ConnectionCreateInput, ConnectionUpdateInput, TagCreateInput, TagUpdateInput, TargetKind } from './types'
 import { TTLCache } from './cache'
@@ -615,6 +617,34 @@ export const api = {
 
   putSetting: async (key: string, value: string): Promise<void> => {
     await mutateJson(`${API_BASE}/settings/${encodeURIComponent(key)}`, { method: 'PUT', body: { value } }, null)
+  },
+
+  // ── 走査ジョブ (spec: 2026-08-18-directory-scan-design.md) ──
+  // 走査は重く状態をサーバーが持つので、TTLCache は通さない。
+
+  startScan: (connId: string, bucket: string, prefix: string) =>
+    mutateJson(
+      buildUrl(`${API_BASE}/storage/${encodeURIComponent(connId)}/scan`, { bucket, prefix }),
+      { method: 'POST' },
+      StartScanOk,
+    ),
+
+  getJob: (id: number) => getJson(`${API_BASE}/jobs/${id}`, Job),
+
+  /** 最後に成功した走査結果。無ければ null。 */
+  latestScan: async (connId: string, bucket: string, prefix: string) => {
+    const dedupKey = `${connId}\n${bucket}\n${prefix}`
+    const res = await fetch(
+      buildUrl(`${API_BASE}/jobs/latest`, { kind: 'storage.scan', dedupKey }),
+      { headers: { Accept: 'application/json' } },
+    )
+    if (res.status === 404) return null
+    if (!res.ok) throw new Error(res.statusText)
+    return Job.parse(await res.json())
+  },
+
+  cancelJob: async (id: number): Promise<void> => {
+    await mutateJson(`${API_BASE}/jobs/${id}/cancel`, { method: 'POST' }, null)
   },
 
   // 該当キャッシュエントリが「いつ S3 から取得されたか」を Date で返す。

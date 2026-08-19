@@ -275,3 +275,38 @@ export type TagSearchResult = z.infer<typeof TagSearchResult>
 // (boolean 以外の設定が増えてもスキーマを変えずに済ませるため)。
 export const AppSettings = z.record(z.string(), z.string())
 export type AppSettings = z.infer<typeof AppSettings>
+
+// ── 走査ジョブ (spec: 2026-08-18-directory-scan-design.md) ──
+export const ScanResult = z.object({
+  objectCount: z.number(),
+  totalBytes: z.number(),
+  children: z.array(z.object({
+    name: z.string(), objectCount: z.number(), totalBytes: z.number(),
+  })),
+  extensions: z.array(z.object({
+    ext: z.string(), objectCount: z.number(), totalBytes: z.number(),
+  })),
+  partial: z.boolean(),
+})
+export type ScanResult = z.infer<typeof ScanResult>
+
+// 進捗。総数が分からない処理があるので count と ratio の 2 形式を持つ。
+// 走査は count (S3 に件数 API が無く、初回は分母が出せない)。
+export const JobProgress = z.union([
+  z.object({ kind: z.literal('count'), done: z.number(), label: z.string().optional() }),
+  z.object({
+    kind: z.literal('ratio'), done: z.number(), total: z.number(), label: z.string().optional(),
+  }),
+])
+
+export const Job = z.object({
+  id: z.number(),
+  status: z.enum(['queued', 'running', 'done', 'error', 'canceled']),
+  progress: JobProgress.nullable().optional(),
+  result: z.unknown(),
+  error: z.string().nullable().optional(),
+  finishedAt: z.string().nullable().optional(),
+})
+export type Job = z.infer<typeof Job>
+
+export const StartScanOk = z.object({ jobId: z.number() })
