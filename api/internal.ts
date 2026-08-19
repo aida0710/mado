@@ -12,6 +12,10 @@ import type { Capability } from './storage.js'
 import { explainStorageError } from './lib/storageError.js'
 import { mountStorageListRoutes } from './routes/storage-list.js'
 import { createResponseCache } from './lib/storage-cache.js'
+import { createJobStore } from './lib/jobs.js'
+import { createBucketSettings } from './lib/bucket-settings.js'
+import { mountJobRoutes } from './routes/jobs.js'
+import { mountStorageScanRoutes } from './routes/storage-scan.js'
 import { mountStorageReadmeRoutes } from './routes/storage-readme.js'
 import { mountStoragePreviewRoutes } from './routes/storage-preview.js'
 import { mountStorageMediaRoutes } from './routes/storage-media.js'
@@ -34,6 +38,8 @@ const storageFactory = createStorageFactory({ pools, crypto })
 // 応答キャッシュは書き込みを伴うので rw プールを使う。書き込み先は
 // storage_response_cache の 1 テーブルのみ (spec の「ロールについての判断」)。
 const responseCache = createResponseCache(pools.rw)
+const jobStore = createJobStore(pools)
+const bucketSettings = createBucketSettings(pools)
 
 const app = new Hono()
 app.use('*', logger())
@@ -86,6 +92,8 @@ mountStorageMediaRoutes(api, {
   pools,
   env,
 })
+mountJobRoutes(api, { store: jobStore })
+mountStorageScanRoutes(api, { store: jobStore, bucketSettings })
 mountStorageFavoritesRoutes(api, { pools })
 mountSettingsRoutes(api, { pools })
 mountNotesRoutes(api, { pools })
