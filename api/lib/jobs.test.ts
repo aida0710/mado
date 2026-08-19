@@ -159,3 +159,51 @@ describe('requeueStale', () => {
     expect(job!.error).toContain('繰り返し')
   })
 })
+
+describe('pruneFinished', () => {
+  // 最新の done は結果ストアを兼ねるので消せない。
+  it('同一対象の最新 done は古くても残す', async () => {
+    const id = await store.enqueue('k', 'd', {})
+    await pools.rw.query(
+      `UPDATE jobs SET status='done', finished_at = now() - interval '30 days' WHERE id=$1`, [id])
+    expect(await store.pruneFinished(7)).toBe(0)
+    expect(await store.get(id)).not.toBeNull()
+  })
+
+  it('より新しい done がある古い行は消す', async () => {
+    const old = await store.enqueue('k', 'd', {})
+    await pools.rw.query(
+      `UPDATE jobs SET status='done', finished_at = now() - interval '30 days' WHERE id=$1`, [old])
+    const recent = await store.enqueue('k', 'd', {})
+    await pools.rw.query(
+      `UPDATE jobs SET status='done', finished_at = now() WHERE id=$1`, [recent])
+
+    expect(await store.pruneFinished(7)).toBe(1)
+    expect(await store.get(old)).toBeNull()
+    expect(await store.get(recent)).not.toBeNull()
+  })
+
+  it('保持期間内の行は消さない', async () => {
+    const a = await store.enqueue('k', 'd', {})
+    await pools.rw.query(
+      `UPDATE jobs SET status='done', finished_at = now() - interval '1 day' WHERE id=$1`, [a])
+    const b = await store.enqueue('k', 'd', {})
+    await pools.rw.query(`UPDATE jobs SET status='done', finished_at = now() WHERE id=$1`, [b])
+    expect(await store.pruneFinished(7)).toBe(0)
+  })
+
+  it('error / canceled も対象 (新しい done があれば)', async () => {
+    const bad = await store.enqueue('k', 'd', {})
+    await pools.rw.query(
+      `UPDATE jobs SET status='error', finished_at = now() - interval '30 days' WHERE id=$1`, [bad])
+    const ok = await store.enqueue('k', 'd', {})
+    await pools.rw.query(`UPDATE jobs SET status='done', finished_at = now() WHERE id=$1`, [ok])
+    expect(await store.pruneFinished(7)).toBe(1)
+    expect(await store.get(bad)).toBeNull()
+  })
+
+  it('running / queued は消さない', async () => {
+    await store.enqueue('k', 'd', {})
+    expect(await store.pruneFinished(0)).toBe(0)
+  })
+})

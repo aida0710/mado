@@ -75,6 +75,9 @@ export interface JobStore {
   /** heartbeat の途絶えた running を queued に戻す。上限到達分は error にする。
    *  戻り値は処理した件数。 */
   requeueStale(staleAfterSec: number, maxAttempts: number): Promise<number>
+  /** 完了ジョブの掃除。(kind, dedup_key) ごとの最新 done は結果ストアを
+   *  兼ねるので残し、それより古い完了行だけを消す。戻り値は削除件数。 */
+  pruneFinished(keepDays: number): Promise<number>
 }
 
 export function createJobStore(pools: Pools): JobStore {
@@ -186,6 +189,21 @@ export function createJobStore(pools: Pools): JobStore {
         [staleAfterSec, maxAttempts],
       )
       return (back.rowCount ?? 0) + (dead.rowCount ?? 0)
+    },
+
+    async pruneFinished(keepDays) {
+      const r = await pools.rw.query(
+        `DELETE FROM jobs j
+          WHERE j.status IN ('done','error','canceled')
+            AND j.finished_at < now() - make_interval(days => $1)
+            AND EXISTS (
+              SELECT 1 FROM jobs n
+               WHERE n.kind = j.kind AND n.dedup_key = j.dedup_key
+                 AND n.status = 'done' AND n.finished_at > j.finished_at
+            )`,
+        [keepDays],
+      )
+      return r.rowCount ?? 0
     },
   }
 }
