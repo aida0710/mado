@@ -65,6 +65,16 @@ export interface JobStore {
   enqueue(kind: string, dedupKey: string, payload: unknown): Promise<number>
   get(id: number): Promise<JobRow | null>
   latestDone(kind: string, dedupKey: string): Promise<JobRow | null>
+  /** queued を 1 件 running にして返す。無ければ null。 */
+  claim(): Promise<{ id: number; kind: string; payload: unknown } | null>
+  heartbeat(id: number, progress: JobProgress | null): Promise<void>
+  finish(id: number, result: unknown): Promise<void>
+  fail(id: number, message: string): Promise<void>
+  cancel(id: number): Promise<void>
+  isCanceled(id: number): Promise<boolean>
+  /** heartbeat の途絶えた running を queued に戻す。上限到達分は error にする。
+   *  戻り値は処理した件数。 */
+  requeueStale(staleAfterSec: number, maxAttempts: number): Promise<number>
 }
 
 export function createJobStore(pools: Pools): JobStore {
@@ -102,6 +112,80 @@ export function createJobStore(pools: Pools): JobStore {
         [kind, dedupKey],
       )
       return r.rows[0] ? toRow(r.rows[0]) : null
+    },
+
+    // SKIP LOCKED なので、将来 worker を増やしても取り合いにならない。
+    async claim() {
+      const r = await pools.rw.query<{ id: number; kind: string; payload: unknown }>(
+        `UPDATE jobs SET status = 'running', started_at = now(), heartbeat_at = now(),
+                         attempts = attempts + 1
+          WHERE id = (
+            SELECT id FROM jobs WHERE status = 'queued'
+             ORDER BY created_at
+             FOR UPDATE SKIP LOCKED
+             LIMIT 1
+          )
+          RETURNING id, kind, payload`,
+      )
+      return r.rows[0] ?? null
+    },
+
+    async heartbeat(id, progress) {
+      await pools.rw.query(
+        `UPDATE jobs SET heartbeat_at = now(), progress = COALESCE($2::jsonb, progress)
+          WHERE id = $1 AND status = 'running'`,
+        [id, progress === null ? null : JSON.stringify(progress)],
+      )
+    },
+
+    async finish(id, result) {
+      await pools.rw.query(
+        `UPDATE jobs SET status = 'done', result = $2, finished_at = now()
+          WHERE id = $1 AND status = 'running'`,
+        [id, JSON.stringify(result)],
+      )
+    },
+
+    async fail(id, message) {
+      await pools.rw.query(
+        `UPDATE jobs SET status = 'error', error = $2, finished_at = now()
+          WHERE id = $1 AND status = 'running'`,
+        [id, message],
+      )
+    },
+
+    // 終端状態のジョブは触らない (done を canceled に落とさない)。
+    async cancel(id) {
+      await pools.rw.query(
+        `UPDATE jobs SET status = 'canceled', finished_at = now()
+          WHERE id = $1 AND status IN ('queued','running')`,
+        [id],
+      )
+    },
+
+    async isCanceled(id) {
+      const r = await pools.ro.query<{ status: JobStatus }>(
+        'SELECT status FROM jobs WHERE id = $1', [id])
+      return r.rows[0]?.status === 'canceled'
+    },
+
+    async requeueStale(staleAfterSec, maxAttempts) {
+      const back = await pools.rw.query(
+        `UPDATE jobs SET status = 'queued', started_at = NULL, heartbeat_at = NULL
+          WHERE status = 'running'
+            AND heartbeat_at < now() - make_interval(secs => $1)
+            AND attempts < $2`,
+        [staleAfterSec, maxAttempts],
+      )
+      const dead = await pools.rw.query(
+        `UPDATE jobs SET status = 'error', finished_at = now(),
+                         error = 'worker が繰り返し停止しました'
+          WHERE status = 'running'
+            AND heartbeat_at < now() - make_interval(secs => $1)
+            AND attempts >= $2`,
+        [staleAfterSec, maxAttempts],
+      )
+      return (back.rowCount ?? 0) + (dead.rowCount ?? 0)
     },
   }
 }

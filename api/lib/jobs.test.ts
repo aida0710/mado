@@ -58,3 +58,104 @@ describe('enqueue / get', () => {
     expect(await store.latestDone('storage.scan', 'k')).toBeNull()
   })
 })
+
+describe('claim / 完了', () => {
+  it('queued を 1 件 claim して running にする', async () => {
+    const id = await store.enqueue('k', 'd', { a: 1 })
+    const job = await store.claim()
+    expect(job).toMatchObject({ id, kind: 'k' })
+    expect(job!.payload).toEqual({ a: 1 })
+    const after = await store.get(id)
+    expect(after!.status).toBe('running')
+    expect(after!.attempts).toBe(1)
+  })
+
+  it('queued が無ければ null', async () => {
+    expect(await store.claim()).toBeNull()
+  })
+
+  it('同じジョブを二重に claim しない', async () => {
+    await store.enqueue('k', 'd', {})
+    expect(await store.claim()).not.toBeNull()
+    expect(await store.claim()).toBeNull()
+  })
+
+  it('古い queued から順に取る', async () => {
+    const first = await store.enqueue('k', 'd1', {})
+    await pools.rw.query(`UPDATE jobs SET created_at = now() - interval '1 hour' WHERE id=$1`, [first])
+    await store.enqueue('k', 'd2', {})
+    expect((await store.claim())!.id).toBe(first)
+  })
+
+  it('finish で done と result が入る', async () => {
+    const id = await store.enqueue('k', 'd', {})
+    await store.claim()
+    await store.finish(id, { total: 42 })
+    const job = await store.get(id)
+    expect(job!.status).toBe('done')
+    expect(job!.result).toEqual({ total: 42 })
+    expect(job!.finishedAt).not.toBeNull()
+  })
+
+  it('fail で error とメッセージが入る', async () => {
+    const id = await store.enqueue('k', 'd', {})
+    await store.claim()
+    await store.fail(id, 'S3 が落ちています')
+    const job = await store.get(id)
+    expect(job!.status).toBe('error')
+    expect(job!.error).toBe('S3 が落ちています')
+  })
+
+  it('heartbeat で進捗が入る', async () => {
+    const id = await store.enqueue('k', 'd', {})
+    await store.claim()
+    await store.heartbeat(id, { kind: 'count', done: 1200 })
+    expect((await store.get(id))!.progress).toEqual({ kind: 'count', done: 1200 })
+  })
+})
+
+describe('キャンセル', () => {
+  it('cancel で canceled になり isCanceled が true', async () => {
+    const id = await store.enqueue('k', 'd', {})
+    await store.claim()
+    expect(await store.isCanceled(id)).toBe(false)
+    await store.cancel(id)
+    expect((await store.get(id))!.status).toBe('canceled')
+    expect(await store.isCanceled(id)).toBe(true)
+  })
+
+  it('done のジョブは cancel しても done のまま', async () => {
+    const id = await store.enqueue('k', 'd', {})
+    await store.claim()
+    await store.finish(id, {})
+    await store.cancel(id)
+    expect((await store.get(id))!.status).toBe('done')
+  })
+})
+
+describe('requeueStale', () => {
+  it('heartbeat が途絶えた running を queued に戻す', async () => {
+    const id = await store.enqueue('k', 'd', {})
+    await store.claim()
+    await pools.rw.query(`UPDATE jobs SET heartbeat_at = now() - interval '10 minutes' WHERE id=$1`, [id])
+    expect(await store.requeueStale(120, 3)).toBe(1)
+    expect((await store.get(id))!.status).toBe('queued')
+  })
+
+  it('heartbeat が新しければ戻さない', async () => {
+    const id = await store.enqueue('k', 'd', {})
+    await store.claim()
+    expect(await store.requeueStale(120, 3)).toBe(0)
+    expect((await store.get(id))!.status).toBe('running')
+  })
+
+  it('attempts が上限に達したら error にする', async () => {
+    const id = await store.enqueue('k', 'd', {})
+    await pools.rw.query(
+      `UPDATE jobs SET status='running', attempts=3, heartbeat_at=now() - interval '10 minutes' WHERE id=$1`, [id])
+    expect(await store.requeueStale(120, 3)).toBe(1)
+    const job = await store.get(id)
+    expect(job!.status).toBe('error')
+    expect(job!.error).toContain('繰り返し')
+  })
+})
