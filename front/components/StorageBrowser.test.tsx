@@ -17,8 +17,10 @@ vi.mock('../lib/api/client', () => ({
     settings: vi.fn(() => Promise.resolve({})),
     // 接続ごとの権限 (useCapabilities)。ここでは全許可の 1 件を返す。
     listConnections: vi.fn(() => Promise.resolve([])),
-    // CacheMeta は fetchedAt が null なら描画しないので、テストでは固定で null を返す。
+    // CacheBanner は fetchedAt が null なら時刻を出さないので、テストでは固定で null を返す。
     lastFetched: { list: vi.fn(() => null) },
+    // 配下の集計の要約 (CacheBanner の trailing)。未走査を既定にする。
+    latestScan: vi.fn(() => Promise.resolve(null)),
   },
 }))
 

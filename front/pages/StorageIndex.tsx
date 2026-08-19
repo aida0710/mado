@@ -4,7 +4,7 @@ import {api} from '../lib/api/client'
 import {ConnectionSwitcher} from '../components/ConnectionSwitcher'
 import {ReadmeSearchPanel} from '../components/ReadmeSearchPanel'
 import {S3PathPanel} from '../components/S3PathPanel'
-import {CacheMeta} from '../components/CacheMeta'
+import {CacheBanner} from '../components/storage/CacheBanner'
 import {TagBadge} from '../components/TagBadge'
 import {TagPicker} from '../components/TagPicker'
 import {TagSearchView} from '../components/TagSearchView'
@@ -164,16 +164,12 @@ export default function StorageIndex({connId}: Props) {
                     狭い画面で CONN だけ次の行へ折り返ったとき行頭 (左) に落ち、
                     そこから開くドロップダウンが画面外へはみ出す。 */}
                 <div className="ml-auto flex flex-wrap items-center justify-end gap-3">
-                    <CacheMeta fetchedAt={api.lastFetched.buckets(connId)} revalidating={revalidating} />
-                    <button
-                        className="ghost"
-                        onClick={forceRefresh}
-                        disabled={loading}
-                        title="キャッシュを破棄して再読み込み"
-                        aria-label="再読み込み"
-                    >
-                        <span aria-hidden>↻</span>
-                    </button>
+                    <CacheBanner
+                        fetchedAt={api.lastFetched.buckets(connId)}
+                        revalidating={revalidating}
+                        onRefresh={forceRefresh}
+                        compact
+                    />
                     <ConnectionSwitcher/>
                 </div>
             </header>

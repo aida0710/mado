@@ -73,7 +73,7 @@ if (typeof localStorage !== 'undefined') {
 // 長 TTL のキャッシュを引く API が共通で受け取るオプション。
 // onRevalidate を渡すと stale-while-revalidate になり、期限切れのキャッシュを
 // 即返しつつ裏で再取得する。呼び出し側はこのコールバックに渡された Promise を
-// await して新しい値で描き直し、その間 UI に「更新中」を出す (CacheMeta)。
+// await して新しい値で描き直し、その間 UI に「更新中」を出す (CacheBanner)。
 // 渡さなければ従来通り、期限切れなら取得完了まで待つ。
 export interface Revalidatable<T> {
   onRevalidate?: (fresh: Promise<T>) => void

@@ -62,3 +62,35 @@ describe('更新ボタン', () => {
     expect(screen.getByRole('button', { name: '再読み込み' })).toBeDisabled()
   })
 })
+
+describe('compact', () => {
+  it('文言を落として時刻だけにする (狭いヘッダ行用)', () => {
+    render(<CacheBanner fetchedAt={AT} revalidating={false} onRefresh={noop} compact />)
+    expect(screen.queryByText(/に取得した情報です/)).toBeNull()
+    expect(screen.getByText(/^\d{2}\/\d{2} \d{2}:\d{2}\(|^\d{2}:\d{2}\(/)).toBeInTheDocument()
+  })
+
+  it('compact でも ↻ は同じ形で出る', () => {
+    render(<CacheBanner fetchedAt={AT} revalidating={false} onRefresh={noop} compact />)
+    const btn = screen.getByRole('button', { name: '再読み込み' })
+    expect(btn.className).toContain('cache-banner__refresh')
+  })
+})
+
+describe('trailing スロット', () => {
+  // 集計の要約を差し込む口。CacheBanner 自体は走査を知らない。
+  it('渡した内容を右端に出す', () => {
+    render(
+      <CacheBanner
+        fetchedAt={AT} revalidating={false} onRefresh={noop}
+        trailing={<span>配下 247,078 件</span>}
+      />,
+    )
+    expect(screen.getByText('配下 247,078 件')).toBeInTheDocument()
+  })
+
+  it('trailing が無くても壊れない', () => {
+    render(<CacheBanner fetchedAt={AT} revalidating={false} onRefresh={noop} />)
+    expect(screen.getByRole('button', { name: '再読み込み' })).toBeInTheDocument()
+  })
+})

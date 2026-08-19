@@ -4,7 +4,11 @@ export function fmtSize(n: number): string {
   if (n < 1024) return `${n} B`
   if (n < 1024 ** 2) return `${(n / 1024).toFixed(1)} KB`
   if (n < 1024 ** 3) return `${(n / 1024 ** 2).toFixed(1)} MB`
-  return `${(n / 1024 ** 3).toFixed(1)} GB`
+  if (n < 1024 ** 4) return `${(n / 1024 ** 3).toFixed(1)} GB`
+  // 配下の集計で TB / PB 規模を扱う (dataset は 774 TB)。GB 頭打ちだと
+  // 「793,530.4 GB」になって桁が読めない。
+  if (n < 1024 ** 5) return `${(n / 1024 ** 4).toFixed(1)} TB`
+  return `${(n / 1024 ** 5).toFixed(1)} PB`
 }
 
 // プレビュー対象を人が読める 1 本の文字列にする。tar 内エントリは
@@ -37,11 +41,30 @@ export function fmtAgo(iso: string): string {
 // 相対時刻だけだと正確な時点が分からないので両方出す。
 //
 // now を引数に取るのはテストのため。呼び出し側は省略してよい。
-export function fmtCacheAge(d: Date, now: Date = new Date()): string {
-  const abs = d.toLocaleString('ja-JP', {
-    year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit', hour12: false,
-  })
+export interface CacheAgeOptions {
+  /** 日付を省いて狭い場所に収める。同日なら HH:mm、日跨ぎなら MM/DD HH:mm。 */
+  compact?: boolean
+}
+
+export function fmtCacheAge(d: Date, now: Date = new Date(), opts: CacheAgeOptions = {}): string {
+  const sameDay =
+    d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate()
+
+  // compact でも日を跨いだら日付を出す。時刻だけでは「昨日の 22:13」と
+  // 区別が付かず、古いデータを新しいと誤読させてしまう。
+  const abs = opts.compact
+    ? (sameDay
+        ? d.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit', hour12: false })
+        : d.toLocaleString('ja-JP', {
+            month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false,
+          }))
+    : d.toLocaleString('ja-JP', {
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', hour12: false,
+      })
+
   const min = Math.floor((now.getTime() - d.getTime()) / 60_000)
   const rel =
     min < 1  ? 'たった今'
@@ -51,22 +74,6 @@ export function fmtCacheAge(d: Date, now: Date = new Date()): string {
   return `${abs}(${rel})`
 }
 
-// キャッシュの「いつ取得したか」表示用。長 TTL (6h) 内なら同日なので時刻のみ、
-// 日付が変わってしまった場合は MM/DD HH:mm で日付も出す。
-export function fmtCacheTime(d: Date): string {
-  const now = new Date()
-  const sameDay =
-    d.getFullYear() === now.getFullYear() &&
-    d.getMonth()    === now.getMonth() &&
-    d.getDate()     === now.getDate()
-  if (sameDay) {
-    return d.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit', hour12: false })
-  }
-  return d.toLocaleString('ja-JP', {
-    month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit', hour12: false,
-  })
-}
 
 // .json (単一ドキュメント) だけプリティプリントする。.jsonl / .ndjson は
 // 1 行 1 JSON 値の形式なのでそのまま返す。整形できない (不正な JSON) ときも

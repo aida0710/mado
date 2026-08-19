@@ -14,7 +14,7 @@
 // バケットではバーが一瞬光るだけでちらつくため、200ms 遅れて現れるように
 // CSS の animation-delay で伏せている (JS タイマーを持たない = 後始末も不要)。
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { fmtCacheAge } from '../../lib/format'
 
 interface Props {
@@ -24,8 +24,12 @@ interface Props {
   revalidating: boolean
   /** ↻ を押したとき。キャッシュを破棄してサーバーごと取り直す。 */
   onRefresh: () => void
-  /** Σ を押したとき。配下のオブジェクト数・サイズを集計するモーダルを開く。 */
-  onScan?: () => void
+  /** 狭いヘッダ行に収める形。文言を落として時刻だけにする。
+   *  README / バケット一覧 / tar プレビューで使う。 */
+  compact?: boolean
+  /** 右端に差し込む内容。一覧では配下の集計の要約が入る。
+   *  CacheBanner 自体は走査を知らない (差し込む側の責務)。 */
+  trailing?: ReactNode
 }
 
 // 相対時刻 ("2時間前") は時間が経つと嘘になる。タブを開きっぱなしにしても
@@ -39,11 +43,13 @@ function useMinuteTick(): void {
   }, [])
 }
 
-export function CacheBanner({ fetchedAt, revalidating, onRefresh, onScan }: Props) {
+export function CacheBanner({ fetchedAt, revalidating, onRefresh, compact, trailing }: Props) {
   useMinuteTick()
 
   return (
-    <div className={`cache-banner${revalidating ? ' cache-banner--stale' : ''}`}>
+    <div className={
+      `cache-banner${revalidating ? ' cache-banner--stale' : ''}${compact ? ' cache-banner--compact' : ''}`
+    }>
       <p className="cache-banner__body">
         <button
           type="button"
@@ -60,28 +66,18 @@ export function CacheBanner({ fetchedAt, revalidating, onRefresh, onScan }: Prop
         {fetchedAt && (
           <span>
             <time dateTime={fetchedAt.toISOString()} className="cache-banner__at">
-              {fmtCacheAge(fetchedAt)}
+              {fmtCacheAge(fetchedAt, new Date(), { compact })}
             </time>
-            に取得した情報です
+            {!compact && 'に取得した情報です'}
           </span>
-        )}
-        {onScan && (
-          <button
-            type="button"
-            className="cache-banner__refresh"
-            onClick={onScan}
-            title="配下のオブジェクト数とサイズを集計する"
-            aria-label="配下を集計"
-          >
-            <span aria-hidden>Σ</span>
-          </button>
         )}
         {revalidating && (
           <span className="cache-banner__status" aria-live="polite">
             <span className="cache-banner__dot" aria-hidden />
-            最新の情報に更新しています
+            {compact ? '更新中' : '最新の情報に更新しています'}
           </span>
         )}
+        {trailing && <span className="cache-banner__trailing">{trailing}</span>}
       </p>
       {revalidating && (
         <div className="cache-banner__track">

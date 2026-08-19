@@ -7,7 +7,7 @@ import { api } from '../lib/api/client'
 import type { z } from 'zod'
 import { Readme } from '../lib/api/types'
 import { encPath } from '../lib/route'
-import { CacheMeta } from './CacheMeta'
+import { CacheBanner } from './storage/CacheBanner'
 import { useCapabilities } from '../lib/useCapabilities'
 
 // 履歴ビューワは「ボタンを押した後にだけ」マウントされる。
@@ -120,15 +120,12 @@ export function ReadmeView({ connId, bucket, prefix }: Props) {
             <span aria-hidden>⏱</span>
             履歴
           </button>
-          <button
-            className="ghost"
-            onClick={forceRefresh}
-            title="キャッシュを破棄して再読み込み"
-            aria-label="更新"
-          >
-            <span aria-hidden>↻</span>
-          </button>
-          <CacheMeta fetchedAt={api.lastFetched.readme(connId, bucket, prefix)} revalidating={revalidating} />
+          <CacheBanner
+            fetchedAt={api.lastFetched.readme(connId, bucket, prefix)}
+            revalidating={revalidating}
+            onRefresh={forceRefresh}
+            compact
+          />
           {data.exists && data.last_editor && (
             <span className="text-[12px] text-ink-7">
               last by <span className="font-medium text-ink-11">{data.last_editor}</span>

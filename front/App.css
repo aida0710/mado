@@ -877,6 +877,124 @@ pre { font-size: 12px; }
   .cache-banner__bar { animation: none; width: 100%; opacity: 0.35; }
 }
 
+/* 狭いヘッダ行に収める形 (README / バケット一覧 / tar プレビュー)。
+   文言を落として時刻だけにするが、時刻の書式と ↻ の形は一覧と同一。 */
+.cache-banner--compact .cache-banner__body {
+  padding: 0;
+  gap: var(--space-2);
+  font-size: 12px;
+}
+.cache-banner--compact .cache-banner__at { font-size: 11.5px; }
+
+/* 右端に差し込む内容 (一覧では配下の集計の要約)。 */
+.cache-banner__trailing {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--ink-7);
+  white-space: nowrap;
+}
+.cache-banner__scan { display: inline-flex; align-items: baseline; gap: 4px; }
+.cache-banner__scan strong { font-weight: 500; }
+/* 集計が途中までであることの印。数字の直後に小さく。 */
+.cache-banner__partial { color: var(--danger); cursor: help; }
+
+.cache-banner__scan-cta {
+  cursor: pointer;
+  border: 0;
+  background: none;
+  padding: 0 2px;
+  font: inherit;
+  color: var(--color-link);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.cache-banner__scan-cta:hover { color: var(--color-link-hover); }
+
+/* ── 配下の集計モーダル ───────────────────────────────────────
+   数字を主役にし、内訳は棒で量を示す。走査中と結果で .scan-figures の
+   枠を保つので、完了時にレイアウトが飛ばない。 */
+.scan-modal__path {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--ink-7);
+  margin: -8px 0 var(--space-4);
+}
+.scan-modal__note { font-size: 12px; color: var(--ink-7); margin: var(--space-3) 0 0; }
+
+.scan-figures {
+  display: flex;
+  gap: var(--space-6);
+  align-items: baseline;
+  padding: var(--space-3) 0;
+  border-top: 1px solid var(--color-rule-strong);
+  border-bottom: 1px solid var(--rule);
+}
+.scan-fig { display: flex; flex-direction: column; gap: 1px; }
+.scan-fig__k {
+  font: 600 9.5px/1 var(--font-sans);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-5);
+}
+.scan-fig__v {
+  font: 500 27px/1 var(--font-serif);
+  color: var(--ink-12);
+  font-variant-numeric: tabular-nums;
+}
+.scan-fig__v small {
+  font: 400 13px/1 var(--font-sans);
+  color: var(--ink-7);
+  margin-left: 3px;
+}
+
+.scan-brk { margin-top: var(--space-4); }
+.scan-brk__k {
+  display: block;
+  font: 600 9.5px/1 var(--font-sans);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-5);
+  margin-bottom: var(--space-1);
+}
+.scan-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: var(--space-3);
+  align-items: baseline;
+  padding: 4px 0 2px;
+  font-size: 12.5px;
+}
+.scan-row__nm {
+  font-family: var(--font-mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.scan-row__ct, .scan-row__sz {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+.scan-row__ct { color: var(--ink-7); }
+.scan-row__sz { color: var(--ink-9); min-width: 64px; text-align: right; }
+
+/* 棒はサイズ基準 (最大値を 100%)。件数より偏りが実務に効く。 */
+.scan-meter { height: 3px; background: var(--ink-1); border-radius: 2px; overflow: hidden; }
+.scan-meter i { display: block; height: 100%; background: var(--ink-9); }
+
+.scan-modal__foot {
+  margin-top: var(--space-4);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 12px;
+  color: var(--ink-7);
+  flex-wrap: wrap;
+}
+
 /* ====================================================================
    Markdown body — react-markdown 出力をくるむラッパー (.markdown-body)
    ==================================================================== */

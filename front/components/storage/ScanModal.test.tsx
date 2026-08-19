@@ -19,6 +19,7 @@ const RESULT = {
   extensions: [{ ext: '.tar', objectCount: 1234, totalBytes: 5_000_000_000 }],
   partial: false,
 }
+
 const mock = (fn: unknown): ReturnType<typeof vi.fn> => fn as ReturnType<typeof vi.fn>
 
 beforeEach(() => vi.clearAllMocks())
@@ -28,8 +29,9 @@ describe('ScanModal', () => {
     mock(api.latestScan).mockResolvedValue({
       id: 1, status: 'done', result: RESULT, finishedAt: '2026-08-18T07:00:00.000Z',
     })
-    render(<ScanModal connId="c1" bucket="b1" prefix="p/" onClose={() => {}} />)
-    expect(await screen.findByText(/1,234/)).toBeInTheDocument()
+    const { container } = render(<ScanModal connId="c1" bucket="b1" prefix="p/" onClose={() => {}} />)
+    await screen.findByText('オブジェクト')
+    expect(container.querySelector('.scan-figures')?.textContent).toContain('1,234')
   })
 
   it('未走査なら実行を促す', async () => {
@@ -50,7 +52,10 @@ describe('ScanModal', () => {
     await user.click(await screen.findByRole('button', { name: '走査する' }))
 
     expect(await screen.findByText(/500/)).toBeInTheDocument()
-    await waitFor(() => expect(screen.getByText(/1,234/)).toBeInTheDocument(), { timeout: 3000 })
+    await waitFor(
+      () => expect(screen.getByText('オブジェクト')).toBeInTheDocument(),
+      { timeout: 3000 },
+    )
   })
 
   it('走査中はキャンセルできる', async () => {
@@ -73,5 +78,38 @@ describe('ScanModal', () => {
     })
     render(<ScanModal connId="c1" bucket="b1" prefix="p/" onClose={() => {}} />)
     expect(await screen.findByText(/集計は途中まで/)).toBeInTheDocument()
+  })
+})
+
+describe('刷新後の表示', () => {
+  it('拡張子別の内訳も出す (API が返しているのに捨てていた)', async () => {
+    mock(api.latestScan).mockResolvedValue({
+      id: 1, status: 'done', result: RESULT, finishedAt: '2026-08-18T07:00:00.000Z',
+    })
+    render(<ScanModal connId="c1" bucket="b1" prefix="p/" onClose={() => {}} />)
+    expect(await screen.findByText('.tar')).toBeInTheDocument()
+  })
+
+  it('件数とサイズを別々の見出しで出す', async () => {
+    mock(api.latestScan).mockResolvedValue({
+      id: 1, status: 'done', result: RESULT, finishedAt: null,
+    })
+    render(<ScanModal connId="c1" bucket="b1" prefix="p/" onClose={() => {}} />)
+    expect(await screen.findByText('オブジェクト')).toBeInTheDocument()
+    expect(screen.getByText('合計サイズ')).toBeInTheDocument()
+  })
+
+  // 走査中と結果で骨格を保つ。完了時にレイアウトが飛ばないようにする。
+  it('走査中も同じ figure 枠に数字を出す', async () => {
+    mock(api.latestScan).mockResolvedValue(null)
+    mock(api.startScan).mockResolvedValue({ jobId: 9 })
+    mock(api.getJob).mockResolvedValue({
+      id: 9, status: 'running', progress: { kind: 'count', done: 112000 },
+    })
+    const user = userEvent.setup()
+    const { container } = render(<ScanModal connId="c1" bucket="b1" prefix="p/" onClose={() => {}} />)
+    await user.click(await screen.findByRole('button', { name: '走査する' }))
+    expect(await screen.findByText('走査済み')).toBeInTheDocument()
+    expect(container.querySelector('.scan-figures')).not.toBeNull()
   })
 })

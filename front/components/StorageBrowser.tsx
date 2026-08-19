@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import type { z } from 'zod'
 import { api } from '../lib/api/client'
-import { StorageList } from '../lib/api/types'
+import { StorageList, ScanResult as ScanResultSchema } from '../lib/api/types'
+import type { ScanResult } from '../lib/api/types'
 import type { Tag } from '../lib/api/types'
 import { EntryTable } from './storage/EntryTable'
 import { CacheBanner } from './storage/CacheBanner'
 import { ScanModal } from './storage/ScanModal'
+import { ScanSummary } from './storage/ScanSummary'
 import { Pager } from './storage/Pager'
 import { SearchBar } from './storage/SearchBar'
 import { TagFilterBar } from './storage/TagFilterBar'
@@ -233,6 +235,8 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
   // 走査は「いま開いているディレクトリ」だけを対象にする (README と同じスコープ)。
   // 行の ⋯ から任意のサブディレクトリを走査する導線は作らない。
   const [scanOpen, setScanOpen] = useState(false)
+  // 走査済みなら数字をバナーにそのまま出す。押すまで見えないのはもったいない。
+  const [scanResult, setScanResult] = useState<ScanResult | null>(null)
 
   useEffect(() => {
     if (!tagsEnabled) return
@@ -254,6 +258,20 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
     // dirs/files は毎レンダ新しい配列参照になるため、実際の中身 (キー結合) で比較する。
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [connId, bucket, tagsEnabled, dirs.join(' '), files.map(f => f.key).join(' ')])
+
+  // 開いているディレクトリの最新の走査結果を引く。prefix が変われば引き直す。
+  useEffect(() => {
+    let cancelled = false
+    // 未走査なら null を入れて前ディレクトリの数字を消す。同期 setState を
+    // 避けて then の中だけで反映する (cascading render を作らない)。
+    api.latestScan(connId, bucket, effectivePrefix)
+      .then(job => {
+        if (cancelled) return
+        setScanResult(job ? ScanResultSchema.parse(job.result) : null)
+      })
+      .catch(() => { if (!cancelled) setScanResult(null) })
+    return () => { cancelled = true }
+  }, [connId, bucket, effectivePrefix])
 
   const handleTagsChange = useCallback((path: string, tagIds: string[]) => {
     setDirTags(prev => (path in prev || dirs.includes(path)) ? { ...prev, [path]: tagIds } : prev)
@@ -355,7 +373,7 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
           fetchedAt={api.lastFetched.list(connId, bucket, effectivePrefix, history[pageIdx] ?? {}, { recursive })}
           revalidating={revalidating}
           onRefresh={forceRefresh}
-          onScan={() => setScanOpen(true)}
+          trailing={<ScanSummary result={scanResult} onOpen={() => setScanOpen(true)} />}
         />
         {scanOpen && (
           <ScanModal
@@ -363,6 +381,7 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
             bucket={bucket}
             prefix={effectivePrefix}
             onClose={() => setScanOpen(false)}
+            onResult={setScanResult}
           />
         )}
         <EntryTable

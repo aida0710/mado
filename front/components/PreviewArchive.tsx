@@ -8,7 +8,7 @@ import { TarPreview } from '../lib/api/types'
 import { fmtSize } from '../lib/format'
 import { absoluteUrl, tarEntryWebUrl } from '../lib/route'
 import { TarEntryModal } from './TarEntryModal'
-import { CacheMeta } from './CacheMeta'
+import { CacheBanner } from './storage/CacheBanner'
 import { CopyMenu, type MenuItem } from './CopyMenu'
 
 type Resp = z.infer<typeof TarPreview>
@@ -211,17 +211,12 @@ export function PreviewArchive({ connId, bucket, k, initialEntry = null, onEntry
           ))}
         </select>
       </label>
-      <button
-        className={pagerBtnClass}
-        style={ruleStyle}
-        onClick={forceRefresh}
-        disabled={loading}
-        title="キャッシュを破棄して再読み込み"
-        aria-label="再読み込み"
-      >
-        <span aria-hidden>↻</span>
-      </button>
-      <CacheMeta fetchedAt={api.lastFetched.tar(connId, bucket, k, { limit: pageSize, offset })} />
+      <CacheBanner
+        fetchedAt={api.lastFetched.tar(connId, bucket, k, { limit: pageSize, offset })}
+        revalidating={false}
+        onRefresh={forceRefresh}
+        compact
+      />
     </div>
   )
 
