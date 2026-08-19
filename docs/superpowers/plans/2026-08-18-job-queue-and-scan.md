@@ -29,8 +29,11 @@
 `npm test` は `../.env` を読むようになっている (`08082cf`)。DB 依存テストはそのまま動く。
 
 ```bash
-cd api && npm test
+cd api && npm test              # 全部
+cd api && npm test -- lib/jobs.test.ts   # ファイル指定
 ```
+
+**`npx vitest run` を直接使わないこと。** `../.env` を読むのは `npm test` スクリプトだけで、`npx vitest` では `DATABASE_URL_RW_TEST` がフォールバック (パスワード `CHANGEME`) になり、DB 依存テストが全部 `password authentication failed` で落ちる。
 
 動かない場合、`.env` の `DATABASE_URL_RW_TEST` のパスワードが `DASHBOARD_PASSWORD` と一致しているか確認する (`.env.example` に注記あり)。認証エラーなら DB は正常で、接続文字列がずれているだけ。
 
@@ -141,7 +144,7 @@ describe('enqueue / get', () => {
 
 - [ ] **Step 2: テストが失敗することを確認**
 
-Run: `cd api && npx vitest run lib/jobs.test.ts`
+Run: `cd api && npm test -- lib/jobs.test.ts`
 Expected: FAIL — `Failed to resolve import "./jobs.js"`
 
 - [ ] **Step 3: マイグレーションを書く**
@@ -322,7 +325,7 @@ export function createJobStore(pools: Pools): JobStore {
 
 - [ ] **Step 6: テストが通ることを確認**
 
-Run: `cd api && npx vitest run lib/jobs.test.ts`
+Run: `cd api && npm test -- lib/jobs.test.ts`
 Expected: PASS (6 件)
 
 - [ ] **Step 7: コミット**
@@ -461,7 +464,7 @@ describe('requeueStale', () => {
 
 - [ ] **Step 2: テストが失敗することを確認**
 
-Run: `cd api && npx vitest run lib/jobs.test.ts`
+Run: `cd api && npm test -- lib/jobs.test.ts`
 Expected: FAIL — `store.claim is not a function`
 
 - [ ] **Step 3: 実装する**
@@ -558,7 +561,7 @@ Expected: FAIL — `store.claim is not a function`
 
 - [ ] **Step 4: テストが通ることを確認**
 
-Run: `cd api && npx vitest run lib/jobs.test.ts`
+Run: `cd api && npm test -- lib/jobs.test.ts`
 Expected: PASS (18 件)
 
 - [ ] **Step 5: コミット**
@@ -636,7 +639,7 @@ describe('pruneFinished', () => {
 
 - [ ] **Step 2: テストが失敗することを確認**
 
-Run: `cd api && npx vitest run lib/jobs.test.ts`
+Run: `cd api && npm test -- lib/jobs.test.ts`
 Expected: FAIL — `store.pruneFinished is not a function`
 
 - [ ] **Step 3: 実装する**
@@ -670,7 +673,7 @@ Expected: FAIL — `store.pruneFinished is not a function`
 
 - [ ] **Step 4: テストが通ることを確認**
 
-Run: `cd api && npx vitest run lib/jobs.test.ts`
+Run: `cd api && npm test -- lib/jobs.test.ts`
 Expected: PASS (23 件)
 
 - [ ] **Step 5: コミット**
@@ -800,7 +803,7 @@ describe('createJobRunner', () => {
 
 - [ ] **Step 2: テストが失敗することを確認**
 
-Run: `cd api && npx vitest run lib/job-runner.test.ts`
+Run: `cd api && npm test -- lib/job-runner.test.ts`
 Expected: FAIL — `Failed to resolve import "./job-runner.js"`
 
 - [ ] **Step 3: 実装する**
@@ -891,7 +894,7 @@ export function createJobRunner(deps: JobRunnerDeps): { runOnce(): Promise<boole
 
 - [ ] **Step 4: テストが通ることを確認**
 
-Run: `cd api && npx vitest run lib/job-runner.test.ts`
+Run: `cd api && npm test -- lib/job-runner.test.ts`
 Expected: PASS (6 件)
 
 - [ ] **Step 5: コミット**
@@ -1006,7 +1009,7 @@ describe('createScanAccumulator', () => {
 
 - [ ] **Step 2: テストが失敗することを確認**
 
-Run: `cd api && npx vitest run lib/scan.test.ts`
+Run: `cd api && npm test -- lib/scan.test.ts`
 Expected: FAIL — `Failed to resolve import "./scan.js"`
 
 - [ ] **Step 3: 実装する**
@@ -1117,7 +1120,7 @@ export function createScanAccumulator(prefix: string) {
 
 - [ ] **Step 4: テストが通ることを確認**
 
-Run: `cd api && npx vitest run lib/scan.test.ts`
+Run: `cd api && npm test -- lib/scan.test.ts`
 Expected: PASS (9 件)
 
 - [ ] **Step 5: コミット**
@@ -1228,7 +1231,7 @@ describe('createScanHandler', () => {
 
 - [ ] **Step 2: テストが失敗することを確認**
 
-Run: `cd api && npx vitest run lib/scan-handler.test.ts`
+Run: `cd api && npm test -- lib/scan-handler.test.ts`
 Expected: FAIL — `Failed to resolve import "./scan-handler.js"`
 
 - [ ] **Step 3: 実装する**
@@ -1325,7 +1328,7 @@ export function createScanHandler(deps: ScanHandlerDeps): JobHandler {
 
 - [ ] **Step 4: テストが通ることを確認**
 
-Run: `cd api && npx vitest run lib/scan-handler.test.ts`
+Run: `cd api && npm test -- lib/scan-handler.test.ts`
 Expected: PASS (5 件)
 
 - [ ] **Step 5: コミット**
@@ -1421,7 +1424,7 @@ describe('createBucketSettings', () => {
 
 - [ ] **Step 2: テストが失敗することを確認**
 
-Run: `cd api && npx vitest run lib/bucket-settings.test.ts`
+Run: `cd api && npm test -- lib/bucket-settings.test.ts`
 Expected: FAIL — `Failed to resolve import "./bucket-settings.js"`
 
 - [ ] **Step 3: マイグレーションを書いて dev DB に流す**
@@ -1510,7 +1513,7 @@ export function createBucketSettings(pools: Pools) {
 
 - [ ] **Step 5: テストが通ることを確認**
 
-Run: `cd api && npx vitest run lib/bucket-settings.test.ts`
+Run: `cd api && npm test -- lib/bucket-settings.test.ts`
 Expected: PASS (7 件)
 
 - [ ] **Step 6: コミット**
@@ -1599,7 +1602,7 @@ describe('POST /storage/:connId/scan', () => {
 
 - [ ] **Step 2: テストが失敗することを確認**
 
-Run: `cd api && npx vitest run routes/storage-scan.test.ts`
+Run: `cd api && npm test -- routes/storage-scan.test.ts`
 Expected: FAIL — `Failed to resolve import "./storage-scan.js"`
 
 - [ ] **Step 3: 走査ルートを書く**
@@ -2282,7 +2285,7 @@ describe('bucket-settings ルート', () => {
 
 - [ ] **Step 2: テストが失敗することを確認**
 
-Run: `cd api && npx vitest run routes/bucket-settings.test.ts`
+Run: `cd api && npm test -- routes/bucket-settings.test.ts`
 Expected: FAIL — `Failed to resolve import "./bucket-settings.js"`
 
 - [ ] **Step 3: ルートを書く**
@@ -2535,7 +2538,7 @@ it('第 3 引数を省略すると既定の TTL を使う', async () => {
 
 - [ ] **Step 2: テストが失敗することを確認**
 
-Run: `cd api && npx vitest run lib/storage-cache.test.ts`
+Run: `cd api && npm test -- lib/storage-cache.test.ts`
 Expected: FAIL — 上書きが効かず `86400000` が入る
 
 - [ ] **Step 3: 実装する**
