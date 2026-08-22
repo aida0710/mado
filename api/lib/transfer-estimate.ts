@@ -122,7 +122,9 @@ function fmtBytes(n: number): string {
 }
 
 function fmtUsd(n: number): string {
-  return n >= 1 ? `$${n.toFixed(2)}` : `$${n.toFixed(4)}`
+  if (n >= 1) return `$${n.toFixed(2)}`
+  // 末尾の 0 は落とす。単価は桁そのものが情報なので、$0.0220 より $0.022。
+  return `$${Number(n.toFixed(4))}`
 }
 
 function buildWarnings(
