@@ -126,6 +126,9 @@ export function mountStorageEstimateRoutes(app: Hono, deps: StorageEstimateDeps)
         source: snapshot.source,
         fetchedAt: snapshot.fetchedAt,
         stale,
+        /** 取得しても更新されない値 (最小保存期間・Wasabi など) の出所。
+         *  取得日が新しい = 全部新しい、と読み違えさせないために返す。 */
+        manualFacts: catalog.manualFacts,
       },
       candidates,
     })

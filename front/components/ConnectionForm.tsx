@@ -50,6 +50,8 @@ interface FormState {
   /** '' = 未設定 (容量の警告を出さない)。単位は TiB。 */
   pricingCapacityTb: number | ''
   pricingInstability: number
+  /** '' = カタログに従う。料金 API の無いプロバイダで実契約単価を入れる用。 */
+  pricingStoragePerGbMonth: number | ''
   showSecret: boolean
   saving: boolean
   error: string | null
@@ -107,6 +109,7 @@ function initialState(current: Connection | null): FormState {
       ? Math.round((current.pricing.capacityBytes / TIB) * 10) / 10
       : '',
     pricingInstability: current?.pricing.instability ?? 0.5,
+    pricingStoragePerGbMonth: current?.pricing.storagePerGbMonth ?? '',
     showSecret: false,
     saving: false,
     error: null,
@@ -124,7 +127,7 @@ export function ConnectionForm({ mode, onClose }: Props) {
     scanEnabled,
     listCacheTtlSec,
     pricingProvider, pricingStorageClass, pricingReadMbps, pricingWriteMbps,
-    pricingCapacityTb, pricingInstability,
+    pricingCapacityTb, pricingInstability, pricingStoragePerGbMonth,
   } = state
 
   const titleId = 'connection-form-title'
@@ -195,6 +198,8 @@ export function ConnectionForm({ mode, onClose }: Props) {
         if (pricingInstability !== cp.instability) pricing.instability = pricingInstability
         const wantCapacity = pricingCapacityTb === '' ? null : Math.round(pricingCapacityTb * TIB)
         if (wantCapacity !== cp.capacityBytes) pricing.capacityBytes = wantCapacity
+        const wantRate = pricingStoragePerGbMonth === '' ? null : pricingStoragePerGbMonth
+        if (wantRate !== cp.storagePerGbMonth) pricing.storagePerGbMonth = wantRate
         if (Object.keys(pricing).length > 0) input.pricing = pricing
 
         if (accessKeyId.trim()) input.accessKeyId = accessKeyId.trim()
@@ -545,6 +550,30 @@ export function ConnectionForm({ mode, onClose }: Props) {
               </div>
             </label>
 
+            <label className="modal-choice">
+              <input
+                type="number"
+                min={0}
+                step={0.001}
+                placeholder="カタログに従う"
+                aria-label="ストレージ単価の上書き ($/GB-月)"
+                value={pricingStoragePerGbMonth}
+                onChange={e => dispatch({
+                  type: 'setField',
+                  field: 'pricingStoragePerGbMonth',
+                  value: e.target.value === '' ? '' : Number(e.target.value),
+                })}
+              />
+              <div>
+                <strong>ストレージ単価の上書き ($/GB-月)</strong>
+                <small>
+                  実際の契約単価があれば入れてください。空ならカタログの値を使います。
+                  Wasabi のように料金 API を公開していないプロバイダでは、
+                  カタログの値は手入力なので、ここを入れたほうが正確です。
+                </small>
+              </div>
+            </label>
+
             <small className="block text-ink-7">
               {current.pricing.ratesResolved ? (
                 current.pricing.effective.storagePerGbMonth === null
@@ -555,7 +584,12 @@ export function ConnectionForm({ mode, onClose }: Props) {
                       取り出し ${current.pricing.effective.retrievalPerGb}/GB
                       {current.pricing.effective.minDurationDays > 0
                         && ` · 最小保存 ${current.pricing.effective.minDurationDays} 日`}
-                      {current.pricing.effective.storageIsProxy && ' (ストレージ単価は代理値)'}
+                      {current.pricing.effective.storageRateSource === 'proxy'
+                        && ' (ストレージ単価は代理値)'}
+                      {current.pricing.effective.storageRateSource === 'manual'
+                        && ' (単価は手入力。「単価を更新」では変わりません)'}
+                      {current.pricing.effective.storageRateSource === 'override'
+                        && ' (単価はこの接続で上書き済み)'}
                     </>
               ) : (
                 `リージョン ${current.pricing.region ?? '(不明)'} の単価が料金カタログにありません。`

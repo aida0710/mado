@@ -35,6 +35,7 @@ export const PRICING_FIXTURE: ConnectionPricing = {
     retrievalPerGb: 0,
     minDurationDays: 0,
     minBillableBytes: 0,
-    storageIsProxy: false,
+    perObjectOverheadBytes: 0,
+    storageRateSource: 'none',
   },
 }

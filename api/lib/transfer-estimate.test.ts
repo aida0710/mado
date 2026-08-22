@@ -22,8 +22,8 @@ function rates(over: Partial<EffectiveRates> = {}): EffectiveRates {
   return {
     storageTiers: [], egressTiers: [], egressFreeGb: 0,
     putPer1000: 0, getPer1000: 0, retrievalPerGb: 0, monitoringPerObjectMonth: 0,
-    minDurationDays: 0, minBillableBytes: 0, storageIsProxy: false,
-    storageClassLabel: null, ratesResolved: true,
+    minDurationDays: 0, minBillableBytes: 0, perObjectOverheadBytes: 0,
+    storageRateSource: 'api', storageClassLabel: null, ratesResolved: true,
     ...over,
   }
 }
@@ -304,6 +304,32 @@ describe('estimateTransfer / 月額', () => {
     expect(r.monthlyUsd).toBe(0)
   })
 
+  it('オブジェクトごとの加算は大きいオブジェクトにも乗る', () => {
+    // Glacier 系の 40KB は「最小課金サイズ」ではなく「加算」。
+    // 平均 1GB でも 1 件あたり 40KB 増える。
+    const r = estimateTransfer({
+      scan: { objectCount: 1000, totalBytes: 1000 * GIB },
+      src: { profile: prof(), rates: rates() },
+      dst: {
+        profile: prof({ connId: 'dst' }),
+        rates: rates({ perObjectOverheadBytes: 40960, storageTiers: [{ upToGb: null, usd: 1 }] }),
+      },
+    })
+    expect(r.billableBytes).toBe(1000 * (GIB + 40960))
+  })
+
+  it('最小課金サイズと加算は両方効く', () => {
+    const r = estimateTransfer({
+      scan: { objectCount: 1000, totalBytes: 1000 * 1024 },
+      src: { profile: prof(), rates: rates() },
+      dst: {
+        profile: prof({ connId: 'dst' }),
+        rates: rates({ minBillableBytes: 128 * 1024, perObjectOverheadBytes: 40960 }),
+      },
+    })
+    expect(r.billableBytes).toBe(1000 * (128 * 1024 + 40960))
+  })
+
   it('社内ストレージは月額 0', () => {
     const r = estimateTransfer({
       scan: { objectCount: 100, totalBytes: 100 * 1024 * GIB },
@@ -400,13 +426,54 @@ describe('estimateTransfer / 警告', () => {
     expect(kinds(r)).toContain('smallObjects')
   })
 
-  it('代理値', () => {
+  it('代理値の単価', () => {
     const r = estimateTransfer({
       scan: { objectCount: 10, totalBytes: 10 * GIB },
       src: { profile: prof(), rates: rates() },
-      dst: { profile: prof({ connId: 'dst' }), rates: rates({ storageIsProxy: true }) },
+      dst: { profile: prof({ connId: 'dst' }), rates: rates({ storageRateSource: 'proxy' }) },
     })
     expect(kinds(r)).toContain('proxyRate')
+  })
+
+  it('手入力の単価は「更新しても変わらない」と伝える', () => {
+    const r = estimateTransfer({
+      scan: { objectCount: 10, totalBytes: 10 * GIB },
+      src: { profile: prof(), rates: rates() },
+      dst: { profile: prof({ connId: 'dst' }), rates: rates({ storageRateSource: 'manual' }) },
+    })
+    const w = r.warnings.find(x => x.kind === 'manualRate')
+    expect(w?.message).toContain('更新では新しくなりません')
+  })
+
+  it('人が入れた上書きには注記を出さない', () => {
+    const r = estimateTransfer({
+      scan: { objectCount: 10, totalBytes: 10 * GIB },
+      src: { profile: prof(), rates: rates() },
+      dst: { profile: prof({ connId: 'dst' }), rates: rates({ storageRateSource: 'override' }) },
+    })
+    expect(kinds(r)).not.toContain('manualRate')
+    expect(kinds(r)).not.toContain('proxyRate')
+  })
+
+  it('オブジェクトごとの加算が無視できない割合なら警告する', () => {
+    const r = estimateTransfer({
+      // 100 万件 × 平均 10KB。40KB の加算が本体の 4 倍になる。
+      scan: { objectCount: 1_000_000, totalBytes: 1_000_000 * 10 * 1024 },
+      src: { profile: prof(), rates: rates() },
+      dst: { profile: prof({ connId: 'dst' }), rates: rates({ perObjectOverheadBytes: 40960 }) },
+    })
+    const w = r.warnings.find(x => x.kind === 'objectOverhead')
+    expect(w?.message).toContain('1,000,000 件')
+  })
+
+  it('加算が全体に比べて小さければ警告しない', () => {
+    const r = estimateTransfer({
+      // 1000 件 × 平均 1GB。40KB の加算は誤差。
+      scan: { objectCount: 1000, totalBytes: 1000 * GIB },
+      src: { profile: prof(), rates: rates() },
+      dst: { profile: prof({ connId: 'dst' }), rates: rates({ perObjectOverheadBytes: 40960 }) },
+    })
+    expect(kinds(r)).not.toContain('objectOverhead')
   })
 
   it('単価が引けなかったときは「無料ではない」と伝える', () => {

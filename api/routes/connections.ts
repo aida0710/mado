@@ -289,7 +289,9 @@ function toMasked(row: ConnectionRow) {
         retrievalPerGb: rates.retrievalPerGb,
         minDurationDays: rates.minDurationDays,
         minBillableBytes: rates.minBillableBytes,
-        storageIsProxy: rates.storageIsProxy,
+        perObjectOverheadBytes: rates.perObjectOverheadBytes,
+        /** 単価の出所。'manual' は「更新しても変わらない」ことを UI に出すため。 */
+        storageRateSource: rates.storageRateSource,
       },
     },
     createdAt: row.created_at.toISOString(),

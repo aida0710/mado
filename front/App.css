@@ -1134,6 +1134,30 @@ pre { font-size: 12px; }
 }
 .est-foot__stale { color: var(--ink-12); }
 
+/* 手入力の値の出所。既定は畳んでおく — 普段は読まないが、数字を疑ったときに
+   「どこまでが API 由来か」を辿れる必要がある。 */
+.est-manual {
+  margin-top: var(--space-3);
+  font-size: 11px;
+  color: var(--ink-5);
+  line-height: 1.6;
+}
+.est-manual > summary {
+  cursor: pointer;
+  color: var(--ink-7);
+}
+.est-manual > summary:hover { color: var(--ink-12); }
+.est-manual ul {
+  margin: var(--space-2) 0 0;
+  padding-left: 1.2em;
+}
+.est-manual li { margin-top: 2px; }
+.est-manual__src { margin: var(--space-2) 0 0; }
+.est-manual__src a {
+  color: var(--color-link);
+  margin-right: var(--space-2);
+}
+
 /* ====================================================================
    Markdown body — react-markdown 出力をくるむラッパー (.markdown-body)
    ==================================================================== */

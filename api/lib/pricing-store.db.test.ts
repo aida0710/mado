@@ -41,6 +41,26 @@ describe('looksLikeCatalog', () => {
     expect(looksLikeCatalog(broken)).toBe(false)
   })
 
+  it('新しく足したフィールドが無い (= 古い形の) カタログを弾く', () => {
+    // 構造を変えたあと古いキャッシュが残っている状態。undefined のまま
+    // 計算に入ると NaN になるので、ここで弾いて同梱に落とすのが役目。
+    const old = structuredClone(CATALOG) as {
+      aws: { regions: Record<string, { storageClasses: Record<string, Record<string, unknown>> }> }
+    }
+    for (const region of Object.values(old.aws.regions)) {
+      for (const cls of Object.values(region.storageClasses)) {
+        delete cls.perObjectOverheadBytes
+      }
+    }
+    expect(looksLikeCatalog(old)).toBe(false)
+  })
+
+  it('手入力の出所が無ければ弾く', () => {
+    const old = structuredClone(CATALOG) as { manualFacts?: unknown }
+    delete old.manualFacts
+    expect(looksLikeCatalog(old)).toBe(false)
+  })
+
   it('Wasabi の単価が無ければ弾く', () => {
     const broken = structuredClone(CATALOG) as { wasabi: { perTbMonthUsd?: number } }
     delete broken.wasabi.perTbMonthUsd

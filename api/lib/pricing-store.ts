@@ -48,14 +48,20 @@ export function looksLikeCatalog(v: unknown): v is PricingCatalog {
   const entries = Object.values(regions)
   if (entries.length === 0) return false
 
-  return entries.every(r =>
-    Array.isArray(r?.egressTiers) &&
-    STORAGE_CLASS_KEYS.every(k => {
-      const cls = r.storageClasses?.[k]
-      return Array.isArray(cls?.storageTiers)
-        && cls.storageTiers.length > 0
-        && typeof cls.putPer1000 === 'number'
-    }))
+  // 構造を変えたときに古いキャッシュを弾くのがここの役目なので、
+  // **新しく足したフィールドも必ず見る**。undefined のまま計算に入ると
+  // NaN になり、費用が「-」や 0 として表示されてしまう。
+  return typeof c.manualFacts?.verifiedOn === 'string'
+    && entries.every(r =>
+      Array.isArray(r?.egressTiers) &&
+      STORAGE_CLASS_KEYS.every(k => {
+        const cls = r.storageClasses?.[k]
+        return Array.isArray(cls?.storageTiers)
+          && cls.storageTiers.length > 0
+          && typeof cls.putPer1000 === 'number'
+          && typeof cls.perObjectOverheadBytes === 'number'
+          && typeof cls.storageRateSource === 'string'
+      }))
 }
 
 export interface PricingStoreOptions {

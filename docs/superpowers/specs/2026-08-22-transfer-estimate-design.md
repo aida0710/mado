@@ -72,13 +72,31 @@ CREATE TABLE pricing_cache (
 `取得ロジック: api/lib/pricing-fetch.ts` (ジョブと取得スクリプトが共有する)
 `取得スクリプト: api/scripts/fetch-pricing.ts` — 同梱カタログを書き出す
 
+### 単価の出所を持つ
+
+**「単価を更新」で新しくなるのは AWS の単価だけである。** 料金 API から取れない値がいくつもあり、それらは取得しても変わらない。取得日 (`asOf` / `fetchedAt`) だけを画面に出すと、Wasabi の行まで API から取れた新しい値に見えてしまう。
+
+そこで単価に出所を持たせる。
+
+| 値 | 意味 |
+| --- | --- |
+| `api` | AWS の料金 API から取得。更新で新しくなる |
+| `proxy` | 料金 API に無いので同額の別クラスの API 値で代用 (Deep Archive) |
+| `manual` | 料金 API が無く、Mado が公表値を焼いている (Wasabi)。**更新しても変わらない** |
+| `override` | その接続の設定で人が入れた値。本人が入れたので注記は要らない |
+| `none` | 費用の概念が無い接続 (社内ストレージ) |
+
+`manual` と `proxy` には候補の行を開いたときに注記を出す。加えて、カタログ全体に `manualFacts` を持たせ、「何を手で持っているか・いつ一次ソースで確認したか・出典はどこか」を見積もり画面の脚注 (既定は折りたたみ) に出す。
+
+`manual` の値には接続ごとの単価上書き (`cost.storage_per_gb_month`) で実際の契約単価を入れられる。UI にも出す。
+
 ### Glacier Deep Archive の単価について
 
 `AmazonS3` の Price List には **Glacier Deep Archive のストレージ単価そのものが存在しない** (取り出し・ライフサイクル遷移リクエストはある)。カタログでは Intelligent-Tiering の Deep Archive Access 層の単価 (`TimedStorage-INT-DAA-ByteHrs`) を代理値として使う。
 
 この代理が妥当であることは、単価が公表されている us-east-1 で確認できる。同層は $0.00099/GB-Mo であり、Deep Archive の公表単価と一致する。同様に Archive Access 層 ($0.0045) は Glacier Flexible Retrieval と、Archive Instant Access 層 ($0.005) は Glacier Instant Retrieval と一致する。
 
-カタログ側でこの値には `"proxy": true` を立て、UI では単価の脚注に出す。
+カタログではこの値の出所を `proxy` とし、UI では候補の行に注記を出す。
 
 ### 取得済みの値 (ap-northeast-1 / 2026-08-18 版)
 
@@ -115,15 +133,19 @@ egress (インターネット向け、段階制):
 | 50〜150TB | 0.086 |
 | 150TB〜 | 0.084 |
 
-最小保存期間 / 最小課金サイズ (Price List に無いドキュメント値):
+最小保存期間 / 最小課金サイズ / オブジェクトごとの加算 (料金 API に無いドキュメント値):
 
-| クラス | 最小期間 | 最小課金サイズ |
-| --- | ---: | ---: |
-| Standard | — | — |
-| Standard-IA / One Zone-IA | 30 日 | 128 KB |
-| Glacier IR | 90 日 | 128 KB |
-| Glacier FR | 90 日 | 40 KB |
-| Glacier DA | 180 日 | 40 KB |
+**最小課金サイズと加算は別物である。** 前者は「これ未満のオブジェクトもこのサイズとして課金する」、後者は「どのサイズのオブジェクトにも上乗せする」。Glacier 系の 40KB を最小課金サイズとして扱うと、大きいオブジェクトぶんの加算が丸ごと落ちる。
+
+| クラス | 最小期間 | 最小課金サイズ | 加算 |
+| --- | ---: | ---: | ---: |
+| Standard / Intelligent-Tiering | — | — | — |
+| Standard-IA / One Zone-IA | 30 日 | 128 KB | — |
+| Glacier IR | 90 日 | 128 KB | — |
+| Glacier FR | 90 日 | — | 40 KB |
+| Glacier DA | 180 日 | — | 40 KB |
+
+40KB の内訳は 8KB (Standard 料金) + 32KB (Glacier 料金) だが、単価を分けるほどの額ではないので 40KB 全部を同クラスの単価で数える。
 
 Wasabi:
 
@@ -203,9 +225,12 @@ putRequestCount = parts > 1
 ### 月額
 
 ```
-billableBytes = objectCount × max(avgBytes, minBillableObjectBytes)
+billableBytes = objectCount × (max(avgBytes, minBillableObjectBytes) + perObjectOverheadBytes)
 monthly       = 段階制で billableBytes を積分
 ```
+
+最小課金サイズと加算は**両方効く**。前者は「これ未満はこのサイズとして課金」、
+後者は「どのサイズにも上乗せ」で、別の概念である (前掲の表を参照)。
 
 **最小課金サイズの扱いには既知の弱点がある。** 走査は合計バイト数と個数しか持たないため、平均で近似せざるを得ない。分布が偏っている (大きいファイルと極小ファイルが混在する) 場合、この近似は最小課金サイズの影響を過小評価する。
 

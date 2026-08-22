@@ -41,7 +41,11 @@ interface ClassSpec {
   retrieval: string | null
   monitoring?: string
   minDurationDays: number
+  /** これ未満のオブジェクトもこのサイズとして課金される (IA 系 / GIR の 128KB)。 */
   minBillableBytes: number
+  /** オブジェクトごとに加算されるバイト数 (Glacier FR / DA のメタデータ 40KB)。
+   *  最小課金サイズと違い、大きいオブジェクトにも乗る。 */
+  perObjectOverheadBytes?: number
 }
 
 const CLASSES: Record<StorageClassKey, ClassSpec> = {
@@ -107,7 +111,8 @@ const CLASSES: Record<StorageClassKey, ClassSpec> = {
     get: 'GET and all other requests to GLACIER per Requests',
     retrieval: 'Fee for Standard Retrieval of data stored',
     minDurationDays: 90,
-    minBillableBytes: 40960,
+    minBillableBytes: 0,
+    perObjectOverheadBytes: 40960,
   },
   DEEP_ARCHIVE: {
     label: 'Glacier Deep Archive',
@@ -121,17 +126,44 @@ const CLASSES: Record<StorageClassKey, ClassSpec> = {
     get: 'GET and all other requests to GDA per Requests',
     retrieval: 'Fee for Standard Retrieval of data stored from Glacier Deep Archive',
     minDurationDays: 180,
-    minBillableBytes: 40960,
+    minBillableBytes: 0,
+    perObjectOverheadBytes: 40960,
   },
 }
 
-/** Wasabi は料金 API を持たない。公表値を定数で持つ。
- *  2026-07-01 に $6.99 → $7.99/TB/月 へ改定された。 */
+/** Wasabi は料金 API を公開していない。公表値を手で持つ。
+ *
+ *  **「単価を更新」を押してもここは変わらない。** 2026-07-01 に
+ *  $6.99 → $7.99/TB/月 へ改定されたばかりで、次の改定も自動では追随しない。
+ *  UI では出所を manual として区別し、接続ごとの単価上書きで実際の契約単価を
+ *  入れられるようにしてある。 */
 const WASABI = {
   label: 'Wasabi Hot Cloud Storage',
   perTbMonthUsd: 7.99,
   minDurationDays: 90,
   minBillableTb: 1,
+  rateSource: 'manual' as const,
+}
+
+/** 料金 API から取れない値と、その確認日・一次ソース。
+ *
+ *  ここに挙がっているものは取得しても更新されない。人が確認した日を持って
+ *  UI に出し、「取得日が新しい = 全部新しい」と読み違えさせない。
+ *  値を直したら verifiedOn も更新すること。 */
+const MANUAL_FACTS = {
+  verifiedOn: '2026-08-22',
+  notes: [
+    'AWS の最小保存期間 (Standard-IA / One Zone-IA は 30 日、Glacier IR / FR は 90 日、Deep Archive は 180 日)',
+    'AWS の最小課金サイズ (IA 系と Glacier IR は 128KB) と、Glacier FR / Deep Archive でオブジェクトごとに加算される 40KB',
+    'Glacier Deep Archive のストレージ単価 (料金 API に無いため、同額の Intelligent-Tiering Deep Archive Access 層で代用)',
+    'Wasabi の単価とポリシー (料金 API を公開していないため全て手入力)',
+  ],
+  sources: [
+    'https://aws.amazon.com/s3/storage-classes/',
+    'https://aws.amazon.com/s3/pricing/',
+    'https://docs.wasabi.com/docs/may-2026-wasabi-pricing',
+    'https://wasabi.com/pricing/faq',
+  ],
 }
 
 interface MeteredRow { price: string }
@@ -210,7 +242,7 @@ function buildStorageClasses(
     out[key] = {
       label: spec.label,
       storageTiers,
-      storageIsProxy: spec.storageIsProxy ?? false,
+      storageRateSource: spec.storageIsProxy ? 'proxy' : 'api',
       // meteredUnitMap は 1 リクエストあたり。表示と突き合わせやすいよう
       // カタログでは $/1000 リクエストに直す。
       putPer1000: round(rate(rows, spec.put, code) * 1000),
@@ -219,6 +251,7 @@ function buildStorageClasses(
       monitoringPerObjectMonth: spec.monitoring ? rate(rows, spec.monitoring, code) : 0,
       minDurationDays: spec.minDurationDays,
       minBillableBytes: spec.minBillableBytes,
+      perObjectOverheadBytes: spec.perObjectOverheadBytes ?? 0,
     }
   }
   return out
@@ -306,6 +339,7 @@ export async function fetchCatalog(opts: FetchCatalogOptions = {}): Promise<Pric
   return {
     asOf: now().toISOString().slice(0, 10),
     awsPublishedAt: s3.manifest?.hawkFilePublicationDate ?? null,
+    manualFacts: MANUAL_FACTS,
     aws: { regions },
     wasabi: WASABI,
   }

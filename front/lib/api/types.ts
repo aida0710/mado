@@ -233,7 +233,10 @@ export const ConnectionPricing = z.object({
     retrievalPerGb: z.number(),
     minDurationDays: z.number(),
     minBillableBytes: z.number(),
-    storageIsProxy: z.boolean(),
+    /** オブジェクトごとに加算されるバイト数 (Glacier 系の 40KB)。 */
+    perObjectOverheadBytes: z.number(),
+    /** 単価の出所。'manual' は「単価を更新しても変わらない」。 */
+    storageRateSource: z.enum(['api', 'proxy', 'manual', 'override', 'none']),
   }),
 })
 export type ConnectionPricing = z.infer<typeof ConnectionPricing>
@@ -469,6 +472,12 @@ export const TransferEstimate = z.object({
     fetchedAt: z.string().nullable(),
     /** 取得から時間が経ちすぎている。更新を促すために出す。 */
     stale: z.boolean(),
+    /** 料金 API から取れず手で持っている値。**更新しても変わらない部分**。 */
+    manualFacts: z.object({
+      verifiedOn: z.string(),
+      notes: z.array(z.string()),
+      sources: z.array(z.string()),
+    }),
   }),
   candidates: z.array(TransferCandidate),
 })

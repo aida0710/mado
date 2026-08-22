@@ -162,6 +162,59 @@ describe('ConnectionForm の見積もり設定', () => {
     expect(onSubmit.mock.calls[0][0]).toEqual({ pricing: { storageClass: 'DEEP_ARCHIVE' } })
   })
 
+  it('ストレージ単価を上書きできる', async () => {
+    const onSubmit = renderEdit(conn)
+    await userEvent.type(screen.getByLabelText('ストレージ単価の上書き ($/GB-月)'), '0.004')
+    await userEvent.click(screen.getByRole('button', { name: '保存' }))
+    await waitFor(() => expect(onSubmit).toHaveBeenCalled())
+    expect(onSubmit.mock.calls[0][0]).toEqual({ pricing: { storagePerGbMonth: 0.004 } })
+  })
+
+  it('単価の上書きを空にするとカタログに戻す', async () => {
+    const overridden: Connection = {
+      ...conn,
+      pricing: { ...PRICING_FIXTURE, storagePerGbMonth: 0.004 },
+    }
+    const onSubmit = renderEdit(overridden)
+    const input = screen.getByLabelText('ストレージ単価の上書き ($/GB-月)')
+    expect(input).toHaveValue(0.004)
+    await userEvent.clear(input)
+    await userEvent.click(screen.getByRole('button', { name: '保存' }))
+    await waitFor(() => expect(onSubmit).toHaveBeenCalled())
+    expect(onSubmit.mock.calls[0][0]).toEqual({ pricing: { storagePerGbMonth: null } })
+  })
+
+  it('手入力の単価は「更新では変わらない」と伝える', () => {
+    // Wasabi のように料金 API が無いプロバイダ。
+    renderEdit({
+      ...conn,
+      pricing: {
+        ...PRICING_FIXTURE,
+        provider: 'wasabi',
+        providerExplicit: true,
+        effective: {
+          ...PRICING_FIXTURE.effective,
+          storagePerGbMonth: 0.0078,
+          minDurationDays: 90,
+          storageRateSource: 'manual',
+        },
+      },
+    })
+    expect(screen.getByText(/単価は手入力。「単価を更新」では変わりません/)).toBeInTheDocument()
+  })
+
+  it('上書き済みならそう表示する', () => {
+    renderEdit({
+      ...awsConn,
+      pricing: {
+        ...awsConn.pricing,
+        storagePerGbMonth: 0.004,
+        effective: { ...awsConn.pricing.effective, storageRateSource: 'override' },
+      },
+    })
+    expect(screen.getByText(/単価はこの接続で上書き済み/)).toBeInTheDocument()
+  })
+
   it('不安定さは 0 も送れる (上振れ無しは意味のある設定)', async () => {
     const onSubmit = renderEdit(conn)
     const inst = screen.getByLabelText('不安定さ')

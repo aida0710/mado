@@ -132,7 +132,7 @@ describe('effectiveRates', () => {
     expect(r.putPer1000).toBeGreaterThan(0)
     expect(r.egressTiers.length).toBeGreaterThan(0)
     expect(r.minDurationDays).toBe(0)
-    expect(r.storageIsProxy).toBe(false)
+    expect(r.storageRateSource).toBe('api')
   })
 
   it('Standard-IA には最小保存期間と最小課金サイズがある', () => {
@@ -144,8 +144,11 @@ describe('effectiveRates', () => {
 
   it('Deep Archive の単価は代理値である印が立つ', () => {
     const r = effectiveRates(aws({ [K.storageClass]: 'DEEP_ARCHIVE' }))
-    expect(r.storageIsProxy).toBe(true)
+    expect(r.storageRateSource).toBe('proxy')
     expect(r.minDurationDays).toBe(180)
+    // 40KB は「最小課金サイズ」ではなく、各オブジェクトへの加算。
+    expect(r.minBillableBytes).toBe(0)
+    expect(r.perObjectOverheadBytes).toBe(40960)
   })
 
   it('アーカイブ系ほどストレージは安く PUT は高い', () => {
@@ -170,6 +173,8 @@ describe('effectiveRates', () => {
     expect(r.egressTiers).toEqual([])
     expect(r.putPer1000).toBe(0)
     expect(r.minDurationDays).toBe(90)
+    // 料金 API が無いので手入力。「更新しても変わらない」ことを UI に出すため。
+    expect(r.storageRateSource).toBe('manual')
   })
 
   it('社内ストレージは全て 0 だが「引けた」扱い', () => {
@@ -177,6 +182,8 @@ describe('effectiveRates', () => {
     expect(r.ratesResolved).toBe(true)
     expect(r.storageTiers).toEqual([])
     expect(r.putPer1000).toBe(0)
+    // 費用の概念が無い接続。'manual' ではないので注記も出ない。
+    expect(r.storageRateSource).toBe('none')
   })
 
   it('手動上書きはカタログより優先される', () => {
@@ -192,11 +199,12 @@ describe('effectiveRates', () => {
     expect(r.getPer1000).toBe(0.0001)
   })
 
-  it('ストレージ単価を上書きすると代理値の印は下りる', () => {
+  it('ストレージ単価を上書きすると出所が override になる', () => {
+    // 人が入れた値なので、代理値でも手入力でもなくなる (注記も出さない)。
     const r = effectiveRates(aws({
       [K.storageClass]: 'DEEP_ARCHIVE', [K.storagePerGbMonth]: '0.002',
     }))
-    expect(r.storageIsProxy).toBe(false)
+    expect(r.storageRateSource).toBe('override')
   })
 
   it('社内ストレージにも単価を入れられる', () => {
@@ -250,10 +258,41 @@ describe('料金カタログ', () => {
     }
   })
 
-  it('Deep Archive だけが代理値である', () => {
+  it('Deep Archive だけが代理値で、他は API 由来', () => {
     for (const region of Object.values(CATALOG.aws.regions)) {
       for (const key of STORAGE_CLASS_KEYS) {
-        expect(region.storageClasses[key].storageIsProxy).toBe(key === 'DEEP_ARCHIVE')
+        expect(region.storageClasses[key].storageRateSource)
+          .toBe(key === 'DEEP_ARCHIVE' ? 'proxy' : 'api')
+      }
+    }
+  })
+
+  it('手で持っている値の出所と確認日を持つ', () => {
+    // 「単価を更新」しても変わらない部分。取得日と混同させないために要る。
+    expect(CATALOG.manualFacts.verifiedOn).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+    expect(CATALOG.manualFacts.notes.length).toBeGreaterThan(0)
+    expect(CATALOG.manualFacts.sources.every(u => u.startsWith('https://'))).toBe(true)
+  })
+
+  it('Wasabi は手入力である印が立つ', () => {
+    expect(CATALOG.wasabi.rateSource).toBe('manual')
+  })
+
+  it('Glacier 系だけがオブジェクトごとの加算を持つ', () => {
+    for (const region of Object.values(CATALOG.aws.regions)) {
+      for (const key of STORAGE_CLASS_KEYS) {
+        const cls = region.storageClasses[key]
+        const expected = key === 'GLACIER' || key === 'DEEP_ARCHIVE' ? 40960 : 0
+        expect(cls.perObjectOverheadBytes, key).toBe(expected)
+      }
+    }
+  })
+
+  it('最小課金サイズは IA 系と Glacier IR の 128KB だけ', () => {
+    for (const region of Object.values(CATALOG.aws.regions)) {
+      for (const key of STORAGE_CLASS_KEYS) {
+        const has = key === 'STANDARD_IA' || key === 'ONEZONE_IA' || key === 'GLACIER_IR'
+        expect(region.storageClasses[key].minBillableBytes, key).toBe(has ? 131072 : 0)
       }
     }
   })

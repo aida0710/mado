@@ -21,6 +21,9 @@ const MONITORING_MIN_BYTES = 128 * 1024
  *  課金側の GB が 2^30 なのと食い違うが、どちらも各分野の慣習どおり。 */
 const BYTES_PER_MB = 1_000_000
 
+/** オブジェクトごとの加算がこの割合を超えたら警告する。 */
+const OVERHEAD_WARN_RATIO = 0.1
+
 export interface ScanInput {
   objectCount: number
   totalBytes: number
@@ -39,7 +42,9 @@ export type WarningKind =
   | 'wasabiPolicy'
   | 'capacity'
   | 'smallObjects'
+  | 'objectOverhead'
   | 'proxyRate'
+  | 'manualRate'
   | 'ratesUnavailable'
 
 export interface EstimateWarning {
@@ -130,6 +135,7 @@ function fmtUsd(n: number): string {
 function buildWarnings(
   src: Endpoint,
   dst: Endpoint,
+  scan: ScanInput,
   avgObjectBytes: number,
   billableBytes: number,
 ): EstimateWarning[] {
@@ -185,11 +191,21 @@ function buildWarnings(
     })
   }
 
-  if (dst.rates.storageIsProxy) {
+  if (dst.rates.storageRateSource === 'proxy') {
     out.push({
       kind: 'proxyRate',
       message: 'このクラスのストレージ単価は AWS の料金 API に存在しないため、'
         + '同額の別クラス (Intelligent-Tiering の Deep Archive Access 層) の値を使っています。',
+    })
+  }
+
+  if (dst.rates.storageRateSource === 'manual') {
+    // 「単価を更新」を押しても変わらない値であることを、行を開けば分かるようにする。
+    out.push({
+      kind: 'manualRate',
+      message: 'このプロバイダは料金 API を公開していないため、単価は Mado が'
+        + '手で持っている公表値です。単価の更新では新しくなりません — '
+        + '実際の契約単価があれば接続の設定で上書きしてください。',
     })
   }
 
@@ -199,6 +215,20 @@ function buildWarnings(
       message: `平均 ${fmtBytes(avgObjectBytes)} は最小課金サイズ `
         + `${fmtBytes(dst.rates.minBillableBytes)} を下回ります。`
         + '小さいオブジェクトもこのサイズとして課金されます。',
+    })
+  }
+
+  // 最小課金サイズ (IA 系の 128KB) とは別に、Glacier 系はオブジェクトごとに
+  // 40KB が**加算**される。最小課金サイズと違って大きいオブジェクトにも乗るので、
+  // 小さいものを大量に置くとここが効く。
+  const overheadBytes = scan.objectCount * dst.rates.perObjectOverheadBytes
+  if (overheadBytes > scan.totalBytes * OVERHEAD_WARN_RATIO) {
+    const pct = Math.round((overheadBytes / (scan.totalBytes + overheadBytes)) * 100)
+    out.push({
+      kind: 'objectOverhead',
+      message: `このクラスはオブジェクトごとに ${fmtBytes(dst.rates.perObjectOverheadBytes)} の`
+        + `メタデータが加算されます。${scan.objectCount.toLocaleString()} 件では`
+        + ` ${fmtBytes(overheadBytes)} 分が上乗せされ、課金対象の約 ${pct}% を占めます。`,
     })
   }
 
@@ -257,7 +287,11 @@ export function estimateTransfer(input: EstimateInput): TransferEstimate {
   // ── 月額 ──
   // 最小課金サイズは平均で近似する。走査は合計と個数しか持たないため
   // (分布が偏っていると過小評価になる。ヒストグラムは後続の課題)。
-  const billableBytes = scan.objectCount * Math.max(avgObjectBytes, dst.rates.minBillableBytes)
+  //
+  // 加算 (Glacier 系の 40KB) は最小課金サイズとは別枠。片方は「これ未満は
+  // このサイズとして課金」、もう片方は「どのサイズにも上乗せ」で、両方効く。
+  const billableBytes = scan.objectCount
+    * (Math.max(avgObjectBytes, dst.rates.minBillableBytes) + dst.rates.perObjectOverheadBytes)
   const monitoring = avgObjectBytes >= MONITORING_MIN_BYTES
     ? scan.objectCount * dst.rates.monitoringPerObjectMonth
     : 0
@@ -282,6 +316,6 @@ export function estimateTransfer(input: EstimateInput): TransferEstimate {
     billableBytes,
     putRequestCount: puts,
     avgObjectBytes,
-    warnings: buildWarnings(src, dst, avgObjectBytes, billableBytes),
+    warnings: buildWarnings(src, dst, scan, avgObjectBytes, billableBytes),
   }
 }

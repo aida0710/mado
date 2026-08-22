@@ -6,7 +6,7 @@
 
 import { CATALOG } from '../pricing/catalog.js'
 import type {
-  PricingCatalog, StorageClassKey, StorageClassPricing, Tier,
+  PricingCatalog, RateSource, StorageClassKey, StorageClassPricing, Tier,
 } from './pricing-types.js'
 import { STORAGE_CLASS_KEYS } from './pricing-types.js'
 
@@ -109,8 +109,10 @@ export interface EffectiveRates {
   monitoringPerObjectMonth: number
   minDurationDays: number
   minBillableBytes: number
-  /** ストレージ単価が同クラスの実値でなく代理値か (Deep Archive)。 */
-  storageIsProxy: boolean
+  /** オブジェクトごとに加算されるバイト数 (Glacier FR / DA の 40KB)。 */
+  perObjectOverheadBytes: number
+  /** ストレージ単価の出所。UI が注記を出すかどうかを決める。 */
+  storageRateSource: RateSource
   /** 表示用のクラス名。クラスの概念が無いプロバイダでは null。 */
   storageClassLabel: string | null
   /** 単価を引けたか。`false` は「カタログに無い」— コストが 0 と表示されるが
@@ -195,7 +197,8 @@ function emptyRates(): EffectiveRates {
     monitoringPerObjectMonth: 0,
     minDurationDays: 0,
     minBillableBytes: 0,
-    storageIsProxy: false,
+    perObjectOverheadBytes: 0,
+    storageRateSource: 'none',
     storageClassLabel: null,
     ratesResolved: true,
   }
@@ -215,7 +218,8 @@ function awsRates(cls: StorageClassPricing, region: {
     monitoringPerObjectMonth: cls.monitoringPerObjectMonth,
     minDurationDays: cls.minDurationDays,
     minBillableBytes: cls.minBillableBytes,
-    storageIsProxy: cls.storageIsProxy,
+    perObjectOverheadBytes: cls.perObjectOverheadBytes,
+    storageRateSource: cls.storageRateSource,
     storageClassLabel: cls.label,
     ratesResolved: true,
   }
@@ -241,6 +245,8 @@ export function effectiveRates(
       // 定額 $/TB-月 を $/GB-月 に直す。段階は無い。
       storageTiers: [{ upToGb: null, usd: w.perTbMonthUsd / 1024 }],
       minDurationDays: w.minDurationDays,
+      // 料金 API が無いので手入力。更新しても変わらないことを UI に出す。
+      storageRateSource: w.rateSource,
       storageClassLabel: w.label,
     }
   } else {
@@ -259,7 +265,7 @@ export function effectiveRates(
       : rates.egressTiers,
     putPer1000: o.putPer1000 ?? rates.putPer1000,
     getPer1000: o.getPer1000 ?? rates.getPer1000,
-    // 上書きした単価は代理値かどうかの話ではなくなる。
-    storageIsProxy: o.storagePerGbMonth !== null ? false : rates.storageIsProxy,
+    // 人が入れた値は出所が変わる。本人が入れたものなので注記は要らない。
+    storageRateSource: o.storagePerGbMonth !== null ? 'override' : rates.storageRateSource,
   }
 }

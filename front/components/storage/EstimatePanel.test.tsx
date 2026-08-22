@@ -11,6 +11,12 @@ vi.mock('../../lib/api/client', () => ({
 
 const GIB = 1024 ** 3
 
+const MANUAL_FACTS = {
+  verifiedOn: '2026-08-22',
+  notes: ['AWS の最小保存期間', 'Wasabi の単価とポリシー'],
+  sources: ['https://aws.amazon.com/s3/pricing/', 'https://wasabi.com/pricing/faq'],
+}
+
 function candidate(over: Partial<TransferCandidate> = {}): TransferCandidate {
   return {
     connId: 'dst', name: 'jamstec-s3', provider: 'onprem',
@@ -40,6 +46,7 @@ function estimate(candidates: TransferCandidate[], over: Partial<TransferEstimat
       source: 'fetched',
       fetchedAt: '2026-08-22T00:00:00Z',
       stale: false,
+      manualFacts: MANUAL_FACTS,
     },
     candidates,
     ...over,
@@ -167,7 +174,7 @@ describe('EstimatePanel', () => {
     vi.mocked(api.estimate).mockResolvedValue(estimate([candidate()], {
       catalog: {
         asOf: '2026-08-22', awsPublishedAt: null,
-        source: 'bundled', fetchedAt: null, stale: true,
+        source: 'bundled', fetchedAt: null, stale: true, manualFacts: MANUAL_FACTS,
       },
     }))
     renderPanel()
@@ -180,6 +187,7 @@ describe('EstimatePanel', () => {
       catalog: {
         asOf: '2025-01-01', awsPublishedAt: null,
         source: 'fetched', fetchedAt: '2025-01-01T00:00:00Z', stale: true,
+        manualFacts: MANUAL_FACTS,
       },
     }))
     renderPanel()
@@ -218,6 +226,18 @@ describe('EstimatePanel', () => {
     vi.mocked(api.estimate).mockResolvedValue(estimate([candidate()]))
     renderPanel()
     expect(await screen.findByText(/平均 304\.5 MB/)).toBeInTheDocument()
+  })
+
+  it('料金 API から取れない値の出所を畳んで出す', async () => {
+    vi.mocked(api.estimate).mockResolvedValue(estimate([candidate()]))
+    renderPanel()
+    // 「取得日が新しい = 全部新しい」と読み違えさせないための注記。
+    expect(await screen.findByText(/料金 API から取れないため手入力です（2026-08-22 確認）/))
+      .toBeInTheDocument()
+    expect(screen.getByText('AWS の最小保存期間')).toBeInTheDocument()
+    // 同じドメインの別ページを区別できるよう、パスまで出す。
+    expect(screen.getByRole('link', { name: 'wasabi.com/pricing/faq' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'aws.amazon.com/s3/pricing' })).toBeInTheDocument()
   })
 
   it('失敗したらエラーを出す', async () => {

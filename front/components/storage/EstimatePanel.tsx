@@ -33,6 +33,17 @@ type State =
   | { kind: 'error'; message: string }
   | { kind: 'data'; data: TransferEstimate }
 
+/** 出典リンクの表示名。ホスト名だけだと同じドメインの別ページが区別できない
+ *  (aws.amazon.com が 2 つ並ぶ) ので、パスまで出してスキームだけ落とす。 */
+function sourceLabel(url: string): string {
+  try {
+    const u = new URL(url)
+    return `${u.hostname}${u.pathname.replace(/\/$/, '')}`
+  } catch {
+    return url
+  }
+}
+
 /** 内訳の 1 行。0 の項目も出す — 「かからない」ことが分かるのが大事。 */
 function CostRow({ label, value, note }: { label: string; value: number; note?: string }) {
   return (
@@ -253,6 +264,24 @@ export function EstimatePanel({ connId, bucket, prefix, onNeedScan }: Props) {
         )}
         {refreshError && <span className="error">{' '}{refreshError}</span>}
       </p>
+      {/* 「単価を更新」で新しくなるのは AWS の単価だけ。最小保存期間や
+          Wasabi は料金 API が無く手で持っているので、取得日とは別に
+          確認日を出す — 取得日が新しい = 全部新しい、と読み違えさせない。 */}
+      <details className="est-manual">
+        <summary>
+          一部の値は料金 API から取れないため手入力です（{catalog.manualFacts.verifiedOn} 確認）
+        </summary>
+        <ul>
+          {catalog.manualFacts.notes.map(n => <li key={n}>{n}</li>)}
+        </ul>
+        <p className="est-manual__src">
+          出典:{' '}
+          {catalog.manualFacts.sources.map(u => (
+            <a key={u} href={u} target="_blank" rel="noreferrer noopener">{sourceLabel(u)}</a>
+          ))}
+        </p>
+      </details>
+
       <p className="est-foot">
         所要時間は接続ごとの帯域設定から出しています。
         実測を入れると精度が上がります（Settings → 接続）。

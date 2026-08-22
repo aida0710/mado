@@ -126,8 +126,8 @@ describe('fetchCatalog', () => {
       { upToGb: 512000, usd: 0.024 },
       { upToGb: null, usd: 0.023 },
     ])
-    expect(tokyo.storageClasses.DEEP_ARCHIVE.storageIsProxy).toBe(true)
-    expect(tokyo.storageClasses.STANDARD.storageIsProxy).toBe(false)
+    expect(tokyo.storageClasses.DEEP_ARCHIVE.storageRateSource).toBe('proxy')
+    expect(tokyo.storageClasses.STANDARD.storageRateSource).toBe('api')
   })
 
   it('リクエスト単価を $/1000 に直す (浮動小数のゴミを残さない)', async () => {

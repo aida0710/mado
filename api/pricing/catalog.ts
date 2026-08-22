@@ -18,6 +18,21 @@ import type { PricingCatalog } from '../lib/pricing-types.js'
 export const CATALOG: PricingCatalog = {
   "asOf": "2026-08-22",
   "awsPublishedAt": "2026-08-18T18:11:13Z",
+  "manualFacts": {
+    "verifiedOn": "2026-08-22",
+    "notes": [
+      "AWS の最小保存期間 (Standard-IA / One Zone-IA は 30 日、Glacier IR / FR は 90 日、Deep Archive は 180 日)",
+      "AWS の最小課金サイズ (IA 系と Glacier IR は 128KB) と、Glacier FR / Deep Archive でオブジェクトごとに加算される 40KB",
+      "Glacier Deep Archive のストレージ単価 (料金 API に無いため、同額の Intelligent-Tiering Deep Archive Access 層で代用)",
+      "Wasabi の単価とポリシー (料金 API を公開していないため全て手入力)"
+    ],
+    "sources": [
+      "https://aws.amazon.com/s3/storage-classes/",
+      "https://aws.amazon.com/s3/pricing/",
+      "https://docs.wasabi.com/docs/may-2026-wasabi-pricing",
+      "https://wasabi.com/pricing/faq"
+    ]
+  },
   "aws": {
     "regions": {
       "ap-northeast-1": {
@@ -39,13 +54,14 @@ export const CATALOG: PricingCatalog = {
                 "usd": 0.023
               }
             ],
-            "storageIsProxy": false,
+            "storageRateSource": "api",
             "putPer1000": 0.0047,
             "getPer1000": 0.00037,
             "retrievalPerGb": 0,
             "monitoringPerObjectMonth": 0,
             "minDurationDays": 0,
-            "minBillableBytes": 0
+            "minBillableBytes": 0,
+            "perObjectOverheadBytes": 0
           },
           "INTELLIGENT_TIERING": {
             "label": "Intelligent-Tiering",
@@ -63,13 +79,14 @@ export const CATALOG: PricingCatalog = {
                 "usd": 0.023
               }
             ],
-            "storageIsProxy": false,
+            "storageRateSource": "api",
             "putPer1000": 0.0047,
             "getPer1000": 0.00037,
             "retrievalPerGb": 0,
             "monitoringPerObjectMonth": 0.0000025,
             "minDurationDays": 0,
-            "minBillableBytes": 0
+            "minBillableBytes": 0,
+            "perObjectOverheadBytes": 0
           },
           "STANDARD_IA": {
             "label": "Standard-IA",
@@ -79,13 +96,14 @@ export const CATALOG: PricingCatalog = {
                 "usd": 0.0138
               }
             ],
-            "storageIsProxy": false,
+            "storageRateSource": "api",
             "putPer1000": 0.01,
             "getPer1000": 0.001,
             "retrievalPerGb": 0.01,
             "monitoringPerObjectMonth": 0,
             "minDurationDays": 30,
-            "minBillableBytes": 131072
+            "minBillableBytes": 131072,
+            "perObjectOverheadBytes": 0
           },
           "ONEZONE_IA": {
             "label": "One Zone-IA",
@@ -95,13 +113,14 @@ export const CATALOG: PricingCatalog = {
                 "usd": 0.011
               }
             ],
-            "storageIsProxy": false,
+            "storageRateSource": "api",
             "putPer1000": 0.01,
             "getPer1000": 0.001,
             "retrievalPerGb": 0.01,
             "monitoringPerObjectMonth": 0,
             "minDurationDays": 30,
-            "minBillableBytes": 131072
+            "minBillableBytes": 131072,
+            "perObjectOverheadBytes": 0
           },
           "GLACIER_IR": {
             "label": "Glacier Instant Retrieval",
@@ -111,13 +130,14 @@ export const CATALOG: PricingCatalog = {
                 "usd": 0.005
               }
             ],
-            "storageIsProxy": false,
+            "storageRateSource": "api",
             "putPer1000": 0.02,
             "getPer1000": 0.01,
             "retrievalPerGb": 0.03,
             "monitoringPerObjectMonth": 0,
             "minDurationDays": 90,
-            "minBillableBytes": 131072
+            "minBillableBytes": 131072,
+            "perObjectOverheadBytes": 0
           },
           "GLACIER": {
             "label": "Glacier Flexible Retrieval",
@@ -127,13 +147,14 @@ export const CATALOG: PricingCatalog = {
                 "usd": 0.0045
               }
             ],
-            "storageIsProxy": false,
+            "storageRateSource": "api",
             "putPer1000": 0.03426,
             "getPer1000": 0.00037,
             "retrievalPerGb": 0.011,
             "monitoringPerObjectMonth": 0,
             "minDurationDays": 90,
-            "minBillableBytes": 40960
+            "minBillableBytes": 0,
+            "perObjectOverheadBytes": 40960
           },
           "DEEP_ARCHIVE": {
             "label": "Glacier Deep Archive",
@@ -143,13 +164,14 @@ export const CATALOG: PricingCatalog = {
                 "usd": 0.002
               }
             ],
-            "storageIsProxy": true,
+            "storageRateSource": "proxy",
             "putPer1000": 0.065,
             "getPer1000": 0.00037,
             "retrievalPerGb": 0.022,
             "monitoringPerObjectMonth": 0,
             "minDurationDays": 180,
-            "minBillableBytes": 40960
+            "minBillableBytes": 0,
+            "perObjectOverheadBytes": 40960
           }
         },
         "egressTiers": [
@@ -195,13 +217,14 @@ export const CATALOG: PricingCatalog = {
                 "usd": 0.021
               }
             ],
-            "storageIsProxy": false,
+            "storageRateSource": "api",
             "putPer1000": 0.005,
             "getPer1000": 0.0004,
             "retrievalPerGb": 0,
             "monitoringPerObjectMonth": 0,
             "minDurationDays": 0,
-            "minBillableBytes": 0
+            "minBillableBytes": 0,
+            "perObjectOverheadBytes": 0
           },
           "INTELLIGENT_TIERING": {
             "label": "Intelligent-Tiering",
@@ -219,13 +242,14 @@ export const CATALOG: PricingCatalog = {
                 "usd": 0.021
               }
             ],
-            "storageIsProxy": false,
+            "storageRateSource": "api",
             "putPer1000": 0.005,
             "getPer1000": 0.0004,
             "retrievalPerGb": 0,
             "monitoringPerObjectMonth": 0.0000025,
             "minDurationDays": 0,
-            "minBillableBytes": 0
+            "minBillableBytes": 0,
+            "perObjectOverheadBytes": 0
           },
           "STANDARD_IA": {
             "label": "Standard-IA",
@@ -235,13 +259,14 @@ export const CATALOG: PricingCatalog = {
                 "usd": 0.0125
               }
             ],
-            "storageIsProxy": false,
+            "storageRateSource": "api",
             "putPer1000": 0.01,
             "getPer1000": 0.001,
             "retrievalPerGb": 0.01,
             "monitoringPerObjectMonth": 0,
             "minDurationDays": 30,
-            "minBillableBytes": 131072
+            "minBillableBytes": 131072,
+            "perObjectOverheadBytes": 0
           },
           "ONEZONE_IA": {
             "label": "One Zone-IA",
@@ -251,13 +276,14 @@ export const CATALOG: PricingCatalog = {
                 "usd": 0.01
               }
             ],
-            "storageIsProxy": false,
+            "storageRateSource": "api",
             "putPer1000": 0.01,
             "getPer1000": 0.001,
             "retrievalPerGb": 0.01,
             "monitoringPerObjectMonth": 0,
             "minDurationDays": 30,
-            "minBillableBytes": 131072
+            "minBillableBytes": 131072,
+            "perObjectOverheadBytes": 0
           },
           "GLACIER_IR": {
             "label": "Glacier Instant Retrieval",
@@ -267,13 +293,14 @@ export const CATALOG: PricingCatalog = {
                 "usd": 0.004
               }
             ],
-            "storageIsProxy": false,
+            "storageRateSource": "api",
             "putPer1000": 0.02,
             "getPer1000": 0.01,
             "retrievalPerGb": 0.03,
             "monitoringPerObjectMonth": 0,
             "minDurationDays": 90,
-            "minBillableBytes": 131072
+            "minBillableBytes": 131072,
+            "perObjectOverheadBytes": 0
           },
           "GLACIER": {
             "label": "Glacier Flexible Retrieval",
@@ -283,13 +310,14 @@ export const CATALOG: PricingCatalog = {
                 "usd": 0.0036
               }
             ],
-            "storageIsProxy": false,
+            "storageRateSource": "api",
             "putPer1000": 0.03,
             "getPer1000": 0.0004,
             "retrievalPerGb": 0.01,
             "monitoringPerObjectMonth": 0,
             "minDurationDays": 90,
-            "minBillableBytes": 40960
+            "minBillableBytes": 0,
+            "perObjectOverheadBytes": 40960
           },
           "DEEP_ARCHIVE": {
             "label": "Glacier Deep Archive",
@@ -299,13 +327,14 @@ export const CATALOG: PricingCatalog = {
                 "usd": 0.00099
               }
             ],
-            "storageIsProxy": true,
+            "storageRateSource": "proxy",
             "putPer1000": 0.05,
             "getPer1000": 0.0004,
             "retrievalPerGb": 0.02,
             "monitoringPerObjectMonth": 0,
             "minDurationDays": 180,
-            "minBillableBytes": 40960
+            "minBillableBytes": 0,
+            "perObjectOverheadBytes": 40960
           }
         },
         "egressTiers": [
@@ -338,6 +367,7 @@ export const CATALOG: PricingCatalog = {
     "label": "Wasabi Hot Cloud Storage",
     "perTbMonthUsd": 7.99,
     "minDurationDays": 90,
-    "minBillableTb": 1
+    "minBillableTb": 1,
+    "rateSource": "manual"
   }
 }
