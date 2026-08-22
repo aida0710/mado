@@ -68,6 +68,9 @@ export interface JobStore {
   /** 実行中 (queued/running) があればそれを、無ければ最後に成功したジョブを返す。
    *  リロードで jobId を失った UI が実行中のジョブへ再接続するために使う。 */
   activeOrLatest(kind: string, dedupKey: string): Promise<JobRow | null>
+  /** status を問わず最後に投入されたジョブ。**失敗も拾う**。
+   *  自動再投入の間隔を決めるのに使う (失敗し続ける処理を無限に投げ直さない)。 */
+  latestAny(kind: string, dedupKey: string): Promise<JobRow | null>
   /** queued を 1 件 running にして返す。無ければ null。 */
   claim(): Promise<{ id: number; kind: string; payload: unknown } | null>
   heartbeat(id: number, progress: JobProgress | null): Promise<void>
@@ -115,6 +118,16 @@ export function createJobStore(pools: Pools): JobStore {
         `SELECT ${COLUMNS} FROM jobs
           WHERE kind = $1 AND dedup_key = $2 AND status = 'done'
           ORDER BY finished_at DESC LIMIT 1`,
+        [kind, dedupKey],
+      )
+      return r.rows[0] ? toRow(r.rows[0]) : null
+    },
+
+    async latestAny(kind, dedupKey) {
+      const r = await pools.ro.query<DbJobRow>(
+        `SELECT ${COLUMNS} FROM jobs
+          WHERE kind = $1 AND dedup_key = $2
+          ORDER BY created_at DESC LIMIT 1`,
         [kind, dedupKey],
       )
       return r.rows[0] ? toRow(r.rows[0]) : null
