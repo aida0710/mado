@@ -14,6 +14,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from '../../lib/api/client'
 import { ScanResult as ScanResultSchema, type ScanResult } from '../../lib/api/types'
 import { fmtCacheAge, fmtSize } from '../../lib/format'
+import { EstimatePanel } from './EstimatePanel'
 
 interface Props {
   connId: string
@@ -61,6 +62,7 @@ export function ScanModal({ connId, bucket, prefix, onClose, onResult }: Props) 
   const [scanned, setScanned] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [loaded, setLoaded] = useState(false)
+  const [tab, setTab] = useState<'breakdown' | 'estimate'>('breakdown')
   const timer = useRef<number | null>(null)
 
   // 開いた直後に、実行中のジョブか保存済みの結果を引く。
@@ -141,6 +143,48 @@ export function ScanModal({ connId, bucket, prefix, onClose, onResult }: Props) 
         <h3>配下の集計</h3>
         <p className="scan-modal__path">{bucket} / {prefix || '(バケット直下)'}</p>
 
+        {/* 「配下に何が何 TB あるか」を見ている文脈は、そのまま「で、どこへ
+            移すか」につながる。新しい導線を作らずこのモーダルを広げる
+            (spec: 2026-08-22-transfer-estimate-design.md)。 */}
+        <div className="scan-modal__tabs" role="tablist">
+          <button
+            type="button"
+            role="tab"
+            id="scan-tab-breakdown"
+            aria-selected={tab === 'breakdown'}
+            aria-controls="scan-panel-breakdown"
+            className={tab === 'breakdown' ? 'is-on' : ''}
+            onClick={() => setTab('breakdown')}
+          >
+            内訳
+          </button>
+          <button
+            type="button"
+            role="tab"
+            id="scan-tab-estimate"
+            aria-selected={tab === 'estimate'}
+            aria-controls="scan-panel-estimate"
+            className={tab === 'estimate' ? 'is-on' : ''}
+            onClick={() => setTab('estimate')}
+          >
+            移送の見積もり
+          </button>
+        </div>
+
+        {tab === 'estimate' ? (
+          <div role="tabpanel" id="scan-panel-estimate" aria-labelledby="scan-tab-estimate">
+            {/* タブを切り替えるたびにマウントし直す = 取り直す。走査を終えた
+                直後に開いても古い結果が出ない。DB を読むだけなので軽い。 */}
+            <EstimatePanel
+              connId={connId}
+              bucket={bucket}
+              prefix={prefix}
+              onNeedScan={() => setTab('breakdown')}
+            />
+          </div>
+        ) : (
+        <div role="tabpanel" id="scan-panel-breakdown" aria-labelledby="scan-tab-breakdown">
+
         {/* 走査中も結果も同じ枠。完了時にレイアウトが飛ばない。 */}
         {(running || result) && (
           <div className="scan-figures">
@@ -220,6 +264,8 @@ export function ScanModal({ connId, bucket, prefix, onClose, onResult }: Props) 
             </>
           )}
         </div>
+        </div>
+        )}
       </div>
     </div>
   )

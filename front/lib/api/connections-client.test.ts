@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { api } from './client'
 import { ALL_CAPABILITIES_ON } from './types'
+import { PRICING_FIXTURE } from './fixtures'
 
 afterEach(() => vi.restoreAllMocks())
 
@@ -12,6 +13,7 @@ describe('connections client', () => {
       capabilities: { ...ALL_CAPABILITIES_ON, download: false },
       scanEnabled: true,
       listCacheTtlSec: 86400,
+      pricing: PRICING_FIXTURE,
       createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z',
       isDefault: true,
     }]), { status: 200, headers: { 'Content-Type': 'application/json' } }))

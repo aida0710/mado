@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import ConnectionsPage from './ConnectionsPage'
 import { api } from '../lib/api/client'
 import { ALL_CAPABILITIES_ON } from '../lib/api/types'
+import { PRICING_FIXTURE } from '../lib/api/fixtures'
 
 vi.mock('../lib/api/client', async importOriginal => {
   const mod = await importOriginal<typeof import('../lib/api/client')>()
@@ -24,6 +25,7 @@ const conn = (id: string, isDefault: boolean) => ({
   capabilities: ALL_CAPABILITIES_ON,
   createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z', isDefault,
   scanEnabled: true, listCacheTtlSec: 86400,
+  pricing: PRICING_FIXTURE,
 })
 
 describe('ConnectionsPage デフォルト切り替え', () => {

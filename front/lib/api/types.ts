@@ -167,6 +167,77 @@ export const CAPABILITY_UI: ReadonlyArray<{
     help: 'README.md をバケットに書き戻します。読み込みがオフだと選べません。' },
 ]
 
+// ── 転送見積もりのプロファイル (spec: 2026-08-22-transfer-estimate-design.md) ──
+
+export const Provider = z.enum(['aws', 'wasabi', 'onprem', 'other'])
+export type Provider = z.infer<typeof Provider>
+
+export const PROVIDER_LABELS: Record<Provider, string> = {
+  aws:    'AWS S3',
+  wasabi: 'Wasabi',
+  onprem: '社内 / その他 (費用なし)',
+  other:  'その他',
+}
+
+export const StorageClassKey = z.enum([
+  'STANDARD', 'INTELLIGENT_TIERING', 'STANDARD_IA', 'ONEZONE_IA',
+  'GLACIER_IR', 'GLACIER', 'DEEP_ARCHIVE',
+])
+export type StorageClassKey = z.infer<typeof StorageClassKey>
+
+/** 選択肢の並び。「速くて高い」→「遅くて安い」の順に並べる。 */
+export const STORAGE_CLASS_OPTIONS: Array<{ key: StorageClassKey; label: string; help: string }> = [
+  { key: 'STANDARD',            label: 'Standard',
+    help: '既定。取り出し料金も最小保存期間も無い。' },
+  { key: 'INTELLIGENT_TIERING', label: 'Intelligent-Tiering',
+    help: 'アクセス頻度で自動的に階層を移す。オブジェクトごとに監視料がかかる。' },
+  { key: 'STANDARD_IA',         label: 'Standard-IA',
+    help: '月額は約半分。読み出しに $/GB がかかり、最小 30 日・128KB 単位。' },
+  { key: 'ONEZONE_IA',          label: 'One Zone-IA',
+    help: '1 つの AZ にしか置かない。失っても再生成できるデータ向け。' },
+  { key: 'GLACIER_IR',          label: 'Glacier Instant Retrieval',
+    help: '取り出しは即時だが $/GB が高い。最小 90 日。' },
+  { key: 'GLACIER',             label: 'Glacier Flexible Retrieval',
+    help: '取り出しに数分〜数時間。最小 90 日。' },
+  { key: 'DEEP_ARCHIVE',        label: 'Glacier Deep Archive',
+    help: '最安。取り出しに十数時間かかり、最小 180 日。' },
+]
+
+/** 接続ごとの見積もり設定。値は「設定 + 推定 + 既定」を畳んだ実効値。 */
+export const ConnectionPricing = z.object({
+  provider: Provider,
+  /** false = エンドポイントからの自動判定。 */
+  providerExplicit: z.boolean(),
+  region: z.string().nullable(),
+  storageClass: StorageClassKey.nullable(),
+  storageClassLabel: z.string().nullable(),
+  /** false = 料金カタログに単価が無い。費用 0 は「無料」の意味ではない。 */
+  ratesResolved: z.boolean(),
+  readMbps: z.number(),
+  writeMbps: z.number(),
+  parallelism: z.number(),
+  requestOverheadMs: z.number(),
+  instability: z.number(),
+  capacityBytes: z.number().nullable(),
+  // 手動上書き。null = カタログに従う。
+  storagePerGbMonth: z.number().nullable(),
+  egressPerGb: z.number().nullable(),
+  putPer1000: z.number().nullable(),
+  getPer1000: z.number().nullable(),
+  /** 上書き適用後の実効単価 (「今いくらで計算されるか」の表示用)。 */
+  effective: z.object({
+    storagePerGbMonth: z.number().nullable(),
+    egressPerGb: z.number().nullable(),
+    putPer1000: z.number(),
+    getPer1000: z.number(),
+    retrievalPerGb: z.number(),
+    minDurationDays: z.number(),
+    minBillableBytes: z.number(),
+    storageIsProxy: z.boolean(),
+  }),
+})
+export type ConnectionPricing = z.infer<typeof ConnectionPricing>
+
 export const Connection = z.object({
   id: z.string(),
   name: z.string(),
@@ -180,6 +251,8 @@ export const Connection = z.object({
   scanEnabled: z.boolean(),
   /** 一覧キャッシュの保持秒数。既定 86400 (24 時間)。 */
   listCacheTtlSec: z.number(),
+  /** 転送見積もりに使うプロファイル。 */
+  pricing: ConnectionPricing,
   createdAt: z.string(),
   updatedAt: z.string(),
   isDefault: z.boolean(),
@@ -214,6 +287,26 @@ export interface ConnectionUpdateInput {
   capabilities?: Partial<Capabilities>
   scanEnabled?: boolean
   listCacheTtlSec?: number
+  /** 見積もり設定の差分。**null = 既定に戻す** (設定行を消す)、
+   *  未指定 = 触らない。プロバイダの既定が「エンドポイントから推定」なので
+   *  この区別が要る。 */
+  pricing?: ConnectionPricingInput
+}
+
+export interface ConnectionPricingInput {
+  provider?: Provider | null
+  region?: string | null
+  storageClass?: StorageClassKey | null
+  readMbps?: number | null
+  writeMbps?: number | null
+  parallelism?: number | null
+  requestOverheadMs?: number | null
+  instability?: number | null
+  capacityBytes?: number | null
+  storagePerGbMonth?: number | null
+  egressPerGb?: number | null
+  putPer1000?: number | null
+  getPer1000?: number | null
 }
 
 export const NoteAbsent  = z.object({ exists: z.literal(false) })
@@ -315,5 +408,69 @@ export const Job = z.object({
 })
 export type Job = z.infer<typeof Job>
 
-export const StartScanOk = z.object({ jobId: z.number() })
+/** ジョブ投入の応答。走査も単価更新も同じ形。 */
+export const StartJobOk = z.object({ jobId: z.number() })
+export const StartScanOk = StartJobOk
+
+// ── 転送見積もり (spec: 2026-08-22-transfer-estimate-design.md) ──
+
+// kind は増える前提なので enum にしない。増えた警告が parse エラーで
+// 画面を落とすより、知らない kind でもメッセージを出せる方がよい。
+export const EstimateWarning = z.object({
+  kind: z.string(),
+  message: z.string(),
+})
+export type EstimateWarning = z.infer<typeof EstimateWarning>
+
+export const TransferCandidate = z.object({
+  connId: z.string(),
+  name: z.string(),
+  provider: Provider,
+  storageClass: StorageClassKey.nullable(),
+  storageClassLabel: z.string().nullable(),
+  /** 移動元と同じ接続 (= ストレージクラスの変更)。回線も egress も要らない。 */
+  sameConnection: z.boolean(),
+  durationSec: z.object({ optimistic: z.number(), pessimistic: z.number() }),
+  upfront: z.object({
+    egress: z.number(),
+    retrieval: z.number(),
+    getRequests: z.number(),
+    putRequests: z.number(),
+    total: z.number(),
+  }),
+  monthlyUsd: z.number(),
+  billableBytes: z.number(),
+  putRequestCount: z.number(),
+  avgObjectBytes: z.number(),
+  warnings: z.array(EstimateWarning),
+})
+export type TransferCandidate = z.infer<typeof TransferCandidate>
+
+export const TransferEstimate = z.object({
+  source: z.object({
+    connId: z.string(),
+    name: z.string(),
+    provider: Provider,
+    storageClass: StorageClassKey.nullable(),
+    storageClassLabel: z.string().nullable(),
+  }),
+  scan: z.object({
+    objectCount: z.number(),
+    totalBytes: z.number(),
+    scannedAt: z.string().nullable(),
+  }),
+  catalog: z.object({
+    asOf: z.string(),
+    awsPublishedAt: z.string().nullable(),
+    /** 'bundled' = まだ取得できていない (同梱の値で計算している)。
+     *  費用 0 が「無料」なのか「単価を引けていない」のかを区別するために要る。 */
+    source: z.enum(['bundled', 'fetched']),
+    /** 単価を取得した日時 (ISO)。同梱を使っているときは null。 */
+    fetchedAt: z.string().nullable(),
+    /** 取得から時間が経ちすぎている。更新を促すために出す。 */
+    stale: z.boolean(),
+  }),
+  candidates: z.array(TransferCandidate),
+})
+export type TransferEstimate = z.infer<typeof TransferEstimate>
 

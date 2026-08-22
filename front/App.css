@@ -995,6 +995,145 @@ pre { font-size: 12px; }
   flex-wrap: wrap;
 }
 
+/* タブ (内訳 / 移送の見積もり)。走査結果を見ている文脈がそのまま
+   「で、どこへ移すか」につながるので、同じモーダルに同居させる。 */
+.scan-modal__tabs {
+  display: flex;
+  gap: var(--space-4);
+  border-bottom: 1px solid var(--rule);
+  margin-bottom: var(--space-3);
+}
+.scan-modal__tabs button {
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  padding: 0 0 6px;
+  margin-bottom: -1px;
+  font: 500 12.5px/1 var(--font-sans);
+  color: var(--ink-7);
+  cursor: pointer;
+}
+.scan-modal__tabs button:hover { color: var(--ink-12); }
+.scan-modal__tabs button.is-on {
+  color: var(--ink-12);
+  border-bottom-color: var(--ink-12);
+}
+
+/* ── 移送の見積もり (spec: 2026-08-22-transfer-estimate-design.md) ──
+   ヘッダと行で同じ grid を共有して 5 列を揃える。警告バッジの列は
+   空でも要素を置く (無いと列が詰まって右 3 列がずれる)。 */
+.est-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  padding: var(--space-2) 0 var(--space-3);
+  font-size: 13px;
+}
+.est-head small { color: var(--ink-7); margin-left: 4px; }
+.est-head__src { color: var(--ink-7); font-size: 11.5px; }
+
+.est-table { border-top: 1px solid var(--color-rule-strong); }
+.est-table__head,
+.est-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto auto 34px;
+  gap: var(--space-3);
+  align-items: baseline;
+  width: 100%;
+  text-align: left;
+  padding: 6px 0;
+}
+.est-table__head {
+  font: 600 9.5px/1 var(--font-sans);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-5);
+  border-bottom: 1px solid var(--rule);
+  padding-bottom: 4px;
+}
+.est-row {
+  border: 0;
+  border-bottom: 1px solid var(--rule);
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.est-row:hover,
+.est-row--open { background: var(--ink-1); }
+.est-row__nm {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  min-width: 0;
+}
+.est-row__caret { color: var(--ink-5); font-size: 10px; }
+.est-row__here {
+  font: 500 9.5px/1.6 var(--font-sans);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-5);
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  padding: 1px 4px;
+}
+.est-row__dur,
+.est-row__up,
+.est-row__mo,
+.est-row__warn {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.est-row__dur { color: var(--ink-7); min-width: 92px; }
+.est-row__up  { color: var(--ink-9); min-width: 62px; }
+.est-row__mo  { color: var(--ink-12); min-width: 66px; }
+.est-row__warn { color: var(--ink-7); font-size: 11px; }
+
+.est-brk {
+  padding: var(--space-3) 0 var(--space-4);
+  border-bottom: 1px solid var(--rule);
+}
+.est-brk__grid { display: flex; flex-direction: column; gap: 2px; }
+.est-brk__row {
+  display: grid;
+  grid-template-columns: 170px 76px 1fr;
+  gap: var(--space-3);
+  align-items: baseline;
+  font-size: 12px;
+}
+.est-brk__k { color: var(--ink-7); }
+.est-brk__v {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  color: var(--ink-12);
+}
+.est-brk__note { color: var(--ink-5); font-size: 11px; }
+
+.est-warns { margin: var(--space-3) 0 0; padding: 0; list-style: none; }
+.est-warns__item {
+  font-size: 11.5px;
+  color: var(--ink-9);
+  line-height: 1.5;
+  padding-left: 15px;
+  text-indent: -15px;
+  margin-top: 4px;
+}
+.est-warns__item::before { content: '\26A0  '; color: var(--ink-5); }
+
+.est-foot {
+  margin-top: var(--space-4);
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--ink-5);
+}
+.est-foot__stale { color: var(--ink-12); }
+
 /* ====================================================================
    Markdown body — react-markdown 出力をくるむラッパー (.markdown-body)
    ==================================================================== */

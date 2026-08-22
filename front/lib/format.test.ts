@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { fmtCacheAge, fmtSize, prettyPrintJson } from './format'
+import { fmtCacheAge, fmtDurationRange, fmtSize, fmtUsd, prettyPrintJson } from './format'
 
 describe('prettyPrintJson', () => {
   it('.json は minify されていても整形する', () => {
@@ -93,5 +93,54 @@ describe('fmtSize — TB / PB', () => {
     expect(fmtSize(512)).toBe('512 B')
     expect(fmtSize(1024)).toBe('1.0 KB')
     expect(fmtSize(1024 ** 3)).toBe('1.0 GB')
+  })
+})
+
+describe('fmtUsd', () => {
+  it('0 は $0', () => {
+    expect(fmtUsd(0)).toBe('$0')
+  })
+
+  it('1 セント未満は潰さずに「小さい」と言う', () => {
+    // $0.00 と出すと無料に見えてしまう。
+    expect(fmtUsd(0.004)).toBe('<$0.01')
+  })
+
+  it('$100 未満はセントまで', () => {
+    expect(fmtUsd(0.5)).toBe('$0.50')
+    expect(fmtUsd(65.4321)).toBe('$65.43')
+  })
+
+  it('$100 以上は丸めて桁区切り', () => {
+    // 下 2 桁には意味が無く、あると精度があるように見えてしまう。
+    expect(fmtUsd(1043.27)).toBe('$1,043')
+    expect(fmtUsd(3890.5)).toBe('$3,891')
+  })
+})
+
+describe('fmtDurationRange', () => {
+  it('90 秒未満は秒', () => {
+    expect(fmtDurationRange(30, 45)).toBe('30〜45 秒')
+  })
+
+  it('90 分未満は分', () => {
+    expect(fmtDurationRange(600, 900)).toBe('10〜15 分')
+  })
+
+  it('48 時間未満は時間', () => {
+    expect(fmtDurationRange(3600 * 13, 3600 * 20)).toBe('13〜20 時間')
+  })
+
+  it('それ以上は日', () => {
+    expect(fmtDurationRange(86400 * 3, 86400 * 4.5)).toBe('3〜4.5 日')
+  })
+
+  it('単位は上振れ側で決め、両端で揃える', () => {
+    // 楽観が分、悲観が時間でも「0.9〜1.5 時間」と揃える。
+    expect(fmtDurationRange(3300, 5400)).toBe('0.9〜1.5 時間')
+  })
+
+  it('両端が同じに丸まったら 1 つだけ出す', () => {
+    expect(fmtDurationRange(200, 200)).toBe('3.3 分')
   })
 })

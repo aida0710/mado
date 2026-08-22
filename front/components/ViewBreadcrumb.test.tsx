@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Connection } from '../lib/api/types'
+import { PRICING_FIXTURE } from '../lib/api/fixtures'
 import { ConnectionContext } from '../lib/connectionContext'
 import { copyToClipboard } from '../lib/clipboard'
 import { ViewBreadcrumb } from './ViewBreadcrumb'
@@ -18,6 +19,7 @@ const conn: Connection = {
   capabilities: ALL_CAPABILITIES_ON,
   createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z', isDefault: false,
   scanEnabled: true, listCacheTtlSec: 86400,
+  pricing: PRICING_FIXTURE,
 }
 
 function renderCrumb() {
