@@ -207,7 +207,11 @@ dev の DB パスワードは未設定なら既定値 (`postgres` / `CHANGEME`) 
 | `ALLOWED_ORIGINS` | yes | CSRF 防御。write 系で許容する Origin (カンマ区切り)。dev: `http://localhost:5173` / prod: ダッシュボードを開く URL |
 | `AUTH_MODE` | no | `disabled` / `local` / `oidc` / `hybrid`。外部公開ではdisabled禁止 |
 | `AUTH_COOKIE_SECURE` | no | HTTPS本番は`true`必須。`__Host-` session cookieを使う |
-| `OIDC_*` | oidc/hybrid | issuer、client ID/secret、callback URL、表示label |
+| `OIDC_ISSUER_URL` / `OIDC_CLIENT_ID` / `OIDC_CLIENT_SECRET` / `OIDC_REDIRECT_URI` | oidc/hybrid | OIDC discovery issuer、client、callback URL |
+| `OIDC_ALLOWED_GROUPS` | no | ログインを許可するAuthentik group（カンマ区切り）。空ならgroup制限なし |
+| `OIDC_ROLE_MAPPING_JSON` | no | Authentik groupから`viewer` / `curator` / `operator` / `admin`への対応。設定時はログインごとに同期 |
+| `OIDC_AUTO_LINK_VERIFIED_EMAIL` | no | `email_verified=true`の既存Local Userを自動連携（default true） |
+| `OIDC_POST_LOGOUT_REDIRECT_URI` | no | Authentik logout後の戻り先。未指定時はcallbackと同じoriginの`/` |
 | `DATASET_REGISTRY_URL` | lineage | Dataset Registry API URL |
 | `DATASET_REGISTRY_TOKEN` | lineage | Mado→Registry内部Bearer token。Pipeline keyとは別物 |
 | `MARQUEZ_URL` | lineage | read-onlyで参照するMarquez URL |
@@ -273,6 +277,9 @@ Pipelineは`POST /api/openlineage/v1/lineage`へService Account keyをBearer送�
 - **CSRF 防御**: write 系 (POST/PUT/DELETE) は `ALLOWED_ORIGINS` と Origin/Referer を照合し、不一致なら 403。
 - **PG ロール分離**: ブラウザ由来の経路は `dashboard_rw` / `dashboard_ro` を使い分け、Postgres レベルで `DROP TABLE` 等を防ぐ。
 - **接続ごとのcapability**はRBACとは別層です。Adminであっても接続側で無効なdownload等は実行できません。
+
+Authentikとの接続、JIT User、group RBAC、Front/Back-channel logoutの登録値は
+[`docs/authentik.md`](docs/authentik.md)にまとめています。
 
 ---
 

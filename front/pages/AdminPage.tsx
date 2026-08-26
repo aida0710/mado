@@ -44,6 +44,7 @@ const ACTION_LABELS: Record<string, string> = {
   'auth.password.change': 'パスワード変更',
   'auth.profile.update': 'アカウント設定変更',
   'auth.bootstrap_admin': '初期管理者を作成',
+  'auth.oidc.session_revoke': 'SSOセッションを失効',
   'connection.create': '接続を追加',
   'connection.update': '接続を変更',
   'connection.delete': '接続を削除',
