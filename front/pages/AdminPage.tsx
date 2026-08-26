@@ -119,7 +119,7 @@ export default function AdminPage() {
 
   return (
     <section className="admin-page">
-      <header className="page-head"><h2>Access</h2><p className="page-head__sub">人のログインとPipelineのAPI keyを分離して管理します。</p></header>
+      <header className="page-head"><h2>Access</h2></header>
       {error && <p className="error" role="alert">{error}</p>}
       {notice && <div className="admin-notice">{notice}</div>}
       {secret && (

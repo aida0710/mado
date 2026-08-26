@@ -65,7 +65,6 @@ export default function HomePage() {
             <span aria-hidden>⏱</span>
             履歴
           </button>
-          <p className="page-head__sub">Mado 全体で1つの共有メモ</p>
         </header>
 
         {isPresent ? (

@@ -127,9 +127,6 @@ export default function LineagePage() {
     <section className="lineage-page">
       <header className="page-head">
         <h2>Lineage</h2>
-        <p className="page-head__sub">
-          Datasetがどこから来て、どのJob・Runで処理され、どの版になったかを追跡します。
-        </p>
       </header>
 
       <LineageToolbar
