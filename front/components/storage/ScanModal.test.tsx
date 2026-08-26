@@ -9,7 +9,9 @@ vi.mock('../../lib/api/client', () => ({
     startScan: vi.fn(),
     getJob: vi.fn(),
     latestScan: vi.fn(),
-    cancelJob: vi.fn(),
+    // Promise を返さないと ScanModal 側の .catch() で落ちる (unhandled error)。
+    cancelJob: vi.fn().mockResolvedValue(undefined),
+    estimate: vi.fn().mockResolvedValue(null),
   },
 }))
 
@@ -138,5 +140,45 @@ describe('リロード後の再接続', () => {
     mock(api.getJob).mockResolvedValue({ id: 42, status: 'queued', progress: null, result: null })
     render(<ScanModal connId="c1" bucket="b1" prefix="p/" onClose={() => {}} />)
     expect(await screen.findByText('走査済み')).toBeInTheDocument()
+  })
+})
+
+describe('ScanModal — 移送の見積もりタブ', () => {
+  it('既定は内訳タブ (見積もりは引かない)', async () => {
+    mock(api.latestScan).mockResolvedValue({
+      id: 1, status: 'done', result: RESULT, finishedAt: null,
+    })
+    render(<ScanModal connId="c1" bucket="b1" prefix="p/" onClose={() => {}} />)
+    await screen.findByText('オブジェクト')
+    expect(api.estimate).not.toHaveBeenCalled()
+  })
+
+  it('タブを開くと同じ場所の見積もりを引く', async () => {
+    mock(api.latestScan).mockResolvedValue({
+      id: 1, status: 'done', result: RESULT, finishedAt: null,
+    })
+    mock(api.estimate).mockResolvedValue(null)
+
+    const user = userEvent.setup()
+    render(<ScanModal connId="c1" bucket="b1" prefix="p/" onClose={() => {}} />)
+    await user.click(await screen.findByRole('tab', { name: '移送の見積もり' }))
+
+    await waitFor(() => expect(api.estimate).toHaveBeenCalledWith('c1', 'b1', 'p/'))
+    // 内訳側の走査ボタンは隠れる (パネルごと切り替わる)。
+    expect(screen.queryByRole('button', { name: '↻ 再走査' })).toBeNull()
+  })
+
+  it('見積もりタブから走査へ戻れる', async () => {
+    mock(api.latestScan).mockResolvedValue(null)
+    mock(api.estimate).mockResolvedValue(null)
+
+    const user = userEvent.setup()
+    render(<ScanModal connId="c1" bucket="b1" prefix="p/" onClose={() => {}} />)
+    await user.click(await screen.findByRole('tab', { name: '移送の見積もり' }))
+    // 未走査なので EstimatePanel が誘導を出す。
+    await user.click(await screen.findByRole('button', { name: '走査する' }))
+
+    // 内訳タブに戻り、そこの走査ボタンが押せる状態になる。
+    expect(await screen.findByText(/まだ走査していません/)).toBeInTheDocument()
   })
 })

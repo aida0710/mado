@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest'
 import { Breadcrumb } from './Breadcrumb'
 import { ConnectionContext } from '../lib/connectionContext'
 import type { Connection } from '../lib/api/types'
+import { PRICING_FIXTURE } from '../lib/api/fixtures'
 import { ALL_CAPABILITIES_ON } from '../lib/api/types'
 
 const conn: Connection = {
@@ -21,6 +22,7 @@ const conn: Connection = {
   isDefault: false,
   scanEnabled: true,
   listCacheTtlSec: 86400,
+  pricing: PRICING_FIXTURE,
 }
 
 function renderBreadcrumb(prefix: string) {

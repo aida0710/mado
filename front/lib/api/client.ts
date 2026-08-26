@@ -23,6 +23,8 @@ import {
   TarPreview,
   Job,
   StartScanOk,
+  StartJobOk,
+  TransferEstimate,
 } from './types'
 import type { ConnectionCreateInput, ConnectionUpdateInput, TagCreateInput, TagUpdateInput, TargetKind } from './types'
 import { TTLCache } from './cache'
@@ -645,6 +647,26 @@ export const api = {
 
   cancelJob: async (id: number): Promise<void> => {
     await mutateJson(`${API_BASE}/jobs/${id}/cancel`, { method: 'POST' }, null)
+  },
+
+  // ── 転送見積もり (spec: 2026-08-22-transfer-estimate-design.md) ──
+  // 走査結果と接続設定だけから計算されるので S3 は叩かれない。
+  // 接続設定を変えると結果が変わるため TTLCache は通さない。
+
+  /** 料金カタログの更新ジョブを投入する。**取得の完了は待たない** —
+   *  呼び出し側が getJob でポーリングする。 */
+  refreshPricing: () =>
+    mutateJson(`${API_BASE}/pricing/refresh`, { method: 'POST' }, StartJobOk),
+
+  /** 走査済みディレクトリの移送見積もり。**まだ走査していなければ null**。 */
+  estimate: async (connId: string, bucket: string, prefix: string) => {
+    const res = await fetch(
+      buildUrl(`${API_BASE}/storage/${encodeURIComponent(connId)}/estimate`, { bucket, prefix }),
+      { headers: { Accept: 'application/json' } },
+    )
+    if (res.status === 409) return null
+    if (!res.ok) throw new Error(res.statusText)
+    return TransferEstimate.parse(await res.json())
   },
 
   // 該当キャッシュエントリが「いつ S3 から取得されたか」を Date で返す。

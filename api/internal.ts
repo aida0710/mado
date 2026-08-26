@@ -15,6 +15,9 @@ import { createResponseCache } from './lib/storage-cache.js'
 import { createJobStore } from './lib/jobs.js'
 import { mountJobRoutes } from './routes/jobs.js'
 import { mountStorageScanRoutes } from './routes/storage-scan.js'
+import { mountStorageEstimateRoutes } from './routes/storage-estimate.js'
+import { mountPricingRoutes } from './routes/pricing.js'
+import { createPricingStore } from './lib/pricing-store.js'
 import { mountStorageReadmeRoutes } from './routes/storage-readme.js'
 import { mountStoragePreviewRoutes } from './routes/storage-preview.js'
 import { mountStorageMediaRoutes } from './routes/storage-media.js'
@@ -38,6 +41,9 @@ const storageFactory = createStorageFactory({ pools, crypto })
 // storage_response_cache の 1 テーブルのみ (spec の「ロールについての判断」)。
 const responseCache = createResponseCache(pools.rw)
 const jobStore = createJobStore(pools)
+// 料金カタログ (同梱 → DB キャッシュ → プロセス内メモリの 3 層)。
+// 取得そのものは worker の pricing.refresh ジョブが行う。
+const pricingStore = createPricingStore(pools)
 
 const app = new Hono()
 app.use('*', logger())
@@ -92,6 +98,9 @@ mountStorageMediaRoutes(api, {
 })
 mountJobRoutes(api, { store: jobStore })
 mountStorageScanRoutes(api, { store: jobStore, getConnectionConfig: storageFactory.getConnectionConfig })
+// 見積もりは S3 を叩かないので cap() のガードには載せない (上のコメント参照)。
+mountStorageEstimateRoutes(api, { pools, store: jobStore, pricing: pricingStore })
+mountPricingRoutes(api, { pools, store: jobStore, pricing: pricingStore })
 mountStorageFavoritesRoutes(api, { pools })
 mountSettingsRoutes(api, { pools })
 mountNotesRoutes(api, { pools })

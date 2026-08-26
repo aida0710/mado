@@ -1,13 +1,21 @@
 import { useReducer } from 'react'
-import { ALL_CAPABILITIES_ON, CAPABILITY_UI } from '../lib/api/types'
+import {
+  ALL_CAPABILITIES_ON, CAPABILITY_UI, PROVIDER_LABELS, STORAGE_CLASS_OPTIONS,
+} from '../lib/api/types'
 import type {
   Capabilities,
   Capability,
   Connection,
   ConnectionCreateInput,
+  ConnectionPricingInput,
   ConnectionUpdateInput,
   ListObjectsVersion,
+  Provider,
+  StorageClassKey,
 } from '../lib/api/types'
+
+/** 容量の入力単位。fmtSize が 1024 系なので、表示と揃えて TiB で扱う。 */
+const TIB = 1024 ** 4
 
 type Mode =
   | { kind: 'create'; onSubmit: (input: ConnectionCreateInput) => Promise<void> }
@@ -31,6 +39,19 @@ interface FormState {
   scanEnabled: boolean
   /** 一覧キャッシュの保持秒数。 */
   listCacheTtlSec: number
+  // ── 転送見積もり (spec: 2026-08-22-transfer-estimate-design.md) ──
+  // 単価の手動上書き (cost.*) は API にはあるが、ここには出していない。
+  // カタログに載っているリージョンなら触る必要が無いため。
+  /** '' = エンドポイントから自動判定。 */
+  pricingProvider: Provider | ''
+  pricingStorageClass: StorageClassKey
+  pricingReadMbps: number
+  pricingWriteMbps: number
+  /** '' = 未設定 (容量の警告を出さない)。単位は TiB。 */
+  pricingCapacityTb: number | ''
+  pricingInstability: number
+  /** '' = カタログに従う。料金 API の無いプロバイダで実契約単価を入れる用。 */
+  pricingStoragePerGbMonth: number | ''
   showSecret: boolean
   saving: boolean
   error: string | null
@@ -80,6 +101,15 @@ function initialState(current: Connection | null): FormState {
     capabilities: current?.capabilities ?? ALL_CAPABILITIES_ON,
     scanEnabled: current?.scanEnabled ?? true,
     listCacheTtlSec: current?.listCacheTtlSec ?? 86400,
+    pricingProvider: current?.pricing.providerExplicit ? current.pricing.provider : '',
+    pricingStorageClass: current?.pricing.storageClass ?? 'STANDARD',
+    pricingReadMbps: current?.pricing.readMbps ?? 300,
+    pricingWriteMbps: current?.pricing.writeMbps ?? 300,
+    pricingCapacityTb: current?.pricing.capacityBytes != null
+      ? Math.round((current.pricing.capacityBytes / TIB) * 10) / 10
+      : '',
+    pricingInstability: current?.pricing.instability ?? 0.5,
+    pricingStoragePerGbMonth: current?.pricing.storagePerGbMonth ?? '',
     showSecret: false,
     saving: false,
     error: null,
@@ -96,6 +126,8 @@ export function ConnectionForm({ mode, onClose }: Props) {
     forcePathStyle, listObjectsVersion, capabilities, showSecret, saving, error,
     scanEnabled,
     listCacheTtlSec,
+    pricingProvider, pricingStorageClass, pricingReadMbps, pricingWriteMbps,
+    pricingCapacityTb, pricingInstability, pricingStoragePerGbMonth,
   } = state
 
   const titleId = 'connection-form-title'
@@ -148,6 +180,28 @@ export function ConnectionForm({ mode, onClose }: Props) {
         if (Object.keys(capChanges).length > 0) input.capabilities = capChanges
         if (scanEnabled !== cur.scanEnabled) input.scanEnabled = scanEnabled
         if (listCacheTtlSec !== cur.listCacheTtlSec) input.listCacheTtlSec = listCacheTtlSec
+
+        // 見積もり設定も差分。**null は「既定に戻す」** (API 側で行を消す) で、
+        // 未指定の「触らない」とは別物なので、自動判定に戻したいときは
+        // null を明示的に送る。
+        const cp = cur.pricing
+        const pricing: ConnectionPricingInput = {}
+        const wantProvider = pricingProvider === '' ? null : pricingProvider
+        if (wantProvider !== (cp.providerExplicit ? cp.provider : null)) {
+          pricing.provider = wantProvider
+        }
+        if (pricingStorageClass !== (cp.storageClass ?? 'STANDARD')) {
+          pricing.storageClass = pricingStorageClass
+        }
+        if (pricingReadMbps !== cp.readMbps) pricing.readMbps = pricingReadMbps
+        if (pricingWriteMbps !== cp.writeMbps) pricing.writeMbps = pricingWriteMbps
+        if (pricingInstability !== cp.instability) pricing.instability = pricingInstability
+        const wantCapacity = pricingCapacityTb === '' ? null : Math.round(pricingCapacityTb * TIB)
+        if (wantCapacity !== cp.capacityBytes) pricing.capacityBytes = wantCapacity
+        const wantRate = pricingStoragePerGbMonth === '' ? null : pricingStoragePerGbMonth
+        if (wantRate !== cp.storagePerGbMonth) pricing.storagePerGbMonth = wantRate
+        if (Object.keys(pricing).length > 0) input.pricing = pricing
+
         if (accessKeyId.trim()) input.accessKeyId = accessKeyId.trim()
         if (secretAccessKey) input.secretAccessKey = secretAccessKey
         await mode.onSubmit(input)
@@ -363,6 +417,187 @@ export function ConnectionForm({ mode, onClose }: Props) {
             </div>
           </label>
         </fieldset>
+
+        {/* 転送見積もりのプロファイル (spec: 2026-08-22-transfer-estimate-design.md)。
+            作成時は出さない — 既定 (エンドポイントからの推定) で見積もりは出るので、
+            接続を足す時点で決めさせる必要が無い。 */}
+        {isEdit && current && (
+          <fieldset className="modal-field">
+            <legend>転送の見積もり</legend>
+            <small className="mb-1 block text-ink-7">
+              「配下の集計 → 移送の見積もり」で使う値です。触らなくても見積もりは出ます。
+            </small>
+
+            <label className="modal-choice">
+              <select
+                aria-label="プロバイダ"
+                value={pricingProvider}
+                onChange={e => dispatch({
+                  type: 'setField',
+                  field: 'pricingProvider',
+                  value: e.target.value as Provider | '',
+                })}
+              >
+                <option value="">
+                  自動判定 ({PROVIDER_LABELS[current.pricing.provider]})
+                </option>
+                {(Object.keys(PROVIDER_LABELS) as Provider[]).map(p => (
+                  <option key={p} value={p}>{PROVIDER_LABELS[p]}</option>
+                ))}
+              </select>
+              <div>
+                <strong>プロバイダ</strong>
+                <small>
+                  料金の計算方法。既定はエンドポイントのホスト名からの推定で、
+                  社内ストレージは費用 0 として扱います。
+                </small>
+              </div>
+            </label>
+
+            {(pricingProvider || current.pricing.provider) === 'aws' && (
+              <label className="modal-choice">
+                <select
+                  aria-label="ストレージクラス"
+                  value={pricingStorageClass}
+                  onChange={e => dispatch({
+                    type: 'setField',
+                    field: 'pricingStorageClass',
+                    value: e.target.value as StorageClassKey,
+                  })}
+                >
+                  {STORAGE_CLASS_OPTIONS.map(o => (
+                    <option key={o.key} value={o.key}>{o.label}</option>
+                  ))}
+                </select>
+                <div>
+                  <strong>ストレージクラス</strong>
+                  <small>
+                    {STORAGE_CLASS_OPTIONS.find(o => o.key === pricingStorageClass)?.help}
+                  </small>
+                </div>
+              </label>
+            )}
+
+            <label className="modal-choice">
+              <input
+                type="number"
+                min={1}
+                aria-label="読み出し帯域 (MB/s)"
+                value={pricingReadMbps}
+                onChange={e => dispatch({
+                  type: 'setField', field: 'pricingReadMbps', value: Number(e.target.value),
+                })}
+              />
+              <div>
+                <strong>読み出し帯域 (MB/s)</strong>
+                <small>ここから出すときの速度。実測値を入れると所要時間の精度が上がります。</small>
+              </div>
+            </label>
+
+            <label className="modal-choice">
+              <input
+                type="number"
+                min={1}
+                aria-label="書き込み帯域 (MB/s)"
+                value={pricingWriteMbps}
+                onChange={e => dispatch({
+                  type: 'setField', field: 'pricingWriteMbps', value: Number(e.target.value),
+                })}
+              />
+              <div>
+                <strong>書き込み帯域 (MB/s)</strong>
+                <small>ここへ入れるときの速度。両端の遅い方が律速になります。</small>
+              </div>
+            </label>
+
+            <label className="modal-choice">
+              <input
+                type="number"
+                min={0}
+                step={0.1}
+                aria-label="不安定さ"
+                value={pricingInstability}
+                onChange={e => dispatch({
+                  type: 'setField', field: 'pricingInstability', value: Number(e.target.value),
+                })}
+              />
+              <div>
+                <strong>不安定さ</strong>
+                <small>
+                  所要時間の上振れ率。0.5 なら悲観側が 1.5 倍になります。
+                  よく落ちる接続ほど大きく。
+                </small>
+              </div>
+            </label>
+
+            <label className="modal-choice">
+              <input
+                type="number"
+                min={0}
+                step={1}
+                placeholder="未設定"
+                aria-label="容量 (TB)"
+                value={pricingCapacityTb}
+                onChange={e => dispatch({
+                  type: 'setField',
+                  field: 'pricingCapacityTb',
+                  value: e.target.value === '' ? '' : Number(e.target.value),
+                })}
+              />
+              <div>
+                <strong>容量 (TB)</strong>
+                <small>入れておくと、収まらない移送に警告が出ます。空なら警告しません。</small>
+              </div>
+            </label>
+
+            <label className="modal-choice">
+              <input
+                type="number"
+                min={0}
+                step={0.001}
+                placeholder="カタログに従う"
+                aria-label="ストレージ単価の上書き ($/GB-月)"
+                value={pricingStoragePerGbMonth}
+                onChange={e => dispatch({
+                  type: 'setField',
+                  field: 'pricingStoragePerGbMonth',
+                  value: e.target.value === '' ? '' : Number(e.target.value),
+                })}
+              />
+              <div>
+                <strong>ストレージ単価の上書き ($/GB-月)</strong>
+                <small>
+                  実際の契約単価があれば入れてください。空ならカタログの値を使います。
+                  Wasabi のように料金 API を公開していないプロバイダでは、
+                  カタログの値は手入力なので、ここを入れたほうが正確です。
+                </small>
+              </div>
+            </label>
+
+            <small className="block text-ink-7">
+              {current.pricing.ratesResolved ? (
+                current.pricing.effective.storagePerGbMonth === null
+                  ? '費用のかからない接続として計算します。'
+                  : <>
+                      現在の単価: ${current.pricing.effective.storagePerGbMonth}/GB-月 ·
+                      PUT ${current.pricing.effective.putPer1000}/1000 ·
+                      取り出し ${current.pricing.effective.retrievalPerGb}/GB
+                      {current.pricing.effective.minDurationDays > 0
+                        && ` · 最小保存 ${current.pricing.effective.minDurationDays} 日`}
+                      {current.pricing.effective.storageRateSource === 'proxy'
+                        && ' (ストレージ単価は代理値)'}
+                      {current.pricing.effective.storageRateSource === 'manual'
+                        && ' (単価は手入力。「単価を更新」では変わりません)'}
+                      {current.pricing.effective.storageRateSource === 'override'
+                        && ' (単価はこの接続で上書き済み)'}
+                    </>
+              ) : (
+                `リージョン ${current.pricing.region ?? '(不明)'} の単価が料金カタログにありません。`
+                + '費用は 0 と表示されますが、無料という意味ではありません。'
+              )}
+            </small>
+          </fieldset>
+        )}
 
         {error && <p className="error" aria-live="polite">{error}</p>}
         <div className="modal-actions">

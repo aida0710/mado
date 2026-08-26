@@ -11,6 +11,11 @@ import {
   settingsToListCacheTtlSec,
   type Capabilities,
 } from '../storage.js'
+import {
+  PRICING_SETTING_KEYS as PK,
+  effectiveRates,
+  settingsToProfile,
+} from '../lib/pricing.js'
 
 // すべてのエンドポイントは認証なし。README/お気に入りのオナーシステム契約を踏襲し、
 // 防御は LAN 境界に委ねる (ハンドラ内には持たない)。
@@ -88,6 +93,21 @@ async function upsertSettings(
   )
 }
 
+/** connection_settings からキーを消す。「既定に戻す」= 行を消す、の意味。
+ *  権限 (cap.*) が true も書き込むのと違い、見積もり設定は既定が
+ *  「プロバイダから推定」なので、明示値の有無が意味を持つ。 */
+async function deleteSettings(
+  q: { query: (sql: string, values: unknown[]) => Promise<unknown> },
+  connId: string,
+  keys: readonly string[],
+): Promise<void> {
+  if (keys.length === 0) return
+  await q.query(
+    `DELETE FROM connection_settings WHERE connection_id = $1 AND key = ANY($2::text[])`,
+    [connId, keys],
+  )
+}
+
 async function upsertCapabilities(
   q: { query: (sql: string, values: unknown[]) => Promise<unknown> },
   connId: string,
@@ -105,6 +125,69 @@ async function upsertCapabilities(
        DO UPDATE SET value = EXCLUDED.value, updated_at = now()`,
     [connId, entries.map(e => e[0]), entries.map(e => e[1])],
   )
+}
+
+// 転送見積もり用の接続プロファイル (spec: 2026-08-22-transfer-estimate-design.md)。
+// 全て connection_settings の key/value なのでマイグレーションは要らない。
+//
+// **null は「既定に戻す」** (行を消す)。undefined は「触らない」。
+// プロバイダは既定がエンドポイントからの推定なので、この区別が意味を持つ。
+const ProviderEnum = z.enum(['aws', 'wasabi', 'onprem', 'other'])
+const StorageClassEnum = z.enum([
+  'STANDARD', 'INTELLIGENT_TIERING', 'STANDARD_IA', 'ONEZONE_IA',
+  'GLACIER_IR', 'GLACIER', 'DEEP_ARCHIVE',
+])
+
+const PricingPatch = z.object({
+  provider:          ProviderEnum.nullable().optional(),
+  region:            z.string().min(1).max(64).nullable().optional(),
+  storageClass:      StorageClassEnum.nullable().optional(),
+  readMbps:          z.number().positive().nullable().optional(),
+  writeMbps:         z.number().positive().nullable().optional(),
+  parallelism:       z.number().int().positive().nullable().optional(),
+  requestOverheadMs: z.number().positive().nullable().optional(),
+  // 0 (上振れ無し) は意味のある設定なので許す。
+  instability:       z.number().min(0).nullable().optional(),
+  capacityBytes:     z.number().positive().nullable().optional(),
+  // 単価の手動上書き。0 は「無料」を意味するので許す。
+  storagePerGbMonth: z.number().min(0).nullable().optional(),
+  egressPerGb:       z.number().min(0).nullable().optional(),
+  putPer1000:        z.number().min(0).nullable().optional(),
+  getPer1000:        z.number().min(0).nullable().optional(),
+})
+
+type PricingPatch = z.infer<typeof PricingPatch>
+
+/** body のフィールド名 → connection_settings のキー。 */
+const PRICING_FIELD_KEYS: Record<keyof PricingPatch, string> = {
+  provider:          PK.provider,
+  region:            PK.region,
+  storageClass:      PK.storageClass,
+  readMbps:          PK.readMbps,
+  writeMbps:         PK.writeMbps,
+  parallelism:       PK.parallelism,
+  requestOverheadMs: PK.requestOverheadMs,
+  instability:       PK.instability,
+  capacityBytes:     PK.capacityBytes,
+  storagePerGbMonth: PK.storagePerGbMonth,
+  egressPerGb:       PK.egressPerGb,
+  putPer1000:        PK.putPer1000,
+  getPer1000:        PK.getPer1000,
+}
+
+/** PricingPatch → (書き込む key/value, 消す key)。 */
+function splitPricingPatch(
+  patch: PricingPatch,
+): { upserts: Array<readonly [string, string]>; deletes: string[] } {
+  const upserts: Array<readonly [string, string]> = []
+  const deletes: string[] = []
+  for (const field of Object.keys(PRICING_FIELD_KEYS) as Array<keyof PricingPatch>) {
+    const v = patch[field]
+    if (v === undefined) continue
+    if (v === null) deletes.push(PRICING_FIELD_KEYS[field])
+    else upserts.push([PRICING_FIELD_KEYS[field], String(v)])
+  }
+  return { upserts, deletes }
 }
 
 const CreateBody = z.object({
@@ -132,6 +215,7 @@ const UpdateBody = z.object({
   // 走査の可否と一覧キャッシュ TTL も connection_settings 側 (capabilities と同じ)。
   scanEnabled: z.boolean().optional(),
   listCacheTtlSec: z.number().int().positive().optional(),
+  pricing: PricingPatch.optional(),
 })
 
 interface ConnectionRow {
@@ -159,6 +243,11 @@ const SELECT_CONN =
      FROM storage_connections c`
 
 function toMasked(row: ConnectionRow) {
+  // 見積もりプロファイルは「設定 + 推定 + 既定」を畳んだ実効値を返す。
+  // 何が明示設定で何が既定かは providerExplicit と各 override の null で分かる。
+  const profile = settingsToProfile(row, row.settings)
+  const rates = effectiveRates(profile)
+
   return {
     id: row.id,
     name: row.name,
@@ -171,6 +260,40 @@ function toMasked(row: ConnectionRow) {
     capabilities: settingsToCapabilities(row.settings),
     scanEnabled: settingsToScanEnabled(row.settings),
     listCacheTtlSec: settingsToListCacheTtlSec(row.settings),
+    pricing: {
+      provider: profile.provider,
+      /** false = エンドポイントからの推定。UI で「自動判定」と出すため。 */
+      providerExplicit: row.settings[PK.provider] !== undefined,
+      region: profile.region,
+      storageClass: profile.storageClass,
+      storageClassLabel: rates.storageClassLabel,
+      /** カタログで単価を引けたか。false は「0 だが無料ではない」。 */
+      ratesResolved: rates.ratesResolved,
+      readMbps: profile.readMbps,
+      writeMbps: profile.writeMbps,
+      parallelism: profile.parallelism,
+      requestOverheadMs: profile.requestOverheadMs,
+      instability: profile.instability,
+      capacityBytes: profile.capacityBytes,
+      // 手動上書き。null = カタログに従う。
+      storagePerGbMonth: profile.overrides.storagePerGbMonth,
+      egressPerGb: profile.overrides.egressPerGb,
+      putPer1000: profile.overrides.putPer1000,
+      getPer1000: profile.overrides.getPer1000,
+      // 上書きを適用した後の実効単価。設定画面に「今いくらで計算されるか」を出す。
+      effective: {
+        storagePerGbMonth: rates.storageTiers[0]?.usd ?? null,
+        egressPerGb: rates.egressTiers[0]?.usd ?? null,
+        putPer1000: rates.putPer1000,
+        getPer1000: rates.getPer1000,
+        retrievalPerGb: rates.retrievalPerGb,
+        minDurationDays: rates.minDurationDays,
+        minBillableBytes: rates.minBillableBytes,
+        perObjectOverheadBytes: rates.perObjectOverheadBytes,
+        /** 単価の出所。'manual' は「更新しても変わらない」ことを UI に出すため。 */
+        storageRateSource: rates.storageRateSource,
+      },
+    },
     createdAt: row.created_at.toISOString(),
     updatedAt: row.updated_at.toISOString(),
   }
@@ -296,7 +419,15 @@ export function mountConnectionsRoutes(app: Hono, deps: ConnectionsDeps): void {
       extraSettings.push(['list_cache_ttl_sec', String(u.listCacheTtlSec)])
     }
 
-    if (sets.length === 0 && capKeys.length === 0 && extraSettings.length === 0) {
+    // 見積もりプロファイルも同じテーブル。こちらは null で「既定に戻す」= 行を
+    // 消す操作があるので、書き込みと削除に振り分ける。
+    const pricing = u.pricing
+      ? splitPricingPatch(u.pricing)
+      : { upserts: [], deletes: [] as string[] }
+    extraSettings.push(...pricing.upserts)
+
+    if (sets.length === 0 && capKeys.length === 0 && extraSettings.length === 0
+        && pricing.deletes.length === 0) {
       // 更新するフィールドがない — 現在の行をそのまま返す。
       const r = await deps.pools.ro.query<ConnectionRow>(
         `${SELECT_CONN} WHERE c.id = $1`, [id],
@@ -310,9 +441,10 @@ export function mountConnectionsRoutes(app: Hono, deps: ConnectionsDeps): void {
     try {
       await client.query('BEGIN')
 
-      // 「README 編集には読み込みが必要」。key/value テーブルでは CHECK 制約に
-      // できないので、送られなかった側の現在値と突き合わせてここで弾く。
-      if (capKeys.length > 0) {
+      // connection_settings 側だけを更新する場合、下の UPDATE が走らないので
+      // 存在チェックがどこにも無くなる。行が無いまま upsert すると FK 違反の
+      // 500 になってしまうため、ここで先に見る。
+      if (capKeys.length > 0 || extraSettings.length > 0 || pricing.deletes.length > 0) {
         const cur = await client.query<ConnectionRow>(
           `${SELECT_CONN} WHERE c.id = $1 FOR UPDATE OF c`, [id],
         )
@@ -320,12 +452,16 @@ export function mountConnectionsRoutes(app: Hono, deps: ConnectionsDeps): void {
           await client.query('ROLLBACK')
           return c.json({ error: 'not found' }, 404)
         }
-        const now = settingsToCapabilities(cur.rows[0].settings)
-        const read  = caps.readmeRead  ?? now.readmeRead
-        const write = caps.readmeWrite ?? now.readmeWrite
-        if (write && !read) {
-          await client.query('ROLLBACK')
-          return c.json({ error: 'README の編集には読み込みが必要です' }, 400)
+        // 「README 編集には読み込みが必要」。key/value テーブルでは CHECK 制約に
+        // できないので、送られなかった側の現在値と突き合わせてここで弾く。
+        if (capKeys.length > 0) {
+          const now = settingsToCapabilities(cur.rows[0].settings)
+          const read  = caps.readmeRead  ?? now.readmeRead
+          const write = caps.readmeWrite ?? now.readmeWrite
+          if (write && !read) {
+            await client.query('ROLLBACK')
+            return c.json({ error: 'README の編集には読み込みが必要です' }, 400)
+          }
         }
       }
 
@@ -342,6 +478,7 @@ export function mountConnectionsRoutes(app: Hono, deps: ConnectionsDeps): void {
       }
       await upsertCapabilities(client, id, caps)
       await upsertSettings(client, id, extraSettings)
+      await deleteSettings(client, id, pricing.deletes)
 
       const r = await client.query<ConnectionRow>(`${SELECT_CONN} WHERE c.id = $1`, [id])
       await client.query('COMMIT')

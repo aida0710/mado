@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { ConnectionForm } from './ConnectionForm'
 import { ALL_CAPABILITIES_ON } from '../lib/api/types'
+import { PRICING_FIXTURE } from '../lib/api/fixtures'
 import type { Connection } from '../lib/api/types'
 
 const conn: Connection = {
@@ -11,6 +12,7 @@ const conn: Connection = {
   capabilities: ALL_CAPABILITIES_ON,
   scanEnabled: true,
   listCacheTtlSec: 86400,
+  pricing: PRICING_FIXTURE,
   createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z', isDefault: false,
 }
 

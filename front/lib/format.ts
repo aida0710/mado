@@ -11,6 +11,38 @@ export function fmtSize(n: number): string {
   return `${(n / 1024 ** 5).toFixed(1)} PB`
 }
 
+// 見積もりの金額 (spec: 2026-08-22-transfer-estimate-design.md)。
+//
+// 桁を合わせるのが目的の数字なので、大きい額ほど小数を落とす。
+// $1,043.27 の下 2 桁には意味が無く、むしろ精度があるように見えてしまう。
+export function fmtUsd(n: number): string {
+  if (n === 0) return '$0'
+  if (n < 0.01) return '<$0.01'
+  if (n < 100) return `$${n.toFixed(2)}`
+  return `$${Math.round(n).toLocaleString()}`
+}
+
+/** 所要時間の単位。上振れ側の大きさで決め、両端で単位を揃える。 */
+function durationUnit(sec: number): { div: number; unit: string } {
+  if (sec < 90) return { div: 1, unit: '秒' }
+  if (sec < 90 * 60) return { div: 60, unit: '分' }
+  if (sec < 48 * 3600) return { div: 3600, unit: '時間' }
+  return { div: 86400, unit: '日' }
+}
+
+function fmtDurationNum(v: number): string {
+  return v < 10 ? String(Math.round(v * 10) / 10) : String(Math.round(v))
+}
+
+// 所要時間はレンジで出す。単一の数字は外れたときに機能全体の信用を落とすので、
+// 楽観と悲観の幅をそのまま見せる。両端が同じ表示に丸まったら 1 つだけ出す。
+export function fmtDurationRange(optimisticSec: number, pessimisticSec: number): string {
+  const { div, unit } = durationUnit(Math.max(optimisticSec, pessimisticSec))
+  const a = fmtDurationNum(optimisticSec / div)
+  const b = fmtDurationNum(pessimisticSec / div)
+  return a === b ? `${a} ${unit}` : `${a}〜${b} ${unit}`
+}
+
 // プレビュー対象を人が読める 1 本の文字列にする。tar 内エントリは
 // 「アーカイブ名 › エントリ名」、単体ファイルは key そのもの。
 // 画面上は basename しか出さない (幅が足りない) ので、これは title 属性と

@@ -14,6 +14,9 @@ import { createJobStore } from './lib/jobs.js'
 import { createJobRunner } from './lib/job-runner.js'
 import { createScanHandler } from './lib/scan-handler.js'
 import { SCAN_KIND } from './routes/storage-scan.js'
+import { createPricingStore } from './lib/pricing-store.js'
+import { createPricingRefreshHandler } from './lib/pricing-refresh-handler.js'
+import { PRICING_REFRESH_KIND } from './routes/pricing.js'
 
 // LAN ダッシュボード: 1 つのストリーム teardown 起因の未捕捉例外で全ユーザーの
 // リクエストを巻き添えにしない。root cause は都度直す前提の最後の砦 (ログは大声で)。
@@ -39,6 +42,11 @@ const jobRunner = createJobRunner({
     [SCAN_KIND]: createScanHandler({
       getStorage: storageFactory.getStorage,
       getConnectionConfig: storageFactory.getConnectionConfig,
+    }),
+    // 料金カタログの取得。**外部 (AWS) を叩く唯一のジョブ**。
+    // 外に出られない環境では失敗するが、その場合も同梱カタログで見積もりは出る。
+    [PRICING_REFRESH_KIND]: createPricingRefreshHandler({
+      store: createPricingStore(pools),
     }),
   },
 })

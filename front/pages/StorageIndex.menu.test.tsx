@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { api } from '../lib/api/client'
 import type { Connection } from '../lib/api/types'
+import { PRICING_FIXTURE } from '../lib/api/fixtures'
 import { ConnectionContext } from '../lib/connectionContext'
 import { copyToClipboard } from '../lib/clipboard'
 import StorageIndex from './StorageIndex'
@@ -31,6 +32,7 @@ const conn: Connection = {
   isDefault: false,
   scanEnabled: true,
   listCacheTtlSec: 86400,
+  pricing: PRICING_FIXTURE,
 }
 
 function mountWithOneBucket() {
