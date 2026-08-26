@@ -7,11 +7,14 @@ import ConnectionsPage from './pages/ConnectionsPage'
 import { PlayerDeckProvider, usePlayerDeck } from './lib/playerDeck'
 import { PinnedPreviewsProvider, usePinnedPreviews } from './lib/pinnedPreviews'
 import { BottomDock } from './components/BottomDock'
+import { useAuth } from './lib/auth-context'
 import './App.css'
 
 // NoteEditPage は Monaco エディタを抱える重量級ページ (~1MB)。
 // ホーム閲覧だけのユーザに Monaco をロードさせないよう、別チャンクに切り出す。
 const NoteEditPage = lazy(() => import('./pages/NoteEditPage'))
+const LineagePage = lazy(() => import('./pages/LineagePage'))
+const AdminPage = lazy(() => import('./pages/AdminPage'))
 
 /* ── Tab — masthead 右側のナビ。
    editorial: 小キャップ + tracking。アクティブは細い下線で示す
@@ -44,11 +47,17 @@ function StoragePageWithKey() {
 }
 
 function Tabs() {
+  const { user } = useAuth()
+  const admin = user?.permissions.some(permission =>
+    permission === 'users:manage' || permission === 'service_accounts:manage'
+  )
   return (
     <nav className="flex items-stretch gap-4 sm:gap-6">
       <Tab to="/"            label="Home" />
       <Tab to="/storage"     label="Storage" />
+      <Tab to="/lineage"     label="Lineage" />
       <Tab to="/settings"    label="Settings" />
+      {admin && <Tab to="/access" label="Access" />}
     </nav>
   )
 }
@@ -69,6 +78,7 @@ function MainContent({ children }: { children: ReactNode }) {
 }
 
 export default function App() {
+  const auth = useAuth()
   return (
     <PlayerDeckProvider>
       <PinnedPreviewsProvider>
@@ -103,7 +113,19 @@ export default function App() {
                 <span className="text-ink-9">.</span>
               </h1>
             </Link>
-            <Tabs />
+            <div className="flex items-center gap-5">
+              <Tabs />
+              {auth.enabled && auth.user && (
+                <button
+                  type="button"
+                  className="mado-account"
+                  title={`${auth.user.displayName} — ログアウト`}
+                  onClick={() => void auth.logout()}
+                >
+                  {auth.user.displayName.slice(0, 1).toUpperCase()}
+                </button>
+              )}
+            </div>
           </header>
 
           <MainContent>
@@ -114,6 +136,8 @@ export default function App() {
                 <Route path="/settings"          element={<ConnectionsPage />} />
                 <Route path="/storage"           element={<StorageLanding />} />
                 <Route path="/storage/:connId/*" element={<StoragePageWithKey />} />
+                <Route path="/lineage"            element={<LineagePage />} />
+                <Route path="/access"             element={<AdminPage />} />
               </Routes>
             </Suspense>
           </MainContent>

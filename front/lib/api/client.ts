@@ -25,8 +25,15 @@ import {
   StartScanOk,
   StartJobOk,
   TransferEstimate,
+  LineageGraph,
+  DatasetDetail,
+  DatasetVersionDetail,
+  LineageRunDetail,
 } from './types'
-import type { ConnectionCreateInput, ConnectionUpdateInput, TagCreateInput, TagUpdateInput, TargetKind } from './types'
+import type {
+  ConnectionCreateInput, ConnectionUpdateInput, TagCreateInput, TagUpdateInput, TargetKind,
+  LineageProjection,
+} from './types'
 import { TTLCache } from './cache'
 
 const API_BASE = '/api/internal'
@@ -620,6 +627,37 @@ export const api = {
   putSetting: async (key: string, value: string): Promise<void> => {
     await mutateJson(`${API_BASE}/settings/${encodeURIComponent(key)}`, { method: 'PUT', body: { value } }, null)
   },
+
+  // ── Dataset lineage ──
+  // Marquez / Registry の違いは API 側で吸収し、ブラウザは統一した
+  // domain graph だけを受け取る。React Flow 用の座標はここでは持たない。
+  lineageGraph: (params: {
+    mode: LineageProjection
+    rootKind?: 'dataset' | 'job'
+    namespace?: string
+    name?: string
+    versionId?: string
+    depth?: number
+  }) => getJson(
+    buildUrl(`${API_BASE}/lineage/graph`, {
+      mode: params.mode,
+      rootKind: params.rootKind,
+      namespace: params.namespace,
+      name: params.name,
+      versionId: params.versionId,
+      depth: params.depth == null ? undefined : String(params.depth),
+    }),
+    LineageGraph,
+  ),
+
+  lineageDataset: (datasetId: string) =>
+    getJson(`${API_BASE}/lineage/datasets/${encodeURIComponent(datasetId)}`, DatasetDetail),
+
+  lineageVersion: (versionId: string) =>
+    getJson(`${API_BASE}/lineage/versions/${encodeURIComponent(versionId)}`, DatasetVersionDetail),
+
+  lineageRun: (runId: string) =>
+    getJson(`${API_BASE}/lineage/runs/${encodeURIComponent(runId)}`, LineageRunDetail),
 
   // ── 走査ジョブ (spec: 2026-08-18-directory-scan-design.md) ──
   // 走査は重く状態をサーバーが持つので、TTLCache は通さない。
