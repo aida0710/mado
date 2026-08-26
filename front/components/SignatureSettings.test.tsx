@@ -51,7 +51,7 @@ describe('SignatureSettings', () => {
       enabled: true,
       user: {
         id: 'user-1', username: 'aida', email: null, displayName: '相田',
-        signatureName: '旧署名', roles: ['admin'], permissions: [], mustChangePassword: false,
+        signatureName: '旧署名', roles: ['admin'], permissions: [], mustChangePassword: false, authMethods: ['local'],
       },
       logout: async () => {},
       reload,
@@ -66,7 +66,7 @@ describe('SignatureSettings', () => {
     await user.click(screen.getByRole('button', { name: '保存' }))
 
     expect(fetchSpy).toHaveBeenCalledWith('/api/auth/profile', expect.objectContaining({
-      method: 'PUT', body: JSON.stringify({ signatureName: '新しい署名' }),
+      method: 'PUT', body: JSON.stringify({ displayName: '相田', username: 'aida', signatureName: '新しい署名' }),
     }))
     expect(reload).toHaveBeenCalledOnce()
     expect(localStorage.getItem(EDITOR_NAME_KEY)).toBeNull()
@@ -78,7 +78,7 @@ describe('SignatureSettings', () => {
       enabled: true,
       user: {
         id: 'user-1', username: 'aida', email: null, displayName: '相田',
-        signatureName: '相田', roles: ['admin'], permissions: [], mustChangePassword: false,
+        signatureName: '相田', roles: ['admin'], permissions: [], mustChangePassword: false, authMethods: ['local'],
       },
       logout,
       reload: async () => {},
