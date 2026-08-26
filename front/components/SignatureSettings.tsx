@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { getEditorName, setEditorName } from '../lib/editorName'
 import { useAuth } from '../lib/auth-context'
+import { SettingsSectionHeader } from './SettingsSectionHeader'
 
 export function SignatureSettings() {
   const auth = useAuth()
@@ -70,6 +71,8 @@ export function SignatureSettings() {
 
   return (
     <section className="mt-7">
+      <SettingsSectionHeader title="アカウントと署名の管理" />
+
       {auth.user && (
         <dl className="account-summary">
           <div><dt>表示名</dt><dd>{auth.user.displayName}</dd></div>

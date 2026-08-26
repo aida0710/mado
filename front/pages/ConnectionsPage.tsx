@@ -5,6 +5,7 @@ import { ALL_CAPABILITIES_ON, CAPABILITY_UI } from '../lib/api/types'
 import type { Capabilities, Connection } from '../lib/api/types'
 import { ConnectionDeleteConfirm } from '../components/ConnectionDeleteConfirm'
 import { ImportExportButtons } from '../components/ImportExportButtons'
+import { SettingsSectionHeader } from '../components/SettingsSectionHeader'
 import { downloadJson, type ImportMode, type ImportSummary } from '../lib/jsonFile'
 import { invalidateCapabilitiesCache } from '../lib/useCapabilities'
 
@@ -44,9 +45,6 @@ function sanitizeCapabilities(raw: unknown): Capabilities {
   if (!out.readmeRead) out.readmeWrite = false
   return out
 }
-
-const sectionTitleClass =
-  'm-0 text-[10.5px] font-semibold uppercase tracking-[0.22em] text-ink-7'
 
 interface State {
   connections: Connection[]
@@ -197,24 +195,23 @@ export default function ConnectionsPage() {
   return (
     <div>
       <section>
-        <div
-          className="mb-3 flex flex-wrap items-baseline justify-between gap-3 pb-2"
-          style={{ borderBottom: '1px solid var(--rule)' }}
-        >
-          <h3 className={sectionTitleClass}>オブジェクトストレージ接続先の管理</h3>
-          <span className="inline-flex flex-wrap items-center gap-2">
-            <ImportExportButtons
-              what="接続"
-              replaceWarning="削除される接続の README・お気に入り・タグ割り当ても、まとめて消えます (connection_id の連鎖削除)。ファイルに載っている接続は作り直さないので、それらは残ります。"
-              onExport={handleExport}
-              onImport={handleImport}
-              onDone={refresh}
-            />
-            <Link className="ghost" to="/settings/connections/new">
-              <span aria-hidden>+</span> 追加
-            </Link>
-          </span>
-        </div>
+        <SettingsSectionHeader
+          title="オブジェクトストレージ接続先の管理"
+          actions={
+            <span className="inline-flex flex-wrap items-center gap-2">
+              <ImportExportButtons
+                what="接続"
+                replaceWarning="削除される接続の README・お気に入り・タグ割り当ても、まとめて消えます (connection_id の連鎖削除)。ファイルに載っている接続は作り直さないので、それらは残ります。"
+                onExport={handleExport}
+                onImport={handleImport}
+                onDone={refresh}
+              />
+              <Link className="ghost" to="/settings/connections/new">
+                <span aria-hidden>+</span> 追加
+              </Link>
+            </span>
+          }
+        />
 
         {loading && (
           <p className="text-[13px] text-ink-7">読み込み中…</p>

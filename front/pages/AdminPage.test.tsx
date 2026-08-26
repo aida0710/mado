@@ -34,6 +34,8 @@ describe('AdminPage', () => {
     expect(nav).toHaveTextContent('Users')
     expect(nav).toHaveTextContent('Service Accounts')
     expect(nav).toHaveTextContent('Audit')
+    expect(screen.getByRole('heading', { name: 'ユーザーとAPIアクセスの管理' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Access' })).not.toBeInTheDocument()
     expect(await screen.findByRole('heading', { name: 'Local Users' })).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Pipeline Service Accounts' })).not.toBeInTheDocument()
   })

@@ -72,7 +72,7 @@ describe('SignatureSettings', () => {
     expect(localStorage.getItem(EDITOR_NAME_KEY)).toBeNull()
   })
 
-  it('重複するAccount見出しを出さず、末尾からサインアウトできる', async () => {
+  it('従来の設定見出しに揃え、末尾からサインアウトできる', async () => {
     const logout = vi.fn().mockResolvedValue(undefined)
     const auth: AuthContextValue = {
       enabled: true,
@@ -86,6 +86,7 @@ describe('SignatureSettings', () => {
     const user = userEvent.setup()
     render(<AuthContext.Provider value={auth}><SignatureSettings /></AuthContext.Provider>)
 
+    expect(screen.getByRole('heading', { name: 'アカウントと署名の管理' })).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Account' })).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'サインアウト' }))
     expect(logout).toHaveBeenCalledOnce()

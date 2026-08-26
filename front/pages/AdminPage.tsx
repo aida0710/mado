@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { Navigate, NavLink, Route, Routes } from 'react-router-dom'
 import { useAuth } from '../lib/auth-context'
+import { SettingsSectionHeader } from '../components/SettingsSectionHeader'
 
 interface UserRow {
   id: string
@@ -336,7 +337,7 @@ export default function AdminPage() {
 
   return (
     <section className="admin-page admin-page--embedded">
-      <header className="admin-page__head"><h3>Access</h3></header>
+      <SettingsSectionHeader title="ユーザーとAPIアクセスの管理" />
       <nav className="access-tabs" aria-label="Access">
         {canUsers && <NavLink to="/settings/access/users" className={({ isActive }) => `access-tabs__link${isActive ? ' is-active' : ''}`}>Users</NavLink>}
         {canAccounts && <NavLink to="/settings/access/service-accounts" className={({ isActive }) => `access-tabs__link${isActive ? ' is-active' : ''}`}>Service Accounts</NavLink>}
