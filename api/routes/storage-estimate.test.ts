@@ -323,12 +323,14 @@ describe('GET /storage/:connId/estimate', () => {
     const id = await store.enqueue(PRICING_REFRESH_KIND, PRICING_REFRESH_DEDUP_KEY, {})
     await store.claim()
     await store.fail(id, 'getaddrinfo ENOTFOUND')
+    const failed = await store.get(id)
+    today = new Date(failed!.finishedAt!)
 
     await get(src)
     expect(await refreshJobs()).toHaveLength(1)
 
     // 1 日経てば投げ直す。
-    today = new Date('2026-08-24T00:00:00Z')
+    today = new Date(today.getTime() + 2 * 86_400_000)
     await get(src)
     expect(await refreshJobs()).toHaveLength(2)
   })

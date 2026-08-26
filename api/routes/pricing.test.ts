@@ -87,9 +87,13 @@ describe('shouldAutoRefresh', () => {
     const id = await store.enqueue(PRICING_REFRESH_KIND, PRICING_REFRESH_DEDUP_KEY, {})
     await store.claim()
     await store.fail(id, 'ENOTFOUND')
-    expect(await shouldAutoRefresh(store, 1, now)).toBe(false)
+    const failed = await store.get(id)
+    const finishedAt = new Date(failed!.finishedAt!)
+    expect(await shouldAutoRefresh(store, 1, finishedAt)).toBe(false)
     // 間隔を過ぎれば投げ直す。
-    expect(await shouldAutoRefresh(store, 1, new Date('2026-08-24T00:00:00Z'))).toBe(true)
+    expect(await shouldAutoRefresh(
+      store, 1, new Date(finishedAt.getTime() + 2 * 86_400_000),
+    )).toBe(true)
   })
 })
 
