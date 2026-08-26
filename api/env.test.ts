@@ -18,6 +18,8 @@ describe('loadEnv', () => {
     expect(env.PREVIEW_TEXT_LIMIT).toBe(65536) // デフォルト値
     expect(env.PREVIEW_TAR_ENTRY_LIMIT).toBe(200)
     expect(env.PREVIEW_TAR_ENTRY_MAX_BYTES).toBe(100 * 1024 * 1024)
+    expect(env.AUTH_MODE).toBe('disabled')
+    expect(env.AUTH_COOKIE_SECURE).toBe(false)
   })
 
   it('splits ALLOWED_ORIGINS by comma + trims spaces + drops empty', () => {
@@ -97,5 +99,16 @@ describe('loadEnv', () => {
     expect(env.MEDIA_SPECTROGRAM_MAX_WIDTH).toBe(4096)
     expect(env.MEDIA_WORKER_PORT).toBe(3100)
     expect(env.MEDIA_WORKER_URL).toBe('http://media-worker:3100')
+  })
+
+  it('boolean文字列のfalseをtrueとして扱わない', () => {
+    const env = loadEnv({
+      DATABASE_URL_RW: 'postgres://x',
+      DATABASE_URL_RO: 'postgres://x',
+      ENCRYPTION_KEY: '0'.repeat(64),
+      ALLOWED_ORIGINS: 'http://localhost:5173',
+      AUTH_COOKIE_SECURE: 'false',
+    })
+    expect(env.AUTH_COOKIE_SECURE).toBe(false)
   })
 })

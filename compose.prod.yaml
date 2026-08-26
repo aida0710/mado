@@ -37,6 +37,23 @@ services:
       - .env
     environment:
       PORT: 3000
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  api-lineage:
+    build: ./api
+    container_name: mado-prod-api-lineage
+    command: ["sh", "-c", "npm run build && npm run start:lineage"]
+    env_file:
+      - .env
+    environment:
+      LINEAGE_API_PORT: 3001
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       postgres:
         condition: service_healthy
@@ -70,6 +87,7 @@ services:
       - "80:8080"
     depends_on:
       - api-internal
+      - api-lineage
     restart: unless-stopped
 
 volumes:

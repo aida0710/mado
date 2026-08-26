@@ -39,6 +39,25 @@ services:
     volumes:
       - ./api:/app
       - /app/node_modules
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api-lineage:
+    build: ./api
+    container_name: mado-dev-api-lineage
+    command: ["npx", "tsx", "watch", "lineage.ts"]
+    env_file:
+      - .env
+    environment:
+      LINEAGE_API_PORT: 3001
+    volumes:
+      - ./api:/app
+      - /app/node_modules
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       postgres:
         condition: service_healthy
@@ -75,6 +94,7 @@ services:
       - ./.git:/app/.git:ro
     depends_on:
       - api-internal
+      - api-lineage
 
 volumes:
   db_data:

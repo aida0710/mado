@@ -26,6 +26,20 @@ import { mountConnectionsRoutes } from './routes/connections.js'
 import { mountNotesRoutes } from './routes/notes.js'
 import { mountStorageTagsRoutes } from './routes/storage-tags.js'
 import { mountSettingsRoutes } from './routes/settings.js'
+import { createAuthStore } from './lib/auth-store.js'
+import { createAuditWriter } from './lib/audit.js'
+import { createServiceAccountStore } from './lib/auth-api-keys.js'
+import { createOidcProvider } from './lib/auth-oidc.js'
+import { requireSession } from './lib/auth-middleware.js'
+import { requirePermission } from './lib/rbac.js'
+import { mountAuthRoutes } from './routes/auth.js'
+import { mountAdminUsersRoutes } from './routes/admin-users.js'
+import { mountServiceAccountRoutes } from './routes/service-accounts.js'
+import { mountAuditRoutes } from './routes/audit.js'
+import { createRegistryClient } from './lib/registry-client.js'
+import { createMarquezClient } from './lib/marquez-client.js'
+import { createLineageService, type StorageBindingResolver } from './lib/lineage-service.js'
+import { mountLineageRoutes } from './routes/lineage.js'
 
 // LAN ダッシュボード: 1 つのストリーム teardown 起因の未捕捉例外で全ユーザーの
 // リクエストを巻き添えにしない。root cause は都度直す前提の最後の砦 (ログは大声で)。
@@ -36,6 +50,21 @@ const env = loadEnv()
 const pools = createPools({ rw: env.DATABASE_URL_RW, ro: env.DATABASE_URL_RO })
 const crypto = createCrypto(env.ENCRYPTION_KEY)
 const storageFactory = createStorageFactory({ pools, crypto })
+const authEnabled = env.AUTH_MODE !== 'disabled'
+const authStore = createAuthStore(pools.rw)
+const audit = createAuditWriter(pools.rw)
+const serviceAccounts = createServiceAccountStore(pools.rw)
+const authCleanupTimer = authEnabled ? setInterval(() => {
+  void Promise.all([
+    authStore.deleteExpiredSessions(),
+    pools.rw.query(
+      `DELETE FROM auth_oidc_attempts
+        WHERE expires_at < now() - interval '1 hour'
+           OR used_at < now() - interval '1 hour'`,
+    ),
+  ]).catch(error => console.error('failed to clean expired auth records', error))
+}, 60 * 60 * 1000) : null
+authCleanupTimer?.unref()
 
 // 応答キャッシュは書き込みを伴うので rw プールを使う。書き込み先は
 // storage_response_cache の 1 テーブルのみ (spec の「ロールについての判断」)。
@@ -49,8 +78,66 @@ const app = new Hono()
 app.use('*', logger())
 app.get('/healthz', c => c.text('ok'))
 
+// Login/callbackはbrowser session確立前に到達するpublic route。write系には既存の
+// Origin検証を適用し、認証を有効化したときだけ公開する。
+if (authEnabled) {
+  const authApi = new Hono()
+  authApi.use('*', requireSafeOrigin(env.ALLOWED_ORIGINS))
+  const oidcEnabled = env.AUTH_MODE === 'oidc' || env.AUTH_MODE === 'hybrid'
+  if (oidcEnabled && (!env.OIDC_ISSUER_URL || !env.OIDC_CLIENT_ID
+      || !env.OIDC_CLIENT_SECRET || !env.OIDC_REDIRECT_URI)) {
+    throw new Error('AUTH_MODE enables OIDC but OIDC_ISSUER_URL/CLIENT_ID/CLIENT_SECRET/REDIRECT_URI is incomplete')
+  }
+  const oidc = oidcEnabled ? createOidcProvider(pools.rw, crypto, {
+    id: 'primary',
+    label: env.OIDC_LABEL,
+    issuerUrl: env.OIDC_ISSUER_URL!,
+    clientId: env.OIDC_CLIENT_ID!,
+    clientSecret: env.OIDC_CLIENT_SECRET!,
+    redirectUri: env.OIDC_REDIRECT_URI!,
+  }) : undefined
+  mountAuthRoutes(authApi, {
+    store: authStore,
+    audit,
+    config: {
+      localEnabled: env.AUTH_MODE === 'local' || env.AUTH_MODE === 'hybrid',
+      session: {
+        idleSeconds: env.AUTH_SESSION_IDLE_SECONDS,
+        absoluteSeconds: env.AUTH_SESSION_ABSOLUTE_SECONDS,
+        secure: env.AUTH_COOKIE_SECURE,
+        cookieName: env.AUTH_COOKIE_SECURE ? '__Host-mado_session' : 'mado_session',
+      },
+      oidc,
+    },
+  })
+  app.route('/api/auth', authApi)
+}
+
 const api = new Hono()
 api.use('*', requireSafeOrigin(env.ALLOWED_ORIGINS))
+if (authEnabled) {
+  api.use('*', requireSession(authStore, {
+    idleSeconds: env.AUTH_SESSION_IDLE_SECONDS,
+    cookieName: env.AUTH_COOKIE_SECURE ? '__Host-mado_session' : 'mado_session',
+  }))
+  // すべてのbuilt-in roleが持つbaseline。Roleなしuserへの意図しない公開を防ぐ。
+  api.use('*', requirePermission('storage:read'))
+
+  // 既存routeのmethod単位RBAC。connection capabilityとは別の「誰が操作できるか」。
+  api.on('POST', '/connections', requirePermission('connections:manage'))
+  api.on(['PUT', 'DELETE'], '/connections/:id', requirePermission('connections:manage'))
+  api.on('PUT', '/connections/:id/default', requirePermission('connections:manage'))
+  api.on('PUT', '/notes/:slug', requirePermission('content:write'))
+  api.on('PUT', '/storage/:connId/readme', requirePermission('content:write'))
+  api.on('POST', '/tags', requirePermission('content:write'))
+  api.on(['PUT', 'DELETE'], '/tags/:id', requirePermission('content:write'))
+  api.on(['PUT', 'DELETE'], '/storage/:connId/favorites/:bucket', requirePermission('content:write'))
+  api.on('PUT', '/settings/:key', requirePermission('settings:manage'))
+  api.on('POST', '/storage/:connId/scan', requirePermission('jobs:operate'))
+  api.on('POST', '/pricing/refresh', requirePermission('jobs:operate'))
+  api.on('POST', '/jobs/:id/cancel', requirePermission('jobs:operate'))
+  api.use('/lineage/*', requirePermission('lineage:read'))
+}
 
 // 接続ごとの権限ガード。「どのエンドポイントがどの権限に属するか」をここ 1 箇所に
 // 集約する (ルートハンドラ側には権限の知識を持たせない)。
@@ -106,6 +193,38 @@ mountSettingsRoutes(api, { pools })
 mountNotesRoutes(api, { pools })
 mountStorageTagsRoutes(api, { pools })
 
+if (env.DATASET_REGISTRY_URL && env.DATASET_REGISTRY_TOKEN && env.MARQUEZ_URL) {
+  const registry = createRegistryClient({
+    baseUrl: env.DATASET_REGISTRY_URL,
+    token: env.DATASET_REGISTRY_TOKEN,
+  })
+  const marquez = createMarquezClient({ baseUrl: env.MARQUEZ_URL })
+  const bindings: StorageBindingResolver = {
+    async resolve(keys) {
+      if (keys.length === 0) return new Map()
+      const result = await pools.ro.query<{
+        registry_storage_system_key: string
+        connection_id: string
+      }>(
+        `SELECT registry_storage_system_key, connection_id
+           FROM lineage_storage_bindings
+          WHERE registry_storage_system_key = ANY($1::text[])`,
+        [[...keys]],
+      )
+      return new Map(result.rows.map(row => [row.registry_storage_system_key, row.connection_id]))
+    },
+  }
+  mountLineageRoutes(api, { service: createLineageService({ registry, marquez, bindings }) })
+} else {
+  api.all('/lineage/*', c => c.json({ error: 'lineage integration is not configured' }, 503))
+}
+
+if (authEnabled) {
+  mountAdminUsersRoutes(api, { store: authStore, audit })
+  mountServiceAccountRoutes(api, { store: serviceAccounts, audit })
+  mountAuditRoutes(api, { pool: pools.ro })
+}
+
 app.route('/api/internal', api)
 
 // 未 catch のエラーをユーザフレンドリーに翻訳する。S3 系は 502 + 短い説明、
@@ -131,6 +250,7 @@ let shuttingDown = false
 const shutdown = async () => {
   if (shuttingDown) return
   shuttingDown = true
+  if (authCleanupTimer) clearInterval(authCleanupTimer)
   setTimeout(() => process.exit(1), 10_000).unref()
   await new Promise<void>(resolve => server.close(() => resolve()))
   await storageFactory.close()

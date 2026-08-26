@@ -5,6 +5,8 @@ import { z } from 'zod'
 const hex32 = (name: string) =>
   z.string().regex(/^[0-9a-fA-F]{64}$/, `${name} must be 64 hex chars (32 bytes)`)
 
+const booleanString = z.enum(['true', 'false', '1', '0'])
+
 const schema = z.object({
   PORT: z.coerce.number().default(3000),
   DATABASE_URL_RW: z.string().min(1),
@@ -34,6 +36,28 @@ const schema = z.object({
   MEDIA_SPECTROGRAM_MAX_WIDTH: z.coerce.number().default(4096),
   MEDIA_WORKER_PORT: z.coerce.number().default(3100),
   MEDIA_WORKER_URL: z.string().default('http://media-worker:3100'),
+
+  // Browser auth。disabledは既存LAN運用から段階移行するための明示モード。
+  // Internetへ公開するときはlocal/oidc/hybridのいずれかとHTTPSを必須にする。
+  AUTH_MODE: z.enum(['disabled', 'local', 'oidc', 'hybrid']).default('disabled'),
+  AUTH_COOKIE_SECURE: booleanString.default('false').transform(value =>
+    value === 'true' || value === '1'
+  ),
+  AUTH_SESSION_IDLE_SECONDS: z.coerce.number().int().min(300).default(28_800),
+  AUTH_SESSION_ABSOLUTE_SECONDS: z.coerce.number().int().min(3600).default(604_800),
+  OIDC_ISSUER_URL: z.string().url().optional(),
+  OIDC_CLIENT_ID: z.string().min(1).optional(),
+  OIDC_CLIENT_SECRET: z.string().min(1).optional(),
+  OIDC_REDIRECT_URI: z.string().url().optional(),
+  OIDC_LABEL: z.string().min(1).default('SSO'),
+
+  // Dataset Registryがmetadataの正本、Marquezはread-only projection。
+  // 3値が揃った場合だけinternal UIにlineage routeをmountする。
+  DATASET_REGISTRY_URL: z.string().url().optional(),
+  DATASET_REGISTRY_TOKEN: z.string().min(16).optional(),
+  MARQUEZ_URL: z.string().url().optional(),
+  LINEAGE_API_PORT: z.coerce.number().int().min(1).max(65535).default(3001),
+  OPENLINEAGE_BODY_LIMIT_BYTES: z.coerce.number().int().min(1024).default(2 * 1024 * 1024),
 })
 
 export type Env = z.infer<typeof schema>
