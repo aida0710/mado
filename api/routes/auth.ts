@@ -37,6 +37,9 @@ const ChangePasswordBody = z.object({
   currentPassword: z.string().min(1).max(1024),
   newPassword: z.string().min(12).max(1024),
 })
+const ProfileBody = z.object({
+  signatureName: z.string().trim().min(1).max(128),
+})
 
 function requestMetadata(c: { req: { header(name: string): string | undefined } }): RequestMetadata {
   const forwarded = c.req.header('X-Forwarded-For')?.split(',')[0]?.trim()
@@ -52,6 +55,7 @@ function publicUser(user: {
   username: string | null
   email: string | null
   displayName: string
+  signatureName: string
   roles: string[]
   permissions: string[]
   mustChangePassword: boolean
@@ -61,6 +65,7 @@ function publicUser(user: {
     username: user.username,
     email: user.email,
     displayName: user.displayName,
+    signatureName: user.signatureName,
     roles: user.roles,
     permissions: user.permissions,
     mustChangePassword: user.mustChangePassword,
@@ -180,6 +185,23 @@ export function mountAuthRoutes(app: Hono, deps: AuthRouteDeps): void {
     const principal = getSessionPrincipal(c)
     if (!principal) return c.json({ error: 'unauthorized' }, 401)
     return c.json({ user: publicUser(principal.user) })
+  })
+
+  app.use('/profile', sessionGuard)
+  app.put('/profile', async c => {
+    const principal = getSessionPrincipal(c)
+    if (!principal) return c.json({ error: 'unauthorized' }, 401)
+    const parsed = ProfileBody.safeParse(await c.req.json().catch(() => null))
+    if (!parsed.success) return c.json({ error: 'invalid profile' }, 400)
+    const user = await deps.store.updateSignatureName(principal.user.id, parsed.data.signatureName)
+    if (!user) return c.json({ error: 'user not found' }, 404)
+    await deps.audit.write({
+      actor: { type: 'user', userId: principal.user.id },
+      action: 'auth.profile.update', outcome: 'success',
+      resourceType: 'user', resourceId: principal.user.id,
+      details: { fields: ['signatureName'] }, ...requestMetadata(c),
+    })
+    return c.json({ user: publicUser(user) })
   })
 
   app.use('/logout', sessionGuard)

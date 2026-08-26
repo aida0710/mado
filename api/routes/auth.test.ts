@@ -43,7 +43,21 @@ describe('auth routes', () => {
 
     const me = await app.request('/me', { headers: { Cookie: cookie!.split(';')[0] } })
     expect(me.status).toBe(200)
-    expect(await me.json()).toMatchObject({ user: { username: 'local-user', email: 'user@example.com', roles: ['viewer'] } })
+    expect(await me.json()).toMatchObject({ user: {
+      username: 'local-user', email: 'user@example.com', signatureName: 'User', roles: ['viewer'],
+    } })
+
+    const profile = await app.request('/profile', {
+      method: 'PUT',
+      headers: { Cookie: cookie!.split(';')[0], 'Content-Type': 'application/json' },
+      body: JSON.stringify({ signatureName: '新しい署名' }),
+    })
+    expect(profile.status).toBe(200)
+    expect(await profile.json()).toMatchObject({ user: { signatureName: '新しい署名' } })
+    const events = await pools.rw.query(
+      `SELECT action, outcome FROM audit_events WHERE action = 'auth.profile.update'`,
+    )
+    expect(events.rows).toEqual([{ action: 'auth.profile.update', outcome: 'success' }])
   })
 
   it('password誤りはgeneric 401でauditし、sessionを発行しない', async () => {

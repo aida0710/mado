@@ -1,9 +1,10 @@
 import type { Hono } from 'hono'
 import { z } from 'zod'
 import type { Pools } from '../db.js'
+import { getSessionPrincipal } from '../lib/rbac.js'
 
-// LAN オナーシステム: GET/PUT はどちらも認証なし。防御は LAN 境界に委ねる。
-// `editor` は自己申告制で、README パターンを踏襲している。
+// 認証有効時の編集者はsession userのアカウント署名を正本にする。
+// editor request値は認証無効の開発・test環境との互換用。
 
 export interface NotesDeps {
   pools: Pools
@@ -11,7 +12,7 @@ export interface NotesDeps {
 
 const PutBody = z.object({
   body: z.string(),
-  editor: z.string().min(1),
+  editor: z.string().min(1).optional(),
 })
 
 interface NoteRow {
@@ -44,7 +45,11 @@ export function mountNotesRoutes(app: Hono, deps: NotesDeps): void {
     }
     const parsed = PutBody.safeParse(await c.req.json().catch(() => null))
     if (!parsed.success) return c.json({ error: parsed.error.message }, 400)
-    const { body, editor } = parsed.data
+    const principal = getSessionPrincipal(c)
+    const body = parsed.data.body
+    const editor = principal?.user.signatureName ?? parsed.data.editor
+    if (!editor) return c.json({ error: 'editor is required' }, 400)
+    const actorUserId = principal?.user.id ?? null
     const sizeBytes = Buffer.byteLength(body, 'utf-8')
 
     // notes (current state) と notes_history (append) を 1 transaction で
@@ -53,18 +58,19 @@ export function mountNotesRoutes(app: Hono, deps: NotesDeps): void {
     try {
       await client.query('BEGIN')
       await client.query(
-        `INSERT INTO notes_history (slug, body, size_bytes, editor)
-         VALUES ($1, $2, $3, $4)`,
-        [slug, body, sizeBytes, editor],
+        `INSERT INTO notes_history (slug, body, size_bytes, editor, actor_user_id)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [slug, body, sizeBytes, editor, actorUserId],
       )
       await client.query(
-        `INSERT INTO notes (slug, body, last_editor, last_edited_at)
-         VALUES ($1, $2, $3, now())
+        `INSERT INTO notes (slug, body, last_editor, last_editor_user_id, last_edited_at)
+         VALUES ($1, $2, $3, $4, now())
          ON CONFLICT (slug) DO UPDATE
            SET body           = EXCLUDED.body,
                last_editor    = EXCLUDED.last_editor,
+               last_editor_user_id = EXCLUDED.last_editor_user_id,
                last_edited_at = EXCLUDED.last_edited_at`,
-        [slug, body, editor],
+        [slug, body, editor, actorUserId],
       )
       await client.query('COMMIT')
     } catch (e) {

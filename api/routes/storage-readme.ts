@@ -6,12 +6,12 @@ import {
 import type { Hono } from 'hono'
 import { z } from 'zod'
 import type { Pools } from '../db.js'
+import { getSessionPrincipal } from '../lib/rbac.js'
 import type { ResponseCache } from '../lib/storage-cache.js'
 import { resolveStorageOrFail, type GetStorage } from './_connId.js'
 
-// GET/PUT はどちらも意図的に認証なし。`editor` は自己申告制 (オナーシステム)。
-// 防御は LAN 境界に委ねる (このハンドラではない)。
-// 脅威モデルを確認せずに Bearer ミドルウェアを追加しないこと。
+// 認証有効時の編集者はsession userのアカウント署名を正本にする。
+// editor request値は認証無効の開発・test環境との互換用。
 
 export interface StorageReadmeDeps {
   getStorage: GetStorage
@@ -25,7 +25,7 @@ const PutBody = z.object({
   bucket: z.string().min(1),
   prefix: z.string(),       // '' (ルート) または '/' で終わる
   body: z.string(),
-  editor: z.string().min(1),
+  editor: z.string().min(1).optional(),
 })
 
 async function streamToString(stream: NodeJS.ReadableStream): Promise<string> {
@@ -89,7 +89,11 @@ export function mountStorageReadmeRoutes(app: Hono, deps: StorageReadmeDeps): vo
     if (!parsed.success) {
       return c.json({ error: parsed.error.message }, 400)
     }
-    const { bucket, prefix, body, editor } = parsed.data
+    const { bucket, prefix, body } = parsed.data
+    const principal = getSessionPrincipal(c)
+    const editor = principal?.user.signatureName ?? parsed.data.editor
+    if (!editor) return c.json({ error: 'editor is required' }, 400)
+    const actorUserId = principal?.user.id ?? null
     const Key = prefix + 'README.md'
     const buf = Buffer.from(body, 'utf-8')
 
@@ -114,18 +118,21 @@ export function mountStorageReadmeRoutes(app: Hono, deps: StorageReadmeDeps): vo
     try {
       await client.query('BEGIN')
       await client.query(
-        `INSERT INTO storage_readme_history(connection_id, bucket, prefix, body, size_bytes, editor)
-         VALUES($1,$2,$3,$4,$5,$6)`,
-        [connId, bucket, prefix, body, buf.byteLength, editor]
+        `INSERT INTO storage_readme_history
+           (connection_id, bucket, prefix, body, size_bytes, editor, actor_user_id)
+         VALUES($1,$2,$3,$4,$5,$6,$7)`,
+        [connId, bucket, prefix, body, buf.byteLength, editor, actorUserId]
       )
       await client.query(
-        `INSERT INTO storage_readme_meta(connection_id, bucket, prefix, last_editor, last_edited_at, size_bytes)
-         VALUES($1,$2,$3,$4, now(), $5)
+        `INSERT INTO storage_readme_meta
+           (connection_id, bucket, prefix, last_editor, last_editor_user_id, last_edited_at, size_bytes)
+         VALUES($1,$2,$3,$4,$5, now(), $6)
          ON CONFLICT (connection_id, bucket, prefix) DO UPDATE
            SET last_editor    = EXCLUDED.last_editor,
+               last_editor_user_id = EXCLUDED.last_editor_user_id,
                last_edited_at = EXCLUDED.last_edited_at,
                size_bytes     = EXCLUDED.size_bytes`,
-        [connId, bucket, prefix, editor, buf.byteLength]
+        [connId, bucket, prefix, editor, actorUserId, buf.byteLength]
       )
       await client.query('COMMIT')
     } catch (e) {

@@ -20,7 +20,10 @@ describe('AuthStore', () => {
     })
     expect(user.username).toBe('admin')
     expect(user.email).toBe('admin@example.com')
+    expect(user.signatureName).toBe('Admin')
     expect(user.permissions).toContain('users:manage')
+
+    expect((await store.updateSignatureName(user.id, '署名'))?.signatureName).toBe('署名')
 
     await store.setLocalPassword(user.id, await hashPassword('long-enough-password'), false)
     const credential = await store.getLocalCredential('ADMIN@example.com')

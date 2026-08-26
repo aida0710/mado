@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS auth_users (
   username              TEXT,
   email                 TEXT,
   display_name          TEXT        NOT NULL,
+  signature_name        TEXT        NOT NULL,
   status                TEXT        NOT NULL DEFAULT 'active'
                         CHECK (status IN ('active', 'disabled')),
   created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -21,6 +22,9 @@ CREATE TABLE IF NOT EXISTS auth_users (
 -- Keep this migration re-runnable for development databases created before
 -- local usernames were introduced.
 ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS username TEXT;
+ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS signature_name TEXT;
+UPDATE auth_users SET signature_name = display_name WHERE signature_name IS NULL;
+ALTER TABLE auth_users ALTER COLUMN signature_name SET NOT NULL;
 
 DO $$ BEGIN
   IF NOT EXISTS (
@@ -249,10 +253,10 @@ ON CONFLICT DO NOTHING;
 -- Argon2id hash, and the account cannot continue past first sign-in without
 -- replacing the known initial credential with a 12+ byte password.
 WITH inserted_admin AS (
-  INSERT INTO auth_users (id, username, email, display_name, status)
+  INSERT INTO auth_users (id, username, email, display_name, signature_name, status)
   SELECT
     '722c09cd-bcb9-4730-9128-f6213cf0fd97'::uuid,
-    'admin', NULL, 'Mado Administrator', 'active'
+    'admin', NULL, 'Mado Administrator', 'Mado Administrator', 'active'
   WHERE NOT EXISTS (
     SELECT 1 FROM auth_users WHERE lower(username) = 'admin'
   )

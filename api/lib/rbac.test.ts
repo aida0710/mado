@@ -9,7 +9,7 @@ describe('requirePermission', () => {
       setSessionPrincipal(c, {
         kind: 'user', sessionId: 's',
         user: {
-          id: 'u', username: null, email: null, displayName: 'U', status: 'active',
+          id: 'u', username: null, email: null, displayName: 'U', signatureName: 'U', status: 'active',
           roles: ['viewer'], permissions: ['storage:read'], mustChangePassword: false,
         },
       })

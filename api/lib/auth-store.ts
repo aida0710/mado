@@ -7,6 +7,7 @@ interface AuthUserRow {
   username: string | null
   email: string | null
   display_name: string
+  signature_name: string
   status: UserStatus
   roles: string[]
   permissions: string[]
@@ -19,7 +20,7 @@ interface LocalCredentialRow extends AuthUserRow {
   locked_until: Date | null
 }
 
-const AUTH_USER_FIELDS = `u.id, u.username, u.email, u.display_name, u.status,
+const AUTH_USER_FIELDS = `u.id, u.username, u.email, u.display_name, u.signature_name, u.status,
          COALESCE((
            SELECT array_agg(ur.role_id ORDER BY ur.role_id)
              FROM auth_user_roles ur WHERE ur.user_id = u.id
@@ -43,6 +44,7 @@ function toUser(row: AuthUserRow): AuthUser {
     username: row.username,
     email: row.email,
     displayName: row.display_name,
+    signatureName: row.signature_name,
     status: row.status,
     roles: row.roles,
     permissions: row.permissions,
@@ -64,6 +66,7 @@ export interface AuthStore {
   getUser(id: string): Promise<AuthUser | null>
   createUser(input: CreateUserInput, client?: PoolClient): Promise<AuthUser>
   updateUser(id: string, patch: { username?: string | null; email?: string | null; displayName?: string; status?: UserStatus }): Promise<AuthUser | null>
+  updateSignatureName(id: string, signatureName: string): Promise<AuthUser | null>
   setUserRoles(userId: string, roles: string[], grantedBy: string): Promise<AuthUser | null>
   rolesExist(roles: string[]): Promise<boolean>
   hasOtherActiveAdmin(userId: string): Promise<boolean>
@@ -122,11 +125,13 @@ export function createAuthStore(pool: Pool): AuthStore {
         if (ownClient) await client.query('BEGIN')
         const id = newId()
         await client.query(
-          `INSERT INTO auth_users (id, username, email, display_name, status) VALUES ($1, $2, $3, $4, $5)`,
+          `INSERT INTO auth_users (id, username, email, display_name, signature_name, status)
+           VALUES ($1, $2, $3, $4, $5, $6)`,
           [
             id,
             input.username?.trim().toLowerCase() || null,
             input.email?.trim().toLowerCase() || null,
+            input.displayName.trim(),
             input.displayName.trim(),
             input.status ?? 'active',
           ],
@@ -174,6 +179,15 @@ export function createAuthStore(pool: Pool): AuthStore {
         `UPDATE auth_users SET ${fields.join(', ')}, updated_at = now()
           WHERE id = $${values.length} RETURNING id`,
         values,
+      )
+      return r.rowCount === 0 ? null : loadUser(id)
+    },
+
+    async updateSignatureName(id, signatureName) {
+      const r = await pool.query(
+        `UPDATE auth_users SET signature_name = $2, updated_at = now()
+          WHERE id = $1 RETURNING id`,
+        [id, signatureName.trim()],
       )
       return r.rowCount === 0 ? null : loadUser(id)
     },
