@@ -61,12 +61,8 @@ export function classifyActivity(method: string, pathname: string): Activity | n
   if (verb === 'POST' && p[0] === 'jobs' && p[1] && p[2] === 'cancel') {
     return { action: 'job.cancel', resourceType: 'job', resourceId: decoded(p[1]) }
   }
-  if (verb === 'GET' && p[0] === 'audit-events') {
-    return { action: 'audit.read', resourceType: 'audit_log', resourceId: null }
-  }
-
   // These routes already record successful mutations with richer details.
-  if (p[0] === 'users' && ['POST', 'PUT', 'PATCH'].includes(verb)) {
+  if (p[0] === 'users' && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(verb)) {
     return { action: 'user.manage', resourceType: 'user', resourceId: decoded(p[1]), dedicatedSuccessAudit: true }
   }
   if (p[0] === 'service-accounts' && ['POST', 'PATCH', 'DELETE'].includes(verb)) {

@@ -16,6 +16,7 @@ describe('audit activity', () => {
     expect(classifyActivity('DELETE', '/api/internal/storage/c1/favorites/bucket')).toMatchObject({ action: 'storage.favorite.remove' })
     expect(classifyActivity('GET', '/api/internal/storage/c1/preview/raw')).toMatchObject({ action: 'storage.download.raw' })
     expect(classifyActivity('GET', '/api/internal/storage/c1/list')).toBeNull()
+    expect(classifyActivity('GET', '/api/internal/audit-events')).toBeNull()
   })
 
   it('response outcomeとactorを記録する', async () => {

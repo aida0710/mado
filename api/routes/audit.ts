@@ -16,6 +16,13 @@ const Query = z.object({
   actorServiceAccountId: z.string().uuid().optional(),
 })
 
+export const ROUTINE_AUDIT_ACTIONS = [
+  'auth.local.login',
+  'auth.oidc.login',
+  'auth.logout',
+  'audit.read',
+] as const
+
 export function mountAuditRoutes(app: Hono, deps: AuditRoutesDeps): void {
   app.use('/audit-events', requirePermission('audit:read'))
   app.get('/audit-events', async c => {
@@ -28,6 +35,8 @@ export function mountAuditRoutes(app: Hono, deps: AuditRoutesDeps): void {
       values.push(value)
       where.push(sql.replace('?', `$${values.length}`))
     }
+    values.push([...ROUTINE_AUDIT_ACTIONS])
+    where.push(`NOT (e.action = ANY($${values.length}::text[]))`)
     if (q.beforeId !== undefined) add('e.id < ?', q.beforeId)
     if (q.action !== undefined) add('e.action = ?', q.action)
     if (q.outcome !== undefined) add('e.outcome = ?', q.outcome)
