@@ -155,6 +155,9 @@ AWS の料金 API から取得して DB にキャッシュしています。脚�
 
 **Lineage**でnamespaceとDataset/Job名を指定すると、MarquezのOpenLineage projectionをグラフ表示します。ノードを選ぶとRegistry正本の版、manifest/hash、保存場所、Git SHA、container、config、model、metricsを確認できます。
 
+Pipelineへの導入方法、DatasetとVersionの分け方、OpenLineage event例、既存データのbackfill、S3接続とのbindingは
+[`docs/lineage.md`](docs/lineage.md)にまとめています。Lineageを新しく生やす前にこのガイドを確認してください。
+
 - logical表示: `Dataset → Job → Dataset`
 - versions表示: 明示したDatasetVersion UUIDから`Version → Run → Version`
 - 「最新らしい版」は推測しません。版表示には明示version IDが必要です
