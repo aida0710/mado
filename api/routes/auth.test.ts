@@ -50,14 +50,19 @@ describe('auth routes', () => {
     const profile = await app.request('/profile', {
       method: 'PUT',
       headers: { Cookie: cookie!.split(';')[0], 'Content-Type': 'application/json' },
-      body: JSON.stringify({ signatureName: '新しい署名' }),
+      body: JSON.stringify({ displayName: '新しい表示名', username: 'renamed-user', signatureName: '新しい署名' }),
     })
     expect(profile.status).toBe(200)
-    expect(await profile.json()).toMatchObject({ user: { signatureName: '新しい署名' } })
-    const events = await pools.rw.query(
-      `SELECT action, outcome FROM audit_events WHERE action = 'auth.profile.update'`,
+    expect(await profile.json()).toMatchObject({ user: {
+      displayName: '新しい表示名', username: 'renamed-user', signatureName: '新しい署名',
+    } })
+    const events = await pools.rw.query<{ action: string; outcome: string; details: { changes: Array<{ field: string; before: unknown; after: unknown }> } }>(
+      `SELECT action, outcome, details FROM audit_events WHERE action = 'auth.profile.update'`,
     )
-    expect(events.rows).toEqual([{ action: 'auth.profile.update', outcome: 'success' }])
+    expect(events.rows[0]).toMatchObject({ action: 'auth.profile.update', outcome: 'success' })
+    expect(events.rows[0].details.changes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ field: 'username', before: 'local-user', after: 'renamed-user' }),
+    ]))
   })
 
   it('password誤りはgeneric 401でauditし、sessionを発行しない', async () => {

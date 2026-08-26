@@ -21,10 +21,9 @@ const CreateBody = z.object({
 })
 const PatchBody = z.object({
   username: z.string().trim().regex(/^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,63}$/).nullable().optional(),
-  email: z.string().email().max(320).nullable().optional(),
   displayName: z.string().trim().min(1).max(128).optional(),
   status: z.enum(['active', 'disabled']).optional(),
-})
+}).strict()
 const RolesBody = z.object({ roles: z.array(Role).max(16) })
 const ResetBody = z.object({ password: z.string().min(12).max(1024).optional() })
 
@@ -60,7 +59,12 @@ export function mountAdminUsersRoutes(app: Hono, deps: AdminUsersDeps): void {
       }
       await deps.audit.write({
         actor: { type: 'user', userId: principal.user.id }, action: 'user.create', outcome: 'success',
-        resourceType: 'user', resourceId: user.id, details: { roles: parsed.data.roles }, ...meta(c),
+        resourceType: 'user', resourceId: user.id,
+        details: {
+          target: { displayName: user.displayName, username: user.username },
+          changes: [{ field: 'roles', label: '権限', before: [], after: parsed.data.roles }],
+        },
+        ...meta(c),
       })
       return c.json({ user }, 201)
     } catch (e) {
@@ -83,11 +87,34 @@ export function mountAdminUsersRoutes(app: Hono, deps: AdminUsersDeps): void {
         && !await deps.store.hasOtherActiveAdmin(id)) {
       return c.json({ error: 'cannot disable the last active admin' }, 409)
     }
-    const user = await deps.store.updateUser(id, parsed.data)
+    let user
+    try {
+      user = await deps.store.updateUser(id, parsed.data)
+    } catch (e) {
+      if (e instanceof Error && 'code' in e && e.code === '23505') {
+        return c.json({ error: 'username already exists' }, 409)
+      }
+      throw e
+    }
     if (parsed.data.status === 'disabled') await deps.store.revokeUserSessions(id)
     await deps.audit.write({
       actor: { type: 'user', userId: principal.user.id }, action: 'user.update', outcome: 'success',
-      resourceType: 'user', resourceId: id, details: { fields: Object.keys(parsed.data) }, ...meta(c),
+      resourceType: 'user', resourceId: id,
+      details: {
+        target: { displayName: current.displayName, username: current.username },
+        changes: [
+          parsed.data.displayName !== undefined && parsed.data.displayName !== current.displayName
+            ? { field: 'displayName', label: '表示名', before: current.displayName, after: parsed.data.displayName }
+            : null,
+          parsed.data.username !== undefined && parsed.data.username !== current.username
+            ? { field: 'username', label: 'ユーザーID', before: current.username, after: parsed.data.username }
+            : null,
+          parsed.data.status !== undefined && parsed.data.status !== current.status
+            ? { field: 'status', label: '状態', before: current.status, after: parsed.data.status }
+            : null,
+        ].filter(Boolean),
+      },
+      ...meta(c),
     })
     return c.json({ user })
   })
@@ -109,7 +136,12 @@ export function mountAdminUsersRoutes(app: Hono, deps: AdminUsersDeps): void {
     await deps.store.revokeUserSessions(id)
     await deps.audit.write({
       actor: { type: 'user', userId: principal.user.id }, action: 'user.roles.update', outcome: 'success',
-      resourceType: 'user', resourceId: id, details: { roles: parsed.data.roles }, ...meta(c),
+      resourceType: 'user', resourceId: id,
+      details: {
+        target: { displayName: current.displayName, username: current.username },
+        changes: [{ field: 'roles', label: '権限', before: current.roles, after: parsed.data.roles }],
+      },
+      ...meta(c),
     })
     return c.json({ user })
   })
@@ -120,15 +152,48 @@ export function mountAdminUsersRoutes(app: Hono, deps: AdminUsersDeps): void {
     if (!z.string().uuid().safeParse(id).success) return c.json({ error: 'invalid user id' }, 400)
     const parsed = ResetBody.safeParse(await c.req.json().catch(() => ({})))
     if (!parsed.success) return c.json({ error: 'invalid body' }, 400)
-    if (!await deps.store.getUser(id)) return c.json({ error: 'user not found' }, 404)
+    const current = await deps.store.getUser(id)
+    if (!current) return c.json({ error: 'user not found' }, 404)
+    if (current.authMethods.includes('sso') && !current.authMethods.includes('local')) {
+      return c.json({ error: 'SSO user password is managed by the identity provider' }, 409)
+    }
     const temporaryPassword = parsed.data.password ?? `Mado-${randomToken(18)}`
     await deps.store.setLocalPassword(id, await hashPassword(temporaryPassword), true)
     await deps.store.revokeUserSessions(id)
     await deps.audit.write({
       actor: { type: 'user', userId: principal.user.id }, action: 'user.password.reset', outcome: 'success',
-      resourceType: 'user', resourceId: id, ...meta(c),
+      resourceType: 'user', resourceId: id,
+      details: {
+        target: { displayName: current.displayName, username: current.username },
+        changes: [{ field: 'password', label: 'パスワード', before: null, after: '再発行・次回変更必須' }],
+      },
+      ...meta(c),
     })
     // 自動生成時だけ一度返す。DB/auditには残さない。
     return c.json({ ok: true, temporaryPassword: parsed.data.password ? undefined : temporaryPassword })
+  })
+
+  app.delete('/users/:id', async c => {
+    const principal = getSessionPrincipal(c)!
+    const id = c.req.param('id')
+    if (!z.string().uuid().safeParse(id).success) return c.json({ error: 'invalid user id' }, 400)
+    if (id === principal.user.id) return c.json({ error: 'cannot delete your own account' }, 409)
+    const current = await deps.store.getUser(id)
+    if (!current) return c.json({ error: 'user not found' }, 404)
+    if (current.status === 'active' && current.roles.includes('admin')
+        && !await deps.store.hasOtherActiveAdmin(id)) {
+      return c.json({ error: 'cannot delete the last active admin' }, 409)
+    }
+    if (!await deps.store.deleteUser(id)) return c.json({ error: 'user not found' }, 404)
+    await deps.audit.write({
+      actor: { type: 'user', userId: principal.user.id }, action: 'user.delete', outcome: 'success',
+      resourceType: 'user', resourceId: id,
+      details: {
+        target: { displayName: current.displayName, username: current.username },
+        changes: [{ field: 'account', label: 'アカウント', before: '存在', after: '削除' }],
+      },
+      ...meta(c),
+    })
+    return c.json({ ok: true })
   })
 }

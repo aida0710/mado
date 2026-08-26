@@ -39,6 +39,8 @@ const ChangePasswordBody = z.object({
 })
 const ProfileBody = z.object({
   signatureName: z.string().trim().min(1).max(128),
+  displayName: z.string().trim().min(1).max(128).optional(),
+  username: z.string().trim().regex(/^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,63}$/).optional(),
 })
 
 function requestMetadata(c: { req: { header(name: string): string | undefined } }): RequestMetadata {
@@ -59,6 +61,7 @@ function publicUser(user: {
   roles: string[]
   permissions: string[]
   mustChangePassword: boolean
+  authMethods: Array<'local' | 'sso'>
 }) {
   return {
     id: user.id,
@@ -69,6 +72,7 @@ function publicUser(user: {
     roles: user.roles,
     permissions: user.permissions,
     mustChangePassword: user.mustChangePassword,
+    authMethods: user.authMethods,
   }
 }
 
@@ -193,13 +197,30 @@ export function mountAuthRoutes(app: Hono, deps: AuthRouteDeps): void {
     if (!principal) return c.json({ error: 'unauthorized' }, 401)
     const parsed = ProfileBody.safeParse(await c.req.json().catch(() => null))
     if (!parsed.success) return c.json({ error: 'invalid profile' }, 400)
-    const user = await deps.store.updateSignatureName(principal.user.id, parsed.data.signatureName)
+    const changes = [
+      { field: 'displayName', label: '表示名', before: principal.user.displayName, after: parsed.data.displayName ?? principal.user.displayName },
+      { field: 'username', label: 'ユーザーID', before: principal.user.username, after: parsed.data.username ?? principal.user.username },
+      { field: 'signatureName', label: '署名', before: principal.user.signatureName, after: parsed.data.signatureName },
+    ].filter(change => change.before !== change.after)
+    let user
+    try {
+      user = await deps.store.updateUser(principal.user.id, {
+        displayName: parsed.data.displayName,
+        username: parsed.data.username,
+      })
+      if (user) user = await deps.store.updateSignatureName(principal.user.id, parsed.data.signatureName)
+    } catch (e) {
+      if (e instanceof Error && 'code' in e && e.code === '23505') {
+        return c.json({ error: 'username already exists' }, 409)
+      }
+      throw e
+    }
     if (!user) return c.json({ error: 'user not found' }, 404)
     await deps.audit.write({
       actor: { type: 'user', userId: principal.user.id },
       action: 'auth.profile.update', outcome: 'success',
       resourceType: 'user', resourceId: principal.user.id,
-      details: { fields: ['signatureName'] }, ...requestMetadata(c),
+      details: { changes }, ...requestMetadata(c),
     })
     return c.json({ user: publicUser(user) })
   })

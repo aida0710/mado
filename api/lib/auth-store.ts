@@ -12,6 +12,7 @@ interface AuthUserRow {
   roles: string[]
   permissions: string[]
   must_change_password: boolean
+  auth_methods: Array<'local' | 'sso'>
 }
 
 interface LocalCredentialRow extends AuthUserRow {
@@ -31,7 +32,13 @@ const AUTH_USER_FIELDS = `u.id, u.username, u.email, u.display_name, u.signature
              JOIN auth_role_permissions rp ON rp.role_id = ur.role_id
             WHERE ur.user_id = u.id
          ), ARRAY[]::text[]) AS permissions,
-         COALESCE(lc.must_change_password, FALSE) AS must_change_password`
+         COALESCE(lc.must_change_password, FALSE) AS must_change_password,
+         ARRAY_REMOVE(ARRAY[
+           CASE WHEN lc.user_id IS NOT NULL THEN 'local' END,
+           CASE WHEN EXISTS (
+             SELECT 1 FROM auth_oidc_identities oi WHERE oi.user_id = u.id
+           ) THEN 'sso' END
+         ], NULL)::text[] AS auth_methods`
 
 const AUTH_USER_FROM = `FROM auth_users u
     LEFT JOIN auth_local_credentials lc ON lc.user_id = u.id`
@@ -49,6 +56,7 @@ function toUser(row: AuthUserRow): AuthUser {
     roles: row.roles,
     permissions: row.permissions,
     mustChangePassword: row.must_change_password,
+    authMethods: row.auth_methods,
   }
 }
 
@@ -66,6 +74,7 @@ export interface AuthStore {
   getUser(id: string): Promise<AuthUser | null>
   createUser(input: CreateUserInput, client?: PoolClient): Promise<AuthUser>
   updateUser(id: string, patch: { username?: string | null; email?: string | null; displayName?: string; status?: UserStatus }): Promise<AuthUser | null>
+  deleteUser(id: string): Promise<boolean>
   updateSignatureName(id: string, signatureName: string): Promise<AuthUser | null>
   setUserRoles(userId: string, roles: string[], grantedBy: string): Promise<AuthUser | null>
   rolesExist(roles: string[]): Promise<boolean>
@@ -105,14 +114,19 @@ export interface CreatedSession {
 }
 
 export function createAuthStore(pool: Pool): AuthStore {
-  async function loadUser(id: string, client: Pool | PoolClient = pool): Promise<AuthUser | null> {
+  async function loadUserIncludingDeleted(id: string, client: Pool | PoolClient = pool): Promise<AuthUser | null> {
     const r = await client.query<AuthUserRow>(`${AUTH_USER_SELECT} WHERE u.id = $1`, [id])
+    return r.rows[0] ? toUser(r.rows[0]) : null
+  }
+
+  async function loadUser(id: string, client: Pool | PoolClient = pool): Promise<AuthUser | null> {
+    const r = await client.query<AuthUserRow>(`${AUTH_USER_SELECT} WHERE u.id = $1 AND u.deleted_at IS NULL`, [id])
     return r.rows[0] ? toUser(r.rows[0]) : null
   }
 
   return {
     async listUsers() {
-      const r = await pool.query<AuthUserRow>(`${AUTH_USER_SELECT} ORDER BY u.created_at, u.id`)
+      const r = await pool.query<AuthUserRow>(`${AUTH_USER_SELECT} WHERE u.deleted_at IS NULL ORDER BY u.created_at, u.id`)
       return r.rows.map(toUser)
     },
 
@@ -177,16 +191,39 @@ export function createAuthStore(pool: Pool): AuthStore {
       values.push(id)
       const r = await pool.query(
         `UPDATE auth_users SET ${fields.join(', ')}, updated_at = now()
-          WHERE id = $${values.length} RETURNING id`,
+          WHERE id = $${values.length} AND deleted_at IS NULL RETURNING id`,
         values,
       )
       return r.rowCount === 0 ? null : loadUser(id)
     },
 
+    async deleteUser(id) {
+      const client = await pool.connect()
+      try {
+        await client.query('BEGIN')
+        const r = await client.query(
+          `UPDATE auth_users
+              SET status = 'disabled', deleted_at = now(), updated_at = now()
+            WHERE id = $1 AND deleted_at IS NULL`,
+          [id],
+        )
+        if ((r.rowCount ?? 0) > 0) {
+          await client.query(`UPDATE auth_sessions SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL`, [id])
+        }
+        await client.query('COMMIT')
+        return (r.rowCount ?? 0) > 0
+      } catch (e) {
+        await client.query('ROLLBACK')
+        throw e
+      } finally {
+        client.release()
+      }
+    },
+
     async updateSignatureName(id, signatureName) {
       const r = await pool.query(
         `UPDATE auth_users SET signature_name = $2, updated_at = now()
-          WHERE id = $1 RETURNING id`,
+          WHERE id = $1 AND deleted_at IS NULL RETURNING id`,
         [id, signatureName.trim()],
       )
       return r.rowCount === 0 ? null : loadUser(id)
@@ -245,7 +282,7 @@ export function createAuthStore(pool: Pool): AuthStore {
         `SELECT ${AUTH_USER_FIELDS}, lc.password_hash, lc.failed_attempts, lc.locked_until
            ${AUTH_USER_FROM}
            WHERE (lower(u.username) = lower($1) OR lower(u.email) = lower($1))
-             AND lc.user_id IS NOT NULL`,
+             AND lc.user_id IS NOT NULL AND u.deleted_at IS NULL`,
         [identifier.trim()],
       )
       const row = r.rows[0]
@@ -319,7 +356,7 @@ export function createAuthStore(pool: Pool): AuthStore {
            JOIN auth_sessions s ON s.user_id = u.id
           WHERE s.token_hash = $1 AND s.revoked_at IS NULL
             AND s.idle_expires_at > now() AND s.absolute_expires_at > now()
-            AND u.status = 'active'`,
+            AND u.status = 'active' AND u.deleted_at IS NULL`,
         [sha256(token)],
       )
       const row = r.rows[0]
@@ -369,7 +406,9 @@ export function createAuthStore(pool: Pool): AuthStore {
           WHERE issuer = $1 AND subject = $2 RETURNING user_id`,
         [issuer, subject],
       )
-      return r.rows[0] ? loadUser(r.rows[0].user_id) : null
+      // Deleted SSO identities must still resolve to their disabled tombstone;
+      // otherwise the callback would try to provision the same subject again.
+      return r.rows[0] ? loadUserIncludingDeleted(r.rows[0].user_id) : null
     },
 
     async createOidcIdentityUser(input) {

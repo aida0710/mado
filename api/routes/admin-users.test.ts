@@ -51,4 +51,40 @@ describe('admin user routes', () => {
     const credential = await store.getLocalCredential('new@example.com')
     expect(credential?.mustChangePassword).toBe(true)
   })
+
+  it('ユーザーを編集し変更前後をauditへ残すがemailは変更させない', async () => {
+    const user = await store.createUser({ username: 'before', email: 'fixed@example.com', displayName: 'Before', roles: ['viewer'] })
+    const update = await app.request(`/users/${user.id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: 'after', displayName: 'After' }),
+    })
+    expect(update.status).toBe(200)
+    expect(await update.json()).toMatchObject({ user: { username: 'after', email: 'fixed@example.com', displayName: 'After' } })
+    const event = await pools.rw.query<{ details: { changes: Array<{ field: string; before: unknown; after: unknown }> } }>(
+      `SELECT details FROM audit_events WHERE action = 'user.update' ORDER BY id DESC LIMIT 1`,
+    )
+    expect(event.rows[0].details.changes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ field: 'username', before: 'before', after: 'after' }),
+    ]))
+    expect((await app.request(`/users/${user.id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'changed@example.com' }),
+    })).status).toBe(400)
+  })
+
+  it('自分自身は削除できず、別ユーザーは削除してauditへ残す', async () => {
+    expect((await app.request(`/users/${adminId}`, { method: 'DELETE' })).status).toBe(409)
+    const user = await store.createUser({ username: 'delete-me', displayName: 'Delete Me', roles: ['viewer'] })
+    expect((await app.request(`/users/${user.id}`, { method: 'DELETE' })).status).toBe(200)
+    expect(await store.getUser(user.id)).toBeNull()
+    const tombstone = await pools.rw.query<{ status: string; deleted_at: Date | null }>(
+      `SELECT status, deleted_at FROM auth_users WHERE id = $1`, [user.id],
+    )
+    expect(tombstone.rows[0]).toMatchObject({ status: 'disabled' })
+    expect(tombstone.rows[0].deleted_at).toBeInstanceOf(Date)
+    const event = await pools.rw.query<{ action: string; details: { target: { username: string } } }>(
+      `SELECT action, details FROM audit_events WHERE action = 'user.delete' ORDER BY id DESC LIMIT 1`,
+    )
+    expect(event.rows[0]).toMatchObject({ action: 'user.delete', details: { target: { username: 'delete-me' } } })
+  })
 })

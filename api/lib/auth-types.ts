@@ -10,6 +10,7 @@ export interface AuthUser {
   roles: string[]
   permissions: string[]
   mustChangePassword: boolean
+  authMethods: Array<'local' | 'sso'>
 }
 
 export interface SessionPrincipal {
