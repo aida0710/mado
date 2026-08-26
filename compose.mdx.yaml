@@ -1,0 +1,175 @@
+# mdx deployment: Mado and its private lineage backends share one Compose
+# project and one bridge network. Only Mado nginx is published, on loopback;
+# host Apache is the sole LAN-facing entry point.
+name: mado-mdx
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?.env に POSTGRES_PASSWORD を設定してください}"
+      POSTGRES_DB: dashboard
+      DASHBOARD_PASSWORD: "${DASHBOARD_PASSWORD:?.env に DASHBOARD_PASSWORD を設定してください}"
+    volumes:
+      - mado-db-data:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+      - ./db/migrations:/migrations:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d dashboard"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  registry-db:
+    image: postgres:16.10-bookworm
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: registry
+      POSTGRES_USER: registry
+      POSTGRES_PASSWORD: "${REGISTRY_DB_PASSWORD:?REGISTRY_DB_PASSWORD is required}"
+    volumes:
+      - registry-db-data:/var/lib/postgresql/data
+      - ./dataset-registry/db/init.sql:/docker-entrypoint-initdb.d/001-init.sql:ro
+      - ./dataset-registry/db/migrations/002_openlineage_ingest.sql:/docker-entrypoint-initdb.d/002-openlineage-ingest.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U registry -d registry"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  marquez-db:
+    image: postgres:14.18-bookworm
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: marquez
+      POSTGRES_USER: marquez
+      POSTGRES_PASSWORD: "${MARQUEZ_DB_PASSWORD:?MARQUEZ_DB_PASSWORD is required}"
+    volumes:
+      - marquez-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U marquez -d marquez"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  marquez-api:
+    image: marquezproject/marquez:0.50.0
+    restart: unless-stopped
+    environment:
+      MARQUEZ_CONFIG: /usr/src/app/marquez.registry.yml
+      MARQUEZ_PORT: "5000"
+      MARQUEZ_ADMIN_PORT: "5001"
+      POSTGRES_HOST: marquez-db
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: marquez
+      POSTGRES_USER: marquez
+      POSTGRES_PASSWORD: "${MARQUEZ_DB_PASSWORD:?MARQUEZ_DB_PASSWORD is required}"
+    volumes:
+      - ./dataset-registry/marquez.yml:/usr/src/app/marquez.registry.yml:ro
+    depends_on:
+      marquez-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/5001'"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  registry-api:
+    build: ./dataset-registry
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: "postgresql://registry:${REGISTRY_DB_PASSWORD}@registry-db:5432/registry"
+      MARQUEZ_URL: http://marquez-api:5000
+      REGISTRY_INGEST_TOKEN: "${REGISTRY_INGEST_TOKEN:?REGISTRY_INGEST_TOKEN is required}"
+    depends_on:
+      registry-db:
+        condition: service_healthy
+      marquez-api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz')"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  lineage-worker:
+    build: ./dataset-registry
+    command: ["python", "-m", "app.worker"]
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: "postgresql://registry:${REGISTRY_DB_PASSWORD}@registry-db:5432/registry"
+      MARQUEZ_URL: http://marquez-api:5000
+    depends_on:
+      registry-db:
+        condition: service_healthy
+      marquez-api:
+        condition: service_healthy
+
+  api-internal:
+    build: ./api
+    command: ["sh", "-c", "npm run build && node dist/internal.js"]
+    env_file:
+      - .env
+    environment:
+      PORT: "3000"
+      DATASET_REGISTRY_URL: http://registry-api:8080
+      DATASET_REGISTRY_TOKEN: "${REGISTRY_INGEST_TOKEN:?REGISTRY_INGEST_TOKEN is required}"
+      MARQUEZ_URL: http://marquez-api:5000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      registry-api:
+        condition: service_healthy
+      marquez-api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  api-lineage:
+    build: ./api
+    command: ["sh", "-c", "npm run build && npm run start:lineage"]
+    env_file:
+      - .env
+    environment:
+      LINEAGE_API_PORT: "3001"
+      DATASET_REGISTRY_URL: http://registry-api:8080
+      DATASET_REGISTRY_TOKEN: "${REGISTRY_INGEST_TOKEN:?REGISTRY_INGEST_TOKEN is required}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      registry-api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  media-worker:
+    build:
+      context: ./api
+      dockerfile: Dockerfile.worker
+    command: ["sh", "-c", "npm run build && node dist/worker.js"]
+    env_file:
+      - .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  nginx:
+    build:
+      context: .
+      dockerfile: nginx/Dockerfile
+      args:
+        VITE_GIT_COMMIT: "${VITE_GIT_COMMIT:-}"
+        VITE_GIT_DATE: "${VITE_GIT_DATE:-}"
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      - api-internal
+      - api-lineage
+    restart: unless-stopped
+
+volumes:
+  mado-db-data:
+  registry-db-data:
+  marquez-db-data:
