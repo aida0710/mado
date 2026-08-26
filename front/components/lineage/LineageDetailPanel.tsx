@@ -70,6 +70,7 @@ function VersionDetail({ detail }: { detail: DatasetVersionDetail }) {
         <Field label="Manifest hash" value={detail.manifestHash} mono />
         <Field label="Schema" value={detail.schemaUri} mono />
         <Field label="Created" value={formatTime(detail.createdAt)} />
+        <Field label="Metadata" value={Object.keys(detail.metadata).length > 0 ? detail.metadata : null} mono />
       </dl>
       <h4>保存場所 <span>{detail.locations.length}</span></h4>
       {detail.locations.length > 0
@@ -117,7 +118,9 @@ function RunDetail({ detail }: { detail: LineageRunDetail }) {
         <Field label="Config URI" value={detail.configUri} mono />
         <Field label="Config hash" value={detail.configHash} mono />
         <Field label="Models" value={detail.modelRefs.length > 0 ? detail.modelRefs : null} mono />
+        <Field label="Runtime" value={Object.keys(detail.runtime).length > 0 ? detail.runtime : null} mono />
         <Field label="Metrics" value={Object.keys(detail.metrics).length > 0 ? detail.metrics : null} mono />
+        <Field label="Sources" value={detail.sources.length > 0 ? detail.sources : null} mono />
         <Field label="Error" value={detail.errorMessage} />
       </dl>
       <h4>Inputs / Outputs</h4>
@@ -131,6 +134,24 @@ function RunDetail({ detail }: { detail: LineageRunDetail }) {
 
 function isRun(detail: LineageDetail): detail is LineageRunDetail { return 'runKey' in detail }
 function isDataset(detail: LineageDetail): detail is DatasetDetail { return 'datasetKey' in detail }
+
+function EmbeddedNodeDetail({ node }: { node: LineageNodeSummary }) {
+  const source = node.kind === 'source'
+  return (
+    <dl className="lineage-detail__fields">
+      <Field label="Status" value={node.status ?? node.latestRun?.state} />
+      <Field label="Registry" value={node.completeness} />
+      <Field label="Updated" value={formatTime(node.updatedAt)} />
+      {source && <Field label="Source kind" value={node.data.sourceKind} />}
+      {source && <Field label="URI" value={node.data.uri} mono />}
+      {source && <Field label="Vendor" value={node.data.vendor} />}
+      {source && <Field label="Product" value={node.data.product} />}
+      {source && <Field label="License" value={node.data.licenseRef} mono />}
+      {source && <Field label="Contract" value={node.data.contractRef} mono />}
+      {source && <Field label="Metadata" value={node.data.metadata} mono />}
+    </dl>
+  )
+}
 
 export function LineageDetailPanel({ node, detail, loading, error, onClose, onOpenVersion }: Props) {
   return (
@@ -148,11 +169,7 @@ export function LineageDetailPanel({ node, detail, loading, error, onClose, onOp
       {loading && <p className="lineage-detail__muted">詳細を読み込み中…</p>}
       {error && <p className="error" role="alert">{error}</p>}
       {node && !loading && !error && !detail && (
-        <dl className="lineage-detail__fields">
-          <Field label="Status" value={node.status ?? node.latestRun?.state} />
-          <Field label="Registry" value={node.completeness} />
-          <Field label="Updated" value={formatTime(node.updatedAt)} />
-        </dl>
+        <EmbeddedNodeDetail node={node} />
       )}
       {detail && (isRun(detail)
         ? <RunDetail detail={detail} />
