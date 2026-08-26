@@ -24,6 +24,7 @@ type Mode =
 interface Props {
   mode: Mode
   onClose: () => void
+  presentation?: 'modal' | 'page'
 }
 
 interface FormState {
@@ -116,7 +117,7 @@ function initialState(current: Connection | null): FormState {
   }
 }
 
-export function ConnectionForm({ mode, onClose }: Props) {
+export function ConnectionForm({ mode, onClose, presentation = 'modal' }: Props) {
   const isEdit = mode.kind === 'edit'
   const current = mode.kind === 'edit' ? mode.current : null
 
@@ -217,17 +218,17 @@ export function ConnectionForm({ mode, onClose }: Props) {
     : ''
   const secretPlaceholder = isEdit ? '空のままで変更しない' : ''
 
-  return (
-    <div className="modal-backdrop">
+  const form = (
       <div
-        className="modal"
-        role="dialog"
-        aria-modal="true"
+        className={presentation === 'page' ? 'modal connection-form--page' : 'modal'}
+        role={presentation === 'modal' ? 'dialog' : undefined}
+        aria-modal={presentation === 'modal' ? 'true' : undefined}
         aria-labelledby={titleId}
       >
         <p className="kicker">Settings · 接続</p>
         <h3 id={titleId}>{isEdit ? '接続を編集' : '接続を追加'}</h3>
 
+        <h4 className="connection-form__section-title">基本情報</h4>
         <label className="modal-field">
           <span className="label">名前</span>
           <input
@@ -259,6 +260,7 @@ export function ConnectionForm({ mode, onClose }: Props) {
             spellCheck={false}
           />
         </label>
+        <h4 className="connection-form__section-title">認証情報</h4>
         <label className="modal-field">
           <span className="label">アクセスキー ID</span>
           <input
@@ -292,6 +294,7 @@ export function ConnectionForm({ mode, onClose }: Props) {
           </div>
         </label>
 
+        <h4 className="connection-form__section-title">互換性</h4>
         {/* Path-style URL: 単一の選択肢として ListObjects と同じ構造で扱う。 */}
         <fieldset className="modal-field">
           <legend className="label">Path-style URL</legend>
@@ -607,6 +610,9 @@ export function ConnectionForm({ mode, onClose }: Props) {
           </button>
         </div>
       </div>
-    </div>
   )
+
+  return presentation === 'modal'
+    ? <div className="modal-backdrop">{form}</div>
+    : form
 }

@@ -1,9 +1,9 @@
 import { lazy, Suspense, type ReactNode } from 'react'
-import { Link, Route, Routes, useLocation, useParams } from 'react-router-dom'
+import { Link, Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom'
 import HomePage from './pages/HomePage'
 import StoragePage from './pages/StoragePage'
 import StorageLanding from './pages/StorageLanding'
-import ConnectionsPage from './pages/ConnectionsPage'
+import SettingsPage from './pages/SettingsPage'
 import { PlayerDeckProvider, usePlayerDeck } from './lib/playerDeck'
 import { PinnedPreviewsProvider, usePinnedPreviews } from './lib/pinnedPreviews'
 import { BottomDock } from './components/BottomDock'
@@ -14,7 +14,6 @@ import './App.css'
 // ホーム閲覧だけのユーザに Monaco をロードさせないよう、別チャンクに切り出す。
 const NoteEditPage = lazy(() => import('./pages/NoteEditPage'))
 const LineagePage = lazy(() => import('./pages/LineagePage'))
-const AdminPage = lazy(() => import('./pages/AdminPage'))
 
 /* ── Tab — masthead 右側のナビ。
    editorial: 小キャップ + tracking。アクティブは細い下線で示す
@@ -47,19 +46,19 @@ function StoragePageWithKey() {
 }
 
 function Tabs() {
-  const { user } = useAuth()
-  const admin = user?.permissions.some(permission =>
-    permission === 'users:manage' || permission === 'service_accounts:manage'
-  )
   return (
     <nav className="mado-tabs flex items-stretch gap-4 sm:gap-6" aria-label="メインナビゲーション">
       <Tab to="/"            label="Home" />
       <Tab to="/storage"     label="Storage" />
       <Tab to="/lineage"     label="Lineage" />
       <Tab to="/settings"    label="Settings" />
-      {admin && <Tab to="/access" label="Access" />}
     </nav>
   )
+}
+
+function LegacyAccessRedirect() {
+  const tail = useParams()['*'] || 'users'
+  return <Navigate to={`/settings/access/${tail}`} replace />
 }
 
 // BottomDock (同期プレイヤー + ピン留め) は画面下部に fixed でドックされるため、
@@ -132,11 +131,11 @@ export default function App() {
               <Routes>
                 <Route path="/"                  element={<HomePage />} />
                 <Route path="/edit-note"         element={<NoteEditPage />} />
-                <Route path="/settings"          element={<ConnectionsPage />} />
+                <Route path="/settings/*"        element={<SettingsPage />} />
                 <Route path="/storage"           element={<StorageLanding />} />
                 <Route path="/storage/:connId/*" element={<StoragePageWithKey />} />
                 <Route path="/lineage"            element={<LineagePage />} />
-                <Route path="/access"             element={<AdminPage />} />
+                <Route path="/access/*"           element={<LegacyAccessRedirect />} />
               </Routes>
             </Suspense>
           </MainContent>

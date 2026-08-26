@@ -192,6 +192,62 @@ body {
 .auth-splash--error { padding: 32px; font-family: var(--font-sans); font-size: 13px; color: var(--danger, #a33); }
 .mado-logout { align-items: center; min-height: 30px; padding: 0 1px 2px; border: 0; border-bottom: 1px solid var(--rule-strong); background: transparent; color: var(--ink-8); font-size: 10.5px; font-weight: 600; letter-spacing: .08em; cursor: pointer; }
 .mado-logout:hover { border-color: var(--ink-10); color: var(--ink-12); }
+
+/* ── Settings / Access の第二階層 ─────────────────────────────── */
+.section-shell {
+  display: grid;
+  grid-template-columns: 164px minmax(0, 1fr);
+  gap: 42px;
+  align-items: start;
+}
+.section-nav {
+  display: grid;
+  position: sticky;
+  top: 18px;
+  border-top: 1px solid var(--ink-11);
+}
+.section-nav__link {
+  display: block;
+  min-width: 0;
+  padding: 10px 4px;
+  border-bottom: 1px solid var(--rule);
+  color: var(--ink-7);
+  font-size: 11.5px;
+  font-weight: 550;
+  text-decoration: none;
+}
+.section-nav__link:hover { color: var(--ink-12); }
+.section-nav__link.is-active {
+  color: var(--ink-12);
+  font-weight: 700;
+}
+.section-nav__link.is-active::before { content: '—'; margin-right: 8px; }
+.section-shell__content { min-width: 0; }
+.section-shell__content > section,
+.section-shell__content > .settings-section-stack > section { margin-top: 0 !important; }
+.section-shell__content > .settings-section-stack > section + section { margin-top: 42px !important; }
+
+@media (max-width: 720px) {
+  .section-shell { display: block; }
+  .section-nav {
+    display: flex;
+    position: static;
+    gap: 0;
+    margin: -6px 0 28px;
+    overflow-x: auto;
+    border-top-color: var(--rule);
+    scrollbar-width: none;
+  }
+  .section-nav::-webkit-scrollbar { display: none; }
+  .section-nav__link {
+    flex: 0 0 auto;
+    padding: 10px 14px 9px;
+    white-space: nowrap;
+  }
+  .section-nav__link:first-child { padding-left: 2px; }
+  .section-nav__link.is-active { border-bottom-color: var(--ink-11); }
+  .section-nav__link.is-active::before { content: none; }
+}
 @media (max-width: 560px) {
   .auth-page { place-items: start center; padding: 46px 22px 40px; }
   .auth-card { padding: 0; border: 0; background: transparent; }
@@ -200,7 +256,16 @@ body {
   .auth-card h1 { font-size: 25px; }
 }
 .admin-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 48px; margin-top: 28px; }
+.admin-page__head { border-bottom: 1px solid var(--ink-11); padding-bottom: 12px; }
+.admin-page__head h3 { margin: 0; font: 500 25px/1.2 var(--font-serif); color: var(--ink-12); }
+.access-tabs { display: flex; gap: 24px; overflow-x: auto; margin-bottom: 28px; border-bottom: 1px solid var(--rule); scrollbar-width: none; }
+.access-tabs::-webkit-scrollbar { display: none; }
+.access-tabs__link { flex: 0 0 auto; padding: 11px 1px 9px; border-bottom: 1.5px solid transparent; color: var(--ink-7); font-size: 11.5px; text-decoration: none; white-space: nowrap; }
+.access-tabs__link:hover { color: var(--ink-12); }
+.access-tabs__link.is-active { border-bottom-color: var(--ink-11); color: var(--ink-12); font-weight: 700; }
+.access-content { min-width: 0; }
 .admin-card { min-width: 0; border-top: 1px solid var(--ink-11); padding: 22px 0 0; background: transparent; }
+.admin-card--standalone { margin-top: 0; }
 .admin-card h3 { margin: 0 0 18px; font-family: var(--font-serif); font-size: 22px; font-weight: 500; }
 .admin-list { display: grid; border-top: 1px solid var(--rule); }
 .admin-list > div { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 11px 0; border-bottom: 1px solid var(--rule); font-size: 12px; }
@@ -209,6 +274,8 @@ body {
 .admin-list em, .admin-badges em { padding: 2px 6px; border: 1px solid var(--rule); font-style: normal; font-size: 9px; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-7); }
 .admin-badges { display: flex !important; grid-auto-flow: column; }
 .admin-form { display: grid; gap: 14px; margin-top: 28px; }
+.admin-form--limited { max-width: 560px; }
+.admin-forms-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 42px; }
 .admin-form h4 { margin: 0 0 1px; font-size: 10px; text-transform: uppercase; letter-spacing: .18em; color: var(--ink-7); }
 .admin-field { display: grid; gap: 6px; }
 .admin-field > span { font-size: 10.5px; font-weight: 600; letter-spacing: .025em; color: var(--ink-7); }
@@ -221,7 +288,7 @@ body {
 .admin-secret { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
 .admin-secret strong { flex-basis: 100%; }
 .admin-secret code { min-width: 0; flex: 1; overflow-wrap: anywhere; user-select: all; }
-.admin-audit { margin-top: 48px; }
+.admin-audit { margin-top: 0; }
 .admin-audit__head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; }
 .admin-audit__head h3 { margin-bottom: 12px; }
 .admin-audit__list { border-top: 1px solid var(--rule); }
@@ -245,6 +312,7 @@ body {
   .admin-audit__list time, .admin-audit__list code { grid-column: 1 / -1; }
   .admin-audit__list em { grid-column: 2; grid-row: 2; }
   .account-summary { grid-template-columns: 1fr; }
+  .admin-forms-grid { grid-template-columns: 1fr; gap: 10px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -730,6 +798,51 @@ pre { font-size: 12px; }
 
 /* Modifiers */
 .modal--narrow { width: min(420px, 100%); max-width: 420px; }
+
+/* 接続設定は項目数が多いため、Settings 内では独立した文書として表示する。
+   同じ form 部品を確認ダイアログ用途でも使えるよう、modal の見た目だけ解除する。 */
+.connection-form--page {
+  width: 100%;
+  max-width: 760px;
+  max-height: none;
+  padding: 0 0 var(--space-6);
+  overflow: visible;
+  border: 0;
+  box-shadow: none;
+  animation: none;
+  background: transparent;
+}
+.connection-form--page > .kicker { display: none; }
+.connection-form--page > h3 {
+  margin-bottom: var(--space-6);
+  font-size: 25px;
+}
+.connection-form__section-title {
+  margin: var(--space-6) 0 var(--space-3);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--rule);
+  color: var(--ink-8);
+  font: 650 10.5px/1 var(--font-sans);
+  letter-spacing: .18em;
+  text-transform: uppercase;
+}
+.connection-form--page > h3 + .connection-form__section-title {
+  margin-top: 0;
+  border-top-color: var(--ink-11);
+}
+.connection-form--page .modal-field { margin-block: var(--space-4); }
+.connection-form--page .modal-actions {
+  margin-top: var(--space-6);
+  padding: var(--space-3) 0;
+}
+
+@media (max-width: 560px) {
+  .connection-form--page > h3 { font-size: 23px; }
+  .connection-form--page .modal-actions {
+    margin-inline: -2px;
+    padding-inline: 2px;
+  }
+}
 
 /* ── Choice row (checkbox / radio + 主ラベル + 説明) ──────────────
    ConnectionForm の Path-style URL / ListObjects API バージョン用。

@@ -2,16 +2,10 @@ import { useCallback, useEffect, useReducer } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../lib/api/client'
 import { ALL_CAPABILITIES_ON, CAPABILITY_UI } from '../lib/api/types'
-import type { Capabilities, Connection, ConnectionCreateInput, ConnectionUpdateInput } from '../lib/api/types'
-import { ConnectionForm } from '../components/ConnectionForm'
+import type { Capabilities, Connection } from '../lib/api/types'
 import { ConnectionDeleteConfirm } from '../components/ConnectionDeleteConfirm'
-import { TagsSettings } from '../components/TagsSettings'
-import { FeatureSettings } from '../components/FeatureSettings'
-import { SignatureSettings } from '../components/SignatureSettings'
-import { About } from '../components/About'
 import { ImportExportButtons } from '../components/ImportExportButtons'
 import { downloadJson, type ImportMode, type ImportSummary } from '../lib/jsonFile'
-import { useTagsEnabled } from '../lib/useFeatureEnabled'
 import { invalidateCapabilitiesCache } from '../lib/useCapabilities'
 
 // エクスポート形式。認証情報は空文字で書き出す。
@@ -58,8 +52,6 @@ interface State {
   connections: Connection[]
   loading: boolean
   error: string | null
-  adding: boolean
-  editing: Connection | null
   deleting: Connection | null
 }
 
@@ -67,10 +59,6 @@ type Action =
   | { type: 'startLoad' }
   | { type: 'loadOk'; rows: Connection[] }
   | { type: 'loadErr'; error: string }
-  | { type: 'openAdd' }
-  | { type: 'closeAdd' }
-  | { type: 'openEdit'; conn: Connection }
-  | { type: 'closeEdit' }
   | { type: 'openDelete'; conn: Connection }
   | { type: 'closeDelete' }
 
@@ -78,8 +66,6 @@ const initial: State = {
   connections: [],
   loading: true,
   error: null,
-  adding: false,
-  editing: null,
   deleting: null,
 }
 
@@ -91,14 +77,6 @@ function reducer(s: State, a: Action): State {
       return { ...s, loading: false, connections: a.rows }
     case 'loadErr':
       return { ...s, loading: false, error: a.error }
-    case 'openAdd':
-      return { ...s, adding: true }
-    case 'closeAdd':
-      return { ...s, adding: false }
-    case 'openEdit':
-      return { ...s, editing: a.conn }
-    case 'closeEdit':
-      return { ...s, editing: null }
     case 'openDelete':
       return { ...s, deleting: a.conn }
     case 'closeDelete':
@@ -107,9 +85,8 @@ function reducer(s: State, a: Action): State {
 }
 
 export default function ConnectionsPage() {
-  const tagsEnabled = useTagsEnabled()
   const [state, dispatch] = useReducer(reducer, initial)
-  const { connections, loading, error, adding, editing, deleting } = state
+  const { connections, loading, error, deleting } = state
 
   const refresh = useCallback(() => {
     dispatch({ type: 'startLoad' })
@@ -122,16 +99,6 @@ export default function ConnectionsPage() {
   }, [])
   useEffect(() => { refresh() }, [refresh])
 
-  const handleCreate = async (input: ConnectionCreateInput) => {
-    await api.createConnection(input)
-    dispatch({ type: 'closeAdd' })
-    refresh()
-  }
-  const handleUpdate = (id: string) => async (input: ConnectionUpdateInput) => {
-    await api.updateConnection(id, input)
-    dispatch({ type: 'closeEdit' })
-    refresh()
-  }
   const handleDelete = (id: string) => async () => {
     await api.deleteConnection(id)
     dispatch({ type: 'closeDelete' })
@@ -229,13 +196,7 @@ export default function ConnectionsPage() {
 
   return (
     <div>
-      <header className="page-head">
-        <h2>Settings</h2>
-      </header>
-
-      <SignatureSettings />
-
-      <section className="mt-7">
+      <section>
         <div
           className="mb-3 flex flex-wrap items-baseline justify-between gap-3 pb-2"
           style={{ borderBottom: '1px solid var(--rule)' }}
@@ -249,9 +210,9 @@ export default function ConnectionsPage() {
               onImport={handleImport}
               onDone={refresh}
             />
-            <button className="ghost" onClick={() => dispatch({ type: 'openAdd' })}>
+            <Link className="ghost" to="/settings/connections/new">
               <span aria-hidden>+</span> 追加
-            </button>
+            </Link>
           </span>
         </div>
 
@@ -267,9 +228,9 @@ export default function ConnectionsPage() {
               追加した接続は <code className="font-mono text-[0.92em]">/storage/&lt;id&gt;/</code> でアクセスできます。<br />
               endpoint / region / アクセスキーをまとめて登録します。
             </p>
-            <button className="empty-state__cta" onClick={() => dispatch({ type: 'openAdd' })}>
+            <Link className="empty-state__cta" to="/settings/connections/new">
               最初の接続を追加
-            </button>
+            </Link>
           </div>
         )}
 
@@ -344,7 +305,7 @@ export default function ConnectionsPage() {
                     </button>
                   )}
                   <Link className="ghost" to={`/storage/${encodeURIComponent(conn.id)}/`}>開く</Link>
-                  <button className="ghost" onClick={() => dispatch({ type: 'openEdit', conn })}>編集</button>
+                  <Link className="ghost" to={`/settings/connections/${encodeURIComponent(conn.id)}`}>編集</Link>
                   <button
                     className="ghost conn-row__danger"
                     onClick={() => dispatch({ type: 'openDelete', conn })}
@@ -358,24 +319,6 @@ export default function ConnectionsPage() {
         )}
       </section>
 
-      {tagsEnabled && <TagsSettings />}
-
-      <FeatureSettings />
-
-      <About />
-
-      {adding && (
-        <ConnectionForm
-          mode={{ kind: 'create', onSubmit: handleCreate }}
-          onClose={() => dispatch({ type: 'closeAdd' })}
-        />
-      )}
-      {editing && (
-        <ConnectionForm
-          mode={{ kind: 'edit', current: editing, onSubmit: handleUpdate(editing.id) }}
-          onClose={() => dispatch({ type: 'closeEdit' })}
-        />
-      )}
       {deleting && (
         <ConnectionDeleteConfirm
           name={deleting.name}

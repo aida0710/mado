@@ -263,7 +263,7 @@ export function TagSearchView({ connId }: Props) {
 
       {allTags.length === 0 ? (
         <p className="mt-4 text-[13px] text-ink-7">
-          タグがまだありません。<Link to="/settings">Settings</Link> で作成してください。
+          タグがまだありません。<Link to="/settings/features">Settings</Link> で作成してください。
         </p>
       ) : (
         <>
