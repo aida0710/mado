@@ -87,19 +87,15 @@ export interface AuthStore {
   setLocalPassword(userId: string, hash: string, mustChange: boolean): Promise<boolean>
   recordFailedLogin(userId: string, threshold: number, lockSeconds: number): Promise<void>
   recordSuccessfulLogin(userId: string): Promise<void>
-  createSession(userId: string, cfg: SessionLifetime, metadata?: RequestMetadata): Promise<CreatedSession>
+  createSession(userId: string, cfg: SessionLifetime, metadata?: RequestMetadata, oidc?: OidcSessionContext): Promise<CreatedSession>
   authenticateSession(token: string, idleSeconds: number, touchIntervalSeconds?: number): Promise<SessionPrincipal | null>
   revokeSession(token: string): Promise<boolean>
   revokeUserSessions(userId: string): Promise<number>
+  getSessionOidcContext(token: string): Promise<OidcSessionContext | null>
+  revokeOidcSessions(input: { issuer: string; subject?: string | null; sid?: string | null }): Promise<number>
+  applyOidcBackchannelLogout(input: OidcBackchannelLogout): Promise<{ accepted: boolean; revoked: number }>
   deleteExpiredSessions(): Promise<number>
-  findOidcIdentity(issuer: string, subject: string): Promise<AuthUser | null>
-  createOidcIdentityUser(input: {
-    issuer: string
-    subject: string
-    email?: string | null
-    displayName: string
-    defaultRole?: string
-  }): Promise<AuthUser>
+  provisionOidcUser(input: OidcProvisionInput): Promise<OidcProvisionResult>
 }
 
 export interface SessionLifetime {
@@ -110,6 +106,40 @@ export interface SessionLifetime {
 export interface CreatedSession {
   id: string
   token: string
+  expiresAt: Date
+}
+
+export interface OidcSessionContext {
+  issuer: string
+  subject: string
+  sid?: string | null
+}
+
+export interface OidcProvisionInput {
+  issuer: string
+  subject: string
+  email?: string | null
+  emailVerified: boolean
+  username?: string | null
+  displayName: string
+  groups: string[]
+  autoLinkVerifiedEmail: boolean
+  defaultRole: string
+  managedRoles?: string[]
+}
+
+export interface OidcProvisionResult {
+  user: AuthUser
+  created: boolean
+  linkedExisting: boolean
+  rolesBefore: string[]
+}
+
+export interface OidcBackchannelLogout {
+  issuer: string
+  subject?: string | null
+  sid?: string | null
+  jti: string
   expiresAt: Date
 }
 
@@ -331,7 +361,7 @@ export function createAuthStore(pool: Pool): AuthStore {
       )
     },
 
-    async createSession(userId, cfg, metadata = {}) {
+    async createSession(userId, cfg, metadata = {}, oidc) {
       const id = newId()
       const token = randomToken(32)
       const absolute = new Date(Date.now() + cfg.absoluteSeconds * 1000)
@@ -341,9 +371,14 @@ export function createAuthStore(pool: Pool): AuthStore {
       ))
       await pool.query(
         `INSERT INTO auth_sessions
-          (id, user_id, token_hash, idle_expires_at, absolute_expires_at, ip_address, user_agent)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [id, userId, sha256(token), idle, absolute, metadata.ipAddress ?? null, metadata.userAgent?.slice(0, 1024) ?? null],
+          (id, user_id, token_hash, idle_expires_at, absolute_expires_at, ip_address, user_agent,
+           oidc_issuer, oidc_subject, oidc_sid)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+        [
+          id, userId, sha256(token), idle, absolute, metadata.ipAddress ?? null,
+          metadata.userAgent?.slice(0, 1024) ?? null,
+          oidc?.issuer ?? null, oidc?.subject ?? null, oidc?.sid ?? null,
+        ],
       )
       return { id, token, expiresAt: absolute }
     },
@@ -391,42 +426,164 @@ export function createAuthStore(pool: Pool): AuthStore {
       return r.rowCount ?? 0
     },
 
+    async getSessionOidcContext(token) {
+      if (token.length < 32 || token.length > 256) return null
+      const r = await pool.query<{ oidc_issuer: string; oidc_subject: string; oidc_sid: string | null }>(
+        `SELECT oidc_issuer, oidc_subject, oidc_sid
+           FROM auth_sessions
+          WHERE token_hash = $1 AND oidc_issuer IS NOT NULL AND oidc_subject IS NOT NULL`,
+        [sha256(token)],
+      )
+      const row = r.rows[0]
+      return row ? { issuer: row.oidc_issuer, subject: row.oidc_subject, sid: row.oidc_sid } : null
+    },
+
+    async revokeOidcSessions(input) {
+      if (!input.sid && !input.subject) return 0
+      const r = input.sid
+        ? await pool.query(
+            `UPDATE auth_sessions SET revoked_at = COALESCE(revoked_at, now())
+              WHERE oidc_issuer = $1 AND oidc_sid = $2 AND revoked_at IS NULL`,
+            [input.issuer, input.sid],
+          )
+        : await pool.query(
+            `UPDATE auth_sessions SET revoked_at = COALESCE(revoked_at, now())
+              WHERE oidc_issuer = $1 AND oidc_subject = $2 AND revoked_at IS NULL`,
+            [input.issuer, input.subject],
+          )
+      return r.rowCount ?? 0
+    },
+
+    async applyOidcBackchannelLogout(input) {
+      const client = await pool.connect()
+      try {
+        await client.query('BEGIN')
+        const event = await client.query(
+          `INSERT INTO auth_oidc_logout_events (issuer, jti, expires_at)
+           VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
+          [input.issuer, input.jti, input.expiresAt],
+        )
+        if ((event.rowCount ?? 0) === 0) {
+          await client.query('ROLLBACK')
+          return { accepted: false, revoked: 0 }
+        }
+        const sessions = input.sid
+          ? await client.query(
+              `UPDATE auth_sessions SET revoked_at = COALESCE(revoked_at, now())
+                WHERE oidc_issuer = $1 AND oidc_sid = $2 AND revoked_at IS NULL`,
+              [input.issuer, input.sid],
+            )
+          : await client.query(
+              `UPDATE auth_sessions SET revoked_at = COALESCE(revoked_at, now())
+                WHERE oidc_issuer = $1 AND oidc_subject = $2 AND revoked_at IS NULL`,
+              [input.issuer, input.subject],
+            )
+        await client.query('COMMIT')
+        return { accepted: true, revoked: sessions.rowCount ?? 0 }
+      } catch (e) {
+        await client.query('ROLLBACK')
+        throw e
+      } finally {
+        client.release()
+      }
+    },
+
     async deleteExpiredSessions() {
       const r = await pool.query(
         `DELETE FROM auth_sessions
           WHERE absolute_expires_at < now() - interval '7 days'
              OR revoked_at < now() - interval '7 days'`,
       )
+      await pool.query(`DELETE FROM auth_oidc_logout_events WHERE expires_at < now()`)
       return r.rowCount ?? 0
     },
 
-    async findOidcIdentity(issuer, subject) {
-      const r = await pool.query<{ user_id: string }>(
-        `UPDATE auth_oidc_identities SET last_login_at = now()
-          WHERE issuer = $1 AND subject = $2 RETURNING user_id`,
-        [issuer, subject],
-      )
-      // Deleted SSO identities must still resolve to their disabled tombstone;
-      // otherwise the callback would try to provision the same subject again.
-      return r.rows[0] ? loadUserIncludingDeleted(r.rows[0].user_id) : null
-    },
-
-    async createOidcIdentityUser(input) {
+    async provisionOidcUser(input) {
       const client = await pool.connect()
       try {
         await client.query('BEGIN')
-        const user = await this.createUser({
-          email: input.email,
-          displayName: input.displayName,
-          roles: [input.defaultRole ?? 'viewer'],
-        }, client)
-        await client.query(
-          `INSERT INTO auth_oidc_identities (issuer, subject, user_id, email_at_login)
-           VALUES ($1, $2, $3, $4)`,
-          [input.issuer, input.subject, user.id, input.email ?? null],
+        const identity = await client.query<{ user_id: string }>(
+          `SELECT user_id FROM auth_oidc_identities
+            WHERE issuer = $1 AND subject = $2 FOR UPDATE`,
+          [input.issuer, input.subject],
         )
+        let userId = identity.rows[0]?.user_id
+        let created = false
+        let linkedExisting = false
+
+        if (!userId && input.autoLinkVerifiedEmail && input.emailVerified && input.email) {
+          const match = await client.query<{ id: string; deleted_at: Date | null }>(
+            `SELECT id, deleted_at FROM auth_users WHERE lower(email) = lower($1) FOR UPDATE`,
+            [input.email],
+          )
+          if (match.rows[0]?.deleted_at) throw new Error('verified oidc email belongs to deleted user')
+          if (match.rows[0]) {
+            userId = match.rows[0].id
+            linkedExisting = true
+          }
+        }
+
+        if (!userId) {
+          const candidate = input.username?.trim().toLowerCase()
+          const validUsername = candidate && /^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,63}$/.test(candidate)
+            ? candidate
+            : null
+          const usernameTaken = validUsername
+            ? (await client.query(`SELECT 1 FROM auth_users WHERE lower(username) = lower($1)`, [validUsername])).rowCount !== 0
+            : false
+          const id = newId()
+          await client.query(
+            `INSERT INTO auth_users (id, username, email, display_name, signature_name, status)
+             VALUES ($1, $2, $3, $4, $4, 'active')`,
+            [id, usernameTaken ? null : validUsername, input.emailVerified ? input.email?.trim().toLowerCase() || null : null, input.displayName.trim()],
+          )
+          userId = id
+          created = true
+          const initialRoles = input.managedRoles ?? [input.defaultRole]
+          for (const role of [...new Set(initialRoles)]) {
+            await client.query(
+              `INSERT INTO auth_user_roles (user_id, role_id, granted_by) VALUES ($1, $2, NULL)`,
+              [userId, role],
+            )
+          }
+        }
+
+        const before = await loadUserIncludingDeleted(userId, client)
+        if (!before) throw new Error('oidc user missing')
+        if (before.status !== 'active') throw new Error('user disabled')
+
+        await client.query(
+          `INSERT INTO auth_oidc_identities
+             (issuer, subject, user_id, email_at_login, email_verified, groups_at_login)
+           VALUES ($1, $2, $3, $4, $5, $6)
+           ON CONFLICT (issuer, subject) DO UPDATE
+             SET email_at_login = EXCLUDED.email_at_login,
+                 email_verified = EXCLUDED.email_verified,
+                 groups_at_login = EXCLUDED.groups_at_login,
+                 last_login_at = now()`,
+          [input.issuer, input.subject, userId, input.email ?? null, input.emailVerified, input.groups],
+        )
+        await client.query(
+          `UPDATE auth_users
+              SET display_name = $2,
+                  email = CASE WHEN $3 THEN lower($4) ELSE email END,
+                  last_login_at = now(), updated_at = now()
+            WHERE id = $1 AND deleted_at IS NULL`,
+          [userId, input.displayName.trim(), input.emailVerified && Boolean(input.email), input.email ?? null],
+        )
+        if (input.managedRoles) {
+          await client.query(`DELETE FROM auth_user_roles WHERE user_id = $1`, [userId])
+          for (const role of [...new Set(input.managedRoles)]) {
+            await client.query(
+              `INSERT INTO auth_user_roles (user_id, role_id, granted_by) VALUES ($1, $2, NULL)`,
+              [userId, role],
+            )
+          }
+        }
+        const user = await loadUser(userId, client)
+        if (!user) throw new Error('oidc user disappeared')
         await client.query('COMMIT')
-        return user
+        return { user, created, linkedExisting, rolesBefore: before.roles }
       } catch (e) {
         await client.query('ROLLBACK')
         throw e

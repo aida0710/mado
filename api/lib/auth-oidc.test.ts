@@ -5,6 +5,7 @@ import { createCrypto } from '../crypto.js'
 const oidcMocks = vi.hoisted(() => ({
   grant: vi.fn(),
   build: vi.fn(),
+  endSession: vi.fn(),
 }))
 
 vi.mock('openid-client', () => ({
@@ -18,8 +19,16 @@ vi.mock('openid-client', () => ({
     for (const [k, v] of Object.entries(params as Record<string, string>)) u.searchParams.set(k, v)
     return u
   }),
+  buildEndSessionUrl: oidcMocks.endSession.mockImplementation((_cfg, params) => {
+    const u = new URL('https://auth.example/end-session')
+    for (const [k, v] of Object.entries(params as Record<string, string>)) u.searchParams.set(k, v)
+    return u
+  }),
   authorizationCodeGrant: oidcMocks.grant.mockResolvedValue({
-    claims: () => ({ sub: 'subject-1', email: 'user@example.com', name: 'User' }),
+    claims: () => ({
+      sub: 'subject-1', email: 'user@example.com', email_verified: true,
+      preferred_username: 'user', name: 'User', groups: ['mado-users', 'mado-admins'], sid: 'session-1',
+    }),
   }),
 }))
 
@@ -56,10 +65,23 @@ describe('OidcProvider', () => {
 
     const callback = new URL('https://attacker.invalid/callback?code=abc&state=state-value')
     const profile = await provider.finish(callback)
-    expect(profile).toMatchObject({ subject: 'subject-1', returnTo: '/lineage' })
+    expect(profile).toMatchObject({
+      subject: 'subject-1', returnTo: '/lineage', emailVerified: true, username: 'user',
+      groups: ['mado-users', 'mado-admins'], sid: 'session-1',
+    })
     // Host header由来URLでなく、設定済みredirect URIをtoken exchangeへ渡す。
     expect(oidcMocks.grant.mock.calls[0][1].origin).toBe('https://mado.example')
     await expect(provider.finish(callback)).rejects.toThrow(/invalid or expired/)
+  })
+
+  it('RP-Initiated Logout URLにMadoへの戻り先を設定する', async () => {
+    const provider = createOidcProvider(pools.rw, crypto, {
+      id: 'authentik', label: 'Authentik', issuerUrl: 'https://auth.example/application/o/mado/',
+      clientId: 'client', clientSecret: 'secret', redirectUri: 'https://mado.example/api/auth/oidc/callback',
+      postLogoutRedirectUri: 'https://mado.example/',
+    })
+    const url = await provider.logoutUrl()
+    expect(url.href).toBe('https://auth.example/end-session?post_logout_redirect_uri=https%3A%2F%2Fmado.example%2F')
   })
 
   it('外部URLへのreturnToをrootへ正規化する', async () => {

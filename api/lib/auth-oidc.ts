@@ -1,5 +1,6 @@
 import type { Pool } from 'pg'
 import * as oidc from 'openid-client'
+import { createRemoteJWKSet, jwtVerify } from 'jose'
 import type { CryptoModule } from '../crypto.js'
 import { sha256 } from './auth-crypto.js'
 
@@ -11,14 +12,27 @@ export interface OidcProviderConfig {
   clientSecret: string
   redirectUri: string
   scopes?: string
+  postLogoutRedirectUri?: string
 }
 
 export interface OidcProfile {
   issuer: string
   subject: string
   email: string | null
+  emailVerified: boolean
+  username: string | null
   displayName: string
+  groups: string[]
+  sid: string | null
   returnTo: string
+}
+
+export interface OidcLogoutClaims {
+  issuer: string
+  subject: string | null
+  sid: string | null
+  jti: string
+  expiresAt: Date
 }
 
 interface AttemptRow {
@@ -30,8 +44,12 @@ interface AttemptRow {
 export interface OidcProvider {
   id: string
   label: string
+  issuer: string
   start(returnTo?: string): Promise<URL>
   finish(callbackUrl: URL): Promise<OidcProfile>
+  logoutUrl(): Promise<URL>
+  matchesIssuer(value: string): boolean
+  verifyBackchannelLogoutToken(token: string): Promise<OidcLogoutClaims>
   deleteExpiredAttempts(): Promise<number>
 }
 
@@ -40,14 +58,28 @@ function safeReturnTo(value: string | undefined): string {
   return value
 }
 
+function canonicalIssuer(value: string): string {
+  return value.replace(/\/$/, '')
+}
+
+function stringArrayClaim(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return [...new Set(value.filter((item): item is string =>
+    typeof item === 'string' && item.trim() !== '' && item.length <= 256)
+    .map(item => item.trim()))].slice(0, 256)
+}
+
 export function createOidcProvider(
   pool: Pool,
   crypto: CryptoModule,
   cfg: OidcProviderConfig,
 ): OidcProvider {
   const issuer = new URL(cfg.issuerUrl)
+  const issuerId = canonicalIssuer(issuer.href)
   const redirectUri = new URL(cfg.redirectUri)
+  const postLogoutRedirectUri = new URL(cfg.postLogoutRedirectUri ?? '/', redirectUri)
   let configuration: Promise<oidc.Configuration> | undefined
+  let jwks: ReturnType<typeof createRemoteJWKSet> | undefined
 
   const getConfiguration = () => {
     configuration ??= oidc.discovery(issuer, cfg.clientId, cfg.clientSecret)
@@ -57,6 +89,7 @@ export function createOidcProvider(
   return {
     id: cfg.id,
     label: cfg.label,
+    issuer: issuerId,
 
     async start(returnTo) {
       const config = await getConfiguration()
@@ -106,16 +139,68 @@ export function createOidcProvider(
         },
       )
       const claims = tokens.claims()
-      if (!claims?.sub) throw new Error('oidc subject missing')
-      const email = typeof claims.email === 'string' ? claims.email : null
-      const displayName = [claims.name, claims.preferred_username, email, claims.sub]
+      if (!claims?.sub || claims.sub.length > 512) throw new Error('oidc subject missing')
+      const email = typeof claims.email === 'string' && claims.email.length <= 320 ? claims.email : null
+      const username = typeof claims.preferred_username === 'string'
+        ? claims.preferred_username.trim() || null
+        : null
+      const displayName = ([claims.name, claims.preferred_username, email, claims.sub]
         .find(v => typeof v === 'string' && v.trim() !== '') as string
+      ).trim().slice(0, 128)
       return {
-        issuer: issuer.href.replace(/\/$/, ''),
+        issuer: issuerId,
         subject: claims.sub,
         email,
+        emailVerified: claims.email_verified === true,
+        username,
         displayName,
+        groups: stringArrayClaim(claims.groups),
+        sid: typeof claims.sid === 'string' && claims.sid.length <= 512 ? claims.sid : null,
         returnTo: row.return_to,
+      }
+    },
+
+    async logoutUrl() {
+      return oidc.buildEndSessionUrl(await getConfiguration(), {
+        post_logout_redirect_uri: postLogoutRedirectUri.href,
+      })
+    },
+
+    matchesIssuer(value) {
+      return canonicalIssuer(value) === issuerId
+    },
+
+    async verifyBackchannelLogoutToken(token) {
+      if (token.length < 32 || token.length > 16_384) throw new Error('invalid logout token')
+      const config = await getConfiguration()
+      const metadata = config.serverMetadata()
+      if (!metadata.jwks_uri) throw new Error('oidc jwks_uri missing')
+      jwks ??= createRemoteJWKSet(new URL(metadata.jwks_uri))
+      const expectedIssuer = metadata.issuer ?? issuer.href
+      const verified = await jwtVerify(token, jwks, {
+        issuer: expectedIssuer,
+        audience: cfg.clientId,
+        clockTolerance: 60,
+        maxTokenAge: '10 minutes',
+      })
+      const claims = verified.payload
+      const eventName = 'http://schemas.openid.net/event/backchannel-logout'
+      if (!claims.events || typeof claims.events !== 'object'
+          || !(eventName in claims.events) || claims.nonce !== undefined) {
+        throw new Error('invalid logout token events')
+      }
+      const subject = typeof claims.sub === 'string' ? claims.sub : null
+      const sid = typeof claims.sid === 'string' ? claims.sid : null
+      if (!subject && !sid) throw new Error('logout token subject missing')
+      if (typeof claims.jti !== 'string' || claims.jti.length > 512) {
+        throw new Error('logout token jti missing')
+      }
+      return {
+        issuer: issuerId,
+        subject,
+        sid,
+        jti: claims.jti,
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
       }
     },
 

@@ -6,6 +6,16 @@ const hex32 = (name: string) =>
   z.string().regex(/^[0-9a-fA-F]{64}$/, `${name} must be 64 hex chars (32 bytes)`)
 
 const booleanString = z.enum(['true', 'false', '1', '0'])
+const roleId = z.enum(['viewer', 'curator', 'operator', 'admin'])
+const oidcRoleMapping = z.string().default('{}').transform((value, ctx): Record<string, z.infer<typeof roleId>> => {
+  try {
+    const parsed = z.record(z.string().min(1), roleId).parse(JSON.parse(value))
+    return parsed
+  } catch {
+    ctx.addIssue({ code: 'custom', message: 'OIDC_ROLE_MAPPING_JSON must be a JSON object mapping group names to Mado roles' })
+    return z.NEVER
+  }
+})
 
 const schema = z.object({
   PORT: z.coerce.number().default(3000),
@@ -50,6 +60,16 @@ const schema = z.object({
   OIDC_CLIENT_SECRET: z.string().min(1).optional(),
   OIDC_REDIRECT_URI: z.string().url().optional(),
   OIDC_LABEL: z.string().min(1).default('SSO'),
+  OIDC_SCOPES: z.string().min(1).default('openid email profile'),
+  OIDC_POST_LOGOUT_REDIRECT_URI: z.string().url().optional(),
+  OIDC_AUTO_LINK_VERIFIED_EMAIL: booleanString.default('true').transform(value =>
+    value === 'true' || value === '1'
+  ),
+  OIDC_ALLOWED_GROUPS: z.string().default('').transform(value =>
+    [...new Set(value.split(',').map(group => group.trim()).filter(Boolean))]
+  ),
+  OIDC_ROLE_MAPPING_JSON: oidcRoleMapping,
+  OIDC_DEFAULT_ROLE: roleId.default('viewer'),
 
   // Dataset Registryがmetadataの正本、Marquezはread-only projection。
   // 3値が揃った場合だけinternal UIにlineage routeをmountする。

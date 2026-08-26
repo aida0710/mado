@@ -9,7 +9,7 @@ const pools = createPools({ rw: RW, ro: RW.replace('dashboard_rw', 'dashboard_ro
 const store = createAuthStore(pools.rw)
 
 beforeEach(async () => {
-  await pools.rw.query('TRUNCATE audit_events, service_accounts, auth_users CASCADE')
+  await pools.rw.query('TRUNCATE auth_oidc_logout_events, audit_events, service_accounts, auth_users CASCADE')
 })
 afterAll(() => closePools(pools))
 
@@ -57,5 +57,57 @@ describe('AuthStore', () => {
     expect(await store.hasOtherActiveAdmin(a.id)).toBe(true)
     await store.updateUser(b.id, { status: 'disabled' })
     expect(await store.hasOtherActiveAdmin(a.id)).toBe(false)
+  })
+
+  it('検証済みemailだけを既存Local Userへ連携し、OIDC groupのroleを同期する', async () => {
+    const local = await store.createUser({
+      username: 'local', email: 'same@example.com', displayName: 'Local', roles: ['viewer'],
+    })
+    await store.setLocalPassword(local.id, await hashPassword('long-enough-password'), false)
+    const linked = await store.provisionOidcUser({
+      issuer: 'https://auth.example/application/o/mado', subject: 'verified-subject',
+      email: 'same@example.com', emailVerified: true, username: 'from-sso', displayName: 'SSO Name',
+      groups: ['mado-admins'], autoLinkVerifiedEmail: true, defaultRole: 'viewer', managedRoles: ['admin'],
+    })
+    expect(linked).toMatchObject({ created: false, linkedExisting: true })
+    expect(linked.user.id).toBe(local.id)
+    expect(linked.user.authMethods).toEqual(['local', 'sso'])
+    expect(linked.user.roles).toEqual(['admin'])
+    expect(linked.user.username).toBe('local')
+
+    const unverified = await store.provisionOidcUser({
+      issuer: 'https://auth.example/application/o/mado', subject: 'unverified-subject',
+      email: 'same@example.com', emailVerified: false, username: 'new-sso', displayName: 'Other',
+      groups: [], autoLinkVerifiedEmail: true, defaultRole: 'viewer',
+    })
+    expect(unverified).toMatchObject({ created: true, linkedExisting: false })
+    expect(unverified.user.id).not.toBe(local.id)
+    expect(unverified.user.email).toBeNull()
+  })
+
+  it('OIDC sid/sub単位でsessionを失効しlogout tokenのreplayを拒否する', async () => {
+    const user = await store.createUser({ displayName: 'SSO', roles: ['viewer'] })
+    const a = await store.createSession(user.id, { idleSeconds: 3600, absoluteSeconds: 7200 }, {}, {
+      issuer: 'https://auth.example', subject: 'sub-1', sid: 'sid-a',
+    })
+    const b = await store.createSession(user.id, { idleSeconds: 3600, absoluteSeconds: 7200 }, {}, {
+      issuer: 'https://auth.example', subject: 'sub-1', sid: 'sid-b',
+    })
+    expect(await store.getSessionOidcContext(a.token)).toEqual({
+      issuer: 'https://auth.example', subject: 'sub-1', sid: 'sid-a',
+    })
+    expect(await store.revokeOidcSessions({ issuer: 'https://auth.example', sid: 'sid-a' })).toBe(1)
+    expect(await store.authenticateSession(a.token, 3600)).toBeNull()
+    expect(await store.authenticateSession(b.token, 3600)).not.toBeNull()
+    expect(await store.revokeOidcSessions({ issuer: 'https://auth.example', subject: 'sub-1' })).toBe(1)
+    expect(await store.authenticateSession(b.token, 3600)).toBeNull()
+
+    const expiry = new Date(Date.now() + 60_000)
+    expect(await store.applyOidcBackchannelLogout({
+      issuer: 'https://auth.example', subject: 'sub-1', jti: 'jti-1', expiresAt: expiry,
+    })).toEqual({ accepted: true, revoked: 0 })
+    expect(await store.applyOidcBackchannelLogout({
+      issuer: 'https://auth.example', subject: 'sub-1', jti: 'jti-1', expiresAt: expiry,
+    })).toEqual({ accepted: false, revoked: 0 })
   })
 })

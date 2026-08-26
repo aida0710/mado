@@ -111,4 +111,29 @@ describe('loadEnv', () => {
     })
     expect(env.AUTH_COOKIE_SECURE).toBe(false)
   })
+
+  it('OIDC groupのallow listとrole mappingを検証してparseする', () => {
+    const env = loadEnv({
+      DATABASE_URL_RW: 'postgres://x',
+      DATABASE_URL_RO: 'postgres://x',
+      ENCRYPTION_KEY: '0'.repeat(64),
+      ALLOWED_ORIGINS: 'https://mado.example',
+      OIDC_ALLOWED_GROUPS: 'mado-users, mado-admins,mado-users',
+      OIDC_ROLE_MAPPING_JSON: '{"mado-admins":"admin","mado-users":"viewer"}',
+      OIDC_AUTO_LINK_VERIFIED_EMAIL: 'true',
+    })
+    expect(env.OIDC_ALLOWED_GROUPS).toEqual(['mado-users', 'mado-admins'])
+    expect(env.OIDC_ROLE_MAPPING_JSON).toEqual({ 'mado-admins': 'admin', 'mado-users': 'viewer' })
+    expect(env.OIDC_AUTO_LINK_VERIFIED_EMAIL).toBe(true)
+  })
+
+  it('存在しないMado roleへのOIDC mappingを拒否する', () => {
+    expect(() => loadEnv({
+      DATABASE_URL_RW: 'postgres://x',
+      DATABASE_URL_RO: 'postgres://x',
+      ENCRYPTION_KEY: '0'.repeat(64),
+      ALLOWED_ORIGINS: 'https://mado.example',
+      OIDC_ROLE_MAPPING_JSON: '{"mado-users":"owner"}',
+    })).toThrow(/OIDC_ROLE_MAPPING_JSON/)
+  })
 })

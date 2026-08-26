@@ -50,8 +50,12 @@ export function AuthGate({ children }: { children: ReactNode }) {
   }, [reload])
 
   const logout = useCallback(async () => {
-    await fetch('/api/auth/logout', { method: 'POST' })
+    const response = await fetch('/api/auth/logout', { method: 'POST' })
+    const body = response.ok
+      ? await response.json() as { logoutUrl?: string | null }
+      : null
     setUser(null)
+    if (body?.logoutUrl) window.location.assign(body.logoutUrl)
   }, [])
   const value = useMemo(() => ({ enabled: !disabled, user, logout, reload }), [disabled, user, logout, reload])
 

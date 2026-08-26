@@ -19,6 +19,12 @@ export interface AuthRouteConfig {
   loginFailureThreshold?: number
   loginLockSeconds?: number
   oidc?: OidcProvider
+  oidcProvisioning?: {
+    autoLinkVerifiedEmail: boolean
+    allowedGroups: string[]
+    roleMapping: Record<string, 'viewer' | 'curator' | 'operator' | 'admin'>
+    defaultRole: 'viewer' | 'curator' | 'operator' | 'admin'
+  }
 }
 
 export interface AuthRouteDeps {
@@ -157,21 +163,45 @@ export function mountAuthRoutes(app: Hono, deps: AuthRouteDeps): void {
     const metadata = requestMetadata(c)
     try {
       const profile = await deps.config.oidc.finish(new URL(c.req.url))
-      let user = await deps.store.findOidcIdentity(profile.issuer, profile.subject)
-      user ??= await deps.store.createOidcIdentityUser({
+      const policy = deps.config.oidcProvisioning ?? {
+        autoLinkVerifiedEmail: true, allowedGroups: [], roleMapping: {}, defaultRole: 'viewer' as const,
+      }
+      if (policy.allowedGroups.length > 0
+          && !profile.groups.some(group => policy.allowedGroups.includes(group))) {
+        throw new Error('oidc group not allowed')
+      }
+      const mappedRoles = [...new Set(profile.groups.map(group => policy.roleMapping[group]).filter(Boolean))]
+      const roleMappingEnabled = Object.keys(policy.roleMapping).length > 0
+      const provisioned = await deps.store.provisionOidcUser({
         issuer: profile.issuer,
         subject: profile.subject,
         email: profile.email,
+        emailVerified: profile.emailVerified,
+        username: profile.username,
         displayName: profile.displayName,
-        defaultRole: 'viewer',
+        groups: profile.groups,
+        autoLinkVerifiedEmail: policy.autoLinkVerifiedEmail,
+        defaultRole: policy.defaultRole,
+        managedRoles: roleMappingEnabled
+          ? (mappedRoles.length > 0 ? mappedRoles : [policy.defaultRole])
+          : undefined,
       })
+      const user = provisioned.user
       if (user.status !== 'active') throw new Error('user disabled')
-      await deps.store.recordSuccessfulLogin(user.id)
-      const session = await deps.store.createSession(user.id, deps.config.session, metadata)
+      const session = await deps.store.createSession(user.id, deps.config.session, metadata, {
+        issuer: profile.issuer, subject: profile.subject, sid: profile.sid,
+      })
       setSessionCookie(c, session.token, deps.config.session)
       await deps.audit.write({
         actor: { type: 'user', userId: user.id }, action: 'auth.oidc.login', outcome: 'success',
-        resourceType: 'session', resourceId: session.id, ...metadata,
+        resourceType: 'session', resourceId: session.id,
+        details: {
+          created: provisioned.created,
+          linkedExisting: provisioned.linkedExisting,
+          rolesBefore: provisioned.rolesBefore,
+          rolesAfter: user.roles,
+        },
+        ...metadata,
       })
       return c.redirect(profile.returnTo, 303)
     } catch (e) {
@@ -181,6 +211,55 @@ export function mountAuthRoutes(app: Hono, deps: AuthRouteDeps): void {
         details: { errorType: e instanceof Error ? e.name : 'unknown' }, ...metadata,
       })
       return c.json({ error: 'oidc login failed' }, 401)
+    }
+  })
+
+  app.get('/oidc/frontchannel-logout', async c => {
+    if (!deps.config.oidc) return c.json({ error: 'oidc disabled' }, 404)
+    const issuer = c.req.query('iss')
+    const sid = c.req.query('sid')
+    if (!issuer || !sid || sid.length > 512 || !deps.config.oidc.matchesIssuer(issuer)) {
+      return c.json({ error: 'invalid frontchannel logout' }, 400)
+    }
+    const revoked = await deps.store.revokeOidcSessions({ issuer: deps.config.oidc.issuer, sid })
+    deleteCookie(c, cookieName, { path: '/', secure: deps.config.session.secure })
+    await deps.audit.write({
+      actor: { type: 'system' }, action: 'auth.oidc.session_revoke', outcome: 'success',
+      resourceType: 'oidc_session', resourceId: sid, details: { channel: 'front', revoked },
+      ...requestMetadata(c),
+    })
+    c.header('Cache-Control', 'no-store')
+    return c.body(null, 204)
+  })
+
+  app.post('/oidc/backchannel-logout', async c => {
+    if (!deps.config.oidc) return c.json({ error: 'oidc disabled' }, 404)
+    const announced = Number(c.req.header('Content-Length') ?? 0)
+    if (Number.isFinite(announced) && announced > 20_000) return c.json({ error: 'request too large' }, 413)
+    try {
+      const body = await c.req.text()
+      if (body.length > 20_000) return c.json({ error: 'request too large' }, 413)
+      const logoutToken = new URLSearchParams(body).get('logout_token')
+      if (!logoutToken) return c.json({ error: 'logout_token missing' }, 400)
+      const claims = await deps.config.oidc.verifyBackchannelLogoutToken(logoutToken)
+      const result = await deps.store.applyOidcBackchannelLogout(claims)
+      if (!result.accepted) {
+        return c.json({ error: 'logout_token already used' }, 400)
+      }
+      await deps.audit.write({
+        actor: { type: 'system' }, action: 'auth.oidc.session_revoke', outcome: 'success',
+        resourceType: 'oidc_identity', resourceId: claims.subject ?? claims.sid,
+        details: { channel: 'back', revoked: result.revoked }, ...requestMetadata(c),
+      })
+      c.header('Cache-Control', 'no-store')
+      return c.body(null, 204)
+    } catch (e) {
+      await deps.audit.write({
+        actor: { type: 'anonymous' }, action: 'auth.oidc.session_revoke', outcome: 'denied',
+        details: { channel: 'back', errorType: e instanceof Error ? e.name : 'unknown' },
+        ...requestMetadata(c),
+      })
+      return c.json({ error: 'invalid logout_token' }, 400)
     }
   })
 
@@ -229,6 +308,7 @@ export function mountAuthRoutes(app: Hono, deps: AuthRouteDeps): void {
   app.post('/logout', async c => {
     const principal = getSessionPrincipal(c)
     const token = getCookie(c, cookieName)
+    const oidcContext = token ? await deps.store.getSessionOidcContext(token) : null
     if (token) await deps.store.revokeSession(token)
     deleteCookie(c, cookieName, { path: '/', secure: deps.config.session.secure })
     if (principal) {
@@ -237,7 +317,10 @@ export function mountAuthRoutes(app: Hono, deps: AuthRouteDeps): void {
         resourceType: 'session', resourceId: principal.sessionId, ...requestMetadata(c),
       })
     }
-    return c.json({ ok: true })
+    const logoutUrl = oidcContext && deps.config.oidc?.matchesIssuer(oidcContext.issuer)
+      ? (await deps.config.oidc.logoutUrl()).href
+      : null
+    return c.json({ ok: true, logoutUrl })
   })
 
   app.use('/change-password', sessionGuard)

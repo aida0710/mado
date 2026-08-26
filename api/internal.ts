@@ -83,7 +83,13 @@ app.get('/healthz', c => c.text('ok'))
 // Origin検証を適用し、認証を有効化したときだけ公開する。
 if (authEnabled) {
   const authApi = new Hono()
-  authApi.use('*', requireSafeOrigin(env.ALLOWED_ORIGINS))
+  const safeOrigin = requireSafeOrigin(env.ALLOWED_ORIGINS)
+  authApi.use('*', async (c, next) => {
+    // AuthentikからのBack-channel logoutはbrowser Originを持たない代わりに、
+    // ProviderのJWKSで署名されたlogout_tokenをhandler内で検証する。
+    if (c.req.path.endsWith('/oidc/backchannel-logout')) return next()
+    return safeOrigin(c, next)
+  })
   const oidcEnabled = env.AUTH_MODE === 'oidc' || env.AUTH_MODE === 'hybrid'
   if (oidcEnabled && (!env.OIDC_ISSUER_URL || !env.OIDC_CLIENT_ID
       || !env.OIDC_CLIENT_SECRET || !env.OIDC_REDIRECT_URI)) {
@@ -96,6 +102,8 @@ if (authEnabled) {
     clientId: env.OIDC_CLIENT_ID!,
     clientSecret: env.OIDC_CLIENT_SECRET!,
     redirectUri: env.OIDC_REDIRECT_URI!,
+    scopes: env.OIDC_SCOPES,
+    postLogoutRedirectUri: env.OIDC_POST_LOGOUT_REDIRECT_URI,
   }) : undefined
   mountAuthRoutes(authApi, {
     store: authStore,
@@ -109,6 +117,12 @@ if (authEnabled) {
         cookieName: env.AUTH_COOKIE_SECURE ? '__Host-mado_session' : 'mado_session',
       },
       oidc,
+      oidcProvisioning: {
+        autoLinkVerifiedEmail: env.OIDC_AUTO_LINK_VERIFIED_EMAIL,
+        allowedGroups: env.OIDC_ALLOWED_GROUPS,
+        roleMapping: env.OIDC_ROLE_MAPPING_JSON,
+        defaultRole: env.OIDC_DEFAULT_ROLE,
+      },
     },
   })
   app.route('/api/auth', authApi)

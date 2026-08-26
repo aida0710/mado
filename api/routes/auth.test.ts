@@ -3,6 +3,7 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import { closePools, createPools } from '../db.js'
 import { createAuditWriter } from '../lib/audit.js'
 import { createAuthStore } from '../lib/auth-store.js'
+import type { OidcProvider } from '../lib/auth-oidc.js'
 import { hashPassword } from '../lib/password.js'
 import { mountAuthRoutes } from './auth.js'
 
@@ -22,7 +23,7 @@ mountAuthRoutes(app, {
 })
 
 beforeEach(async () => {
-  await pools.rw.query('TRUNCATE audit_events, service_accounts, auth_users CASCADE')
+  await pools.rw.query('TRUNCATE auth_oidc_logout_events, audit_events, service_accounts, auth_users CASCADE')
   const user = await store.createUser({ username: 'local-user', email: 'user@example.com', displayName: 'User', roles: ['viewer'] })
   await store.setLocalPassword(user.id, await hashPassword('correct-password-123'), false)
 })
@@ -82,5 +83,75 @@ describe('auth routes', () => {
 
   it('cookie無しの/meを401にする', async () => {
     expect((await app.request('/me')).status).toBe(401)
+  })
+
+  it('OIDC callbackで検証済みemailを既存Userへ連携しgroup roleを同期する', async () => {
+    const oidc: OidcProvider = {
+      id: 'primary', label: 'Authentik', issuer: 'https://auth.example/application/o/mado',
+      start: async () => new URL('https://auth.example/authorize'),
+      finish: async () => ({
+        issuer: 'https://auth.example/application/o/mado', subject: 'subject-1',
+        email: 'user@example.com', emailVerified: true, username: 'sso-user', displayName: 'SSO User',
+        groups: ['mado-admins'], sid: 'sid-1', returnTo: '/lineage',
+      }),
+      logoutUrl: async () => new URL('https://auth.example/end-session'),
+      matchesIssuer: value => value.replace(/\/$/, '') === 'https://auth.example/application/o/mado',
+      verifyBackchannelLogoutToken: async () => { throw new Error('not used') },
+      deleteExpiredAttempts: async () => 0,
+    }
+    const oidcApp = new Hono()
+    mountAuthRoutes(oidcApp, {
+      store, audit,
+      config: {
+        localEnabled: true,
+        session: { idleSeconds: 3600, absoluteSeconds: 7200, secure: false, cookieName: 'mado_session' },
+        oidc,
+        oidcProvisioning: {
+          autoLinkVerifiedEmail: true, allowedGroups: ['mado-admins'],
+          roleMapping: { 'mado-admins': 'admin' }, defaultRole: 'viewer',
+        },
+      },
+    })
+    const response = await oidcApp.request('/oidc/callback?code=ok&state=ok')
+    expect(response.status).toBe(303)
+    expect(response.headers.get('location')).toBe('/lineage')
+    const linked = await store.getLocalCredential('local-user')
+    expect(linked).toMatchObject({ displayName: 'SSO User', roles: ['admin'] })
+    expect(linked?.authMethods).toEqual(['local', 'sso'])
+  })
+
+  it('Back-channel logoutを一度だけ受理して該当sessionを失効する', async () => {
+    const user = (await store.getLocalCredential('local-user'))!
+    const session = await store.createSession(user.id, { idleSeconds: 3600, absoluteSeconds: 7200 }, {}, {
+      issuer: 'https://auth.example/application/o/mado', subject: 'subject-1', sid: 'sid-1',
+    })
+    const oidc: OidcProvider = {
+      id: 'primary', label: 'Authentik', issuer: 'https://auth.example/application/o/mado',
+      start: async () => new URL('https://auth.example/authorize'),
+      finish: async () => { throw new Error('not used') },
+      logoutUrl: async () => new URL('https://auth.example/end-session'),
+      matchesIssuer: () => true,
+      verifyBackchannelLogoutToken: async () => ({
+        issuer: 'https://auth.example/application/o/mado', subject: 'subject-1', sid: 'sid-1',
+        jti: 'logout-jti-1', expiresAt: new Date(Date.now() + 60_000),
+      }),
+      deleteExpiredAttempts: async () => 0,
+    }
+    const oidcApp = new Hono()
+    mountAuthRoutes(oidcApp, {
+      store, audit,
+      config: {
+        localEnabled: false,
+        session: { idleSeconds: 3600, absoluteSeconds: 7200, secure: false, cookieName: 'mado_session' },
+        oidc,
+      },
+    })
+    const request = () => oidcApp.request('/oidc/backchannel-logout', {
+      method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'logout_token=signed-token-placeholder',
+    })
+    expect((await request()).status).toBe(204)
+    expect(await store.authenticateSession(session.token, 3600)).toBeNull()
+    expect((await request()).status).toBe(400)
   })
 })
