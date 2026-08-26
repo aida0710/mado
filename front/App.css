@@ -175,6 +175,7 @@ body {
 .auth-card__mark span { color: var(--ink-8); }
 .auth-card__eyebrow { margin: 24px 0 7px; font-size: 10px; font-weight: 700; letter-spacing: .24em; color: var(--ink-7); }
 .auth-card h1 { margin: 0; font-family: var(--font-serif); font-size: 27px; font-weight: 500; letter-spacing: -.02em; color: var(--ink-12); }
+.auth-card--login h1 { margin-bottom: 28px; }
 .auth-card__lead { margin: 11px 0 28px; font-size: 13px; line-height: 1.8; color: var(--ink-7); }
 .auth-card__sso, .auth-form button { display: grid; width: 100%; min-height: 44px; place-items: center; border: 1px solid var(--ink-11); background: var(--ink-12); color: var(--paper); font-size: 13px; font-weight: 650; text-decoration: none; cursor: pointer; }
 .auth-card__sso:hover, .auth-form button:hover { background: var(--ink-10); }

@@ -37,11 +37,10 @@ export function LoginPage({ config, onLoggedIn }: Props) {
 
   return (
     <main className="auth-page">
-      <section className="auth-card" aria-labelledby="auth-title">
+      <section className="auth-card auth-card--login" aria-labelledby="auth-title">
         <div className="auth-card__mark">mado<span>.</span></div>
         <p className="auth-card__eyebrow">DATA CATALOG</p>
-        <h1 id="auth-title">データの窓口へログイン</h1>
-        <p className="auth-card__lead">StorageとLineageを同じ権限境界で安全に扱います。</p>
+        <h1 id="auth-title">ログイン</h1>
 
         {config.oidc.enabled && (
           <a className="auth-card__sso" href={oidcUrl}>{config.oidc.label ?? 'SSO'}で続行</a>
