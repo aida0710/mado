@@ -139,11 +139,11 @@ export default function AdminPage() {
           ))}</div>
           <form className="admin-form" onSubmit={createUser}>
             <h4>ユーザーを追加</h4>
-            <input name="displayName" placeholder="表示名" required />
-            <input name="username" placeholder="ユーザー名" pattern="[A-Za-z0-9][A-Za-z0-9_.-]{0,63}" required />
-            <input name="email" type="email" placeholder="email@example.jp（任意）" />
-            <input name="password" type="password" minLength={12} placeholder="初回パスワード（12文字以上）" required />
-            <select name="role" defaultValue="viewer"><option value="viewer">Viewer</option><option value="curator">Curator</option><option value="operator">Operator</option><option value="admin">Admin</option></select>
+            <label className="admin-field"><span>表示名</span><input name="displayName" placeholder="例: Mado Curator" required /></label>
+            <label className="admin-field"><span>ユーザー名</span><input name="username" placeholder="例: curator" pattern="[A-Za-z0-9][A-Za-z0-9_.-]{0,63}" required /></label>
+            <label className="admin-field"><span>メールアドレス（任意）</span><input name="email" type="email" placeholder="email@example.jp" /></label>
+            <label className="admin-field"><span>初回パスワード（12文字以上）</span><input name="password" type="password" minLength={12} autoComplete="new-password" required /></label>
+            <label className="admin-field"><span>権限</span><select name="role" defaultValue="viewer"><option value="viewer">Viewer</option><option value="curator">Curator</option><option value="operator">Operator</option><option value="admin">Admin</option></select></label>
             <button type="submit">作成</button>
           </form>
         </section>
@@ -155,15 +155,15 @@ export default function AdminPage() {
           ))}</div>
           <form className="admin-form" onSubmit={createAccount}>
             <h4>Accountを追加</h4>
-            <input name="name" placeholder="nemo-curator-production" required />
-            <input name="description" placeholder="用途" />
+            <label className="admin-field"><span>Account名</span><input name="name" placeholder="例: nemo-curator-production" required /></label>
+            <label className="admin-field"><span>用途（任意）</span><input name="description" placeholder="例: 音声前処理の本番Pipeline" /></label>
             <button type="submit">作成</button>
           </form>
           <form className="admin-form" onSubmit={issueKey}>
             <h4>Lineage API keyを発行</h4>
-            <select name="accountId" required defaultValue=""><option value="" disabled>Service Accountを選択</option>{accounts.filter(a => a.status === 'active').map(account => <option key={account.id} value={account.id}>{account.name}</option>)}</select>
-            <input name="name" placeholder="production-2026-08" required />
-            <input name="namespaces" placeholder="speech,podcast（カンマ区切り）" required />
+            <label className="admin-field"><span>Service Account</span><select name="accountId" required defaultValue=""><option value="" disabled>選択してください</option>{accounts.filter(a => a.status === 'active').map(account => <option key={account.id} value={account.id}>{account.name}</option>)}</select></label>
+            <label className="admin-field"><span>Key名</span><input name="name" placeholder="例: production-2026-08" required /></label>
+            <label className="admin-field"><span>許可するNamespace</span><input name="namespaces" placeholder="speech,podcast（カンマ区切り）" required /></label>
             <button type="submit">一度だけkeyを表示</button>
           </form>
         </section>

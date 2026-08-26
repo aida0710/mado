@@ -25,7 +25,7 @@ function Tab({ to, label }: { to: string; label: string }) {
   return (
     <Link
       className={
-        'inline-flex h-9 items-center px-1 ' +
+        'mado-tab inline-flex h-9 items-center px-1 ' +
         'text-[11px] font-semibold uppercase tracking-[0.22em] ' +
         'no-underline transition-colors duration-[160ms] ' +
         'border-b-[1.5px] ' +
@@ -52,7 +52,7 @@ function Tabs() {
     permission === 'users:manage' || permission === 'service_accounts:manage'
   )
   return (
-    <nav className="flex items-stretch gap-4 sm:gap-6">
+    <nav className="mado-tabs flex items-stretch gap-4 sm:gap-6" aria-label="メインナビゲーション">
       <Tab to="/"            label="Home" />
       <Tab to="/storage"     label="Storage" />
       <Tab to="/lineage"     label="Lineage" />
@@ -90,7 +90,7 @@ export default function App() {
               ・下に hairline rule (border-color はトークンの --color-rule)
               を thin に置く。                                             */}
           <header
-            className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 pt-6 pb-4 sm:pt-7"
+            className="mado-header flex flex-wrap items-center justify-between gap-x-4 gap-y-2 pt-6 pb-4 sm:pt-7"
             style={{ borderBottom: '1px solid var(--rule)' }}
           >
             <Link
@@ -113,7 +113,7 @@ export default function App() {
                 <span className="text-ink-9">.</span>
               </h1>
             </Link>
-            <div className="flex items-center gap-5">
+            <div className="mado-nav-row flex items-center gap-5">
               <Tabs />
               {auth.enabled && auth.user && (
                 <button
