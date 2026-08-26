@@ -15,6 +15,8 @@ function service(overrides: Partial<LineageService> = {}): LineageService {
       nodes: [], edges: [], truncated: false,
     }),
     search: vi.fn().mockResolvedValue({ results: [], totalCount: 0, warnings: [] }),
+    catalog: vi.fn().mockResolvedValue({ results: [], totalCount: 0 }),
+    resolveLocation: vi.fn().mockResolvedValue({ storageSystemKey: null, uri: '', matches: [] }),
     dataset: vi.fn(), version: vi.fn(), run: vi.fn(), jobRuns: vi.fn(),
     projectionStatus: vi.fn().mockResolvedValue({
       state: 'synced', pendingEvents: 0, oldestPendingAt: null,
@@ -62,5 +64,23 @@ describe('lineage read routes', () => {
     mountLineageRoutes(app, { service: svc })
     await app.request('/lineage/search?q=raw&limit=10000')
     expect(svc.search).toHaveBeenCalledWith({ q: 'raw', namespace: undefined, limit: 100 })
+  })
+
+  it('登録一覧をpagingしStorage pathを逆引きする', async () => {
+    const svc = service()
+    const app = new Hono()
+    mountLineageRoutes(app, { service: svc })
+
+    expect((await app.request('/lineage/catalog?q=podcast&limit=20&offset=40')).status).toBe(200)
+    expect(svc.catalog).toHaveBeenCalledWith({
+      q: 'podcast', namespace: undefined, limit: 20, offset: 40,
+    })
+
+    expect((await app.request(
+      '/lineage/resolve-location?connectionId=conn1&bucket=dataset&key=podcast%2Fa.tar',
+    )).status).toBe(200)
+    expect(svc.resolveLocation).toHaveBeenCalledWith({
+      connectionId: 'conn1', bucket: 'dataset', key: 'podcast/a.tar', limit: 20,
+    })
   })
 })

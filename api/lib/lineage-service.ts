@@ -8,6 +8,7 @@ import type {
   LogicalLineageGraph,
   LogicalLineageNode,
   RegistryDatasetSummary,
+  StorageLineageResolution,
   VersionLineageGraph,
 } from '../shared/lineage-types.js'
 import type { MarquezClient, MarquezGraphNode } from './marquez-client.js'
@@ -31,6 +32,16 @@ export interface LineageService {
   logicalGraph(query: LogicalGraphQuery): Promise<LogicalLineageGraph>
   versionGraph(query: VersionGraphQuery): Promise<VersionLineageGraph>
   search(query: { q: string; namespace?: string; limit: number }): Promise<LineageSearchResponse>
+  catalog(query: { q: string; namespace?: string; limit: number; offset: number }): Promise<{
+    results: RegistryDatasetSummary[]
+    totalCount: number
+  }>
+  resolveLocation(query: {
+    connectionId: string
+    bucket: string
+    key: string
+    limit: number
+  }): Promise<StorageLineageResolution>
   dataset(id: string): Promise<DatasetDetail>
   version(id: string): Promise<DatasetVersionDetail>
   run(id: string): Promise<LineageRunDetail>
@@ -41,6 +52,7 @@ export interface LineageService {
 /** Mado DBのlineage_storage_bindingsを読むadapter。 */
 export interface StorageBindingResolver {
   resolve(storageSystemKeys: readonly string[]): Promise<ReadonlyMap<string, string>>
+  keyForConnection(connectionId: string): Promise<string | null>
 }
 
 function nodeIdentity(node: MarquezGraphNode): { namespace: string; name: string } | null {
@@ -120,7 +132,7 @@ export function createLineageService(deps: {
           kind: rootRegistry?.kind ?? query.kind,
           namespace: query.namespace,
           name: query.name,
-          label: query.name,
+          label: rootRegistry?.displayName ?? query.name,
           updatedAt: null,
           completeness: rootRegistry ? 'complete' : 'unregistered',
           registry: rootRegistry,
@@ -164,7 +176,7 @@ export function createLineageService(deps: {
         kind: registry?.kind ?? (node.type === 'JOB' ? 'job' : 'dataset'),
         namespace: identity.namespace,
         name: identity.name,
-        label: identity.name,
+        label: registry?.displayName ?? identity.name,
         updatedAt: typeof node.data.updatedAt === 'string' ? node.data.updatedAt : null,
         completeness: node.type === 'JOB' ? 'partial' : registry ? 'complete' : 'unregistered',
         registry,
@@ -219,6 +231,12 @@ export function createLineageService(deps: {
           namespace: item.namespace,
           name: item.name,
           label: item.name,
+          displayName: null,
+          description: null,
+          mediaType: null,
+          owner: null,
+          currentVersionId: null,
+          versionCount: 0,
           updatedAt: item.updatedAt,
           datasetId: null,
         })
@@ -233,6 +251,12 @@ export function createLineageService(deps: {
           namespace: item.namespace,
           name: item.name,
           label: item.name,
+          displayName: item.displayName,
+          description: item.description,
+          mediaType: item.mediaType,
+          owner: item.owner,
+          currentVersionId: item.currentVersionId,
+          versionCount: item.versionCount,
           updatedAt: null,
           datasetId: item.datasetId,
         })
@@ -240,6 +264,29 @@ export function createLineageService(deps: {
     }
     const results = [...byId.values()].slice(0, query.limit)
     return { results, totalCount: results.length, warnings }
+  }
+
+  const catalog = (query: {
+    q: string
+    namespace?: string
+    limit: number
+    offset: number
+  }) => deps.registry.searchDatasets(query)
+
+  const resolveLocation = async (query: {
+    connectionId: string
+    bucket: string
+    key: string
+    limit: number
+  }): Promise<StorageLineageResolution> => {
+    const normalizedKey = query.key.replace(/^\/+/, '')
+    const uri = `s3://${query.bucket}/${normalizedKey}`
+    const storageSystemKey = deps.bindings
+      ? await deps.bindings.keyForConnection(query.connectionId)
+      : null
+    if (!storageSystemKey) return { storageSystemKey: null, uri, matches: [] }
+    const resolved = await deps.registry.resolveStorageLocation(storageSystemKey, uri, query.limit)
+    return { storageSystemKey, uri: resolved.uri, matches: resolved.matches }
   }
 
   const bindVersionLocations = async (
@@ -276,6 +323,8 @@ export function createLineageService(deps: {
       query.versionId, query.direction, query.depth,
     ),
     search,
+    catalog,
+    resolveLocation,
     dataset,
     version: async id => bindVersionLocations(await deps.registry.getVersion(id)),
     run: id => deps.registry.getRun(id),

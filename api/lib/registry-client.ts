@@ -5,6 +5,7 @@ import type {
   LineageRunDetail,
   OpenLineageIngestResult,
   RegistryDatasetSummary,
+  RegistryStorageLocationMatch,
   VersionLineageGraph,
 } from '../shared/lineage-types.js'
 import type { OpenLineageEvent } from './openlineage-schema.js'
@@ -30,6 +31,7 @@ export interface RegistrySearchQuery {
   q: string
   namespace?: string
   limit: number
+  offset?: number
 }
 
 export interface RegistrySearchResponse {
@@ -46,6 +48,11 @@ export interface RegistryClient {
     refs: ReadonlyArray<{ namespace: string; name: string }>,
   ): Promise<RegistryDatasetSummary[]>
   searchDatasets(query: RegistrySearchQuery): Promise<RegistrySearchResponse>
+  resolveStorageLocation(
+    storageSystemKey: string,
+    uri: string,
+    limit?: number,
+  ): Promise<{ uri: string; matches: RegistryStorageLocationMatch[]; totalCount: number }>
   getDataset(id: string): Promise<DatasetDetail>
   getVersion(id: string): Promise<DatasetVersionDetail>
   getRun(id: string): Promise<LineageRunDetail>
@@ -95,11 +102,41 @@ function datasetSummary(value: unknown): RegistryDatasetSummary {
     datasetKey: text(row.datasetKey ?? row.dataset_key),
     namespace,
     name,
+    displayName: text(row.displayName ?? row.display_name),
+    aliases: Array.isArray(row.aliases)
+      ? row.aliases.filter((item): item is string => typeof item === 'string') : [],
     description: text(row.description),
     mediaType: text(row.mediaType ?? row.media_type),
     owner: text(row.owner),
     currentVersionId: text(row.currentVersionId ?? row.current_version_id),
     versionCount: Number(row.versionCount ?? row.version_count ?? 0) || 0,
+  }
+}
+
+function storageLocationMatch(value: unknown): RegistryStorageLocationMatch {
+  const row = record(value)
+  const dataset = datasetSummary(row)
+  const versionId = text(row.versionId ?? row.version_id)
+  const version = text(row.version)
+  const locationId = text(row.locationId ?? row.location_id)
+  const locationUri = text(row.locationUri ?? row.location_uri)
+  if (!versionId || !version || !locationId || !locationUri) {
+    throw new RegistryClientError('Registry storage location match is invalid', 502, 'invalid_response')
+  }
+  const rawStatus = text(row.status, 'unknown')!
+  const status = ['available', 'archived', 'missing', 'deleted', 'unknown'].includes(rawStatus)
+    ? rawStatus as RegistryStorageLocationMatch['status'] : 'unknown'
+  return {
+    ...dataset,
+    versionId,
+    version,
+    versionCreatedAt: text(row.versionCreatedAt ?? row.version_created_at, '')!,
+    locationId,
+    locationUri,
+    status,
+    isPrimary: row.isPrimary === true || row.is_primary === true,
+    observedAt: text(row.observedAt ?? row.observed_at, '')!,
+    matchType: (row.matchType ?? row.match_type) === 'exact' ? 'exact' : 'prefix',
   }
 }
 
@@ -270,10 +307,28 @@ export function createRegistryClient(options: RegistryClientOptions): RegistryCl
       url.searchParams.set('q', query.q)
       url.searchParams.set('limit', String(query.limit))
       if (query.namespace) url.searchParams.set('namespace', query.namespace)
+      if (query.offset) url.searchParams.set('offset', String(query.offset))
       return request<unknown>(url.toString()).then(body => {
         const wrapped = record(body)
         const results = Array.isArray(wrapped.results) ? wrapped.results.map(datasetSummary) : []
         return { results, totalCount: Number(wrapped.totalCount ?? wrapped.total_count ?? results.length) }
+      })
+    },
+
+    resolveStorageLocation: (storageSystemKey, uri, limit = 20) => {
+      const url = endpoint(options.baseUrl, '/v1/resolve/storage-location')
+      url.searchParams.set('storage_system_key', storageSystemKey)
+      url.searchParams.set('uri', uri)
+      url.searchParams.set('limit', String(limit))
+      return request<unknown>(url.toString()).then(body => {
+        const wrapped = record(body)
+        const matches = Array.isArray(wrapped.matches)
+          ? wrapped.matches.map(storageLocationMatch) : []
+        return {
+          uri: text(wrapped.uri, uri)!,
+          matches,
+          totalCount: Number(wrapped.totalCount ?? wrapped.total_count ?? matches.length),
+        }
       })
     },
 

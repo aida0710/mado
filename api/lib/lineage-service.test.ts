@@ -8,6 +8,7 @@ function registry(overrides: Partial<RegistryClient> = {}): RegistryClient {
     ingestOpenLineage: vi.fn(),
     resolveDatasets: vi.fn().mockResolvedValue([]),
     searchDatasets: vi.fn().mockResolvedValue({ results: [], totalCount: 0 }),
+    resolveStorageLocation: vi.fn().mockResolvedValue({ uri: '', matches: [], totalCount: 0 }),
     getDataset: vi.fn(), getVersion: vi.fn(), getRun: vi.fn(), getVersionGraph: vi.fn(),
     getProjectionStatus: vi.fn().mockResolvedValue({
       state: 'synced', pendingEvents: 0, oldestPendingAt: null,
@@ -32,6 +33,7 @@ describe('lineage service', () => {
     const reg = registry({
       resolveDatasets: vi.fn().mockResolvedValue([{
         kind: 'dataset', datasetId: 'd1', datasetKey: 'raw', namespace: 'speech', name: 'raw',
+        displayName: 'Raw speech', aliases: [],
         description: null, mediaType: 'audio', owner: null, currentVersionId: 'v1', versionCount: 1,
       }]),
     })
@@ -74,6 +76,7 @@ describe('lineage service', () => {
       registry: registry({
         searchDatasets: vi.fn().mockResolvedValue({ results: [{
           kind: 'dataset', datasetId: 'd1', datasetKey: 'raw', namespace: 'speech', name: 'raw',
+          displayName: 'Raw speech', aliases: [],
           description: null, mediaType: null, owner: null, currentVersionId: null, versionCount: 0,
         }], totalCount: 1 }),
       }),
@@ -107,8 +110,42 @@ describe('lineage service', () => {
       marquez: marquez(),
       bindings: {
         resolve: vi.fn().mockResolvedValue(new Map([['mdx-s3', 'conn123456']])),
+        keyForConnection: vi.fn().mockResolvedValue('mdx-s3'),
       },
     })
     expect((await service.version('v1')).locations[0].madoConnectionId).toBe('conn123456')
+  })
+
+  it('Mado接続とS3 pathを登録済みDataset Versionへ逆引きする', async () => {
+    const match = {
+      kind: 'dataset' as const, datasetId: 'd1', datasetKey: 'raw',
+      namespace: 'speech', name: 'raw', displayName: 'Raw speech', aliases: [],
+      description: null, mediaType: 'audio', owner: null, currentVersionId: 'v1', versionCount: 1,
+      versionId: 'v1', version: '1', versionCreatedAt: '2026-08-26T00:00:00Z',
+      locationId: 'l1', locationUri: 's3://dataset/raw/', status: 'available' as const,
+      isPrimary: true, observedAt: '2026-08-26T00:00:00Z', matchType: 'prefix' as const,
+    }
+    const reg = registry({
+      resolveStorageLocation: vi.fn().mockResolvedValue({
+        uri: 's3://dataset/raw/part/a.tar', matches: [match], totalCount: 1,
+      }),
+    })
+    const service = createLineageService({
+      registry: reg,
+      marquez: marquez(),
+      bindings: {
+        resolve: vi.fn().mockResolvedValue(new Map()),
+        keyForConnection: vi.fn().mockResolvedValue('mdx-s3'),
+      },
+    })
+
+    const result = await service.resolveLocation({
+      connectionId: 'conn123456', bucket: 'dataset', key: '/raw/part/a.tar', limit: 20,
+    })
+
+    expect(result.matches[0].versionId).toBe('v1')
+    expect(reg.resolveStorageLocation).toHaveBeenCalledWith(
+      'mdx-s3', 's3://dataset/raw/part/a.tar', 20,
+    )
   })
 })

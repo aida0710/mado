@@ -30,7 +30,7 @@ function registry(): RegistryClient {
       accepted: true, duplicate: false, eventId: 'evt-1',
       runId: event().run.runId, projection: 'pending', warnings: [],
     }),
-    resolveDatasets: vi.fn(), searchDatasets: vi.fn(), getDataset: vi.fn(),
+    resolveDatasets: vi.fn(), searchDatasets: vi.fn(), resolveStorageLocation: vi.fn(), getDataset: vi.fn(),
     getVersion: vi.fn(), getRun: vi.fn(), getVersionGraph: vi.fn(),
     getProjectionStatus: vi.fn(),
   }

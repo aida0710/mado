@@ -33,6 +33,7 @@ services:
       - registry-db-data:/var/lib/postgresql/data
       - ./dataset-registry/db/init.sql:/docker-entrypoint-initdb.d/001-init.sql:ro
       - ./dataset-registry/db/migrations/002_openlineage_ingest.sql:/docker-entrypoint-initdb.d/002-openlineage-ingest.sql:ro
+      - ./dataset-registry/db/migrations/003_catalog_discovery.sql:/docker-entrypoint-initdb.d/003-catalog-discovery.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U registry -d registry"]
       interval: 5s

@@ -231,6 +231,15 @@ if (env.DATASET_REGISTRY_URL && env.DATASET_REGISTRY_TOKEN && env.MARQUEZ_URL) {
       )
       return new Map(result.rows.map(row => [row.registry_storage_system_key, row.connection_id]))
     },
+    async keyForConnection(connectionId) {
+      const result = await pools.ro.query<{ registry_storage_system_key: string }>(
+        `SELECT registry_storage_system_key
+           FROM lineage_storage_bindings
+          WHERE connection_id = $1`,
+        [connectionId],
+      )
+      return result.rows[0]?.registry_storage_system_key ?? null
+    },
   }
   mountLineageRoutes(api, { service: createLineageService({ registry, marquez, bindings }) })
 } else {

@@ -79,6 +79,38 @@ export function mountLineageRoutes(app: Hono, deps: LineageRoutesDeps): void {
     }
   })
 
+  app.get('/lineage/catalog', async c => {
+    const q = (c.req.query('q') ?? '').trim()
+    const namespace = c.req.query('namespace')?.trim() || undefined
+    const limit = boundedInt(c.req.query('limit'), 20, 1, 100)
+    const offset = boundedInt(c.req.query('offset'), 0, 0, 1_000_000)
+    try {
+      return c.json(await deps.service.catalog({ q, namespace, limit, offset }))
+    } catch (error) {
+      return backendError(c, error)
+    }
+  })
+
+  app.get('/lineage/resolve-location', async c => {
+    const connectionId = z.string().min(1).max(256).safeParse(c.req.query('connectionId'))
+    const bucket = z.string().min(1).max(1024).safeParse(c.req.query('bucket'))
+    const key = z.string().max(8192).safeParse(c.req.query('key') ?? '')
+    const limit = boundedInt(c.req.query('limit'), 20, 1, 100)
+    if (!connectionId.success || !bucket.success || !key.success) {
+      return c.json({ error: 'connectionId, bucket and a valid key are required' }, 400)
+    }
+    try {
+      return c.json(await deps.service.resolveLocation({
+        connectionId: connectionId.data,
+        bucket: bucket.data,
+        key: key.data,
+        limit,
+      }))
+    } catch (error) {
+      return backendError(c, error)
+    }
+  })
+
   app.get('/lineage/projection-status', async c => {
     return c.json(await deps.service.projectionStatus())
   })

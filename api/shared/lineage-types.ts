@@ -14,11 +14,31 @@ export interface RegistryDatasetSummary {
   datasetKey: string | null
   namespace: string
   name: string
+  displayName: string | null
+  aliases: string[]
   description: string | null
   mediaType: string | null
   owner: string | null
   currentVersionId: string | null
   versionCount: number
+}
+
+export interface RegistryStorageLocationMatch extends RegistryDatasetSummary {
+  versionId: string
+  version: string
+  versionCreatedAt: string
+  locationId: string
+  locationUri: string
+  status: 'available' | 'archived' | 'missing' | 'deleted' | 'unknown'
+  isPrimary: boolean
+  observedAt: string
+  matchType: 'exact' | 'prefix'
+}
+
+export interface StorageLineageResolution {
+  storageSystemKey: string | null
+  uri: string
+  matches: RegistryStorageLocationMatch[]
 }
 
 export interface LogicalLineageNode {
@@ -151,6 +171,12 @@ export interface LineageSearchResult {
   namespace: string
   name: string
   label: string
+  displayName: string | null
+  description: string | null
+  mediaType: string | null
+  owner: string | null
+  currentVersionId: string | null
+  versionCount: number
   updatedAt: string | null
   datasetId: string | null
 }
