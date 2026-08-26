@@ -245,6 +245,32 @@ INSERT INTO auth_role_permissions (role_id, permission_id) VALUES
   ('admin',    'audit:read')
 ON CONFLICT DO NOTHING;
 
+-- OSS installation bootstrap account. The repository contains only this
+-- Argon2id hash, and the account cannot continue past first sign-in without
+-- replacing the known initial credential with a 12+ byte password.
+WITH inserted_admin AS (
+  INSERT INTO auth_users (id, username, email, display_name, status)
+  SELECT
+    '722c09cd-bcb9-4730-9128-f6213cf0fd97'::uuid,
+    'admin', NULL, 'Mado Administrator', 'active'
+  WHERE NOT EXISTS (
+    SELECT 1 FROM auth_users WHERE lower(username) = 'admin'
+  )
+  RETURNING id
+)
+INSERT INTO auth_local_credentials
+  (user_id, password_hash, password_changed_at, failed_attempts, locked_until, must_change_password)
+SELECT
+  id,
+  '$argon2id$v=19$m=19456,p=1,t=2$8oOsWtdAXDOIjP/riC899g$sViBQ9sggkfFP0TRMI+bzulPPHojFXMewKlCQ/Xaxkg',
+  now(), 0, NULL, TRUE
+FROM inserted_admin
+ON CONFLICT (user_id) DO NOTHING;
+
+INSERT INTO auth_user_roles (user_id, role_id, granted_by)
+SELECT id, 'admin', id FROM auth_users WHERE lower(username) = 'admin'
+ON CONFLICT (user_id, role_id) DO NOTHING;
+
 ALTER TABLE auth_users                          OWNER TO dashboard_rw;
 ALTER TABLE auth_oidc_identities                OWNER TO dashboard_rw;
 ALTER TABLE auth_local_credentials              OWNER TO dashboard_rw;

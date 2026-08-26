@@ -235,7 +235,9 @@ dev の DB パスワードは未設定なら既定値 (`postgres` / `CHANGEME`) 
 
 ### 認証とLineageの初期化
 
-既存DBには、コードを起動する前に`021_auth.sql`と`022_lineage_bindings.sql`を適用します。Local Userを使う場合の初期Adminは対話的に作成します（パスワードを引数やshell historyへ残しません）。既定のusernameは`admin`で、初回ログイン時にパスワード変更が必須です。
+既存DBには、コードを起動する前に`021_auth.sql`と`022_lineage_bindings.sql`を適用します。新規導入ではLocal Admin `admin` / `mado-admin!`が作成され、初回ログイン時に12文字以上の新しいパスワードへの変更が必須です。既存の`admin`がいる場合、migrationはパスワードを上書きしません。
+
+初期Adminを明示的に再設定する場合は、対話的なbootstrapコマンドを使います（パスワードを引数やshell historyへ残しません）。
 
 ```bash
 docker compose -f compose.prod.yaml exec api-internal \
