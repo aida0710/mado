@@ -34,7 +34,7 @@ describe('AdminPage', () => {
     expect(nav).toHaveTextContent('Users')
     expect(nav).toHaveTextContent('Service Accounts')
     expect(nav).toHaveTextContent('Audit')
-    expect(screen.getByRole('heading', { name: 'ユーザーとAPIアクセスの管理' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'ユーザーとAPIアクセスの管理' })).not.toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Access' })).not.toBeInTheDocument()
     expect(await screen.findByRole('heading', { name: 'ユーザーを追加' })).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Local Users' })).not.toBeInTheDocument()
@@ -45,7 +45,7 @@ describe('AdminPage', () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ accounts: [] }), {
       status: 200, headers: { 'Content-Type': 'application/json' },
     }))
-    render(
+    const { container } = render(
       <AuthContext.Provider value={auth}>
         <MemoryRouter initialEntries={['/settings/access/service-accounts']}>
           <Routes><Route path="/settings/access/*" element={<AdminPage />} /></Routes>
@@ -55,6 +55,7 @@ describe('AdminPage', () => {
 
     expect(await screen.findByRole('heading', { name: 'Service Accountを追加' })).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Pipeline Service Accounts' })).not.toBeInTheDocument()
+    expect(container.querySelector('.admin-list')).not.toBeInTheDocument()
   })
 
   it('Auditタブ直下で監査ログ見出しを重複させない', async () => {

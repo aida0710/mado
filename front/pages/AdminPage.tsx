@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { Navigate, NavLink, Route, Routes } from 'react-router-dom'
 import { useAuth } from '../lib/auth-context'
-import { SettingsSectionHeader } from '../components/SettingsSectionHeader'
 
 interface UserRow {
   id: string
@@ -133,13 +132,15 @@ function UsersPage() {
     <section className="admin-card admin-card--standalone">
       {error && <p className="error" role="alert">{error}</p>}
       {notice && <div className="admin-notice">{notice}</div>}
-      <div className="admin-list">{users.map(user => (
-        <div key={user.id}>
-          <span><strong>{user.displayName}</strong><small>{user.username}{user.email ? ` · ${user.email}` : ''}</small></span>
-          <span className="admin-badges">{user.roles.map(role => <em key={role}>{role}</em>)}</span>
-        </div>
-      ))}</div>
-      <form className="admin-form admin-form--limited" onSubmit={createUser}>
+      {users.length > 0 && (
+        <div className="admin-list">{users.map(user => (
+          <div key={user.id}>
+            <span><strong>{user.displayName}</strong><small>{user.username}{user.email ? ` · ${user.email}` : ''}</small></span>
+            <span className="admin-badges">{user.roles.map(role => <em key={role}>{role}</em>)}</span>
+          </div>
+        ))}</div>
+      )}
+      <form className={`admin-form admin-form--limited${users.length === 0 ? ' admin-form--flush' : ''}`} onSubmit={createUser}>
         <h4>ユーザーを追加</h4>
         <label className="admin-field"><span>表示名</span><input name="displayName" placeholder="例: Mado Curator" required /></label>
         <label className="admin-field"><span>ユーザー名</span><input name="username" placeholder="例: curator" pattern="[A-Za-z0-9][A-Za-z0-9_.-]{0,63}" required /></label>
@@ -231,10 +232,12 @@ function ServiceAccountsPage() {
           <button type="button" onClick={() => setSecret(null)}>閉じる</button>
         </div>
       )}
-      <div className="admin-list">{accounts.map(account => (
-        <div key={account.id}><span><strong>{account.name}</strong><small>{account.description || '説明なし'}</small></span><em>{account.status}</em></div>
-      ))}</div>
-      <div className="admin-forms-grid">
+      {accounts.length > 0 && (
+        <div className="admin-list">{accounts.map(account => (
+          <div key={account.id}><span><strong>{account.name}</strong><small>{account.description || '説明なし'}</small></span><em>{account.status}</em></div>
+        ))}</div>
+      )}
+      <div className="admin-forms-grid admin-forms-grid--flush">
         <form className="admin-form" onSubmit={createAccount}>
           <h4>Service Accountを追加</h4>
           <label className="admin-field"><span>Service Account名</span><input name="name" placeholder="例: nemo-curator-production" required /></label>
@@ -334,7 +337,6 @@ export default function AdminPage() {
 
   return (
     <section className="admin-page admin-page--embedded">
-      <SettingsSectionHeader title="ユーザーとAPIアクセスの管理" />
       <nav className="access-tabs" aria-label="Access">
         {canUsers && <NavLink to="/settings/access/users" className={({ isActive }) => `access-tabs__link${isActive ? ' is-active' : ''}`}>Users</NavLink>}
         {canAccounts && <NavLink to="/settings/access/service-accounts" className={({ isActive }) => `access-tabs__link${isActive ? ' is-active' : ''}`}>Service Accounts</NavLink>}
