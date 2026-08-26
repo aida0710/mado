@@ -84,6 +84,7 @@ function DatasetDetailView({ detail, onOpenVersion }: { detail: DatasetDetail; o
   return (
     <>
       <dl className="lineage-detail__fields">
+        <Field label="表示名" value={detail.displayName} />
         <Field label="Dataset key" value={detail.datasetKey} mono />
         <Field label="Media type" value={detail.mediaType} />
         <Field label="Owner" value={detail.owner} />

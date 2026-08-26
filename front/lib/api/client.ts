@@ -29,6 +29,8 @@ import {
   DatasetDetail,
   DatasetVersionDetail,
   LineageRunDetail,
+  DatasetCatalogResponse,
+  StorageLineageResolution,
 } from './types'
 import type {
   ConnectionCreateInput, ConnectionUpdateInput, TagCreateInput, TagUpdateInput, TargetKind,
@@ -658,6 +660,19 @@ export const api = {
 
   lineageRun: (runId: string) =>
     getJson(`${API_BASE}/lineage/runs/${encodeURIComponent(runId)}`, LineageRunDetail),
+
+  lineageCatalog: (params: { q?: string; namespace?: string; limit?: number; offset?: number } = {}) =>
+    getJson(buildUrl(`${API_BASE}/lineage/catalog`, {
+      q: params.q,
+      namespace: params.namespace,
+      limit: params.limit == null ? undefined : String(params.limit),
+      offset: params.offset == null ? undefined : String(params.offset),
+    }), DatasetCatalogResponse),
+
+  lineageResolveLocation: (connectionId: string, bucket: string, key: string) =>
+    getJson(buildUrl(`${API_BASE}/lineage/resolve-location`, {
+      connectionId, bucket, key,
+    }), StorageLineageResolution),
 
   // ── 走査ジョブ (spec: 2026-08-18-directory-scan-design.md) ──
   // 走査は重く状態をサーバーが持つので、TTLCache は通さない。

@@ -55,38 +55,6 @@ export function LineageToolbar({ route, loading, onModeChange, onApply, onDepthC
         </button>
       </div>
 
-      <form
-        key={`${route.mode}|${route.rootKind}|${route.namespace}|${route.name}|${route.versionId}`}
-        className="lineage-toolbar__root"
-        onSubmit={submit}
-      >
-        {route.mode === 'logical' ? (
-          <>
-            <label>
-              <span>種類</span>
-              <select name="rootKind" defaultValue={route.rootKind}>
-                <option value="dataset">Dataset</option>
-                <option value="job">Job</option>
-              </select>
-            </label>
-            <label>
-              <span>Namespace</span>
-              <input name="namespace" defaultValue={route.namespace} placeholder="speech" />
-            </label>
-            <label className="lineage-toolbar__name">
-              <span>Name</span>
-              <input name="name" defaultValue={route.name} placeholder="callhome-raw" />
-            </label>
-          </>
-        ) : (
-          <label className="lineage-toolbar__name">
-            <span>Version ID</span>
-            <input name="versionId" defaultValue={route.versionId} placeholder="DatasetVersion UUID" />
-          </label>
-        )}
-        <button type="submit" className="ghost">表示</button>
-      </form>
-
       <label className="lineage-toolbar__depth">
         <span>Depth</span>
         <select value={route.depth} onChange={event => onDepthChange(Number(event.target.value))}>
@@ -96,6 +64,41 @@ export function LineageToolbar({ route, loading, onModeChange, onApply, onDepthC
       <button type="button" className="ghost" onClick={onRefresh} disabled={loading}>
         {loading ? '更新中…' : '↻ 更新'}
       </button>
+
+      <details className="lineage-toolbar__technical">
+        <summary>技術IDで指定</summary>
+        <form
+          key={`${route.mode}|${route.rootKind}|${route.namespace}|${route.name}|${route.versionId}`}
+          className="lineage-toolbar__root"
+          onSubmit={submit}
+        >
+          {route.mode === 'logical' ? (
+            <>
+              <label>
+                <span>種類</span>
+                <select name="rootKind" defaultValue={route.rootKind}>
+                  <option value="dataset">Dataset</option>
+                  <option value="job">Job</option>
+                </select>
+              </label>
+              <label>
+                <span>Namespace</span>
+                <input name="namespace" defaultValue={route.namespace} placeholder="speech" />
+              </label>
+              <label className="lineage-toolbar__name">
+                <span>Name</span>
+                <input name="name" defaultValue={route.name} placeholder="callhome-raw" />
+              </label>
+            </>
+          ) : (
+            <label className="lineage-toolbar__name">
+              <span>Version ID</span>
+              <input name="versionId" defaultValue={route.versionId} placeholder="DatasetVersion UUID" />
+            </label>
+          )}
+          <button type="submit" className="ghost">表示</button>
+        </form>
+      </details>
     </div>
   )
 }

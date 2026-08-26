@@ -25,6 +25,7 @@ vi.mock('../lib/api/client', async importOriginal => {
       lineageDataset: vi.fn(),
       lineageVersion: vi.fn(),
       lineageRun: vi.fn(),
+      lineageCatalog: vi.fn().mockResolvedValue({ results: [], totalCount: 0 }),
     },
   }
 })
@@ -37,6 +38,7 @@ const graph: LineageGraph = {
     summary: {}, data: {}, status: null, completeness: 'complete',
     registry: {
       kind: 'dataset', datasetId: 'dataset-1', datasetKey: 'callhome', namespace: 'speech', name: 'raw',
+      displayName: 'CALLHOME raw', aliases: [],
       description: null, mediaType: 'audio', owner: null, currentVersionId: 'version-1', versionCount: 1,
     },
     latestRun: null,
@@ -47,6 +49,7 @@ const graph: LineageGraph = {
 
 const dataset = {
   kind: 'dataset' as const, datasetId: 'dataset-1', datasetKey: 'callhome', namespace: 'speech', name: 'raw',
+  displayName: 'CALLHOME raw', aliases: [],
   description: 'Purchased speech', mediaType: 'audio', owner: null, currentVersionId: 'version-1',
   versionCount: 1, createdAt: '2026-08-26T00:00:00Z', versions: [{
     id: 'version-1', datasetId: 'dataset-1', version: 'v1', contentHash: null, manifestUri: 's3://meta/manifest.jsonl',
@@ -68,10 +71,31 @@ function renderPage(entry = '/lineage') {
 }
 
 describe('LineagePage', () => {
-  it('does not guess a root and explains how to start', () => {
+  it('does not guess a root and explains how to start', async () => {
     renderPage()
-    expect(screen.getByText('起点を指定してください')).toBeInTheDocument()
+    expect(screen.getByText('登録一覧からDatasetを選んでください')).toBeInTheDocument()
+    expect(await screen.findByText('登録 0件')).toBeInTheDocument()
     expect(api.lineageGraph).not.toHaveBeenCalled()
+  })
+
+  it('登録一覧から機械identityを選びURLへ反映する', async () => {
+    vi.mocked(api.lineageCatalog).mockResolvedValue({
+      results: [{
+        kind: 'dataset', datasetId: 'dataset-1', datasetKey: 'callhome',
+        namespace: 'speech', name: 'raw', displayName: 'CALLHOME raw', aliases: [],
+        description: 'Purchased speech', mediaType: 'audio', owner: null,
+        currentVersionId: 'version-1', versionCount: 1,
+      }],
+      totalCount: 1,
+    })
+    vi.mocked(api.lineageGraph).mockResolvedValue(graph)
+    renderPage()
+
+    fireEvent.click(await screen.findByRole('button', { name: /CALLHOME raw/ }))
+
+    expect(await screen.findByTestId('lineage-graph')).toBeInTheDocument()
+    expect(screen.getByTestId('query')).toHaveTextContent('namespace=speech')
+    expect(screen.getByTestId('query')).toHaveTextContent('name=raw')
   })
 
   it('loads a logical graph from URL-driven root fields', async () => {

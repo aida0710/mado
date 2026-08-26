@@ -489,6 +489,46 @@ export type TransferEstimate = z.infer<typeof TransferEstimate>
 export const LineageProjection = z.enum(['logical', 'versions'])
 export type LineageProjection = z.infer<typeof LineageProjection>
 
+export const DatasetCatalogItem = z.object({
+  kind: z.enum(['dataset', 'source']),
+  datasetId: z.string().nullable(),
+  datasetKey: z.string().nullable(),
+  namespace: z.string(),
+  name: z.string(),
+  displayName: z.string().nullable().default(null),
+  aliases: z.array(z.string()).default([]),
+  description: z.string().nullable(),
+  mediaType: z.string().nullable(),
+  owner: z.string().nullable(),
+  currentVersionId: z.string().nullable(),
+  versionCount: z.number().int().nonnegative(),
+})
+export type DatasetCatalogItem = z.infer<typeof DatasetCatalogItem>
+
+export const DatasetCatalogResponse = z.object({
+  results: z.array(DatasetCatalogItem),
+  totalCount: z.number().int().nonnegative(),
+})
+
+export const StorageLineageMatch = DatasetCatalogItem.extend({
+  versionId: z.string(),
+  version: z.string(),
+  versionCreatedAt: z.string(),
+  locationId: z.string(),
+  locationUri: z.string(),
+  status: z.enum(['available', 'archived', 'missing', 'deleted', 'unknown']),
+  isPrimary: z.boolean(),
+  observedAt: z.string(),
+  matchType: z.enum(['exact', 'prefix']),
+})
+
+export const StorageLineageResolution = z.object({
+  storageSystemKey: z.string().nullable(),
+  uri: z.string(),
+  matches: z.array(StorageLineageMatch),
+})
+export type StorageLineageResolution = z.infer<typeof StorageLineageResolution>
+
 export const LineageNodeKind = z.enum(['source', 'dataset', 'job', 'version', 'run', 'location'])
 export type LineageNodeKind = z.infer<typeof LineageNodeKind>
 
@@ -509,6 +549,8 @@ export const LineageNodeSummary = z.object({
     datasetKey: z.string().nullable(),
     namespace: z.string(),
     name: z.string(),
+    displayName: z.string().nullable().default(null),
+    aliases: z.array(z.string()).default([]),
     description: z.string().nullable(),
     mediaType: z.string().nullable(),
     owner: z.string().nullable(),
@@ -592,6 +634,8 @@ export const DatasetDetail = z.object({
   datasetKey: z.string().nullable(),
   namespace: z.string(),
   name: z.string(),
+  displayName: z.string().nullable().default(null),
+  aliases: z.array(z.string()).default([]),
   description: z.string().nullable(),
   mediaType: z.string().nullable(),
   owner: z.string().nullable(),

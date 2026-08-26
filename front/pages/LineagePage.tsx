@@ -9,6 +9,7 @@ import { parseLineageRoute, patchLineageRoute } from '../lib/lineage/route'
 import { LineageGraph } from '../components/lineage/LineageGraph'
 import { LineageToolbar } from '../components/lineage/LineageToolbar'
 import { LineageDetailPanel, type LineageDetail } from '../components/lineage/LineageDetailPanel'
+import { LineageCatalog } from '../components/lineage/LineageCatalog'
 
 interface GraphState {
   loading: boolean
@@ -129,6 +130,17 @@ export default function LineagePage() {
         <h2>Lineage</h2>
       </header>
 
+      <LineageCatalog
+        hasSelection={ready}
+        onSelect={dataset => patchRoute({
+          mode: 'logical',
+          rootKind: 'dataset',
+          namespace: dataset.namespace,
+          name: dataset.name,
+          selectedId: '',
+        })}
+      />
+
       <LineageToolbar
         route={route}
         loading={graphState.loading}
@@ -155,9 +167,9 @@ export default function LineagePage() {
 
       {!ready && (
         <div className="empty-state lineage-empty">
-          <h3>{route.mode === 'logical' ? '起点を指定してください' : 'DatasetVersionを指定してください'}</h3>
+          <h3>{route.mode === 'logical' ? '登録一覧からDatasetを選んでください' : 'DatasetVersionを指定してください'}</h3>
           <p>{route.mode === 'logical'
-            ? 'NamespaceとDataset / Job名を入力すると、その上流・下流を表示します。'
+            ? '名前、説明、S3 URIから検索できます。NamespaceとNameは技術IDとして詳細指定に残しています。'
             : 'Datasetノードを選んで「版・Runを表示」へ切り替えるか、Version IDを入力してください。'}</p>
         </div>
       )}

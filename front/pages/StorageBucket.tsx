@@ -5,6 +5,7 @@ import { ConnectionSwitcher } from '../components/ConnectionSwitcher'
 import { StorageBrowser } from '../components/StorageBrowser'
 import { ReadmeView } from '../components/ReadmeView'
 import { PreviewDrawer } from '../components/PreviewDrawer'
+import { StorageLineagePanel } from '../components/storage/StorageLineagePanel'
 import { fileLinkToDirRedirect } from '../lib/route'
 import { useDrawerResize } from '../lib/useDrawerResize'
 
@@ -76,6 +77,7 @@ export default function StorageBucket({ connId }: Props) {
         <Breadcrumb connId={connId} bucket={bucket} prefix={prefix} />
         <ConnectionSwitcher />
       </div>
+      <StorageLineagePanel connId={connId} bucket={bucket} path={selected ?? prefix} />
       {/* README はリスト幅に依存させない (常に full width) */}
       <ReadmeView connId={connId} bucket={bucket} prefix={prefix} />
       {/* リスト + preview drawer を横並び。drawer 幅は drawer 左端のハンドルで

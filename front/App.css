@@ -1882,13 +1882,76 @@ pre { font-size: 12px; }
    Dataset lineage — React Flow は読み取り専用。
    ==================================================================== */
 .lineage-page { min-width: 0; }
+.lineage-catalog {
+  margin-bottom: var(--space-3);
+  border-top: 1px solid var(--rule);
+  border-bottom: 1px solid var(--rule);
+}
+.lineage-catalog__toggle {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  padding: 11px 0;
+  cursor: pointer;
+  color: var(--ink-11);
+  font: 600 11px/1.2 var(--font-sans);
+  letter-spacing: .08em;
+}
+.lineage-catalog__body { padding: 0 0 var(--space-4); }
+.lineage-catalog__search { display: grid; gap: 5px; }
+.lineage-catalog__search > span {
+  color: var(--ink-7);
+  font: 600 9.5px/1 var(--font-sans);
+  letter-spacing: .16em;
+  text-transform: uppercase;
+}
+.lineage-catalog__search input {
+  width: 100%;
+  height: 42px;
+  border: 1px solid var(--color-rule-strong);
+  background: var(--paper);
+  padding: 8px 11px;
+  font-size: 13px;
+}
+.lineage-catalog__search input:focus { outline: 2px solid var(--ink-12); outline-offset: 1px; }
+.lineage-catalog__meta {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 0;
+  color: var(--ink-7);
+  font-size: 10.5px;
+}
+.lineage-catalog__results { max-height: 420px; margin: 0; padding: 0; overflow: auto; list-style: none; }
+.lineage-catalog__results li { border-top: 1px solid var(--rule); }
+.lineage-catalog__results li:last-child { border-bottom: 1px solid var(--rule); }
+.lineage-catalog__results button {
+  display: grid;
+  width: 100%;
+  grid-template-columns: minmax(180px, .8fr) minmax(220px, 1.4fr) auto;
+  gap: 3px var(--space-4);
+  padding: 11px 4px;
+  cursor: pointer;
+  text-align: left;
+}
+.lineage-catalog__results button:hover { background: var(--ink-0); }
+.lineage-catalog__title { align-self: center; font: 500 15px/1.3 var(--font-serif); }
+.lineage-catalog__description { align-self: center; color: var(--ink-9); font-size: 11.5px; line-height: 1.45; }
+.lineage-catalog__facts { align-self: center; color: var(--ink-7); font-size: 10.5px; white-space: nowrap; }
+.lineage-catalog__identity {
+  grid-column: 1 / -1;
+  overflow-wrap: anywhere;
+  color: var(--ink-6);
+  font: 400 9.5px/1.4 var(--font-mono);
+}
+.lineage-catalog__empty { margin: 0; padding: var(--space-4) 0; color: var(--ink-7); font-size: 12px; }
+.lineage-catalog__pager { display: flex; justify-content: flex-end; gap: var(--space-2); padding-top: var(--space-3); }
 .lineage-toolbar {
   display: flex;
   flex-wrap: wrap;
   align-items: end;
   gap: var(--space-3);
   padding: var(--space-3) 0;
-  border-top: 1px solid var(--rule);
   border-bottom: 1px solid var(--rule);
 }
 .lineage-toolbar__modes { display: inline-flex; align-self: stretch; }
@@ -1922,6 +1985,14 @@ pre { font-size: 12px; }
 .lineage-toolbar__name { flex: 1 1 190px; }
 .lineage-toolbar__depth { width: 64px; }
 .lineage-toolbar__depth select { width: 100%; }
+.lineage-toolbar__technical { flex: 1 0 100%; }
+.lineage-toolbar__technical summary {
+  width: fit-content;
+  cursor: pointer;
+  color: var(--ink-7);
+  font-size: 10.5px;
+}
+.lineage-toolbar__technical[open] summary { margin-bottom: var(--space-2); }
 .lineage-notice {
   display: flex;
   flex-wrap: wrap;
@@ -2021,10 +2092,39 @@ pre { font-size: 12px; }
 .lineage-detail__io li { padding: 6px 0; font: 400 10.5px/1.45 var(--font-mono); border-bottom: 1px solid var(--rule); word-break: break-word; }
 .lineage-detail__io li span { display: inline-block; width: 34px; font: 600 8.5px/1 var(--font-sans); color: var(--ink-7); }
 
+.storage-lineage {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr) auto;
+  gap: var(--space-3);
+  align-items: start;
+  margin: var(--space-2) 0 var(--space-3);
+  padding: 10px 12px;
+  border-left: 2px solid var(--ink-9);
+  background: var(--ink-0);
+}
+.storage-lineage__label {
+  padding-top: 2px;
+  color: var(--ink-7);
+  font: 600 9px/1 var(--font-sans);
+  letter-spacing: .17em;
+  text-transform: uppercase;
+}
+.storage-lineage__matches { display: grid; gap: 9px; min-width: 0; }
+.storage-lineage__match { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); min-width: 0; }
+.storage-lineage__match > div:first-child { display: grid; min-width: 0; gap: 2px; }
+.storage-lineage__match strong { overflow-wrap: anywhere; font-size: 12px; }
+.storage-lineage__match span, .storage-lineage__more { color: var(--ink-7); font-size: 10.5px; }
+.storage-lineage__actions { display: flex; flex: 0 0 auto; gap: var(--space-3); }
+.storage-lineage__actions a { color: var(--color-link); font-size: 11px; text-underline-offset: 2px; }
+
 @media (max-width: 800px) {
   .lineage-workspace { grid-template-columns: minmax(0, 1fr); }
   .lineage-canvas { height: min(62vh, 600px); }
   .lineage-detail { position: static; max-height: none; }
   .lineage-toolbar__root { flex-basis: 100%; flex-wrap: wrap; }
   .lineage-toolbar__root label { flex: 1 1 140px; }
+  .lineage-catalog__results button { grid-template-columns: minmax(0, 1fr) auto; }
+  .lineage-catalog__description { grid-column: 1 / -1; }
+  .storage-lineage { grid-template-columns: minmax(0, 1fr); }
+  .storage-lineage__match { align-items: start; flex-direction: column; gap: 5px; }
 }
