@@ -13,6 +13,7 @@ import './App.css'
 // ホーム閲覧だけのユーザに Monaco をロードさせないよう、別チャンクに切り出す。
 const NoteEditPage = lazy(() => import('./pages/NoteEditPage'))
 const LineagePage = lazy(() => import('./pages/LineagePage'))
+const LineageRegisterPage = lazy(() => import('./pages/LineageRegisterPage'))
 
 /* ── Tab — masthead 右側のナビ。
    editorial: 小キャップ + tracking。アクティブは細い下線で示す
@@ -124,6 +125,7 @@ export default function App() {
                 <Route path="/storage"           element={<StorageLanding />} />
                 <Route path="/storage/:connId/*" element={<StoragePageWithKey />} />
                 <Route path="/lineage"            element={<LineagePage />} />
+                <Route path="/lineage/register"   element={<LineageRegisterPage />} />
                 <Route path="/access/*"           element={<LegacyAccessRedirect />} />
               </Routes>
             </Suspense>

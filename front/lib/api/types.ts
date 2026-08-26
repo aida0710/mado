@@ -529,6 +529,84 @@ export const StorageLineageResolution = z.object({
 })
 export type StorageLineageResolution = z.infer<typeof StorageLineageResolution>
 
+export const ManualLineageMutationResult = z.record(z.string(), z.unknown())
+
+export interface ManualStorageLocationInput {
+  connectionId: string
+  bucket: string
+  key: string
+  status: 'available' | 'archived' | 'missing' | 'deleted' | 'unknown'
+  isPrimary: boolean
+}
+
+export interface ManualDatasetRegistrationInput {
+  datasetId?: string
+  dataset?: {
+    datasetKey: string
+    namespace: string
+    name: string
+    displayName?: string
+    aliases: string[]
+    description?: string
+    mediaType?: string
+    owner?: string
+  }
+  version: {
+    version: string
+    contentHash?: string
+    manifestUri?: string
+    manifestHash?: string
+    schemaUri?: string
+  }
+  location?: ManualStorageLocationInput
+  source?: {
+    sourceKey: string
+    kind: 'purchased' | 'crawled' | 'provided' | 'generated' | 'database' | 'other'
+    name: string
+    uri?: string
+    vendor?: string
+    product?: string
+    licenseRef?: string
+    contractRef?: string
+  }
+  processing?: {
+    transformation: ManualTransformationInput
+    inputVersionIds: string[]
+    jobNamespace: string
+    jobName: string
+    gitSha?: string
+    containerDigest?: string
+    configUri?: string
+    configHash?: string
+    executionTimeStatus: 'known' | 'unknown'
+    occurredAt?: string
+  }
+  evidenceRefs: string[]
+}
+
+export interface ManualTransformationInput {
+  transformationKey: string
+  name: string
+  description?: string
+  codeRepository?: string
+  defaultCodeRef?: string
+}
+
+export interface ManualLineageRegistrationInput {
+  transformation: ManualTransformationInput
+  inputVersionIds: string[]
+  outputVersionIds: string[]
+  jobNamespace: string
+  jobName: string
+  gitSha?: string
+  containerDigest?: string
+  configUri?: string
+  configHash?: string
+  executionTimeStatus: 'known' | 'unknown'
+  occurredAt?: string
+  evidenceRefs: string[]
+}
+
 export const LineageNodeKind = z.enum(['source', 'dataset', 'job', 'version', 'run', 'location'])
 export type LineageNodeKind = z.infer<typeof LineageNodeKind>
 

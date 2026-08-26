@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useReducer, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { api } from '../lib/api/client'
 import type {
   DatasetDetail, DatasetVersionDetail, LineageGraph as LineageGraphDto, LineageNodeSummary,
@@ -10,6 +10,7 @@ import { LineageGraph } from '../components/lineage/LineageGraph'
 import { LineageToolbar } from '../components/lineage/LineageToolbar'
 import { LineageDetailPanel, type LineageDetail } from '../components/lineage/LineageDetailPanel'
 import { LineageCatalog } from '../components/lineage/LineageCatalog'
+import { useAuth } from '../lib/auth-context'
 
 interface GraphState {
   loading: boolean
@@ -64,6 +65,8 @@ export default function LineagePage() {
   const [graphState, dispatchGraph] = useReducer(graphReducer, initialGraph)
   const [detailState, setDetailState] = useState<DetailState>(initialDetail)
   const [refreshToken, setRefreshToken] = useState(0)
+  const { user } = useAuth()
+  const canCurate = user?.permissions.includes('lineage:curate') ?? false
 
   const ready = route.mode === 'logical'
     ? route.namespace !== '' && route.name !== ''
@@ -128,6 +131,7 @@ export default function LineagePage() {
     <section className="lineage-page">
       <header className="page-head">
         <h2>Lineage</h2>
+        {canCurate && <Link className="ghost" to="/lineage/register">手動で登録</Link>}
       </header>
 
       <LineageCatalog

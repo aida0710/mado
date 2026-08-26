@@ -31,10 +31,14 @@ import {
   LineageRunDetail,
   DatasetCatalogResponse,
   StorageLineageResolution,
+  ManualLineageMutationResult,
 } from './types'
 import type {
   ConnectionCreateInput, ConnectionUpdateInput, TagCreateInput, TagUpdateInput, TargetKind,
   LineageProjection,
+  ManualDatasetRegistrationInput,
+  ManualStorageLocationInput,
+  ManualLineageRegistrationInput,
 } from './types'
 import { TTLCache } from './cache'
 
@@ -673,6 +677,20 @@ export const api = {
     getJson(buildUrl(`${API_BASE}/lineage/resolve-location`, {
       connectionId, bucket, key,
     }), StorageLineageResolution),
+
+  registerManualDataset: (input: ManualDatasetRegistrationInput) =>
+    mutateJson(`${API_BASE}/lineage/curation/datasets`, { method: 'POST', body: input }, ManualLineageMutationResult),
+
+  registerManualLocation: (input: {
+    versionId: string
+    location: ManualStorageLocationInput
+    evidenceRefs: string[]
+  }) => mutateJson(
+    `${API_BASE}/lineage/curation/locations`, { method: 'POST', body: input }, ManualLineageMutationResult,
+  ),
+
+  registerManualLineage: (input: ManualLineageRegistrationInput) =>
+    mutateJson(`${API_BASE}/lineage/curation/runs`, { method: 'POST', body: input }, ManualLineageMutationResult),
 
   // ── 走査ジョブ (spec: 2026-08-18-directory-scan-design.md) ──
   // 走査は重く状態をサーバーが持つので、TTLCache は通さない。
