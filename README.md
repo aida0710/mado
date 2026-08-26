@@ -6,7 +6,7 @@
 
 <img width="1340" height="771" alt="mosaic_20260524162904" src="https://github.com/user-attachments/assets/4f5349ad-38c2-46c7-8e29-3be76477615c" />
 
-アカウント機能然り認証系は存在しないので、priate network内でのみ動作させることを想定しています。
+Local UserまたはOIDC SSOでログインでき、Pipelineは人とは別のService Account keyを使います。既存LAN運用から移行できるよう認証無効モードも残していますが、外部公開では使用しません。
 
 ## できること
 
@@ -20,12 +20,15 @@
 - **配下の集計** — ディレクトリ配下のオブジェクト数と合計サイズを数える (サブディレクトリ / 拡張子別の内訳つき)
 - **移送の見積もり** — その集計をもとに「他の接続へ移したら費用と時間はどれくらいか」を並べて比較。AWS S3 はストレージクラスも選べる
 - **接続ごとの権限** — 「一覧は見せるがダウンロードと README 書き戻しは禁止」のように、接続単位で操作を絞れる
+- **Dataset Lineage** — OpenLineageの`Dataset → Job → Dataset`と、版ごとの`DatasetVersion → Run → DatasetVersion`をReact Flowで辿る
+- **認証とRBAC** — Local User / OIDC SSO、Viewer・Curator・Operator・Admin、監査ログ
+- **Pipeline API key** — namespaceを限定したService Account keyを一度だけ表示して発行
 
 ---
 
 ### アクセス
 
-研究室 LAN / VPN 内から、ダッシュボードの URL をブラウザで開きます (URL は管理者に確認。例: `http://<ホスト>/`)。**ログインはありません** (LAN / VPN 境界が前提 → [セキュリティ](#セキュリティ))。
+ダッシュボードのURLをブラウザで開き、SSOまたは管理者が作成したLocal Userでログインします。`AUTH_MODE=disabled`の既存LAN環境ではログイン画面を出しません。
 
 上部のタブで **Home / Storage / Settings** を切り替えます。
 
@@ -148,6 +151,17 @@ AWS の料金 API から取得して DB にキャッシュしています。脚�
 
 これらは脚注の「一部の値は料金 API から取れないため手入力です」を開くと、何を手で持っているか・いつ一次ソースで確認したか・出典が読めます。候補の行を開けば、その移動先の単価が手入力かどうかも出ます。実際の契約単価があれば **接続の設定でストレージ単価を上書き**してください (そちらが優先されます)。
 
+### 9. Dataset Lineage
+
+**Lineage**でnamespaceとDataset/Job名を指定すると、MarquezのOpenLineage projectionをグラフ表示します。ノードを選ぶとRegistry正本の版、manifest/hash、保存場所、Git SHA、container、config、model、metricsを確認できます。
+
+- logical表示: `Dataset → Job → Dataset`
+- versions表示: 明示したDatasetVersion UUIDから`Version → Run → Version`
+- 「最新らしい版」は推測しません。版表示には明示version IDが必要です
+- Registryが正本で、Marquez停止中は警告を表示します。MadoからMarquezへ直接書き込みません
+
+Adminの**Access**ではLocal UserとService Accountを作成し、`lineage:write`と許可namespaceを持つkeyを発行できます。keyの秘密部分は発行時に一度だけ表示されます。
+
 ### バージョン確認
 
 **Settings** の一番下 **About** に、バージョン・稼働中のコミット (GitHub リンク) ・リポジトリが表示されます。
@@ -191,6 +205,12 @@ dev の DB パスワードは未設定なら既定値 (`postgres` / `CHANGEME`) 
 | `DASHBOARD_PASSWORD` | prod:yes / dev:no | `dashboard_rw` / `dashboard_ro` のパスワード。**`DATABASE_URL_*` のパスワードと一致必須**。dev 既定 `CHANGEME` |
 | `ENCRYPTION_KEY` | yes | `storage_connections` の S3 認証情報を AES-256-GCM で暗号化するキー (32 byte hex) |
 | `ALLOWED_ORIGINS` | yes | CSRF 防御。write 系で許容する Origin (カンマ区切り)。dev: `http://localhost:5173` / prod: ダッシュボードを開く URL |
+| `AUTH_MODE` | no | `disabled` / `local` / `oidc` / `hybrid`。外部公開ではdisabled禁止 |
+| `AUTH_COOKIE_SECURE` | no | HTTPS本番は`true`必須。`__Host-` session cookieを使う |
+| `OIDC_*` | oidc/hybrid | issuer、client ID/secret、callback URL、表示label |
+| `DATASET_REGISTRY_URL` | lineage | Dataset Registry API URL |
+| `DATASET_REGISTRY_TOKEN` | lineage | Mado→Registry内部Bearer token。Pipeline keyとは別物 |
+| `MARQUEZ_URL` | lineage | read-onlyで参照するMarquez URL |
 | `PREVIEW_TEXT_LIMIT` | no | テキストプレビュー最大バイト (default 65536) |
 | `PREVIEW_TAR_ENTRY_LIMIT` | no | tar 内 1 ページのエントリ最大数 (default 200) |
 | `PREVIEW_TARXZ_BYTE_LIMIT` | no | tar.xz の解凍バイト上限 (default 256MiB) |
@@ -213,6 +233,17 @@ dev の DB パスワードは未設定なら既定値 (`postgres` / `CHANGEME`) 
 
 > ⚠ この機能は `db/migrations/020_pricing_cache.sql` を使います。**既存の DB には手で適用が必要**です ([`db/README.md`](db/README.md) の「Applying a migration to an existing database」)。
 
+### 認証とLineageの初期化
+
+既存DBには、コードを起動する前に`021_auth.sql`と`022_lineage_bindings.sql`を適用します。Local Userを使う場合の初期Adminは対話的に作成します（パスワードを引数やshell historyへ残しません）。既定のusernameは`admin`で、初回ログイン時にパスワード変更が必須です。
+
+```bash
+docker compose -f compose.prod.yaml exec api-internal \
+  npm run auth:bootstrap-admin -- --username admin
+```
+
+Pipelineは`POST /api/openlineage/v1/lineage`へService Account keyをBearer送信します。Madoがprofile/scope/namespaceを検証し、keyを除いたprincipal envelopeをRegistryへ転送します。
+
 ### 本番デプロイ
 
 ```bash
@@ -231,13 +262,15 @@ dev の DB パスワードは未設定なら既定値 (`postgres` / `CHANGEME`) 
 
 ## セキュリティ
 
-このダッシュボードは **「LAN / VPN 境界に守られた環境下で使う社内アプリ」** 前提で設計されています:
+このダッシュボードは認証を備えていますが、公開入口のTLSとネットワーク制御は引き続き必要です:
 
-- **インターネットには出さない**。LAN / VPN 内であればブラウザ向け API は誰でも到達でき、書き込み系も認証なし (オナーシステム)。
+- **外部公開前にHTTPS必須**。現行compose.prodはHTTP `:80`のままなので、そのままInternetへ公開しません。TLS終端後に`AUTH_COOKIE_SECURE=true`と`AUTH_MODE=local|oidc|hybrid`を設定します。
+- Browser sessionとPipeline Service Account keyを分離し、API keyはhashだけを保存します。
+- RBACと接続capabilityを重ね、認証・権限変更・key発行を監査ログへ保存します（password/token/event本体は記録しません）。
 - **`ENCRYPTION_KEY`** で `storage_connections` の S3 認証情報を保存時暗号化 (AES-256-GCM)。DB ダンプだけ漏れても解読不能。
 - **CSRF 防御**: write 系 (POST/PUT/DELETE) は `ALLOWED_ORIGINS` と Origin/Referer を照合し、不一致なら 403。
 - **PG ロール分離**: ブラウザ由来の経路は `dashboard_rw` / `dashboard_ro` を使い分け、Postgres レベルで `DROP TABLE` 等を防ぐ。
-- **接続ごとの権限は「誤操作の防止」**であって認証ではありません。API 側でも 403 で止めますが、Settings から誰でも戻せます。悪意ある利用者を想定した境界は依然として LAN / VPN です。
+- **接続ごとのcapability**はRBACとは別層です。Adminであっても接続側で無効なdownload等は実行できません。
 
 ---
 
@@ -245,7 +278,7 @@ dev の DB パスワードは未設定なら既定値 (`postgres` / `CHANGEME`) 
 
 ### アーキテクチャ
 
-dev / prod 共通で 4 サービス。dev は Vite dev server で HMR、prod は nginx で静的配信 + リバプロ。media-worker は api-internal と同じコードベース (+ ffmpeg) を持つ別コンテナで、host には公開せず compose ネットワーク内でのみ到達可能。
+dev / prodとも、ブラウザsession用`api-internal`とPipeline key用`api-lineage`を別processにします。Dataset metadataの正本はRegistry、Marquezはoutboxから再構築できるprojectionです。
 
 ```
                  ┌─ docker compose ──────────────────────────────┐
@@ -253,6 +286,8 @@ Browser ─:5173 ─►│ front (vite dev / dev)                        │
    または :80    │   または                                      │
                  │ nginx (静的 + リバプロ / prod)                │
                  │   └─► /api/internal/* → api-internal (Hono)   │
+                 │   └─► /api/auth/*     → api-internal          │
+Pipeline ───────►│   └─► /api/openlineage/* → api-lineage        │
                  │                              ├─► media-worker │
                  │                              │    (ffmpeg)    │
                  │                          postgres             │
@@ -265,6 +300,7 @@ Browser ─:5173 ─►│ front (vite dev / dev)                        │
 | `front` | `vite dev` (HMR) | (なし、nginx に焼き込み) |
 | `nginx` | (なし、Vite proxy が代替) | 静的配信 + `/api/internal/*` リバプロ |
 | `api-internal` | `tsx watch internal.ts` | `node dist/internal.js` |
+| `api-lineage` | `tsx watch lineage.ts` | `node dist/lineage.js` |
 | `media-worker` | `tsx watch worker.ts` | `node dist/worker.js` |
 | `postgres` | postgres:16-alpine (`127.0.0.1:5432`) | postgres:16-alpine (compose 内部のみ) |
 
@@ -301,3 +337,9 @@ cd front && npm test && npm run lint
 ## クレジット
 
 - ロゴ (`front/public/mado-icon.png`): "Window" icon by [Inmotus Design](https://icons8.com/icon/set/window/external-others-inmotus-design) on [Icons8](https://icons8.com/)。Icons8 の無料利用規約により attribution を明記。
+
+---
+
+## License
+
+Mado is licensed under the [Apache License 2.0](LICENSE).
