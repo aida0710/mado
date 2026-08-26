@@ -28,6 +28,7 @@ import { mountStorageTagsRoutes } from './routes/storage-tags.js'
 import { mountSettingsRoutes } from './routes/settings.js'
 import { createAuthStore } from './lib/auth-store.js'
 import { createAuditWriter } from './lib/audit.js'
+import { auditActivity } from './lib/audit-activity.js'
 import { createServiceAccountStore } from './lib/auth-api-keys.js'
 import { createOidcProvider } from './lib/auth-oidc.js'
 import { requireSession } from './lib/auth-middleware.js'
@@ -120,6 +121,8 @@ if (authEnabled) {
     idleSeconds: env.AUTH_SESSION_IDLE_SECONDS,
     cookieName: env.AUTH_COOKIE_SECURE ? '__Host-mado_session' : 'mado_session',
   }))
+  // 認証済みrequestの拒否・失敗も残せるよう、権限checkより先に監査する。
+  api.use('*', auditActivity(audit))
   // すべてのbuilt-in roleが持つbaseline。Roleなしuserへの意図しない公開を防ぐ。
   api.use('*', requirePermission('storage:read'))
 
@@ -132,6 +135,7 @@ if (authEnabled) {
   api.on('POST', '/tags', requirePermission('content:write'))
   api.on(['PUT', 'DELETE'], '/tags/:id', requirePermission('content:write'))
   api.on(['PUT', 'DELETE'], '/storage/:connId/favorites/:bucket', requirePermission('content:write'))
+  api.on(['PUT', 'DELETE'], '/storage/:connId/tags', requirePermission('content:write'))
   api.on('PUT', '/settings/:key', requirePermission('settings:manage'))
   api.on('POST', '/storage/:connId/scan', requirePermission('jobs:operate'))
   api.on('POST', '/pricing/refresh', requirePermission('jobs:operate'))

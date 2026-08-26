@@ -28,19 +28,22 @@ export function mountAuditRoutes(app: Hono, deps: AuditRoutesDeps): void {
       values.push(value)
       where.push(sql.replace('?', `$${values.length}`))
     }
-    if (q.beforeId !== undefined) add('id < ?', q.beforeId)
-    if (q.action !== undefined) add('action = ?', q.action)
-    if (q.outcome !== undefined) add('outcome = ?', q.outcome)
-    if (q.actorUserId !== undefined) add('actor_user_id = ?', q.actorUserId)
-    if (q.actorServiceAccountId !== undefined) add('actor_service_account_id = ?', q.actorServiceAccountId)
+    if (q.beforeId !== undefined) add('e.id < ?', q.beforeId)
+    if (q.action !== undefined) add('e.action = ?', q.action)
+    if (q.outcome !== undefined) add('e.outcome = ?', q.outcome)
+    if (q.actorUserId !== undefined) add('e.actor_user_id = ?', q.actorUserId)
+    if (q.actorServiceAccountId !== undefined) add('e.actor_service_account_id = ?', q.actorServiceAccountId)
     values.push(q.limit + 1)
     const r = await deps.pool.query(
-      `SELECT id, occurred_at, request_id, actor_type, actor_user_id,
-              actor_service_account_id, action, resource_type, resource_id,
-              outcome, ip_address, user_agent, details
-         FROM audit_events
+      `SELECT e.id, e.occurred_at, e.request_id, e.actor_type, e.actor_user_id,
+              e.actor_service_account_id, e.action, e.resource_type, e.resource_id,
+              e.outcome, e.ip_address, e.user_agent, e.details,
+              COALESCE(u.display_name, sa.name, e.actor_type) AS actor_label
+         FROM audit_events e
+         LEFT JOIN auth_users u ON u.id = e.actor_user_id
+         LEFT JOIN service_accounts sa ON sa.id = e.actor_service_account_id
         ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
-        ORDER BY id DESC LIMIT $${values.length}`,
+        ORDER BY e.id DESC LIMIT $${values.length}`,
       values,
     )
     const hasMore = r.rows.length > q.limit
