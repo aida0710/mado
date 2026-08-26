@@ -253,9 +253,8 @@ body {
 .access-tabs__link:hover { color: var(--ink-12); }
 .access-tabs__link.is-active { border-bottom-color: var(--ink-11); color: var(--ink-12); font-weight: 700; }
 .access-content { min-width: 0; }
-.admin-card { min-width: 0; border-top: 1px solid var(--ink-11); padding: 22px 0 0; background: transparent; }
+.admin-card { min-width: 0; background: transparent; }
 .admin-card--standalone { margin-top: 0; }
-.admin-card h3 { margin: 0 0 18px; font-family: var(--font-serif); font-size: 22px; font-weight: 500; }
 .admin-list { display: grid; border-top: 1px solid var(--rule); }
 .admin-list > div { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 11px 0; border-bottom: 1px solid var(--rule); font-size: 12px; }
 .admin-list span { display: grid; gap: 3px; }
@@ -278,8 +277,7 @@ body {
 .admin-secret strong { flex-basis: 100%; }
 .admin-secret code { min-width: 0; flex: 1; overflow-wrap: anywhere; user-select: all; }
 .admin-audit { margin-top: 0; }
-.admin-audit__head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; }
-.admin-audit__head h3 { margin-bottom: 12px; }
+.admin-audit__actions { display: flex; justify-content: flex-end; margin-bottom: 10px; }
 .admin-audit__list { border-top: 1px solid var(--rule); }
 .admin-audit__list article { display: grid; grid-template-columns: 145px 130px minmax(150px, 1fr) minmax(110px, 1fr) 62px; gap: 12px; align-items: baseline; padding: 9px 0; border-bottom: 1px solid var(--rule); font-size: 11.5px; }
 .admin-audit__list time, .admin-audit__list code { color: var(--ink-7); font: 10.5px/1.4 var(--font-mono); overflow-wrap: anywhere; }
@@ -297,7 +295,6 @@ body {
 .account-signout { margin-top: 42px; padding-top: 14px; border-top: 1px solid var(--rule); }
 @media (max-width: 780px) {
   .admin-grid { grid-template-columns: 1fr; gap: 44px; }
-  .admin-card { padding-top: 18px; }
   .admin-audit__list article { grid-template-columns: 1fr auto; gap: 4px 12px; padding: 12px 0; }
   .admin-audit__list time, .admin-audit__list code { grid-column: 1 / -1; }
   .admin-audit__list em { grid-column: 2; grid-row: 2; }

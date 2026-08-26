@@ -131,7 +131,6 @@ function UsersPage() {
 
   return (
     <section className="admin-card admin-card--standalone">
-      <h3>Local Users</h3>
       {error && <p className="error" role="alert">{error}</p>}
       {notice && <div className="admin-notice">{notice}</div>}
       <div className="admin-list">{users.map(user => (
@@ -222,7 +221,6 @@ function ServiceAccountsPage() {
 
   return (
     <section className="admin-card admin-card--standalone">
-      <h3>Pipeline Service Accounts</h3>
       {error && <p className="error" role="alert">{error}</p>}
       {notice && <div className="admin-notice">{notice}</div>}
       {secret && (
@@ -238,8 +236,8 @@ function ServiceAccountsPage() {
       ))}</div>
       <div className="admin-forms-grid">
         <form className="admin-form" onSubmit={createAccount}>
-          <h4>Accountを追加</h4>
-          <label className="admin-field"><span>Account名</span><input name="name" placeholder="例: nemo-curator-production" required /></label>
+          <h4>Service Accountを追加</h4>
+          <label className="admin-field"><span>Service Account名</span><input name="name" placeholder="例: nemo-curator-production" required /></label>
           <label className="admin-field"><span>用途（任意）</span><input name="description" placeholder="例: 音声前処理の本番Pipeline" /></label>
           <button type="submit">作成</button>
         </form>
@@ -302,8 +300,7 @@ function AuditPageView() {
 
   return (
     <section className="admin-card admin-card--standalone admin-audit">
-      <div className="admin-audit__head">
-        <h3>監査ログ</h3>
+      <div className="admin-audit__actions">
         <button type="button" className="ghost" onClick={() => void reload()}>更新</button>
       </div>
       {error && <p className="error" role="alert">{error}</p>}
