@@ -61,6 +61,14 @@ export function classifyActivity(method: string, pathname: string): Activity | n
   if (verb === 'POST' && p[0] === 'jobs' && p[1] && p[2] === 'cancel') {
     return { action: 'job.cancel', resourceType: 'job', resourceId: decoded(p[1]) }
   }
+  if (verb === 'POST' && p[0] === 'lineage' && p[1] === 'curation') {
+    const kind = p[2] === 'datasets' ? 'dataset' : p[2] === 'locations' ? 'location'
+      : p[2] === 'runs' ? 'run' : null
+    if (kind) return {
+      action: `lineage.${kind}.register`, resourceType: kind, resourceId: null,
+      dedicatedSuccessAudit: true,
+    }
+  }
   // These routes already record successful mutations with richer details.
   if (p[0] === 'users' && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(verb)) {
     return { action: 'user.manage', resourceType: 'user', resourceId: decoded(p[1]), dedicatedSuccessAudit: true }

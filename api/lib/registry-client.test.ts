@@ -102,4 +102,19 @@ describe('Registry client', () => {
     expect(detail.versions[0].manifestUri).toBe('s3://raw/manifest.jsonl')
     expect(detail.versions[0].locations[0].isPrimary).toBe(true)
   })
+
+  it('手動登録はinternal credential付きの専用endpointへ送る', async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(new Response(JSON.stringify({
+      dataset: { id: 'd1' }, version: { id: 'v1' },
+    }), { status: 201, headers: { 'Content-Type': 'application/json' } }))
+    const client = createRegistryClient({ baseUrl: 'http://registry', token: 'secret', fetch })
+    await client.registerManualDataset({
+      registration_key: 'manual-1', dataset_id: 'd1', version: { version: 'v1' },
+      locations: [], evidence_refs: [], submitted_by: 'u1',
+    })
+    const [url, init] = fetch.mock.calls[0]
+    expect(String(url)).toBe('http://registry/v1/manual/datasets')
+    expect(init?.method).toBe('POST')
+    expect((init?.headers as Record<string, string>).Authorization).toBe('Bearer secret')
+  })
 })

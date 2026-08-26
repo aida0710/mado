@@ -17,6 +17,9 @@ describe('audit activity', () => {
     expect(classifyActivity('GET', '/api/internal/storage/c1/preview/raw')).toMatchObject({ action: 'storage.download.raw' })
     expect(classifyActivity('GET', '/api/internal/storage/c1/list')).toBeNull()
     expect(classifyActivity('GET', '/api/internal/audit-events')).toBeNull()
+    expect(classifyActivity('POST', '/api/internal/lineage/curation/datasets')).toMatchObject({
+      action: 'lineage.dataset.register', dedicatedSuccessAudit: true,
+    })
   })
 
   it('response outcomeとactorを記録する', async () => {

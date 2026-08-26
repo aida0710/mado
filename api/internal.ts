@@ -41,6 +41,7 @@ import { createRegistryClient } from './lib/registry-client.js'
 import { createMarquezClient } from './lib/marquez-client.js'
 import { createLineageService, type StorageBindingResolver } from './lib/lineage-service.js'
 import { mountLineageRoutes } from './routes/lineage.js'
+import { mountLineageCurationRoutes } from './routes/lineage-curation.js'
 
 // LAN ダッシュボード: 1 つのストリーム teardown 起因の未捕捉例外で全ユーザーの
 // リクエストを巻き添えにしない。root cause は都度直す前提の最後の砦 (ログは大声で)。
@@ -242,6 +243,9 @@ if (env.DATASET_REGISTRY_URL && env.DATASET_REGISTRY_TOKEN && env.MARQUEZ_URL) {
     },
   }
   mountLineageRoutes(api, { service: createLineageService({ registry, marquez, bindings }) })
+  if (authEnabled) {
+    mountLineageCurationRoutes(api, { registry, pool: pools.ro, audit })
+  }
 } else {
   api.all('/lineage/*', c => c.json({ error: 'lineage integration is not configured' }, 503))
 }

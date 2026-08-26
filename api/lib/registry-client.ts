@@ -39,6 +39,36 @@ export interface RegistrySearchResponse {
   totalCount: number
 }
 
+export interface RegistryManualLocationInput {
+  uri: string
+  storage_kind: string
+  storage_system_key: string
+  storage_system_kind: string
+  storage_endpoint: string | null
+  region: string | null
+  bucket: string
+  status: 'available' | 'archived' | 'missing' | 'deleted' | 'unknown'
+  is_primary: boolean
+  metadata: Record<string, unknown>
+}
+
+export interface RegistryManualDatasetInput {
+  registration_key: string
+  dataset_id?: string
+  dataset?: Record<string, unknown>
+  version: Record<string, unknown>
+  locations: RegistryManualLocationInput[]
+  source?: Record<string, unknown>
+  processing?: Record<string, unknown>
+  evidence_refs: string[]
+  submitted_by: string
+}
+
+export interface RegistryManualLineageInput extends Record<string, unknown> {
+  run_key: string
+  submitted_by: string
+}
+
 export interface RegistryClient {
   ingestOpenLineage(
     event: OpenLineageEvent,
@@ -62,6 +92,14 @@ export interface RegistryClient {
     depth: number,
   ): Promise<VersionLineageGraph>
   getProjectionStatus(): Promise<LineageProjectionStatus>
+  registerManualDataset(input: RegistryManualDatasetInput): Promise<Record<string, unknown>>
+  registerManualLocation(input: {
+    version_id: string
+    location: RegistryManualLocationInput
+    evidence_refs: string[]
+    submitted_by: string
+  }): Promise<Record<string, unknown>>
+  registerManualLineage(input: RegistryManualLineageInput): Promise<Record<string, unknown>>
 }
 
 export interface RegistryClientOptions {
@@ -356,6 +394,24 @@ export function createRegistryClient(options: RegistryClientOptions): RegistryCl
         oldestPendingAt: text(row.oldestPendingAt ?? row.oldest_pending_at),
         ...(typeof row.message === 'string' ? { message: row.message } : {}),
       }
+    }),
+
+    registerManualDataset: input => request('/v1/manual/datasets', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    }),
+
+    registerManualLocation: input => request('/v1/manual/locations', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    }),
+
+    registerManualLineage: input => request('/v1/manual/lineage', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
     }),
   }
 }
