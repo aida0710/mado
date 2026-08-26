@@ -331,8 +331,32 @@ credentialはMadoのConnectionだけが保持し、Registryへは保存しませ
 
 ## 4. 既存データをbackfillする
 
-過去データは実行時のOpenLineage eventがないため、Registry用のidempotent seed scriptで登録します。
-Registry APIはCompose bridge内だけに置き、外部公開しません。
+過去データは実行時のOpenLineage eventがないため、Madoの`Lineage → 手動で登録`から
+根拠を確認できた範囲を登録します。画面を利用できるのは`lineage:curate`権限を持つ
+CuratorまたはAdminです。Madoは認証と監査を行い、Compose bridge内のRegistry APIへ
+1回のtransactionとして保存します。Registry APIは外部公開しません。
+
+### 画面の3つの使い分け
+
+| 画面 | 使う場面 | 作られる記録 |
+|---|---|---|
+| Dataset | 初めて台帳へ載せる、または既存Datasetへ新しい版を足す | Dataset、Version、任意の保存場所・Source・処理履歴 |
+| 保存場所 | 同じ内容を別のS3等へコピーした | 既存VersionにStorageLocationだけを追加 |
+| 処理履歴 | 入力版と出力版は登録済みで、過去の処理関係だけを足す | Transformationと完了済みRun |
+
+Dataset登録では、Sourceと処理履歴を同時に登録できます。購入データなら購入先をSourceにし、
+クローリングならWeb site、feed、外部DB等をSourceにします。保存場所を入力する場合は、先に
+`Settings → Connections`で接続を作り、Registry storage systemとのbindingを済ませてください。
+
+手動登録した処理は`historical-lineage-assertion`として保存されます。正確な実行時刻が不明なら
+「不明」のまま保存され、現在時刻を過去の実行時刻として捏造しません。同じVersionを1つのRunの
+入力と出力へ同時に指定することもできません。
+
+登録成功・失敗はAuditへ`lineage.dataset.register`、`lineage.location.register`、
+`lineage.run.register`として残ります。登録済みの不変なVersionやRunを画面から上書き・削除する
+機能はありません。訂正が必要なら、証拠を確認して新しいVersionまたは新しいRunとして登録します。
+
+大量の既存データを反復可能に投入する場合だけ、Registry用のidempotent seed scriptを使います。
 
 ### 登録順序
 
@@ -344,7 +368,7 @@ Registry APIはCompose bridge内だけに置き、外部公開しません。
 6. 根拠があるinput/outputだけをRunへ付ける。
 7. Runを`COMPLETE`、`FAIL`または`ABORT`で終了する。
 
-seed scriptは`source_key`、`dataset_key`、`namespace/name`、Version名、`transformation_key`、
+画面またはseed scriptでは`source_key`、`dataset_key`、`namespace/name`、Version名、`transformation_key`、
 `run_key`を固定し、再実行しても重複しないようにします。先に一覧を取得し、存在すれば更新またはskipします。
 
 過去の正確な実行時刻、Git SHA、model revisionが分からない場合は捏造しません。例えばmetadataへ次のように残します。
