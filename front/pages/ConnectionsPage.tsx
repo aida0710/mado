@@ -233,6 +233,8 @@ export default function ConnectionsPage() {
         <h2>Settings</h2>
       </header>
 
+      <SignatureSettings />
+
       <section className="mt-7">
         <div
           className="mb-3 flex flex-wrap items-baseline justify-between gap-3 pb-2"
@@ -357,8 +359,6 @@ export default function ConnectionsPage() {
       </section>
 
       {tagsEnabled && <TagsSettings />}
-
-      <SignatureSettings />
 
       <FeatureSettings />
 

@@ -1,5 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react'
-import { beforeEach, describe, expect, it } from 'vitest'
+import userEvent from '@testing-library/user-event'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { AuthContext, type AuthContextValue } from '../lib/auth-context'
 import { EDITOR_NAME_KEY } from '../lib/editorName'
 import { SignatureSettings } from './SignatureSettings'
 
@@ -12,42 +14,61 @@ describe('SignatureSettings', () => {
     expect(screen.getByLabelText('署名名')).toHaveValue('tanaka')
   })
 
-  it('入力欄から離れると保存する', () => {
+  it('保存ボタンで端末署名を保存する（認証無効時の互換動作）', async () => {
+    const user = userEvent.setup()
     render(<SignatureSettings />)
     const input = screen.getByLabelText('署名名')
     fireEvent.change(input, { target: { value: 'sato' } })
-    fireEvent.blur(input)
+    await user.click(screen.getByRole('button', { name: '保存' }))
 
     expect(localStorage.getItem(EDITOR_NAME_KEY)).toBe('sato')
     expect(screen.getByText('保存しました')).toBeInTheDocument()
   })
 
-  it('Enter でも保存する', () => {
+  it('Enterでも保存する', async () => {
+    const user = userEvent.setup()
     render(<SignatureSettings />)
     const input = screen.getByLabelText('署名名')
     fireEvent.change(input, { target: { value: 'suzuki' } })
-    fireEvent.keyDown(input, { key: 'Enter' })
+    await user.type(input, '{Enter}')
 
     expect(localStorage.getItem(EDITOR_NAME_KEY)).toBe('suzuki')
   })
 
-  // 空にしたらキーごと消す。空文字が残ると「設定済み」と区別がつかない。
-  it('空にすると設定を消す', () => {
-    localStorage.setItem(EDITOR_NAME_KEY, 'tanaka')
-    render(<SignatureSettings />)
-    const input = screen.getByLabelText('署名名')
-    fireEvent.change(input, { target: { value: '   ' } })
-    fireEvent.blur(input)
-
-    expect(localStorage.getItem(EDITOR_NAME_KEY)).toBeNull()
-  })
-
-  it('前後の空白は落として保存する', () => {
+  it('前後の空白は落として保存する', async () => {
+    const user = userEvent.setup()
     render(<SignatureSettings />)
     const input = screen.getByLabelText('署名名')
     fireEvent.change(input, { target: { value: '  aida  ' } })
-    fireEvent.blur(input)
+    await user.click(screen.getByRole('button', { name: '保存' }))
 
     expect(localStorage.getItem(EDITOR_NAME_KEY)).toBe('aida')
+  })
+
+  it('認証時はアカウント署名をAPIへ保存して再読込する', async () => {
+    const reload = vi.fn().mockResolvedValue(undefined)
+    const auth: AuthContextValue = {
+      enabled: true,
+      user: {
+        id: 'user-1', username: 'aida', email: null, displayName: '相田',
+        signatureName: '旧署名', roles: ['admin'], permissions: [], mustChangePassword: false,
+      },
+      logout: async () => {},
+      reload,
+    }
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{}', { status: 200 }))
+    const user = userEvent.setup()
+    render(<AuthContext.Provider value={auth}><SignatureSettings /></AuthContext.Provider>)
+
+    const input = screen.getByLabelText('署名名')
+    await user.clear(input)
+    await user.type(input, '新しい署名')
+    await user.click(screen.getByRole('button', { name: '保存' }))
+
+    expect(fetchSpy).toHaveBeenCalledWith('/api/auth/profile', expect.objectContaining({
+      method: 'PUT', body: JSON.stringify({ signatureName: '新しい署名' }),
+    }))
+    expect(reload).toHaveBeenCalledOnce()
+    expect(localStorage.getItem(EDITOR_NAME_KEY)).toBeNull()
   })
 })

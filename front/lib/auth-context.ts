@@ -5,6 +5,7 @@ export interface AuthUser {
   username: string | null
   email: string | null
   displayName: string
+  signatureName: string
   roles: string[]
   permissions: string[]
   mustChangePassword: boolean

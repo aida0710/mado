@@ -146,8 +146,8 @@ body {
     padding-bottom: 0 !important;
   }
   .mado-nav-row { width: 100%; }
-  .mado-account {
-    display: grid;
+  .mado-logout {
+    display: inline-flex;
     position: absolute;
     top: 20px;
     right: 0;
@@ -190,8 +190,8 @@ body {
 .auth-form button:disabled { opacity: .55; cursor: default; }
 .auth-splash { min-height: 100vh; display: grid; place-items: center; font-family: var(--font-serif); font-size: 28px; color: var(--ink-10); }
 .auth-splash--error { padding: 32px; font-family: var(--font-sans); font-size: 13px; color: var(--danger, #a33); }
-.mado-account { display: grid; width: 30px; height: 30px; place-items: center; border: 1px solid var(--rule-strong); border-radius: 50%; background: transparent; color: var(--ink-9); font-size: 11px; font-weight: 700; cursor: pointer; }
-.mado-account:hover { border-color: var(--ink-8); color: var(--ink-12); }
+.mado-logout { align-items: center; min-height: 30px; padding: 0 1px 2px; border: 0; border-bottom: 1px solid var(--rule-strong); background: transparent; color: var(--ink-8); font-size: 10.5px; font-weight: 600; letter-spacing: .08em; cursor: pointer; }
+.mado-logout:hover { border-color: var(--ink-10); color: var(--ink-12); }
 @media (max-width: 560px) {
   .auth-page { place-items: start center; padding: 46px 22px 40px; }
   .auth-card { padding: 0; border: 0; background: transparent; }
@@ -221,9 +221,30 @@ body {
 .admin-secret { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
 .admin-secret strong { flex-basis: 100%; }
 .admin-secret code { min-width: 0; flex: 1; overflow-wrap: anywhere; user-select: all; }
+.admin-audit { margin-top: 48px; }
+.admin-audit__head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; }
+.admin-audit__head h3 { margin-bottom: 12px; }
+.admin-audit__list { border-top: 1px solid var(--rule); }
+.admin-audit__list article { display: grid; grid-template-columns: 145px 130px minmax(150px, 1fr) minmax(110px, 1fr) 62px; gap: 12px; align-items: baseline; padding: 9px 0; border-bottom: 1px solid var(--rule); font-size: 11.5px; }
+.admin-audit__list time, .admin-audit__list code { color: var(--ink-7); font: 10.5px/1.4 var(--font-mono); overflow-wrap: anywhere; }
+.admin-audit__list em { justify-self: end; font: 600 9px/1 var(--font-mono); text-transform: uppercase; color: var(--ink-7); }
+.admin-audit__list article[data-outcome="denied"] em, .admin-audit__list article[data-outcome="failure"] em { color: var(--danger); }
+.admin-audit__more { margin-top: 14px; }
+.account-summary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 0 0 10px; border-top: 1px solid var(--rule); }
+.account-summary > div { padding: 10px 4px; border-bottom: 1px solid var(--rule); }
+.account-summary dt { color: var(--ink-7); font-size: 10px; }
+.account-summary dd { margin: 3px 0 0; font-size: 12.5px; }
+.account-password { margin-top: 16px; border-top: 1px solid var(--rule); padding-top: 12px; }
+.account-password summary { width: fit-content; color: var(--ink-8); cursor: pointer; font-size: 11.5px; }
+.account-password .admin-form { max-width: 430px; margin-top: 16px; }
+.account-password__notice { color: var(--ink-7); font-size: 12px; }
 @media (max-width: 780px) {
   .admin-grid { grid-template-columns: 1fr; gap: 44px; }
   .admin-card { padding-top: 18px; }
+  .admin-audit__list article { grid-template-columns: 1fr auto; gap: 4px 12px; padding: 12px 0; }
+  .admin-audit__list time, .admin-audit__list code { grid-column: 1 / -1; }
+  .admin-audit__list em { grid-column: 2; grid-row: 2; }
+  .account-summary { grid-template-columns: 1fr; }
 }
 
 @media (prefers-reduced-motion: reduce) {

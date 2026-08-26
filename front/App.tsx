@@ -118,11 +118,10 @@ export default function App() {
               {auth.enabled && auth.user && (
                 <button
                   type="button"
-                  className="mado-account"
-                  title={`${auth.user.displayName} — ログアウト`}
+                  className="mado-logout"
                   onClick={() => void auth.logout()}
                 >
-                  {auth.user.displayName.slice(0, 1).toUpperCase()}
+                  ログアウト
                 </button>
               )}
             </div>

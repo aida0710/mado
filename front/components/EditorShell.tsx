@@ -3,10 +3,10 @@
 // - 上部: kicker + h2 (タイトル)
 // - 中央: 「左サイドバー (optional) + Monaco エディタ」 — leftPane が undefined のときは
 //   1-pane (エディタのみ全幅)、指定されたときは 2-pane
-// - 下部: 編集者名 input + 保存/キャンセル ボタン + エラー表示
+// - 下部: アカウント署名 (認証時はread-only) + 保存/キャンセル + エラー表示
 //
 // 離脱警告:
-//   - dirty (= 本文 or 編集者名が初期値から変わった) のとき、ブラウザ閉じ・リロード時に
+//   - dirty (= 本文、または認証無効時の編集者名が変わった) のとき、ブラウザ閉じ・リロード時に
 //     beforeunload 警告を出す
 //   - 同サイト内のクライアントナビゲーション (Link 押下、戻る/進む) も React Router の
 //     useBlocker で confirm ダイアログを挟む
@@ -14,6 +14,7 @@
 
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { getEditorName, setEditorName } from '../lib/editorName'
+import { useAuth } from '../lib/auth-context'
 import { useBlocker } from 'react-router-dom'
 
 interface Props {
@@ -33,11 +34,11 @@ export function EditorShell({
   onSave, onSaved, onCancel,
   leftPane, children,
 }: Props) {
+  const auth = useAuth()
   const [body, setBody] = useState(() => initialBody)
-  // 署名欄は常に「自分の署名名」(Settings で設定、この端末だけ) で初期化する。
-  // 以前は前回の編集者名 (サーバーの last_editor) を入れていたため、他人が
-  // 書いた README を開くとその人の名前のまま保存されてしまっていた。
-  const [editor, setEditor] = useState(() => getEditorName())
+  // 認証時はアカウント署名が正本。認証disabledの開発環境だけ従来の端末署名を使う。
+  const [localEditor, setLocalEditor] = useState(() => getEditorName())
+  const editor = auth.user?.signatureName ?? localEditor
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   // モバイル時の sidebar (= ファイル参照ペイン) の開閉。デスクトップでは CSS により
@@ -51,8 +52,8 @@ export function EditorShell({
 
   // 署名欄の初期値は自分の名前なので、editor の比較は「開いた時点の値」と行う。
   // initialEditor (前回の編集者) と比べると、開いただけで dirty になってしまう。
-  const openedEditorRef = useRef(editor)
-  const dirty = body !== initialBody || editor !== openedEditorRef.current
+  const [openedEditor] = useState(editor)
+  const dirty = body !== initialBody || (!auth.enabled && editor !== openedEditor)
 
   // 1. ブラウザレベル離脱 (タブ閉じ / リロード / 外部 URL 遷移)
   useEffect(() => {
@@ -85,8 +86,7 @@ export function EditorShell({
     setError(null)
     try {
       await onSave(body, editor)
-      // 署名欄をその場で書き換えた場合は、それを自分の署名名として覚える。
-      setEditorName(editor)
+      if (!auth.enabled) setEditorName(editor)
       justSavedRef.current = true
       onSaved()
     } catch (e) {
@@ -144,7 +144,8 @@ export function EditorShell({
           <span className="label">編集者名</span>
           <input
             value={editor}
-            onChange={e => setEditor(e.target.value)}
+            onChange={e => setLocalEditor(e.target.value)}
+            readOnly={auth.enabled}
             placeholder="e.g. tanaka"
             autoComplete="nickname"
             spellCheck={false}
