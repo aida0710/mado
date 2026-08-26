@@ -7,7 +7,6 @@ import SettingsPage from './pages/SettingsPage'
 import { PlayerDeckProvider, usePlayerDeck } from './lib/playerDeck'
 import { PinnedPreviewsProvider, usePinnedPreviews } from './lib/pinnedPreviews'
 import { BottomDock } from './components/BottomDock'
-import { useAuth } from './lib/auth-context'
 import './App.css'
 
 // NoteEditPage は Monaco エディタを抱える重量級ページ (~1MB)。
@@ -77,7 +76,6 @@ function MainContent({ children }: { children: ReactNode }) {
 }
 
 export default function App() {
-  const auth = useAuth()
   return (
     <PlayerDeckProvider>
       <PinnedPreviewsProvider>
@@ -114,15 +112,6 @@ export default function App() {
             </Link>
             <div className="mado-nav-row flex items-center gap-5">
               <Tabs />
-              {auth.enabled && auth.user && (
-                <button
-                  type="button"
-                  className="mado-logout"
-                  onClick={() => void auth.logout()}
-                >
-                  ログアウト
-                </button>
-              )}
             </div>
           </header>
 

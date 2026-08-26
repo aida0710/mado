@@ -71,4 +71,23 @@ describe('SignatureSettings', () => {
     expect(reload).toHaveBeenCalledOnce()
     expect(localStorage.getItem(EDITOR_NAME_KEY)).toBeNull()
   })
+
+  it('重複するAccount見出しを出さず、末尾からサインアウトできる', async () => {
+    const logout = vi.fn().mockResolvedValue(undefined)
+    const auth: AuthContextValue = {
+      enabled: true,
+      user: {
+        id: 'user-1', username: 'aida', email: null, displayName: '相田',
+        signatureName: '相田', roles: ['admin'], permissions: [], mustChangePassword: false,
+      },
+      logout,
+      reload: async () => {},
+    }
+    const user = userEvent.setup()
+    render(<AuthContext.Provider value={auth}><SignatureSettings /></AuthContext.Provider>)
+
+    expect(screen.queryByRole('heading', { name: 'Account' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'サインアウト' }))
+    expect(logout).toHaveBeenCalledOnce()
+  })
 })

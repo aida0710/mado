@@ -2,9 +2,6 @@ import { useState, type FormEvent } from 'react'
 import { getEditorName, setEditorName } from '../lib/editorName'
 import { useAuth } from '../lib/auth-context'
 
-const sectionTitleClass =
-  'm-0 text-[10.5px] font-semibold uppercase tracking-[0.22em] text-ink-7'
-
 export function SignatureSettings() {
   const auth = useAuth()
   const [name, setName] = useState(() => auth.user?.signatureName ?? getEditorName())
@@ -73,13 +70,6 @@ export function SignatureSettings() {
 
   return (
     <section className="mt-7">
-      <div
-        className="mb-3 flex items-baseline justify-between gap-3 pb-2"
-        style={{ borderBottom: '1px solid var(--rule)' }}
-      >
-        <h3 className={sectionTitleClass}>Account</h3>
-      </div>
-
       {auth.user && (
         <dl className="account-summary">
           <div><dt>表示名</dt><dd>{auth.user.displayName}</dd></div>
@@ -109,16 +99,23 @@ export function SignatureSettings() {
       </p>
 
       {auth.enabled && (
-        <details className="account-password">
-          <summary>パスワードを変更</summary>
-          <form className="admin-form" onSubmit={changePassword}>
-            <label className="admin-field"><span>現在のパスワード</span><input name="currentPassword" type="password" autoComplete="current-password" required /></label>
-            <label className="admin-field"><span>新しいパスワード（12文字以上）</span><input name="newPassword" type="password" autoComplete="new-password" minLength={12} required /></label>
-            <label className="admin-field"><span>新しいパスワード（確認）</span><input name="confirmation" type="password" autoComplete="new-password" minLength={12} required /></label>
-            <button type="submit" disabled={passwordBusy}>{passwordBusy ? '変更中…' : '変更'}</button>
-          </form>
-          {passwordNotice && <p className="account-password__notice">{passwordNotice}</p>}
-        </details>
+        <>
+          <details className="account-password">
+            <summary>パスワードを変更</summary>
+            <form className="admin-form" onSubmit={changePassword}>
+              <label className="admin-field"><span>現在のパスワード</span><input name="currentPassword" type="password" autoComplete="current-password" required /></label>
+              <label className="admin-field"><span>新しいパスワード（12文字以上）</span><input name="newPassword" type="password" autoComplete="new-password" minLength={12} required /></label>
+              <label className="admin-field"><span>新しいパスワード（確認）</span><input name="confirmation" type="password" autoComplete="new-password" minLength={12} required /></label>
+              <button type="submit" disabled={passwordBusy}>{passwordBusy ? '変更中…' : '変更'}</button>
+            </form>
+            {passwordNotice && <p className="account-password__notice">{passwordNotice}</p>}
+          </details>
+          <div className="account-signout">
+            <button type="button" className="ghost" onClick={() => void auth.logout()}>
+              サインアウト
+            </button>
+          </div>
+        </>
       )}
     </section>
   )
