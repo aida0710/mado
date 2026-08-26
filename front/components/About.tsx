@@ -1,4 +1,5 @@
 import { APP_VERSION, GIT_COMMIT, GIT_DATE, REPO_URL, commitUrl } from '../lib/buildInfo'
+import { SettingsSectionHeader } from './SettingsSectionHeader'
 
 const dtClass = 'text-ink-7'
 const ddClass = 'm-0 text-ink-11'
@@ -11,13 +12,7 @@ export function About() {
 
   return (
     <section className="mt-10">
-      <header className="page-head">
-        <h2>About</h2>
-      </header>
-
-      <p className="m-0 mb-4 text-[13px] leading-relaxed text-ink-9">
-        オブジェクトストレージを横断的にブラウズ、プレビューし、バケット内のディレクトリを適切に管理する社内向けダッシュボード
-      </p>
+      <SettingsSectionHeader title="アプリケーション情報" />
 
       <dl className="m-0 grid w-fit grid-cols-[auto_1fr] gap-x-5 gap-y-2 font-mono text-[12px]">
         <dt className={dtClass}>Version</dt>
