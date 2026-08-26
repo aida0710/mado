@@ -139,12 +139,19 @@ body {
 @media (max-width: 640px) {
   .mado-header {
     display: grid !important;
+    position: relative;
     grid-template-columns: minmax(0, 1fr);
     gap: 12px !important;
     padding-top: 20px !important;
     padding-bottom: 0 !important;
   }
   .mado-nav-row { width: 100%; }
+  .mado-account {
+    display: grid;
+    position: absolute;
+    top: 20px;
+    right: 0;
+  }
   .mado-tabs {
     display: grid !important;
     grid-auto-flow: column;
@@ -190,7 +197,6 @@ body {
   .auth-card__mark { font-size: 32px; }
   .auth-card__eyebrow { margin-top: 28px; }
   .auth-card h1 { font-size: 25px; }
-  .mado-account { display: none; }
 }
 .admin-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 48px; margin-top: 28px; }
 .admin-card { min-width: 0; border-top: 1px solid var(--ink-11); padding: 22px 0 0; background: transparent; }
