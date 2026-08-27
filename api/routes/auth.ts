@@ -4,7 +4,9 @@ import { z } from 'zod'
 import type { AuditWriter } from '../lib/audit.js'
 import type { AuthStore, SessionLifetime } from '../lib/auth-store.js'
 import type { OidcProvider } from '../lib/auth-oidc.js'
+import { OidcAttemptLimitError } from '../lib/auth-oidc.js'
 import { randomToken } from '../lib/auth-crypto.js'
+import { AuthRateLimiter } from '../lib/auth-rate-limit.js'
 import { requirePasswordChangeComplete, requireSession } from '../lib/auth-middleware.js'
 import { SESSION_COOKIE } from '../lib/auth-types.js'
 import { getSessionPrincipal } from '../lib/rbac.js'
@@ -19,6 +21,7 @@ export interface AuthRouteConfig {
   }
   loginFailureThreshold?: number
   loginLockSeconds?: number
+  rateLimiter?: AuthRateLimiter
   oidc?: OidcProvider
   oidcProvisioning?: {
     autoLinkVerifiedEmail: boolean
@@ -96,6 +99,8 @@ export function mountAuthRoutes(app: Hono, deps: AuthRouteDeps): void {
     idleSeconds: deps.config.session.idleSeconds,
     cookieName,
   })
+  const limiter = deps.config.rateLimiter ?? new AuthRateLimiter()
+  const oidcCookieName = deps.config.session.secure ? '__Host-mado_oidc_tx' : 'mado_oidc_tx'
   // 存在しないuserでもArgon2を1回計算し、email列挙のtiming差を小さくする。
   const dummyHash = hashPassword(`not-a-real-password-${randomToken(16)}`)
 
@@ -112,16 +117,32 @@ export function mountAuthRoutes(app: Hono, deps: AuthRouteDeps): void {
     if (!parsed.success) return c.json({ error: 'invalid identifier or password' }, 401)
     const identifier = parsed.data.identifier ?? parsed.data.email!
     const metadata = requestMetadata(c)
-    const credential = await deps.store.getLocalCredential(identifier)
-    const locked = credential?.lockedUntil && credential.lockedUntil.getTime() > Date.now()
-    const valid = await verifyPassword(credential?.passwordHash ?? await dummyHash, parsed.data.password)
-    if (!credential || credential.status !== 'active' || locked || !valid) {
-      if (credential && !locked) {
-        await deps.store.recordFailedLogin(credential.id, threshold, lockSeconds)
-      }
+    const normalizedIdentifier = identifier.trim().toLowerCase()
+    const ipKey = `login:ip:${metadata.ipAddress ?? 'unknown'}`
+    const pairKey = `login:pair:${metadata.ipAddress ?? 'unknown'}:${normalizedIdentifier}`
+    const identifierKey = `login:identifier:${normalizedIdentifier}`
+    if (!limiter.consume(ipKey, 30, 60_000)
+        || !limiter.consume(pairKey, 5, 60_000)
+        || !limiter.consume(identifierKey, 20, 15 * 60_000)) {
       await deps.audit.write({
         actor: { type: 'anonymous' }, action: 'auth.local.login', outcome: 'denied',
-        details: { identifier: identifier.toLowerCase(), reason: locked ? 'locked' : 'invalid' },
+        details: { identifier: normalizedIdentifier, reason: 'rate_limited' }, ...metadata,
+      })
+      c.header('Retry-After', '60')
+      return c.json({ error: 'too many login attempts' }, 429)
+    }
+    const credential = await deps.store.getLocalCredential(identifier)
+    const checked = await limiter.passwordCheck(async () =>
+      verifyPassword(credential?.passwordHash ?? await dummyHash, parsed.data.password))
+    if (!checked.accepted) {
+      c.header('Retry-After', '1')
+      return c.json({ error: 'authentication busy' }, 429)
+    }
+    if (!credential || credential.status !== 'active' || !checked.value) {
+      if (credential) await deps.store.recordFailedLogin(credential.id, threshold, lockSeconds)
+      await deps.audit.write({
+        actor: { type: 'anonymous' }, action: 'auth.local.login', outcome: 'denied',
+        details: { identifier: normalizedIdentifier, reason: 'invalid' },
         ...metadata,
       })
       return c.json({ error: 'invalid identifier or password' }, 401)
@@ -135,6 +156,7 @@ export function mountAuthRoutes(app: Hono, deps: AuthRouteDeps): void {
       )
     }
     await deps.store.recordSuccessfulLogin(credential.id)
+    limiter.reset(pairKey, identifierKey)
     const session = await deps.store.createSession(credential.id, deps.config.session, metadata)
     setSessionCookie(c, session.token, deps.config.session)
     await deps.audit.write({
@@ -146,20 +168,42 @@ export function mountAuthRoutes(app: Hono, deps: AuthRouteDeps): void {
 
   app.get('/oidc/start', async c => {
     if (!deps.config.oidc) return c.json({ error: 'oidc disabled' }, 404)
-    const url = await deps.config.oidc.start(c.req.query('returnTo'))
-    return c.redirect(url.href, 302)
+    const metadata = requestMetadata(c)
+    if (!limiter.consume(`oidc:start:${metadata.ipAddress ?? 'unknown'}`, 20, 60_000)) {
+      c.header('Retry-After', '60')
+      return c.json({ error: 'too many oidc attempts' }, 429)
+    }
+    const existing = getCookie(c, oidcCookieName)
+    const browserBinding = existing && existing.length >= 32 && existing.length <= 256
+      ? existing : randomToken(32)
+    try {
+      const url = await deps.config.oidc.start(c.req.query('returnTo'), browserBinding)
+      setCookie(c, oidcCookieName, browserBinding, {
+        httpOnly: true, secure: deps.config.session.secure, sameSite: 'Lax', path: '/', maxAge: 300,
+      })
+      return c.redirect(url.href, 302)
+    } catch (error) {
+      if (error instanceof OidcAttemptLimitError) {
+        c.header('Retry-After', '300')
+        return c.json({ error: 'too many oidc attempts' }, 429)
+      }
+      throw error
+    }
   })
 
   app.get('/oidc/callback', async c => {
     if (!deps.config.oidc) return c.json({ error: 'oidc disabled' }, 404)
     const metadata = requestMetadata(c)
+    const browserBinding = getCookie(c, oidcCookieName)
+    deleteCookie(c, oidcCookieName, { path: '/', secure: deps.config.session.secure })
     try {
-      const profile = await deps.config.oidc.finish(new URL(c.req.url))
+      if (!browserBinding) throw new Error('oidc browser binding missing')
+      const profile = await deps.config.oidc.finish(new URL(c.req.url), browserBinding)
       const policy = deps.config.oidcProvisioning ?? {
-        autoLinkVerifiedEmail: true, allowedGroups: [], roleMapping: {}, defaultRole: 'viewer' as const,
+        autoLinkVerifiedEmail: false, allowedGroups: [], roleMapping: {}, defaultRole: 'viewer' as const,
       }
-      if (policy.allowedGroups.length > 0
-          && !profile.groups.some(group => policy.allowedGroups.includes(group))) {
+      if (policy.allowedGroups.length === 0
+          || !profile.groups.some(group => policy.allowedGroups.includes(group))) {
         throw new Error('oidc group not allowed')
       }
       const mappedRoles = [...new Set(profile.groups.map(group => policy.roleMapping[group]).filter(Boolean))]

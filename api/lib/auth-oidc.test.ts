@@ -51,7 +51,7 @@ describe('OidcProvider', () => {
       id: 'authentik', label: 'Authentik', issuerUrl: 'https://auth.example/application/o/mado/',
       clientId: 'client', clientSecret: 'secret', redirectUri: 'https://mado.example/api/auth/oidc/callback',
     })
-    const start = await provider.start('/lineage')
+    const start = await provider.start('/lineage', 'browser-binding-value-1234567890')
     expect(start.searchParams.get('state')).toBe('state-value')
     expect(start.searchParams.get('nonce')).toBe('nonce-value')
     expect(start.searchParams.get('code_challenge_method')).toBe('S256')
@@ -64,14 +64,14 @@ describe('OidcProvider', () => {
     expect(stored.rows[0].code_verifier_enc).not.toContain('verifier-value')
 
     const callback = new URL('https://attacker.invalid/callback?code=abc&state=state-value')
-    const profile = await provider.finish(callback)
+    const profile = await provider.finish(callback, 'browser-binding-value-1234567890')
     expect(profile).toMatchObject({
       subject: 'subject-1', returnTo: '/lineage', emailVerified: true, username: 'user',
       groups: ['mado-users', 'mado-admins'], sid: 'session-1',
     })
     // Host header由来URLでなく、設定済みredirect URIをtoken exchangeへ渡す。
     expect(oidcMocks.grant.mock.calls[0][1].origin).toBe('https://mado.example')
-    await expect(provider.finish(callback)).rejects.toThrow(/invalid or expired/)
+    await expect(provider.finish(callback, 'browser-binding-value-1234567890')).rejects.toThrow(/invalid or expired/)
   })
 
   it('RP-Initiated Logout URLにMadoへの戻り先を設定する', async () => {
@@ -89,8 +89,31 @@ describe('OidcProvider', () => {
       id: 'authentik', label: 'Authentik', issuerUrl: 'https://auth.example/',
       clientId: 'client', clientSecret: 'secret', redirectUri: 'https://mado.example/api/auth/oidc/callback',
     })
-    await provider.start('//evil.example')
+    await provider.start('//evil.example', 'browser-binding-value-1234567890')
     const r = await pools.rw.query<{ return_to: string }>('SELECT return_to FROM auth_oidc_attempts')
     expect(r.rows[0].return_to).toBe('/')
   })
+
+  it('callbackを開始browserのbindingに限定する', async () => {
+    const provider = createOidcProvider(pools.rw, crypto, {
+      id: 'authentik', label: 'Authentik', issuerUrl: 'https://auth.example/',
+      clientId: 'client', clientSecret: 'secret', redirectUri: 'https://mado.example/api/auth/oidc/callback',
+    })
+    await provider.start('/', 'correct-browser-binding-1234567890')
+    const callback = new URL('https://mado.example/api/auth/oidc/callback?code=abc&state=state-value')
+    await expect(provider.finish(callback, 'attacker-browser-binding-123456789')).rejects.toThrow(/invalid or expired/)
+    await expect(provider.finish(callback, 'correct-browser-binding-1234567890')).resolves.toMatchObject({ subject: 'subject-1' })
+  })
+
+  it.each(['/\\evil.example', '/%5cevil.example', '/%0d%0aLocation:%20https://evil.example'])(
+    '危険なreturnTo %sをrootへ正規化する', async returnTo => {
+      const provider = createOidcProvider(pools.rw, crypto, {
+        id: 'authentik', label: 'Authentik', issuerUrl: 'https://auth.example/',
+        clientId: 'client', clientSecret: 'secret', redirectUri: 'https://mado.example/api/auth/oidc/callback',
+      })
+      await provider.start(returnTo, `browser-binding-${returnTo}-12345678901234567890`)
+      const r = await pools.rw.query<{ return_to: string }>('SELECT return_to FROM auth_oidc_attempts')
+      expect(r.rows[0].return_to).toBe('/')
+    },
+  )
 })

@@ -138,12 +138,45 @@ describe('auth routes', () => {
         },
       },
     })
-    const response = await oidcApp.request('/oidc/callback?code=ok&state=ok')
+    const started = await oidcApp.request('/oidc/start?returnTo=%2Flineage')
+    const bindingCookie = started.headers.get('set-cookie')!.split(';')[0]
+    const response = await oidcApp.request('/oidc/callback?code=ok&state=ok', {
+      headers: { Cookie: bindingCookie },
+    })
     expect(response.status).toBe(303)
     expect(response.headers.get('location')).toBe('/lineage')
     const linked = await store.getLocalCredential('local-user')
     expect(linked).toMatchObject({ displayName: 'SSO User', roles: ['admin'] })
     expect(linked?.authMethods).toEqual(['local', 'sso'])
+  })
+
+  it('OIDC callbackは開始browser cookieなしでは拒否する', async () => {
+    const oidc: OidcProvider = {
+      id: 'primary', label: 'Authentik', issuer: 'https://auth.example/application/o/mado',
+      start: async () => new URL('https://auth.example/authorize'),
+      finish: async () => ({
+        issuer: 'https://auth.example/application/o/mado', subject: 'subject-1',
+        email: null, emailVerified: false, username: null, displayName: 'SSO User',
+        groups: ['mado-users'], sid: null, returnTo: '/',
+      }),
+      logoutUrl: async () => new URL('https://auth.example/end-session'),
+      matchesIssuer: () => true,
+      verifyBackchannelLogoutToken: async () => { throw new Error('not used') },
+      deleteExpiredAttempts: async () => 0,
+    }
+    const oidcApp = new Hono()
+    mountAuthRoutes(oidcApp, {
+      store, audit,
+      config: {
+        localEnabled: false,
+        session: { idleSeconds: 3600, absoluteSeconds: 7200, secure: false, cookieName: 'mado_session' },
+        oidc,
+        oidcProvisioning: {
+          autoLinkVerifiedEmail: false, allowedGroups: ['mado-users'], roleMapping: {}, defaultRole: 'viewer',
+        },
+      },
+    })
+    expect((await oidcApp.request('/oidc/callback?code=ok&state=ok')).status).toBe(401)
   })
 
   it('Back-channel logoutを一度だけ受理して該当sessionを失効する', async () => {

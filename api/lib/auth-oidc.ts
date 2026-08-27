@@ -41,21 +41,42 @@ interface AttemptRow {
   return_to: string
 }
 
+export class OidcAttemptLimitError extends Error {
+  constructor() {
+    super('too many pending oidc attempts')
+    this.name = 'OidcAttemptLimitError'
+  }
+}
+
 export interface OidcProvider {
   id: string
   label: string
   issuer: string
-  start(returnTo?: string): Promise<URL>
-  finish(callbackUrl: URL): Promise<OidcProfile>
+  start(returnTo: string | undefined, browserBinding: string): Promise<URL>
+  finish(callbackUrl: URL, browserBinding: string): Promise<OidcProfile>
   logoutUrl(): Promise<URL>
   matchesIssuer(value: string): boolean
   verifyBackchannelLogoutToken(token: string): Promise<OidcLogoutClaims>
   deleteExpiredAttempts(): Promise<number>
 }
 
-function safeReturnTo(value: string | undefined): string {
-  if (!value || !value.startsWith('/') || value.startsWith('//') || value.length > 2048) return '/'
-  return value
+export function safeReturnTo(value: string | undefined): string {
+  const unsafe = (candidate: string) => [...candidate].some(char => {
+    const code = char.charCodeAt(0)
+    return char === '\\' || code < 0x20 || code === 0x7f
+  })
+  if (!value || value.length > 2048 || unsafe(value)) return '/'
+  let decoded: string
+  try { decoded = decodeURIComponent(value) } catch { return '/' }
+  if (unsafe(decoded) || decoded.startsWith('//')) return '/'
+  try {
+    const base = new URL('https://mado.invalid/')
+    const resolved = new URL(value, base)
+    if (resolved.origin !== base.origin || !resolved.pathname.startsWith('/')) return '/'
+    return `${resolved.pathname}${resolved.search}${resolved.hash}`
+  } catch {
+    return '/'
+  }
 }
 
 function canonicalIssuer(value: string): string {
@@ -91,17 +112,31 @@ export function createOidcProvider(
     label: cfg.label,
     issuer: issuerId,
 
-    async start(returnTo) {
+    async start(returnTo, browserBinding) {
+      if (browserBinding.length < 32 || browserBinding.length > 256) throw new Error('invalid oidc browser binding')
       const config = await getConfiguration()
       const state = oidc.randomState()
       const nonce = oidc.randomNonce()
       const verifier = oidc.randomPKCECodeVerifier()
       const challenge = await oidc.calculatePKCECodeChallenge(verifier)
+      const bindingHash = sha256(browserBinding)
+      const pending = await pool.query<{ own: string; total: string }>(
+        `SELECT count(*) FILTER (WHERE browser_binding_hash = $1)::text AS own,
+                count(*)::text AS total
+           FROM auth_oidc_attempts
+          WHERE used_at IS NULL AND expires_at > now()`,
+        [bindingHash],
+      )
+      if (Number(pending.rows[0]?.own ?? 0) >= 3 || Number(pending.rows[0]?.total ?? 0) >= 10_000) {
+        throw new OidcAttemptLimitError()
+      }
       await pool.query(
         `INSERT INTO auth_oidc_attempts
-          (state_hash, provider_id, nonce_enc, code_verifier_enc, return_to, expires_at)
-         VALUES ($1, $2, $3, $4, $5, now() + interval '5 minutes')`,
-        [sha256(state), cfg.id, crypto.encrypt(nonce), crypto.encrypt(verifier), safeReturnTo(returnTo)],
+          (state_hash, provider_id, nonce_enc, code_verifier_enc, return_to,
+           browser_binding_hash, expires_at)
+         VALUES ($1, $2, $3, $4, $5, $6, now() + interval '5 minutes')`,
+        [sha256(state), cfg.id, crypto.encrypt(nonce), crypto.encrypt(verifier),
+          safeReturnTo(returnTo), bindingHash],
       )
       return oidc.buildAuthorizationUrl(config, {
         redirect_uri: redirectUri.href,
@@ -114,14 +149,16 @@ export function createOidcProvider(
       })
     },
 
-    async finish(callbackUrl) {
+    async finish(callbackUrl, browserBinding) {
+      if (browserBinding.length < 32 || browserBinding.length > 256) throw new Error('invalid oidc browser binding')
       const state = callbackUrl.searchParams.get('state')
       if (!state || state.length > 512) throw new Error('invalid oidc state')
       const attempt = await pool.query<AttemptRow>(
         `UPDATE auth_oidc_attempts SET used_at = now()
-          WHERE state_hash = $1 AND provider_id = $2 AND used_at IS NULL AND expires_at > now()
+          WHERE state_hash = $1 AND provider_id = $2 AND browser_binding_hash = $3
+            AND used_at IS NULL AND expires_at > now()
           RETURNING nonce_enc, code_verifier_enc, return_to`,
-        [sha256(state), cfg.id],
+        [sha256(state), cfg.id, sha256(browserBinding)],
       )
       const row = attempt.rows[0]
       if (!row) throw new Error('invalid or expired oidc state')

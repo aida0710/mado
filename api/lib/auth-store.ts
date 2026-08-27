@@ -518,6 +518,10 @@ export function createAuthStore(pool: Pool): AuthStore {
           )
           if (match.rows[0]?.deleted_at) throw new Error('verified oidc email belongs to deleted user')
           if (match.rows[0]) {
+            const candidate = await loadUserIncludingDeleted(match.rows[0].id, client)
+            if (!candidate || candidate.roles.some(role => role !== 'viewer')) {
+              throw new Error('privileged local user requires explicit oidc linking')
+            }
             userId = match.rows[0].id
             linkedExisting = true
           }

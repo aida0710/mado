@@ -85,6 +85,17 @@ describe('AuthStore', () => {
     expect(unverified.user.email).toBeNull()
   })
 
+  it('特権Local Userへのemail自動連携を拒否する', async () => {
+    await store.createUser({
+      username: 'admin', email: 'admin@example.com', displayName: 'Admin', roles: ['admin'],
+    })
+    await expect(store.provisionOidcUser({
+      issuer: 'https://auth.example', subject: 'attacker-subject',
+      email: 'admin@example.com', emailVerified: true, username: 'attacker', displayName: 'Attacker',
+      groups: ['mado-users'], autoLinkVerifiedEmail: true, defaultRole: 'viewer',
+    })).rejects.toThrow(/explicit oidc linking/)
+  })
+
   it('OIDC sid/sub単位でsessionを失効しlogout tokenのreplayを拒否する', async () => {
     const user = await store.createUser({ displayName: 'SSO', roles: ['viewer'] })
     const a = await store.createSession(user.id, { idleSeconds: 3600, absoluteSeconds: 7200 }, {}, {
