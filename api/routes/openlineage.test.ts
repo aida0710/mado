@@ -57,11 +57,30 @@ function request(body: unknown, token = 'mado_lin_key.secret'): Request {
 
 describe('OpenLineage ingest route', () => {
   it('Bearerなしを拒否する', async () => {
+    const recordAuthFailure = vi.fn().mockResolvedValue(undefined)
     const app = new Hono()
-    mountOpenLineageRoutes(app, { auth: auth(), registry: registry() })
+    mountOpenLineageRoutes(app, { auth: auth({ recordAuthFailure }), registry: registry() })
     const res = await app.request(OPENLINEAGE_INGEST_PATH, { method: 'POST', body: '{}' })
     expect(res.status).toBe(401)
     expect(res.headers.get('WWW-Authenticate')).toBe('Bearer')
+    expect(recordAuthFailure).toHaveBeenCalledWith(expect.objectContaining({
+      reason: 'missing', tokenPrefix: null,
+    }))
+  })
+
+  it('無効なkeyは安全なprefixだけを監査する', async () => {
+    const recordAuthFailure = vi.fn().mockResolvedValue(undefined)
+    const app = new Hono()
+    mountOpenLineageRoutes(app, {
+      auth: auth({ authenticate: vi.fn().mockResolvedValue(null), recordAuthFailure }),
+      registry: registry(),
+    })
+    const response = await app.request(request(event(), 'mado_lin_abcdefgh12345678.super-secret'))
+    expect(response.status).toBe(401)
+    expect(recordAuthFailure).toHaveBeenCalledWith(expect.objectContaining({
+      reason: 'invalid', tokenPrefix: 'mado_lin_abcdefgh12345678',
+    }))
+    expect(JSON.stringify(recordAuthFailure.mock.calls)).not.toContain('super-secret')
   })
 
   it('Originなしでもservice keyで受け、Registryへだけwriteする', async () => {

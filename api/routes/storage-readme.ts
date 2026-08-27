@@ -102,7 +102,11 @@ export function mountStorageReadmeRoutes(app: Hono, deps: StorageReadmeDeps): vo
         Bucket: bucket, Key, Body: buf, ContentType: 'text/markdown',
       }))
     } catch (e) {
-      return c.json({ error: (e as Error).message }, 500)
+      console.error('storage README write failed', {
+        name: e instanceof Error ? e.name : 'unknown',
+        status: (e as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode,
+      })
+      return c.json({ error: 'storage request failed' }, 500)
     }
 
     // README.md が一覧に現れる / 消えるので、この prefix の一覧キャッシュを捨てる。
@@ -140,7 +144,7 @@ export function mountStorageReadmeRoutes(app: Hono, deps: StorageReadmeDeps): vo
       console.error(JSON.stringify({
         ev: 'storage.readme.meta_failed',
         connId, bucket, prefix, editor,
-        error: (e as Error).message,
+        errorName: e instanceof Error ? e.name : 'unknown',
       }))
       client.release()
       return c.json({ ok: true, meta_stale: true, size_bytes: buf.byteLength })

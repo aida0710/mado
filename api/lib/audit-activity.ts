@@ -1,6 +1,7 @@
-import type { Context, MiddlewareHandler } from 'hono'
+import type { MiddlewareHandler } from 'hono'
 import type { AuditWriter } from './audit.js'
 import { getSessionPrincipal } from './rbac.js'
+import { requestMetadata } from './request-metadata.js'
 
 interface Activity {
   action: string
@@ -33,6 +34,9 @@ export function classifyActivity(method: string, pathname: string): Activity | n
   if (verb === 'PUT' && p[0] === 'notes' && p[1]) {
     return { action: 'note.update', resourceType: 'note', resourceId: decoded(p[1]) }
   }
+  if (verb === 'GET' && p[0] === 'notes' && p[1]) {
+    return { action: 'note.read', resourceType: 'note', resourceId: decoded(p[1]) }
+  }
   if (p[0] === 'tags') {
     if (verb === 'POST' && p.length === 1) return { action: 'tag.create', resourceType: 'tag', resourceId: null }
     if (verb === 'PUT' && p[1]) return { action: 'tag.update', resourceType: 'tag', resourceId: decoded(p[1]) }
@@ -41,6 +45,7 @@ export function classifyActivity(method: string, pathname: string): Activity | n
   if (p[0] === 'storage' && p[1]) {
     const connectionId = decoded(p[1])
     if (verb === 'PUT' && p[2] === 'readme') return { action: 'storage.readme.update', resourceType: 'connection', resourceId: connectionId }
+    if (verb === 'GET' && p[2] === 'readme') return { action: 'storage.readme.read', resourceType: 'connection', resourceId: connectionId }
     if ((verb === 'PUT' || verb === 'DELETE') && p[2] === 'favorites') {
       return { action: verb === 'PUT' ? 'storage.favorite.add' : 'storage.favorite.remove', resourceType: 'storage_path', resourceId: `${connectionId}/${decoded(p[3]) ?? ''}` }
     }
@@ -50,6 +55,9 @@ export function classifyActivity(method: string, pathname: string): Activity | n
     if (verb === 'POST' && p[2] === 'scan') return { action: 'storage.scan.start', resourceType: 'connection', resourceId: connectionId }
     if (verb === 'GET' && p[2] === 'preview' && ['raw', 'tar', 'tar-entry'].includes(p[3] ?? '')) {
       return { action: `storage.download.${p[3]}`, resourceType: 'connection', resourceId: connectionId }
+    }
+    if (verb === 'GET' && p[2] === 'preview' && ['text', 'image'].includes(p[3] ?? '')) {
+      return { action: `storage.preview.${p[3]}`, resourceType: 'connection', resourceId: connectionId }
     }
   }
   if (verb === 'PUT' && p[0] === 'settings' && p[1]) {
@@ -69,6 +77,9 @@ export function classifyActivity(method: string, pathname: string): Activity | n
       dedicatedSuccessAudit: true,
     }
   }
+  if (verb === 'GET' && p[0] === 'lineage') {
+    return { action: 'lineage.read', resourceType: 'lineage', resourceId: p.slice(1).map(decoded).join('/').slice(0, 1024) || null }
+  }
   // These routes already record successful mutations with richer details.
   if (p[0] === 'users' && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(verb)) {
     return { action: 'user.manage', resourceType: 'user', resourceId: decoded(p[1]), dedicatedSuccessAudit: true }
@@ -79,16 +90,6 @@ export function classifyActivity(method: string, pathname: string): Activity | n
   return null
 }
 
-function requestMeta(c: Context) {
-  const requestId = c.req.header('X-Request-Id')
-  return {
-    ipAddress: c.req.header('X-Forwarded-For')?.split(',')[0]?.trim() ?? null,
-    userAgent: c.req.header('User-Agent') ?? null,
-    requestId: requestId && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestId)
-      ? requestId : null,
-  }
-}
-
 export function auditActivity(audit: AuditWriter): MiddlewareHandler {
   return async (c, next) => {
     const activity = classifyActivity(c.req.method, c.req.path)
@@ -96,32 +97,34 @@ export function auditActivity(audit: AuditWriter): MiddlewareHandler {
     const principal = getSessionPrincipal(c)
     if (!principal) return next()
 
-    let thrown = false
+    const metadata = requestMetadata(c)
+    const intentId = await audit.start({
+      actor: { type: 'user', userId: principal.user.id },
+      action: activity.action,
+      resourceType: activity.resourceType,
+      resourceId: activity.resourceId,
+      details: { method: c.req.method, state: 'started' },
+      ...metadata,
+    })
+
     try {
       await next()
     } catch (error) {
-      thrown = true
-      await audit.write({
-        actor: { type: 'user', userId: principal.user.id },
-        action: activity.action, outcome: 'failure',
-        resourceType: activity.resourceType, resourceId: activity.resourceId,
-        details: { method: c.req.method, status: 500 }, ...requestMeta(c),
-      }).catch(auditError => console.error('audit write failed', auditError))
+      await audit.finish(intentId, 'failure', {
+        method: c.req.method, status: 500, state: 'completed',
+      }).catch(auditError => console.error('audit intent completion failed', auditError))
       throw error
-    } finally {
-      if (!thrown) {
-        const status = c.res.status
-        const outcome = status >= 200 && status < 400 ? 'success'
-          : status === 401 || status === 403 ? 'denied' : 'failure'
-        if (!(activity.dedicatedSuccessAudit && outcome === 'success')) {
-          await audit.write({
-            actor: { type: 'user', userId: principal.user.id },
-            action: activity.action, outcome,
-            resourceType: activity.resourceType, resourceId: activity.resourceId,
-            details: { method: c.req.method, status }, ...requestMeta(c),
-          }).catch(error => console.error('audit write failed', error))
-        }
-      }
+    }
+
+    const status = c.res.status
+    const outcome = status >= 200 && status < 400 ? 'success'
+      : status === 401 || status === 403 ? 'denied' : 'failure'
+    if (activity.dedicatedSuccessAudit && outcome === 'success') {
+      await audit.discard(intentId).catch(error => console.error('audit intent discard failed', error))
+    } else {
+      await audit.finish(intentId, outcome, {
+        method: c.req.method, status, state: 'completed',
+      }).catch(error => console.error('audit intent completion failed', error))
     }
   }
 }

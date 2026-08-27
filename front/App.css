@@ -306,6 +306,7 @@ body {
 .admin-audit__list time, .admin-audit__list code { color: var(--ink-7); font: 10.5px/1.4 var(--font-mono); overflow-wrap: anywhere; }
 .admin-audit__list em { justify-self: end; font: 600 9px/1 var(--font-mono); text-transform: uppercase; color: var(--ink-7); }
 .admin-audit__event[data-outcome="denied"] em, .admin-audit__event[data-outcome="failure"] em { color: var(--danger); }
+.admin-audit__event[data-outcome="pending"] em { color: var(--warning, #8a5a00); }
 .admin-audit__detail { margin: 0 0 12px 145px; padding: 12px 14px; border-left: 1px solid var(--rule-strong); background: var(--ink-0); font-size: 11px; }
 .admin-audit__detail > div { display: grid; grid-template-columns: 130px minmax(0, 1fr); gap: 12px; padding: 4px 0; }
 .admin-audit__detail > div > span { display: flex; flex-wrap: wrap; gap: 7px; min-width: 0; font-family: var(--font-mono); }

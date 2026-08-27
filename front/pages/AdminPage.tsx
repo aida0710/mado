@@ -27,7 +27,7 @@ interface AuditEventRow {
   action: string
   resource_type: string | null
   resource_id: string | null
-  outcome: 'success' | 'denied' | 'failure'
+  outcome: 'pending' | 'success' | 'denied' | 'failure'
   details?: {
     target?: { displayName?: string | null; username?: string | null }
     changes?: Array<{ field: string; label?: string; before: unknown; after: unknown }>
@@ -50,7 +50,9 @@ const ACTION_LABELS: Record<string, string> = {
   'connection.delete': '接続を削除',
   'connection.default.set': 'デフォルト接続を変更',
   'note.update': '共有ノートを保存',
+  'note.read': '共有ノートを閲覧',
   'storage.readme.update': 'READMEを保存',
+  'storage.readme.read': 'READMEを閲覧',
   'storage.scan.start': '走査を開始',
   'storage.tag.assign': 'タグを付与',
   'storage.tag.remove': 'タグを解除',
@@ -59,12 +61,15 @@ const ACTION_LABELS: Record<string, string> = {
   'storage.download.raw': 'ファイルをダウンロード',
   'storage.download.tar': 'アーカイブをダウンロード',
   'storage.download.tar-entry': 'アーカイブ内をダウンロード',
+  'storage.preview.text': 'テキストを閲覧',
+  'storage.preview.image': '画像を閲覧',
   'tag.create': 'タグを作成',
   'tag.update': 'タグを変更',
   'tag.delete': 'タグを削除',
   'setting.update': '設定を変更',
   'pricing.refresh': '料金を更新',
   'job.cancel': 'ジョブを中断',
+  'lineage.read': 'Lineageを閲覧',
   'service_account.create': 'Service Accountを作成',
   'service_account.update': 'Service Accountを変更',
   'service_account.key.issue': 'API keyを発行',
@@ -79,6 +84,7 @@ const ACTION_LABELS: Record<string, string> = {
 }
 
 const OUTCOME_LABELS: Record<AuditEventRow['outcome'], string> = {
+  pending: 'PENDING',
   success: 'OK',
   denied: 'DENIED',
   failure: 'ERROR',

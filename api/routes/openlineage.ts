@@ -1,10 +1,12 @@
-import type { Hono } from 'hono'
+import type { Context, Hono } from 'hono'
 import {
   forbiddenWritableNamespaces,
   validateOpenLineageProfile,
 } from '../lib/openlineage-schema.js'
 import type { RegistryClient } from '../lib/registry-client.js'
 import { RegistryClientError } from '../lib/registry-client.js'
+import type { RequestMetadata } from '../lib/auth-types.js'
+import { requestMetadata } from '../lib/request-metadata.js'
 
 export const OPENLINEAGE_INGEST_PATH = '/openlineage/v1/lineage'
 export const DEFAULT_OPENLINEAGE_BODY_LIMIT = 2 * 1024 * 1024
@@ -26,6 +28,26 @@ export interface LineageServiceAuthenticator {
     jobName: string | null
     outcome: 'accepted' | 'forbidden' | 'invalid' | 'upstream_error'
   }): Promise<void>
+  recordAuthFailure?(event: RequestMetadata & {
+    reason: 'missing' | 'invalid' | 'unavailable'
+    tokenPrefix: string | null
+  }): Promise<void>
+}
+
+function tokenPrefix(token: string | null): string | null {
+  if (!token) return null
+  return /^(mado_lin_[A-Za-z0-9_-]{8,32})/.exec(token)?.[1] ?? null
+}
+
+async function auditAuthFailure(
+  deps: OpenLineageRoutesDeps,
+  c: Context,
+  reason: 'missing' | 'invalid' | 'unavailable',
+  token: string | null,
+): Promise<void> {
+  if (!deps.auth.recordAuthFailure) return
+  await deps.auth.recordAuthFailure({ reason, tokenPrefix: tokenPrefix(token), ...requestMetadata(c) })
+    .catch(error => (deps.log ?? console).warn('failed to record service-key rejection', error))
 }
 
 export interface OpenLineageRoutesDeps {
@@ -60,6 +82,7 @@ export function mountOpenLineageRoutes(app: Hono, deps: OpenLineageRoutesDeps): 
   app.post(OPENLINEAGE_INGEST_PATH, async c => {
     const token = bearerToken(c.req.header('Authorization'))
     if (!token) {
+      await auditAuthFailure(deps, c, 'missing', null)
       c.header('WWW-Authenticate', 'Bearer')
       return c.json({ error: 'Bearer service key is required' }, 401)
     }
@@ -68,9 +91,11 @@ export function mountOpenLineageRoutes(app: Hono, deps: OpenLineageRoutesDeps): 
     try {
       principal = await deps.auth.authenticate(token)
     } catch {
+      await auditAuthFailure(deps, c, 'unavailable', token)
       return c.json({ error: 'authentication service unavailable' }, 503)
     }
     if (!principal) {
+      await auditAuthFailure(deps, c, 'invalid', token)
       c.header('WWW-Authenticate', 'Bearer')
       return c.json({ error: 'invalid service key' }, 401)
     }

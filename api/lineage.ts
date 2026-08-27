@@ -1,12 +1,12 @@
 import { serve } from '@hono/node-server'
 import { Hono } from 'hono'
-import { logger } from 'hono/logger'
 import { loadEnv } from './env.js'
 import { closePools, createPools } from './db.js'
 import { createAuditWriter } from './lib/audit.js'
 import { createServiceAccountStore } from './lib/auth-api-keys.js'
 import { createRegistryClient } from './lib/registry-client.js'
 import { mountOpenLineageRoutes } from './routes/openlineage.js'
+import { requestLogger } from './lib/request-logger.js'
 
 const env = loadEnv()
 if (!env.DATASET_REGISTRY_URL || !env.DATASET_REGISTRY_TOKEN) {
@@ -22,13 +22,21 @@ const registry = createRegistryClient({
 })
 
 const app = new Hono()
-app.use('*', logger())
+app.use('*', requestLogger())
 app.get('/healthz', c => c.text('ok'))
 
 const api = new Hono()
 mountOpenLineageRoutes(api, {
   auth: {
     authenticate: token => accounts.authenticate(token),
+    async recordAuthFailure(event) {
+      await audit.write({
+        actor: { type: 'anonymous' }, action: 'lineage.authenticate', outcome: 'denied',
+        resourceType: 'service_account_key', resourceId: event.tokenPrefix,
+        details: { reason: event.reason },
+        ipAddress: event.ipAddress, userAgent: event.userAgent, requestId: event.requestId,
+      })
+    },
     async recordUse(event) {
       const outcome = event.outcome === 'accepted'
         ? 'success'

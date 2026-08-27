@@ -23,31 +23,53 @@ describe('audit activity', () => {
   })
 
   it('response outcomeとactorを記録する', async () => {
-    const write = vi.fn().mockResolvedValue(undefined)
+    const start = vi.fn().mockResolvedValue(42)
+    const finish = vi.fn().mockResolvedValue(undefined)
     const app = new Hono()
     app.use('*', async (c, next) => {
       setSessionPrincipal(c, { kind: 'user', sessionId: 's', user })
       await next()
     })
-    app.use('*', auditActivity({ write } as AuditWriter))
+    app.use('*', auditActivity({ start, finish, discard: vi.fn(), write: vi.fn() } as unknown as AuditWriter))
     app.put('/settings/:key', c => c.json({ error: 'forbidden' }, 403))
     expect((await app.request('/settings/theme', { method: 'PUT' })).status).toBe(403)
-    expect(write).toHaveBeenCalledWith(expect.objectContaining({
-      actor: { type: 'user', userId: user.id }, action: 'setting.update', outcome: 'denied',
-      resourceId: 'theme', details: { method: 'PUT', status: 403 },
+    expect(start).toHaveBeenCalledWith(expect.objectContaining({
+      actor: { type: 'user', userId: user.id }, action: 'setting.update', resourceId: 'theme',
     }))
+    expect(finish).toHaveBeenCalledWith(42, 'denied', {
+      method: 'PUT', status: 403, state: 'completed',
+    })
   })
 
   it('専用auditがあるrouteでは成功を重複記録しない', async () => {
-    const write = vi.fn().mockResolvedValue(undefined)
+    const start = vi.fn().mockResolvedValue(43)
+    const discard = vi.fn().mockResolvedValue(undefined)
+    const write = vi.fn()
     const app = new Hono()
     app.use('*', async (c, next) => {
       setSessionPrincipal(c, { kind: 'user', sessionId: 's', user })
       await next()
     })
-    app.use('*', auditActivity({ write } as AuditWriter))
+    app.use('*', auditActivity({ start, finish: vi.fn(), discard, write } as unknown as AuditWriter))
     app.post('/users', c => c.json({ ok: true }, 201))
     await app.request('/users', { method: 'POST' })
     expect(write).not.toHaveBeenCalled()
+    expect(discard).toHaveBeenCalledWith(43)
+  })
+
+  it('audit intentを保存できなければmutationを実行しない', async () => {
+    const app = new Hono()
+    const mutation = vi.fn(c => c.json({ ok: true }))
+    app.use('*', async (c, next) => {
+      setSessionPrincipal(c, { kind: 'user', sessionId: 's', user })
+      await next()
+    })
+    app.use('*', auditActivity({
+      start: vi.fn().mockRejectedValue(new Error('audit unavailable')),
+      finish: vi.fn(), discard: vi.fn(), write: vi.fn(),
+    } as unknown as AuditWriter))
+    app.put('/settings/:key', mutation)
+    expect((await app.request('/settings/theme', { method: 'PUT' })).status).toBe(500)
+    expect(mutation).not.toHaveBeenCalled()
   })
 })

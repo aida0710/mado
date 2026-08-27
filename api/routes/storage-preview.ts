@@ -114,7 +114,11 @@ function storageError(c: Context, e: unknown): Response {
   if (e instanceof NoSuchKey) {
     return c.json({ error: 'not found' }, 404)
   }
-  return c.json({ error: (e as Error).message }, 500)
+  console.error('storage preview failed', {
+    name: e instanceof Error ? e.name : 'unknown',
+    status: (e as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode,
+  })
+  return c.json({ error: 'storage request failed' }, 500)
 }
 
 export function mountStoragePreviewRoutes(app: Hono, deps: StoragePreviewDeps): void {
@@ -144,7 +148,7 @@ export function mountStoragePreviewRoutes(app: Hono, deps: StoragePreviewDeps): 
     const body = new Uint8Array(buf.byteLength)
     body.set(buf)
     return new Response(body, {
-      headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+      headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'private, no-store' },
     })
   })
 
@@ -178,6 +182,7 @@ export function mountStoragePreviewRoutes(app: Hono, deps: StoragePreviewDeps): 
     const asciiName = filename.replace(/[^\x20-\x7e]/g, '_').replace(/"/g, '\\"')
     const headers: Record<string, string> = {
       'Content-Type': 'application/octet-stream',
+      'Cache-Control': 'private, no-store',
       'Content-Disposition':
         `attachment; filename="${asciiName}"; ` +
         `filename*=UTF-8''${encodeURIComponent(filename)}`,
@@ -210,7 +215,7 @@ export function mountStoragePreviewRoutes(app: Hono, deps: StoragePreviewDeps): 
       return storageError(c, e)
     }
     const mime = IMAGE_MIME[ext(key)] ?? 'application/octet-stream'
-    const headers: Record<string, string> = { 'Content-Type': mime }
+    const headers: Record<string, string> = { 'Content-Type': mime, 'Cache-Control': 'private, no-store' }
     if (contentLength != null) headers['Content-Length'] = String(contentLength)
     return new Response(
       Readable.toWeb(stream) as unknown as ReadableStream<Uint8Array>,
@@ -245,6 +250,7 @@ export function mountStoragePreviewRoutes(app: Hono, deps: StoragePreviewDeps): 
     const headers: Record<string, string> = {
       'Content-Type': mime,
       'Accept-Ranges': 'bytes',
+      'Cache-Control': 'private, no-store',
     }
     if (contentLength != null) headers['Content-Length'] = String(contentLength)
     if (contentRange) headers['Content-Range'] = contentRange
@@ -360,7 +366,11 @@ export function mountStoragePreviewRoutes(app: Hono, deps: StoragePreviewDeps): 
               if (e instanceof NoSuchKey) {
                 write({ error: 'not found' })
               } else {
-                write({ error: (e as Error).message })
+                console.error('storage archive read failed', {
+                  name: e instanceof Error ? e.name : 'unknown',
+                  status: (e as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode,
+                })
+                write({ error: 'storage request failed' })
               }
               return
             }
@@ -394,7 +404,10 @@ export function mountStoragePreviewRoutes(app: Hono, deps: StoragePreviewDeps): 
             })
           }
         } catch (e) {
-          write({ error: (e as Error).message })
+          console.error('storage archive preview failed', {
+            name: e instanceof Error ? e.name : 'unknown',
+          })
+          write({ error: 'archive preview failed' })
         } finally {
           // cancel() で既に closed 済みなら二重 close しない。
           if (!closed) {
@@ -416,7 +429,10 @@ export function mountStoragePreviewRoutes(app: Hono, deps: StoragePreviewDeps): 
       },
     })
     return new Response(body, {
-      headers: { 'Content-Type': 'application/x-ndjson; charset=utf-8' },
+      headers: {
+        'Content-Type': 'application/x-ndjson; charset=utf-8',
+        'Cache-Control': 'private, no-store',
+      },
     })
   })
 
@@ -460,7 +476,10 @@ export function mountStoragePreviewRoutes(app: Hono, deps: StoragePreviewDeps): 
     try {
       result = await extractTarEntry(stream, kind, entry, byteLimit)
     } catch (e) {
-      return c.json({ error: (e as Error).message }, 500)
+      console.error('storage archive entry failed', {
+        name: e instanceof Error ? e.name : 'unknown',
+      })
+      return c.json({ error: 'archive entry extraction failed' }, 500)
     }
     if (!result) {
       return c.json({ error: `entry not found: ${entry}` }, 404)
@@ -477,6 +496,7 @@ export function mountStoragePreviewRoutes(app: Hono, deps: StoragePreviewDeps): 
     const headers: Record<string, string> = {
       'Content-Type': entryContentType(entry),
       'Content-Length': String(buf.byteLength),
+      'Cache-Control': 'private, no-store',
     }
     // head モードで実際に切り詰めたことを呼び出し側から見えるようにしておく
     // (プレビューが「全部」なのか「先頭だけ」なのかを区別したくなった時のため)。

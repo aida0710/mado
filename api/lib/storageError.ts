@@ -1,11 +1,5 @@
-// AWS SDK / S3 由来のエラーを、意味のある HTTP status と「ストレージが
-// 実際に返した内容」に翻訳する。
-//
-// こちらで原因の解釈や対処の助言は書かない。以前は「一時的なプロキシ
-// エラーかも」「credentials か bucket permissions を確認」といった文言を
-// 付けていたが、実態とずれると誤誘導になる (R2 が鍵の長さの不備を返して
-// いるのに「一時的」と読める、など)。status とストレージのコード / 生
-// メッセージだけを出し、判断は見る人に任せる。
+// AWS SDK / S3 由来のエラーをHTTP statusへ翻訳する。upstreamの生message、
+// canonical request、request IDはcredentialや内部構成を含み得るため返さない。
 
 interface SdkErrorLike {
   name?: string
@@ -18,10 +12,6 @@ export interface ExplainedError {
   status: 400 | 403 | 404 | 500 | 502
   message: string
 }
-
-// 生メッセージの上限。SignatureDoesNotMatch は canonical request 全文を
-// 抱えることがあり、そのまま出すと画面が埋まる。
-const MAX_MESSAGE = 400
 
 // 我々が返す status。upstream の失敗は 502 に寄せる (404 だけは素通し) —
 // クライアントから見て「mado の不具合」と「ストレージ側の応答」を
@@ -47,19 +37,10 @@ export function explainStorageError(e: unknown): ExplainedError | null {
     return null
   }
 
-  const code = err.name && err.name !== 'Error' ? err.name : undefined
-  const raw = err.message?.trim()
-  const body = code && raw && raw !== code ? `${code}: ${raw}` : code ?? raw ?? 'no detail'
-  const rid = err.$metadata?.requestId
-  const parts = [
-    upstream != null ? `HTTP ${upstream}` : null,
-    body,
-    rid ? `requestId=${rid}` : null,
-  ].filter(Boolean)
-
-  const message = parts.join(' — ')
+  const status = mapStatus(upstream)
   return {
-    status: mapStatus(upstream),
-    message: message.length > MAX_MESSAGE ? `${message.slice(0, MAX_MESSAGE)}…` : message,
+    status,
+    message: status === 404 ? 'storage object not found'
+      : status === 502 ? 'storage service error' : 'storage request failed',
   }
 }

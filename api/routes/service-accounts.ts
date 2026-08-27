@@ -3,6 +3,7 @@ import { z } from 'zod'
 import type { AuditWriter } from '../lib/audit.js'
 import type { ServiceAccountStore } from '../lib/auth-api-keys.js'
 import { getSessionPrincipal, requirePermission } from '../lib/rbac.js'
+import { requestMetadata } from '../lib/request-metadata.js'
 
 export interface ServiceAccountsDeps {
   store: ServiceAccountStore
@@ -25,14 +26,6 @@ const CreateKey = z.object({
   expiresAt: z.string().datetime().nullable().optional(),
 })
 
-function meta(c: { req: { header(name: string): string | undefined } }) {
-  return {
-    ipAddress: c.req.header('X-Forwarded-For')?.split(',')[0]?.trim() ?? null,
-    userAgent: c.req.header('User-Agent') ?? null,
-    requestId: c.req.header('X-Request-Id') ?? null,
-  }
-}
-
 export function mountServiceAccountRoutes(app: Hono, deps: ServiceAccountsDeps): void {
   app.use('/service-accounts', requirePermission('service_accounts:manage'))
   app.use('/service-accounts/*', requirePermission('service_accounts:manage'))
@@ -47,7 +40,7 @@ export function mountServiceAccountRoutes(app: Hono, deps: ServiceAccountsDeps):
       const account = await deps.store.createAccount({ ...parsed.data, createdBy: principal.user.id })
       await deps.audit.write({
         actor: { type: 'user', userId: principal.user.id }, action: 'service_account.create', outcome: 'success',
-        resourceType: 'service_account', resourceId: account.id, ...meta(c),
+        resourceType: 'service_account', resourceId: account.id, ...requestMetadata(c),
       })
       return c.json({ account }, 201)
     } catch (e) {
@@ -68,7 +61,7 @@ export function mountServiceAccountRoutes(app: Hono, deps: ServiceAccountsDeps):
     if (!account) return c.json({ error: 'service account not found' }, 404)
     await deps.audit.write({
       actor: { type: 'user', userId: principal.user.id }, action: 'service_account.update', outcome: 'success',
-      resourceType: 'service_account', resourceId: id, details: { fields: Object.keys(parsed.data) }, ...meta(c),
+      resourceType: 'service_account', resourceId: id, details: { fields: Object.keys(parsed.data) }, ...requestMetadata(c),
     })
     return c.json({ account })
   })
@@ -100,7 +93,7 @@ export function mountServiceAccountRoutes(app: Hono, deps: ServiceAccountsDeps):
         actor: { type: 'user', userId: principal.user.id }, action: 'service_account.key.issue', outcome: 'success',
         resourceType: 'service_account_key', resourceId: key.id,
         details: { serviceAccountId: id, scopes: key.scopes, namespaces: key.namespaces, tokenPrefix: key.tokenPrefix },
-        ...meta(c),
+        ...requestMetadata(c),
       })
       return c.json({ key }, 201)
     } catch (e) {
@@ -121,7 +114,7 @@ export function mountServiceAccountRoutes(app: Hono, deps: ServiceAccountsDeps):
     if (!await deps.store.revokeKey(accountId, keyId)) return c.json({ error: 'key not found or already revoked' }, 404)
     await deps.audit.write({
       actor: { type: 'user', userId: principal.user.id }, action: 'service_account.key.revoke', outcome: 'success',
-      resourceType: 'service_account_key', resourceId: keyId, details: { serviceAccountId: accountId }, ...meta(c),
+      resourceType: 'service_account_key', resourceId: keyId, details: { serviceAccountId: accountId }, ...requestMetadata(c),
     })
     return c.json({ ok: true })
   })

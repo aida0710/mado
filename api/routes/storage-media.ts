@@ -85,8 +85,8 @@ export function mountStorageMediaRoutes(app: Hono, deps: StorageMediaDeps): void
     return new Response(body, {
       headers: {
         'Content-Type': 'image/png',
-        // cacheKey は ETag 込みハッシュなので内容は不変
-        'Cache-Control': 'public, max-age=31536000, immutable',
+        // 認証済みデータをshared/browser cacheへ永続保存しない。
+        'Cache-Control': 'private, no-store',
       },
     })
   })

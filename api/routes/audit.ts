@@ -11,7 +11,7 @@ const Query = z.object({
   limit: z.coerce.number().int().min(1).max(200).default(50),
   beforeId: z.coerce.number().int().positive().optional(),
   action: z.string().min(1).max(128).optional(),
-  outcome: z.enum(['success', 'denied', 'failure']).optional(),
+  outcome: z.enum(['pending', 'success', 'denied', 'failure']).optional(),
   actorUserId: z.string().uuid().optional(),
   actorServiceAccountId: z.string().uuid().optional(),
 })
@@ -20,6 +20,7 @@ export const ROUTINE_AUDIT_ACTIONS = [
   'auth.local.login',
   'auth.oidc.login',
   'auth.logout',
+  'auth.session.denied',
   'audit.read',
 ] as const
 

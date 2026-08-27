@@ -3,6 +3,7 @@ import type { Context, Hono } from 'hono'
 import type { Pool } from 'pg'
 import { z } from 'zod'
 import type { AuditWriter } from '../lib/audit.js'
+import { requestMetadata } from '../lib/request-metadata.js'
 import { getSessionPrincipal, requirePermission } from '../lib/rbac.js'
 import type {
   RegistryClient,
@@ -130,14 +131,6 @@ export interface LineageCurationDeps {
   registry: RegistryClient
   pool: Pool
   audit: AuditWriter
-}
-
-function meta(c: Context) {
-  return {
-    ipAddress: c.req.header('X-Forwarded-For')?.split(',')[0]?.trim() ?? null,
-    userAgent: c.req.header('User-Agent') ?? null,
-    requestId: c.req.header('X-Request-Id') ?? null,
-  }
 }
 
 function compact<T extends Record<string, unknown>>(input: T): Record<string, unknown> {
@@ -280,7 +273,7 @@ export function mountLineageCurationRoutes(app: Hono, deps: LineageCurationDeps)
           processing: parsed.data.processing?.transformation.name,
           evidenceRefs: parsed.data.evidenceRefs,
         },
-        ...meta(c),
+        ...requestMetadata(c),
       })
       return c.json(result, 201)
     } catch (error) {
@@ -306,7 +299,7 @@ export function mountLineageCurationRoutes(app: Hono, deps: LineageCurationDeps)
         action: 'lineage.location.register', outcome: 'success',
         resourceType: 'dataset_version', resourceId: parsed.data.versionId,
         details: { storageUri: location.uri, evidenceRefs: parsed.data.evidenceRefs },
-        ...meta(c),
+        ...requestMetadata(c),
       })
       return c.json(result, 201)
     } catch (error) {
@@ -351,7 +344,7 @@ export function mountLineageCurationRoutes(app: Hono, deps: LineageCurationDeps)
           executionTimeStatus: parsed.data.executionTimeStatus,
           evidenceRefs: parsed.data.evidenceRefs,
         },
-        ...meta(c),
+        ...requestMetadata(c),
       })
       return c.json(result, 201)
     } catch (error) {

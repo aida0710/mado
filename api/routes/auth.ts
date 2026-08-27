@@ -1,4 +1,4 @@
-import type { Hono } from 'hono'
+import type { Context, Hono } from 'hono'
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
 import { z } from 'zod'
 import type { AuditWriter } from '../lib/audit.js'
@@ -95,12 +95,21 @@ export function mountAuthRoutes(app: Hono, deps: AuthRouteDeps): void {
   const threshold = deps.config.loginFailureThreshold ?? 5
   const lockSeconds = deps.config.loginLockSeconds ?? 15 * 60
   const cookieName = deps.config.session.cookieName ?? SESSION_COOKIE
+  const limiter = deps.config.rateLimiter ?? new AuthRateLimiter()
+  const oidcCookieName = deps.config.session.secure ? '__Host-mado_oidc_tx' : 'mado_oidc_tx'
+  const deniedSessionAudit = async (c: Context, reason: 'missing' | 'invalid') => {
+    const metadata = requestMetadata(c)
+    if (!limiter.consume(`session:denied:${metadata.ipAddress ?? 'unknown'}`, 30, 60_000)) return
+    await deps.audit.write({
+      actor: { type: 'anonymous' }, action: 'auth.session.denied', outcome: 'denied',
+      details: { reason }, ...metadata,
+    })
+  }
   const sessionGuard = requireSession(deps.store, {
     idleSeconds: deps.config.session.idleSeconds,
     cookieName,
+    onDenied: deniedSessionAudit,
   })
-  const limiter = deps.config.rateLimiter ?? new AuthRateLimiter()
-  const oidcCookieName = deps.config.session.secure ? '__Host-mado_oidc_tx' : 'mado_oidc_tx'
   // 存在しないuserでもArgon2を1回計算し、email列挙のtiming差を小さくする。
   const dummyHash = hashPassword(`not-a-real-password-${randomToken(16)}`)
 

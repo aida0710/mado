@@ -134,7 +134,7 @@ describe('GET /media/analyze', () => {
 })
 
 describe('GET /media/spectrogram', () => {
-  it('PNG を immutable Cache-Control 付きで返す / 無ければ 404', async () => {
+  it('PNG をprivate no-storeで返す / 無ければ 404', async () => {
     const cacheKey = mediaCacheKey(REF)
     await upsertMediaCache(pools.rw, cacheKey, {
       peaks: [], durationSec: 1, sampleRate: null, spectrogramPng: Buffer.from([0x89, 0x50]), meta: META,
@@ -142,7 +142,7 @@ describe('GET /media/spectrogram', () => {
     const res = await makeApp().request(`/storage/c1/media/spectrogram?cacheKey=${cacheKey}`)
     expect(res.status).toBe(200)
     expect(res.headers.get('Content-Type')).toBe('image/png')
-    expect(res.headers.get('Cache-Control')).toContain('immutable')
+    expect(res.headers.get('Cache-Control')).toBe('private, no-store')
     const missing = await makeApp().request('/storage/c1/media/spectrogram?cacheKey=none')
     expect(missing.status).toBe(404)
   })

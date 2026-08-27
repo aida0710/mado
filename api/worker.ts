@@ -3,7 +3,6 @@
 // api-internal と同じコードベース / .env を共有し、compose で別サービスとして起動。
 import { serve } from '@hono/node-server'
 import { Hono } from 'hono'
-import { logger } from 'hono/logger'
 import { loadEnv } from './env.js'
 import { createPools, closePools } from './db.js'
 import { createCrypto } from './crypto.js'
@@ -17,6 +16,7 @@ import { SCAN_KIND } from './routes/storage-scan.js'
 import { createPricingStore } from './lib/pricing-store.js'
 import { createPricingRefreshHandler } from './lib/pricing-refresh-handler.js'
 import { PRICING_REFRESH_KIND } from './routes/pricing.js'
+import { requestLogger } from './lib/request-logger.js'
 
 // LAN ダッシュボード: 1 つのストリーム teardown 起因の未捕捉例外で全ユーザーの
 // リクエストを巻き添えにしない。root cause は都度直す前提の最後の砦 (ログは大声で)。
@@ -52,7 +52,7 @@ const jobRunner = createJobRunner({
 })
 
 const app = new Hono()
-app.use('*', logger())
+app.use('*', requestLogger())
 app.get('/healthz', c => c.text('ok'))
 
 app.post('/analyze', async c => {
