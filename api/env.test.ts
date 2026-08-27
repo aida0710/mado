@@ -13,6 +13,7 @@ describe('loadEnv', () => {
       ALLOWED_ORIGINS: 'http://localhost:5173',
     })
     expect(env.PORT).toBe(3000)
+    expect(env.MADO_ENV).toBe('development')
     expect(env.ENCRYPTION_KEY).toBe(VALID_KEY)
     expect(env.ALLOWED_ORIGINS).toEqual(['http://localhost:5173'])
     expect(env.PREVIEW_TEXT_LIMIT).toBe(65536) // デフォルト値
@@ -135,5 +136,38 @@ describe('loadEnv', () => {
       ALLOWED_ORIGINS: 'https://mado.example',
       OIDC_ROLE_MAPPING_JSON: '{"mado-users":"owner"}',
     })).toThrow(/OIDC_ROLE_MAPPING_JSON/)
+  })
+
+  it('productionでは認証無効を拒否する', () => {
+    expect(() => loadEnv({
+      MADO_ENV: 'production',
+      AUTH_MODE: 'disabled',
+      DATABASE_URL_RW: 'postgres://x',
+      DATABASE_URL_RO: 'postgres://x',
+      ENCRYPTION_KEY: '0'.repeat(64),
+      ALLOWED_ORIGINS: 'https://mado.example',
+    })).toThrow(/AUTH_MODE=disabled/)
+  })
+
+  it('productionでも認証を明示すれば起動できる', () => {
+    const env = loadEnv({
+      MADO_ENV: 'production',
+      AUTH_MODE: 'local',
+      DATABASE_URL_RW: 'postgres://x',
+      DATABASE_URL_RO: 'postgres://x',
+      ENCRYPTION_KEY: '0'.repeat(64),
+      ALLOWED_ORIGINS: 'http://mado.internal',
+    })
+    expect(env.AUTH_MODE).toBe('local')
+  })
+
+  it('OIDC利用時はgroup allowlistを必須にする', () => {
+    expect(() => loadEnv({
+      AUTH_MODE: 'oidc',
+      DATABASE_URL_RW: 'postgres://x',
+      DATABASE_URL_RO: 'postgres://x',
+      ENCRYPTION_KEY: '0'.repeat(64),
+      ALLOWED_ORIGINS: 'https://mado.example',
+    })).toThrow(/OIDC_ALLOWED_GROUPS/)
   })
 })

@@ -31,7 +31,7 @@ import { createAuditWriter } from './lib/audit.js'
 import { auditActivity } from './lib/audit-activity.js'
 import { createServiceAccountStore } from './lib/auth-api-keys.js'
 import { createOidcProvider } from './lib/auth-oidc.js'
-import { requireSession } from './lib/auth-middleware.js'
+import { requirePasswordChangeComplete, requireSession } from './lib/auth-middleware.js'
 import { requirePermission } from './lib/rbac.js'
 import { mountAuthRoutes } from './routes/auth.js'
 import { mountAdminUsersRoutes } from './routes/admin-users.js'
@@ -138,6 +138,7 @@ if (authEnabled) {
   }))
   // 認証済みrequestの拒否・失敗も残せるよう、権限checkより先に監査する。
   api.use('*', auditActivity(audit))
+  api.use('*', requirePasswordChangeComplete())
   // すべてのbuilt-in roleが持つbaseline。Roleなしuserへの意図しない公開を防ぐ。
   api.use('*', requirePermission('storage:read'))
 

@@ -115,6 +115,7 @@ services:
     env_file:
       - .env
     environment:
+      MADO_ENV: production
       PORT: "3000"
       DATASET_REGISTRY_URL: http://registry-api:8080
       DATASET_REGISTRY_TOKEN: "${REGISTRY_INGEST_TOKEN:?REGISTRY_INGEST_TOKEN is required}"
@@ -134,6 +135,7 @@ services:
     env_file:
       - .env
     environment:
+      MADO_ENV: production
       LINEAGE_API_PORT: "3001"
       DATASET_REGISTRY_URL: http://registry-api:8080
       DATASET_REGISTRY_TOKEN: "${REGISTRY_INGEST_TOKEN:?REGISTRY_INGEST_TOKEN is required}"
@@ -151,6 +153,8 @@ services:
     command: ["sh", "-c", "npm run build && node dist/worker.js"]
     env_file:
       - .env
+    environment:
+      MADO_ENV: production
     depends_on:
       postgres:
         condition: service_healthy

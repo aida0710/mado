@@ -18,6 +18,7 @@ const oidcRoleMapping = z.string().default('{}').transform((value, ctx): Record<
 })
 
 const schema = z.object({
+  MADO_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().default(3000),
   DATABASE_URL_RW: z.string().min(1),
   DATABASE_URL_RO: z.string().min(1),
@@ -62,7 +63,7 @@ const schema = z.object({
   OIDC_LABEL: z.string().min(1).default('SSO'),
   OIDC_SCOPES: z.string().min(1).default('openid email profile'),
   OIDC_POST_LOGOUT_REDIRECT_URI: z.string().url().optional(),
-  OIDC_AUTO_LINK_VERIFIED_EMAIL: booleanString.default('true').transform(value =>
+  OIDC_AUTO_LINK_VERIFIED_EMAIL: booleanString.default('false').transform(value =>
     value === 'true' || value === '1'
   ),
   OIDC_ALLOWED_GROUPS: z.string().default('').transform(value =>
@@ -78,6 +79,19 @@ const schema = z.object({
   MARQUEZ_URL: z.string().url().optional(),
   LINEAGE_API_PORT: z.coerce.number().int().min(1).max(65535).default(3001),
   OPENLINEAGE_BODY_LIMIT_BYTES: z.coerce.number().int().min(1024).default(2 * 1024 * 1024),
+}).superRefine((env, ctx) => {
+  if (env.MADO_ENV === 'production' && env.AUTH_MODE === 'disabled') {
+    ctx.addIssue({
+      code: 'custom', path: ['AUTH_MODE'],
+      message: 'AUTH_MODE=disabled is forbidden when MADO_ENV=production',
+    })
+  }
+  if ((env.AUTH_MODE === 'oidc' || env.AUTH_MODE === 'hybrid') && env.OIDC_ALLOWED_GROUPS.length === 0) {
+    ctx.addIssue({
+      code: 'custom', path: ['OIDC_ALLOWED_GROUPS'],
+      message: 'OIDC_ALLOWED_GROUPS is required when OIDC is enabled',
+    })
+  }
 })
 
 export type Env = z.infer<typeof schema>

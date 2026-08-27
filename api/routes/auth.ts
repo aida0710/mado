@@ -5,9 +5,10 @@ import type { AuditWriter } from '../lib/audit.js'
 import type { AuthStore, SessionLifetime } from '../lib/auth-store.js'
 import type { OidcProvider } from '../lib/auth-oidc.js'
 import { randomToken } from '../lib/auth-crypto.js'
-import { requireSession } from '../lib/auth-middleware.js'
-import { SESSION_COOKIE, type RequestMetadata } from '../lib/auth-types.js'
+import { requirePasswordChangeComplete, requireSession } from '../lib/auth-middleware.js'
+import { SESSION_COOKIE } from '../lib/auth-types.js'
 import { getSessionPrincipal } from '../lib/rbac.js'
+import { requestMetadata } from '../lib/request-metadata.js'
 import { hashPassword, passwordNeedsRehash, verifyPassword } from '../lib/password.js'
 
 export interface AuthRouteConfig {
@@ -48,15 +49,6 @@ const ProfileBody = z.object({
   displayName: z.string().trim().min(1).max(128).optional(),
   username: z.string().trim().regex(/^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,63}$/).optional(),
 })
-
-function requestMetadata(c: { req: { header(name: string): string | undefined } }): RequestMetadata {
-  const forwarded = c.req.header('X-Forwarded-For')?.split(',')[0]?.trim()
-  return {
-    ipAddress: forwarded || null,
-    userAgent: c.req.header('User-Agent') ?? null,
-    requestId: c.req.header('X-Request-Id') ?? null,
-  }
-}
 
 function publicUser(user: {
   id: string
@@ -271,6 +263,7 @@ export function mountAuthRoutes(app: Hono, deps: AuthRouteDeps): void {
   })
 
   app.use('/profile', sessionGuard)
+  app.use('/profile', requirePasswordChangeComplete())
   app.put('/profile', async c => {
     const principal = getSessionPrincipal(c)
     if (!principal) return c.json({ error: 'unauthorized' }, 401)

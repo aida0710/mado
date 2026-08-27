@@ -36,6 +36,7 @@ services:
     env_file:
       - .env
     environment:
+      MADO_ENV: production
       PORT: 3000
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -51,6 +52,7 @@ services:
     env_file:
       - .env
     environment:
+      MADO_ENV: production
       LINEAGE_API_PORT: 3001
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -67,6 +69,8 @@ services:
     command: ["sh", "-c", "npm run build && node dist/worker.js"]
     env_file:
       - .env
+    environment:
+      MADO_ENV: production
     depends_on:
       postgres:
         condition: service_healthy

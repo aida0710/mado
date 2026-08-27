@@ -85,6 +85,32 @@ describe('auth routes', () => {
     expect((await app.request('/me')).status).toBe(401)
   })
 
+  it('一時passwordのsessionは変更完了までprofileを拒否する', async () => {
+    const user = (await store.getLocalCredential('local-user'))!
+    await store.setLocalPassword(user.id, await hashPassword('temporary-password-123'), true)
+    const login = await app.request('/local/login', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ identifier: 'local-user', password: 'temporary-password-123' }),
+    })
+    const cookie = login.headers.get('set-cookie')!.split(';')[0]
+    expect((await app.request('/me', { headers: { Cookie: cookie } })).status).toBe(200)
+    expect((await app.request('/profile', {
+      method: 'PUT', headers: { Cookie: cookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ signatureName: '迂回' }),
+    })).status).toBe(403)
+
+    const changed = await app.request('/change-password', {
+      method: 'POST', headers: { Cookie: cookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ currentPassword: 'temporary-password-123', newPassword: 'changed-password-123' }),
+    })
+    expect(changed.status).toBe(200)
+    const nextCookie = changed.headers.get('set-cookie')!.split(';')[0]
+    expect((await app.request('/profile', {
+      method: 'PUT', headers: { Cookie: nextCookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ signatureName: '変更後' }),
+    })).status).toBe(200)
+  })
+
   it('OIDC callbackで検証済みemailを既存Userへ連携しgroup roleを同期する', async () => {
     const oidc: OidcProvider = {
       id: 'primary', label: 'Authentik', issuer: 'https://auth.example/application/o/mado',
