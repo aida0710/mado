@@ -38,7 +38,7 @@ OIDC_REDIRECT_URI=https://mado.example/api/auth/oidc/callback
 OIDC_POST_LOGOUT_REDIRECT_URI=https://mado.example/
 OIDC_LABEL=Authentik
 OIDC_SCOPES=openid email profile
-OIDC_AUTO_LINK_VERIFIED_EMAIL=true
+OIDC_AUTO_LINK_VERIFIED_EMAIL=false
 OIDC_ALLOWED_GROUPS=mado-users,mado-admins,mado-curators,mado-operators
 OIDC_ROLE_MAPPING_JSON={"mado-admins":"admin","mado-curators":"curator","mado-operators":"operator","mado-users":"viewer"}
 OIDC_DEFAULT_ROLE=viewer
@@ -47,9 +47,9 @@ OIDC_DEFAULT_ROLE=viewer
 ## UserとRoleの同期規則
 
 - 初回SSOでUserをJIT作成します。self-signup用のMado画面はありません。
-- `email_verified=true`かつemailが一致するときだけ既存Local UserへSSO identityを連携します。
+- 既存Local Userへのemail自動連携は既定で無効です。有効化した場合も`email_verified=true`かつemail一致が必要で、Admin等の特権Local Userは自動連携しません。
 - 未検証emailはUserのemailにも既存Userとの連携にも使いません。
-- `OIDC_ALLOWED_GROUPS`が設定されている場合、いずれかのgroupに所属しないUserを拒否します。
+- `OIDC_ALLOWED_GROUPS`は必須です。いずれかのgroupに所属しないUserを拒否し、空の設定ではMadoが起動しません。
 - role mappingが設定されている場合、SSOログインのたびにMado RoleをAuthentik groupへ同期します。
 - 複数groupから複数Roleを付与できます。該当groupが無い場合は`OIDC_DEFAULT_ROLE`になります。
 - SSO由来の表示名と検証済みemailはログイン時に更新します。Madoの署名は上書きしません。
@@ -57,3 +57,9 @@ OIDC_DEFAULT_ROLE=viewer
 
 Role同期を使う環境では、SSO UserのRoleをMado画面から一時的に変えても次回ログインで
 Authentik側の状態へ戻ります。恒久変更はAuthentik groupで行います。
+
+## Login transactionの防御
+
+MadoはAuthorization Code Flowの`state`とPKCEに加え、OIDC開始時に短命のHttpOnly cookieを発行します。callbackは同じbrowser cookieを提示した場合だけ受理するため、別browserで開始した認証transactionや古いtransactionを流用できません。`returnTo`もMado内の相対pathだけを許可します。
+
+Local loginとOIDC開始には送信元・identifier・同時Argon2処理数の制限があります。上限時は`429`を返すため、reverse proxyで追加制限する場合もこの応答を維持してください。

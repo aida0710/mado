@@ -61,7 +61,7 @@ Glacier Deep Archive のように **一覧には出るが `GetObject` すると�
 | README の読み込み | ディレクトリ README のセクションと README 検索が消える |
 | README の編集 | 「編集 / 作成」が消える (読み込みがオフだと選べません) |
 
-オフにした操作は画面から導線が消えるだけでなく、**共有 Web URL を直接開いても 403** で止まります。ただしこれは *アクセス制御ではなく誤操作の防止* です — Mado に認証は無いので、誰でも Settings で戻せます ([セキュリティ](#セキュリティ))。
+オフにした操作は画面から導線が消えるだけでなく、**共有 Web URL を直接開いても 403** で止まります。接続capabilityはRBACに重ねる防御層で、`connections:manage`権限を持つUserだけがSettingsから変更できます ([セキュリティ](#セキュリティ))。
 
 Settings の接続一覧には、制限のかかっている接続に「制限: …」が表示されます。
 
@@ -208,12 +208,13 @@ dev の DB パスワードは未設定なら既定値 (`postgres` / `CHANGEME`) 
 | `DASHBOARD_PASSWORD` | prod:yes / dev:no | `dashboard_rw` / `dashboard_ro` のパスワード。**`DATABASE_URL_*` のパスワードと一致必須**。dev 既定 `CHANGEME` |
 | `ENCRYPTION_KEY` | yes | `storage_connections` の S3 認証情報を AES-256-GCM で暗号化するキー (32 byte hex) |
 | `ALLOWED_ORIGINS` | yes | CSRF 防御。write 系で許容する Origin (カンマ区切り)。dev: `http://localhost:5173` / prod: ダッシュボードを開く URL |
-| `AUTH_MODE` | no | `disabled` / `local` / `oidc` / `hybrid`。外部公開ではdisabled禁止 |
+| `MADO_ENV` | no | `development` / `test` / `production`。本番composeは`production`を固定し、安全でない認証設定を起動時に拒否 |
+| `AUTH_MODE` | no | `disabled` / `local` / `oidc` / `hybrid`。`MADO_ENV=production`では未設定・`disabled`を起動時に拒否 |
 | `AUTH_COOKIE_SECURE` | no | HTTPS本番は`true`必須。`__Host-` session cookieを使う |
 | `OIDC_ISSUER_URL` / `OIDC_CLIENT_ID` / `OIDC_CLIENT_SECRET` / `OIDC_REDIRECT_URI` | oidc/hybrid | OIDC discovery issuer、client、callback URL |
-| `OIDC_ALLOWED_GROUPS` | no | ログインを許可するAuthentik group（カンマ区切り）。空ならgroup制限なし |
+| `OIDC_ALLOWED_GROUPS` | oidc/hybrid | ログインを許可するAuthentik group（カンマ区切り）。空は起動時に拒否 |
 | `OIDC_ROLE_MAPPING_JSON` | no | Authentik groupから`viewer` / `curator` / `operator` / `admin`への対応。設定時はログインごとに同期 |
-| `OIDC_AUTO_LINK_VERIFIED_EMAIL` | no | `email_verified=true`の既存Local Userを自動連携（default true） |
+| `OIDC_AUTO_LINK_VERIFIED_EMAIL` | no | `email_verified=true`の既存Local Userを自動連携（default false）。特権Local Userは自動連携しない |
 | `OIDC_POST_LOGOUT_REDIRECT_URI` | no | Authentik logout後の戻り先。未指定時はcallbackと同じoriginの`/` |
 | `DATASET_REGISTRY_URL` | lineage | Dataset Registry API URL |
 | `DATASET_REGISTRY_TOKEN` | lineage | Mado→Registry内部Bearer token。Pipeline keyとは別物 |
@@ -242,7 +243,7 @@ dev の DB パスワードは未設定なら既定値 (`postgres` / `CHANGEME`) 
 
 ### 認証とLineageの初期化
 
-既存DBには、コードを起動する前に`021_auth.sql`と`022_lineage_bindings.sql`を適用します。新規導入ではLocal Admin `admin` / `mado-admin!`が作成され、初回ログイン時に12文字以上の新しいパスワードへの変更が必須です。既存の`admin`がいる場合、migrationはパスワードを上書きしません。
+既存DBには、コードを起動する前に`021_auth.sql`から`027_durable_audit_intents.sql`までの未適用migrationを番号順に適用します。新規導入ではLocal Admin `admin` / `mado-admin!`が作成され、初回ログイン時に12文字以上の新しいパスワードへの変更が必須です。この変更完了まではサーバー側でも通常APIを拒否します。既存の`admin`がいる場合、migrationはパスワードを上書きしません。
 
 初期Adminを明示的に再設定する場合は、対話的なbootstrapコマンドを使います（パスワードを引数やshell historyへ残しません）。
 
@@ -274,8 +275,9 @@ Pipelineは`POST /api/openlineage/v1/lineage`へService Account keyをBearer送�
 このダッシュボードは認証を備えていますが、公開入口のTLSとネットワーク制御は引き続き必要です:
 
 - **外部公開前にHTTPS必須**。現行compose.prodはHTTP `:80`のままなので、そのままInternetへ公開しません。TLS終端後に`AUTH_COOKIE_SECURE=true`と`AUTH_MODE=local|oidc|hybrid`を設定します。
+- productionは認証無効で起動できません。初期・一時passwordの変更完了前は、直接APIを呼んでも通常機能を利用できません。
 - Browser sessionとPipeline Service Account keyを分離し、API keyはhashだけを保存します。
-- RBACと接続capabilityを重ね、認証・権限変更・key発行を監査ログへ保存します（password/token/event本体は記録しません）。
+- RBACと接続capabilityを重ね、操作開始前にdurableな監査intentを保存します。認証拒否・重要read・変更・key発行を記録し、password/token/OIDC code/OpenLineage event本体は保存しません。
 - **`ENCRYPTION_KEY`** で `storage_connections` の S3 認証情報を保存時暗号化 (AES-256-GCM)。DB ダンプだけ漏れても解読不能。
 - **CSRF 防御**: write 系 (POST/PUT/DELETE) は `ALLOWED_ORIGINS` と Origin/Referer を照合し、不一致なら 403。
 - **PG ロール分離**: ブラウザ由来の経路は `dashboard_rw` / `dashboard_ro` を使い分け、Postgres レベルで `DROP TABLE` 等を防ぐ。
