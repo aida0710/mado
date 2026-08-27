@@ -24,4 +24,10 @@ describe('requestMetadata', () => {
       'x-request-id': 'not-a-uuid',
     }))).toMatchObject({ ipAddress: null, requestId: null })
   })
+
+  it('nginxの32桁request IDをUUID表記へ正規化する', () => {
+    expect(requestMetadata(context({
+      'x-request-id': '8f4f72c53e534ed7a965bd24f4fe5eb8',
+    })).requestId).toBe('8f4f72c5-3e53-4ed7-a965-bd24f4fe5eb8')
+  })
 })
