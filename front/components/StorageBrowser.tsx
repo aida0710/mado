@@ -223,8 +223,9 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
     load({}, { refresh: true })
   }
 
-  const dirs = page?.directories ?? []
-  const files = page?.files ?? []
+  // page 未取得時も依存配列へ毎回新しい [] を渡さない。
+  const dirs = useMemo(() => page?.directories ?? [], [page?.directories])
+  const files = useMemo(() => page?.files ?? [], [page?.files])
 
   // タグ: レジストリ全件 + 表示中の dirs/files 分のバッチ割り当てを取得する。
   // dirs/files が変わるたび (ページ送り・検索・prefix 遷移) に再取得する。
@@ -257,7 +258,7 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
       setFileTags(f)
     }).catch(() => {})
     return () => { cancelled = true }
-    // dirs/files は毎レンダ新しい配列参照になるため、実際の中身 (キー結合) で比較する。
+    // 割り当て API は表示キー集合が変わったときだけ引き直す。
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [connId, bucket, tagsEnabled, dirs.join(' '), files.map(f => f.key).join(' ')])
 

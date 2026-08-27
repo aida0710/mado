@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useState, type KeyboardEvent } from 'react'
+import { memo, useCallback, useMemo, useState, useSyncExternalStore, type KeyboardEvent } from 'react'
 import { Link } from 'react-router-dom'
 import type { z } from 'zod'
 import { api } from '../../lib/api/client'
@@ -31,20 +31,20 @@ function TagRow({ tags }: { tags: Tag[] }) {
 // 同じ key の要素を複数ヒットしてしまうので、matchMedia を購読して片方だけ
 // 描画する。SSR / 初期描画は desktop 既定 (matches=true) として扱う。
 const COMPACT_QUERY = '(max-width: 639.98px)'
-function useIsCompact(): boolean {
-  const get = () => typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+const getCompactSnapshot = (): boolean =>
+  typeof window !== 'undefined' && typeof window.matchMedia === 'function'
     ? window.matchMedia(COMPACT_QUERY).matches
     : false
-  const [isCompact, setIsCompact] = useState(get)
-  useEffect(() => {
-    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return
-    const mql = window.matchMedia(COMPACT_QUERY)
-    const handler = (): void => setIsCompact(mql.matches)
-    mql.addEventListener('change', handler)
-    setIsCompact(mql.matches)
-    return () => mql.removeEventListener('change', handler)
-  }, [])
-  return isCompact
+
+const subscribeCompact = (onStoreChange: () => void): (() => void) => {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return () => {}
+  const mql = window.matchMedia(COMPACT_QUERY)
+  mql.addEventListener('change', onStoreChange)
+  return () => mql.removeEventListener('change', onStoreChange)
+}
+
+function useIsCompact(): boolean {
+  return useSyncExternalStore(subscribeCompact, getCompactSnapshot, () => false)
 }
 
 type ListResp = z.infer<typeof StorageList>

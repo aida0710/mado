@@ -36,6 +36,8 @@ export function ReadmeView({ connId, bucket, prefix }: Props) {
   // README プレビューは普段は 15 行で打ち切り。長い時だけ「すべて表示」が出る。
   // フォントサイズは HomePage と同じ (`.markdown-body` のベース 17px) — ここでは
   // 折りたたみ機能だけ載せる。
+  // 親が README の identity を key にしているため、別ディレクトリへ移れば
+  // component ごと再生成され、展開状態も自然に初期値へ戻る。
   const [expanded, setExpanded] = useState(false)
   const [needsExpand, setNeedsExpand] = useState(false)
   const bodyRef = useRef<HTMLDivElement>(null)
@@ -69,9 +71,6 @@ export function ReadmeView({ connId, bucket, prefix }: Props) {
   }, [connId, bucket, prefix, refresh])
 
   useEffect(() => { refresh() }, [refresh])
-
-  // 表示対象が prefix を跨いだら expand 状態をリセット (別ディレクトリでは別カウント)。
-  useEffect(() => { setExpanded(false) }, [connId, bucket, prefix])
 
   // 折りたたみ中に「内容が 15 行を超えているか」を判定。展開中は再測定しない
   // (overflow が消えてもボタンを出し続けるため)。ResizeObserver で画面幅変化にも追従。
@@ -152,7 +151,7 @@ export function ReadmeView({ connId, bucket, prefix }: Props) {
             <button
               type="button"
               className="markdown-body__expand"
-              onClick={() => setExpanded(e => !e)}
+              onClick={() => setExpanded(current => !current)}
               aria-expanded={expanded}
             >
               {expanded ? '▲ 折りたたむ' : '▼ すべて表示'}

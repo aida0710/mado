@@ -31,18 +31,40 @@ interface Props {
 
 type ListData = z.infer<typeof StorageList>
 
+interface ListResult {
+  connId: string
+  bucket: string
+  prefix: string
+  data: ListData | null
+  error: string | null
+}
+
 export function InsertableFileList({ connId, bucket, prefix: initialPrefix, onInsert }: Props) {
   const [prefix, setPrefix] = useState(initialPrefix)
-  const [data, setData] = useState<ListData | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  // 応答を取得対象と一緒に保持する。prefix 切替時に effect 内で state を同期リセット
+  // しなくても、旧ディレクトリの結果を新しい現在地へ一瞬表示せずに済む。
+  const [result, setResult] = useState<ListResult>({
+    connId: '',
+    bucket: '',
+    prefix: '',
+    data: null,
+    error: null,
+  })
+  const isCurrent = result.connId === connId && result.bucket === bucket && result.prefix === prefix
+  const data = isCurrent ? result.data : null
+  const error = isCurrent ? result.error : null
 
   useEffect(() => {
-    setData(null)
-    setError(null)
     let cancelled = false
     api.list(connId, bucket, prefix, {}, { recursive: false })
-      .then(r => { if (!cancelled) setData(r) })
-      .catch(e => { if (!cancelled) setError((e as Error).message) })
+      .then(data => {
+        if (!cancelled) setResult({ connId, bucket, prefix, data, error: null })
+      })
+      .catch(e => {
+        if (!cancelled) {
+          setResult({ connId, bucket, prefix, data: null, error: (e as Error).message })
+        }
+      })
     return () => { cancelled = true }
   }, [connId, bucket, prefix])
 

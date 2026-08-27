@@ -78,8 +78,14 @@ export default function StorageBucket({ connId }: Props) {
         <ConnectionSwitcher />
       </div>
       <StorageLineagePanel connId={connId} bucket={bucket} path={selected ?? prefix} />
-      {/* README はリスト幅に依存させない (常に full width) */}
-      <ReadmeView connId={connId} bucket={bucket} prefix={prefix} />
+      {/* README はリスト幅に依存させない (常に full width)。identity を key にして、
+          ディレクトリ遷移時は旧 README の取得・展開状態をまとめて破棄する。 */}
+      <ReadmeView
+        key={JSON.stringify([connId, bucket, prefix])}
+        connId={connId}
+        bucket={bucket}
+        prefix={prefix}
+      />
       {/* リスト + preview drawer を横並び。drawer 幅は drawer 左端のハンドルで
           リサイズでき、広げるとリストを圧縮せず上に重なる (useDrawerResize)。
           ハンドルは drawer 内に置き、その高さに収める。README には影響しない。 */}

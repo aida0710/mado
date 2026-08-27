@@ -23,6 +23,8 @@ interface Props {
     connId: string
 }
 
+const EMPTY_FAVORITES = new Set<string>()
+
 const sectionTitleClass =
     'mt-7 mb-3 text-[10.5px] font-semibold uppercase tracking-[0.22em] text-ink-7 first-of-type:mt-0'
 const listClass = 'm-0 list-none p-0'
@@ -39,21 +41,26 @@ const subLinkClass =
 export default function StorageIndex({connId}: Props) {
     const [searchParams] = useSearchParams()
     const indexHref = `/storage/${encodeURIComponent(connId)}/`
-    const [buckets, setBuckets] = useState<BucketRow[]>([])
+    const [loadedBuckets, setLoadedBuckets] = useState<BucketRow[]>([])
     // 関数形式: そうしないと毎レンダ new Set() が走って即破棄される。
-    const [favorites, setFavorites] = useState<Set<string>>(() => new Set())
-    const [error, setError] = useState<string | null>(null)
-    const [loading, setLoading] = useState(false)
+    const [loadedFavorites, setLoadedFavorites] = useState<Set<string>>(() => new Set())
+    const [loadError, setLoadError] = useState<{connId: string; message: string} | null>(null)
+    const [loadedConnId, setLoadedConnId] = useState<string | null>(null)
+    const [refreshingBuckets, setRefreshingBuckets] = useState(false)
     // 期限切れキャッシュを表示したまま裏でバケット一覧を再取得中か。
     const [revalidating, setRevalidating] = useState(false)
     // 遅い応答が接続切替をまたいで届いたときに別接続のバケットを描かないための gate。
     const sessionRef = useRef(0)
+    const buckets = loadedConnId === connId ? loadedBuckets : []
+    const favorites = loadedConnId === connId ? loadedFavorites : EMPTY_FAVORITES
+    const error = loadError?.connId === connId ? loadError.message : null
+    // 接続切替直後は effect で同期 setState せず、取得済み identity との差から
+    // loading を導出する。旧接続の一覧も新しい接続へ一瞬表示されない。
+    const loading = refreshingBuckets || loadedConnId !== connId
 
     // opts.refresh は ↻ からのみ true。通常のロードで貫通させると
     // サーバーキャッシュの意味が無くなる。
     const refresh = useCallback((opts: { refresh?: boolean } = {}) => {
-        setLoading(true)
-        setError(null)
         const sid = ++sessionRef.current
         const current = (): boolean => sessionRef.current === sid
         Promise.all([
@@ -64,7 +71,7 @@ export default function StorageIndex({connId}: Props) {
                     if (!current()) return
                     setRevalidating(true)
                     fresh
-                        .then(r => { if (current()) { setBuckets(r.buckets); setRevalidating(false) } })
+                        .then(r => { if (current()) { setLoadedBuckets(r.buckets); setRevalidating(false) } })
                         .catch(() => { if (current()) setRevalidating(false) })
                 },
             }),
@@ -72,14 +79,22 @@ export default function StorageIndex({connId}: Props) {
         ])
             .then(([bucketsRes, favs]) => {
                 if (!current()) return
-                setBuckets(bucketsRes.buckets)
-                setFavorites(new Set(favs))
+                setLoadedBuckets(bucketsRes.buckets)
+                setLoadedFavorites(new Set(favs))
+                setLoadError(null)
+                setLoadedConnId(connId)
             })
-            .catch((e: Error) => { if (current()) setError(e.message) })
-            .finally(() => { if (current()) setLoading(false) })
+            .catch((e: Error) => {
+                if (!current()) return
+                setLoadError({connId, message: e.message})
+                setLoadedConnId(connId)
+            })
+            .finally(() => { if (current()) setRefreshingBuckets(false) })
     }, [connId])
 
     const forceRefresh = useCallback(() => {
+        setRefreshingBuckets(true)
+        setLoadError(null)
         api.invalidateBuckets(connId)
         api.invalidateFavorites(connId)
         refresh({ refresh: true })
@@ -121,13 +136,13 @@ export default function StorageIndex({connId}: Props) {
         const next = new Set(favorites)
         if (isFav) next.delete(name)
         else next.add(name)
-        setFavorites(next)
+        setLoadedFavorites(next)
         try {
             if (isFav) await api.removeFavorite(connId, name)
             else await api.addFavorite(connId, name)
         } catch (e) {
-            setFavorites(favorites)
-            setError((e as Error).message)
+            setLoadedFavorites(favorites)
+            setLoadError({connId, message: (e as Error).message})
         }
     }
 
