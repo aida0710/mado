@@ -2,8 +2,9 @@ import type { Hono } from 'hono'
 import { z } from 'zod'
 import type { AuditWriter } from '../lib/audit.js'
 import { randomToken } from '../lib/auth-crypto.js'
-import type { AuthStore } from '../lib/auth-store.js'
+import { LastActiveAdminError, type AuthStore } from '../lib/auth-store.js'
 import { requirePermission, getSessionPrincipal } from '../lib/rbac.js'
+import { requestMetadata } from '../lib/request-metadata.js'
 import { hashPassword } from '../lib/password.js'
 
 export interface AdminUsersDeps {
@@ -26,14 +27,6 @@ const PatchBody = z.object({
 }).strict()
 const RolesBody = z.object({ roles: z.array(Role).max(16) })
 const ResetBody = z.object({ password: z.string().min(12).max(1024).optional() })
-
-function meta(c: { req: { header(name: string): string | undefined } }) {
-  return {
-    ipAddress: c.req.header('X-Forwarded-For')?.split(',')[0]?.trim() ?? null,
-    userAgent: c.req.header('User-Agent') ?? null,
-    requestId: c.req.header('X-Request-Id') ?? null,
-  }
-}
 
 export function mountAdminUsersRoutes(app: Hono, deps: AdminUsersDeps): void {
   app.use('/users', requirePermission('users:manage'))
@@ -64,7 +57,7 @@ export function mountAdminUsersRoutes(app: Hono, deps: AdminUsersDeps): void {
           target: { displayName: user.displayName, username: user.username },
           changes: [{ field: 'roles', label: '権限', before: [], after: parsed.data.roles }],
         },
-        ...meta(c),
+        ...requestMetadata(c),
       })
       return c.json({ user }, 201)
     } catch (e) {
@@ -83,14 +76,13 @@ export function mountAdminUsersRoutes(app: Hono, deps: AdminUsersDeps): void {
     if (!parsed.success) return c.json({ error: 'invalid body' }, 400)
     const current = await deps.store.getUser(id)
     if (!current) return c.json({ error: 'user not found' }, 404)
-    if (parsed.data.status === 'disabled' && current.roles.includes('admin')
-        && !await deps.store.hasOtherActiveAdmin(id)) {
-      return c.json({ error: 'cannot disable the last active admin' }, 409)
-    }
     let user
     try {
       user = await deps.store.updateUser(id, parsed.data)
     } catch (e) {
+      if (e instanceof LastActiveAdminError) {
+        return c.json({ error: 'cannot disable the last active admin' }, 409)
+      }
       if (e instanceof Error && 'code' in e && e.code === '23505') {
         return c.json({ error: 'username already exists' }, 409)
       }
@@ -114,7 +106,7 @@ export function mountAdminUsersRoutes(app: Hono, deps: AdminUsersDeps): void {
             : null,
         ].filter(Boolean),
       },
-      ...meta(c),
+      ...requestMetadata(c),
     })
     return c.json({ user })
   })
@@ -128,11 +120,15 @@ export function mountAdminUsersRoutes(app: Hono, deps: AdminUsersDeps): void {
     if (!await deps.store.rolesExist(parsed.data.roles)) return c.json({ error: 'unknown role' }, 400)
     const current = await deps.store.getUser(id)
     if (!current) return c.json({ error: 'user not found' }, 404)
-    if (current.status === 'active' && current.roles.includes('admin')
-        && !parsed.data.roles.includes('admin') && !await deps.store.hasOtherActiveAdmin(id)) {
-      return c.json({ error: 'cannot remove the last active admin role' }, 409)
+    let user
+    try {
+      user = await deps.store.setUserRoles(id, parsed.data.roles, principal.user.id)
+    } catch (error) {
+      if (error instanceof LastActiveAdminError) {
+        return c.json({ error: 'cannot remove the last active admin role' }, 409)
+      }
+      throw error
     }
-    const user = await deps.store.setUserRoles(id, parsed.data.roles, principal.user.id)
     await deps.store.revokeUserSessions(id)
     await deps.audit.write({
       actor: { type: 'user', userId: principal.user.id }, action: 'user.roles.update', outcome: 'success',
@@ -141,7 +137,7 @@ export function mountAdminUsersRoutes(app: Hono, deps: AdminUsersDeps): void {
         target: { displayName: current.displayName, username: current.username },
         changes: [{ field: 'roles', label: '権限', before: current.roles, after: parsed.data.roles }],
       },
-      ...meta(c),
+      ...requestMetadata(c),
     })
     return c.json({ user })
   })
@@ -167,7 +163,7 @@ export function mountAdminUsersRoutes(app: Hono, deps: AdminUsersDeps): void {
         target: { displayName: current.displayName, username: current.username },
         changes: [{ field: 'password', label: 'パスワード', before: null, after: '再発行・次回変更必須' }],
       },
-      ...meta(c),
+      ...requestMetadata(c),
     })
     // 自動生成時だけ一度返す。DB/auditには残さない。
     return c.json({ ok: true, temporaryPassword: parsed.data.password ? undefined : temporaryPassword })
@@ -180,11 +176,14 @@ export function mountAdminUsersRoutes(app: Hono, deps: AdminUsersDeps): void {
     if (id === principal.user.id) return c.json({ error: 'cannot delete your own account' }, 409)
     const current = await deps.store.getUser(id)
     if (!current) return c.json({ error: 'user not found' }, 404)
-    if (current.status === 'active' && current.roles.includes('admin')
-        && !await deps.store.hasOtherActiveAdmin(id)) {
-      return c.json({ error: 'cannot delete the last active admin' }, 409)
+    try {
+      if (!await deps.store.deleteUser(id)) return c.json({ error: 'user not found' }, 404)
+    } catch (error) {
+      if (error instanceof LastActiveAdminError) {
+        return c.json({ error: 'cannot delete the last active admin' }, 409)
+      }
+      throw error
     }
-    if (!await deps.store.deleteUser(id)) return c.json({ error: 'user not found' }, 404)
     await deps.audit.write({
       actor: { type: 'user', userId: principal.user.id }, action: 'user.delete', outcome: 'success',
       resourceType: 'user', resourceId: id,
@@ -192,7 +191,7 @@ export function mountAdminUsersRoutes(app: Hono, deps: AdminUsersDeps): void {
         target: { displayName: current.displayName, username: current.username },
         changes: [{ field: 'account', label: 'アカウント', before: '存在', after: '削除' }],
       },
-      ...meta(c),
+      ...requestMetadata(c),
     })
     return c.json({ ok: true })
   })

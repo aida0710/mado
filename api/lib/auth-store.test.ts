@@ -59,6 +59,23 @@ describe('AuthStore', () => {
     expect(await store.hasOtherActiveAdmin(a.id)).toBe(false)
   })
 
+  it('並行操作でもactive adminを0人にしない', async () => {
+    const a = await store.createUser({ email: 'a@example.com', displayName: 'A', roles: ['admin'] })
+    const b = await store.createUser({ email: 'b@example.com', displayName: 'B', roles: ['admin'] })
+    const results = await Promise.allSettled([
+      store.updateUser(a.id, { status: 'disabled' }),
+      store.updateUser(b.id, { status: 'disabled' }),
+    ])
+    expect(results.filter(result => result.status === 'fulfilled')).toHaveLength(1)
+    expect(results.filter(result => result.status === 'rejected')).toHaveLength(1)
+    const active = await pools.rw.query(
+      `SELECT count(DISTINCT u.id)::int AS count
+         FROM auth_users u JOIN auth_user_roles ur ON ur.user_id = u.id
+        WHERE u.status = 'active' AND u.deleted_at IS NULL AND ur.role_id = 'admin'`,
+    )
+    expect(active.rows[0].count).toBe(1)
+  })
+
   it('検証済みemailだけを既存Local Userへ連携し、OIDC groupのroleを同期する', async () => {
     const local = await store.createUser({
       username: 'local', email: 'same@example.com', displayName: 'Local', roles: ['viewer'],

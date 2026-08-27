@@ -143,6 +143,13 @@ export interface OidcBackchannelLogout {
   expiresAt: Date
 }
 
+export class LastActiveAdminError extends Error {
+  constructor() {
+    super('cannot remove the last active admin')
+    this.name = 'LastActiveAdminError'
+  }
+}
+
 export function createAuthStore(pool: Pool): AuthStore {
   async function loadUserIncludingDeleted(id: string, client: Pool | PoolClient = pool): Promise<AuthUser | null> {
     const r = await client.query<AuthUserRow>(`${AUTH_USER_SELECT} WHERE u.id = $1`, [id])
@@ -152,6 +159,26 @@ export function createAuthStore(pool: Pool): AuthStore {
   async function loadUser(id: string, client: Pool | PoolClient = pool): Promise<AuthUser | null> {
     const r = await client.query<AuthUserRow>(`${AUTH_USER_SELECT} WHERE u.id = $1 AND u.deleted_at IS NULL`, [id])
     return r.rows[0] ? toUser(r.rows[0]) : null
+  }
+
+  async function assertAdminRemovalAllowed(client: PoolClient, userId: string): Promise<void> {
+    await client.query(`SELECT pg_advisory_xact_lock(hashtext('mado-active-admin-invariant'))`)
+    const target = await client.query<{ status: UserStatus; is_admin: boolean }>(
+      `SELECT u.status,
+              EXISTS (SELECT 1 FROM auth_user_roles ur WHERE ur.user_id = u.id AND ur.role_id = 'admin') AS is_admin
+         FROM auth_users u
+        WHERE u.id = $1 AND u.deleted_at IS NULL
+        FOR UPDATE`,
+      [userId],
+    )
+    if (target.rows[0]?.status !== 'active' || !target.rows[0]?.is_admin) return
+    const admins = await client.query<{ count: string }>(
+      `SELECT count(DISTINCT u.id)::text AS count
+         FROM auth_users u
+         JOIN auth_user_roles ur ON ur.user_id = u.id AND ur.role_id = 'admin'
+        WHERE u.status = 'active' AND u.deleted_at IS NULL`,
+    )
+    if (Number(admins.rows[0]?.count ?? 0) <= 1) throw new LastActiveAdminError()
   }
 
   return {
@@ -219,18 +246,31 @@ export function createAuthStore(pool: Pool): AuthStore {
       }
       if (fields.length === 0) return loadUser(id)
       values.push(id)
-      const r = await pool.query(
-        `UPDATE auth_users SET ${fields.join(', ')}, updated_at = now()
-          WHERE id = $${values.length} AND deleted_at IS NULL RETURNING id`,
-        values,
-      )
-      return r.rowCount === 0 ? null : loadUser(id)
+      const client = await pool.connect()
+      try {
+        await client.query('BEGIN')
+        if (patch.status === 'disabled') await assertAdminRemovalAllowed(client, id)
+        const r = await client.query(
+          `UPDATE auth_users SET ${fields.join(', ')}, updated_at = now()
+            WHERE id = $${values.length} AND deleted_at IS NULL RETURNING id`,
+          values,
+        )
+        const user = r.rowCount === 0 ? null : await loadUser(id, client)
+        await client.query('COMMIT')
+        return user
+      } catch (e) {
+        await client.query('ROLLBACK')
+        throw e
+      } finally {
+        client.release()
+      }
     },
 
     async deleteUser(id) {
       const client = await pool.connect()
       try {
         await client.query('BEGIN')
+        await assertAdminRemovalAllowed(client, id)
         const r = await client.query(
           `UPDATE auth_users
               SET status = 'disabled', deleted_at = now(), updated_at = now()
@@ -268,6 +308,7 @@ export function createAuthStore(pool: Pool): AuthStore {
           await client.query('ROLLBACK')
           return null
         }
+        if (!roles.includes('admin')) await assertAdminRemovalAllowed(client, userId)
         await client.query(`DELETE FROM auth_user_roles WHERE user_id = $1`, [userId])
         for (const role of [...new Set(roles)]) {
           await client.query(
