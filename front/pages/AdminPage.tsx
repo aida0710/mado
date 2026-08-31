@@ -69,7 +69,7 @@ const ACTION_LABELS: Record<string, string> = {
   'setting.update': '設定を変更',
   'pricing.refresh': '料金を更新',
   'job.cancel': 'ジョブを中断',
-  'lineage.read': 'データの流れを閲覧',
+  'lineage.read': 'DataLineageを閲覧',
   'service_account.create': 'Service Accountを作成',
   'service_account.update': 'Service Accountを変更',
   'service_account.key.issue': 'API keyを発行',
@@ -91,7 +91,7 @@ const OUTCOME_LABELS: Record<AuditEventRow['outcome'], string> = {
 }
 
 const ROLE_OPTIONS = [
-  { id: 'viewer', label: 'Viewer — 閲覧のみ', help: 'Storageとデータの流れを閲覧できます。' },
+  { id: 'viewer', label: 'Viewer — 閲覧のみ', help: 'StorageとDataLineageを閲覧できます。' },
   { id: 'curator', label: 'Curator — 内容編集', help: '閲覧に加え、README・ノート・タグなどを編集できます。' },
   { id: 'operator', label: 'Operator — ジョブ実行', help: '閲覧に加え、走査・料金更新・ジョブ中断を実行できます。' },
   { id: 'admin', label: 'Admin — すべて管理', help: '接続・設定・ユーザー・API key・監査ログを含む全操作ができます。' },

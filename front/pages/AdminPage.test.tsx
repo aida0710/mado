@@ -41,7 +41,7 @@ describe('AdminPage', () => {
     expect(screen.queryByRole('heading', { name: 'Local Users' })).not.toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Pipeline Service Accounts' })).not.toBeInTheDocument()
     expect(screen.getByRole('option', { name: 'Viewer — 閲覧のみ' })).toBeInTheDocument()
-    expect(screen.getByText('Storageとデータの流れを閲覧できます。')).toBeInTheDocument()
+    expect(screen.getByText('StorageとDataLineageを閲覧できます。')).toBeInTheDocument()
   })
 
   it('Service Accountsタブ直下で見出しを重複させない', async () => {

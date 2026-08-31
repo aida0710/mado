@@ -34,7 +34,7 @@ export function LineageToolbar({ route, loading, onModeChange, onApply, onDepthC
 
   return (
     <div className="lineage-toolbar">
-      <div className="lineage-toolbar__modes" role="group" aria-label="データの流れの表示方法">
+      <div className="lineage-toolbar__modes" role="group" aria-label="DataLineageの表示方法">
         <button
           type="button"
           className="lineage-toolbar__mode"

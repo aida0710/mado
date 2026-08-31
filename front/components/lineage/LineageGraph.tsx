@@ -83,7 +83,7 @@ function Canvas({ graph, selectedId, direction, onSelect, onClearSelection }: Ca
   }, [fitView, graphKey, nodes, selectedId])
 
   return (
-    <div className="lineage-canvas" aria-label="データの流れグラフ">
+    <div className="lineage-canvas" aria-label="DataLineageグラフ">
       <ReactFlow
         key={graphKey}
         nodes={nodes}

@@ -149,7 +149,7 @@ export default function LineagePage() {
   return (
     <section className="lineage-page">
       <header className="page-head">
-        <h2>データの流れ</h2>
+        <h2>DataLineage</h2>
         {canCurate && <Link className="ghost" to="/lineage/register">手動で登録</Link>}
       </header>
 

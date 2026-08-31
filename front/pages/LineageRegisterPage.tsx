@@ -365,12 +365,12 @@ export default function LineageRegisterPage() {
   }, [allowed])
 
   if (!allowed) {
-    return <section><header className="page-head"><h2>データの流れ</h2></header><p className="error">手動登録の権限がありません。</p></section>
+    return <section><header className="page-head"><h2>DataLineage</h2></header><p className="error">手動登録の権限がありません。</p></section>
   }
 
   return (
     <section className="manual-lineage-page">
-      <header className="page-head"><h2>データの流れ</h2><Link className="ghost" to="/lineage">一覧に戻る</Link></header>
+      <header className="page-head"><h2>DataLineage</h2><Link className="ghost" to="/lineage">一覧に戻る</Link></header>
       <nav className="manual-kind-nav" aria-label="登録種別">
         <button type="button" data-active={kind === 'dataset' || undefined} onClick={() => setKind('dataset')}>データセット</button>
         <button type="button" data-active={kind === 'location' || undefined} onClick={() => setKind('location')}>保存場所</button>
