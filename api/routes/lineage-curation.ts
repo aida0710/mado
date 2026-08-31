@@ -121,6 +121,16 @@ const LineageRegistration = z.object({
   }
 })
 
+const DatasetUpdate = z.object({
+  displayName: z.string().trim().min(1).max(512).nullable().optional(),
+  aliases: z.array(z.string().trim().min(1).max(1024)).max(100).optional(),
+  description: z.string().trim().max(8192).nullable().optional(),
+  mediaType: z.string().trim().max(512).nullable().optional(),
+  owner: z.string().trim().max(512).nullable().optional(),
+}).strict().refine(value => Object.values(value).some(item => item !== undefined), {
+  message: 'one or more fields are required',
+})
+
 interface StorageBindingRow {
   registry_storage_system_key: string
   endpoint: string
@@ -217,6 +227,27 @@ function mutationError(c: Context, error: unknown): Response {
 
 export function mountLineageCurationRoutes(app: Hono, deps: LineageCurationDeps): void {
   app.use('/lineage/curation/*', requirePermission('lineage:curate'))
+
+  app.patch('/lineage/curation/datasets/:datasetId', async c => {
+    const principal = getSessionPrincipal(c)!
+    const datasetId = c.req.param('datasetId')
+    if (!Uuid.safeParse(datasetId).success) return c.json({ error: 'Dataset IDを確認してください。' }, 400)
+    const parsed = DatasetUpdate.safeParse(await c.req.json().catch(() => null))
+    if (!parsed.success) return c.json({ error: '入力内容を確認してください。' }, 400)
+    try {
+      const result = await deps.registry.updateDataset(datasetId, parsed.data)
+      await deps.audit.write({
+        actor: { type: 'user', userId: principal.user.id },
+        action: 'lineage.dataset.update', outcome: 'success',
+        resourceType: 'dataset', resourceId: datasetId,
+        details: { changedFields: Object.keys(parsed.data) },
+        ...requestMetadata(c),
+      })
+      return c.json(result)
+    } catch (error) {
+      return mutationError(c, error)
+    }
+  })
 
   app.post('/lineage/curation/datasets', async c => {
     const principal = getSessionPrincipal(c)!

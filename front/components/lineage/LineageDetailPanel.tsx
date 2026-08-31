@@ -1,7 +1,8 @@
+import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import type {
   DatasetDetail, DatasetVersionDetail, LineageNodeSummary, LineageRunDetail,
-  LineageStorageLocationDetail,
+  LineageStorageLocationDetail, LineageDatasetUpdateInput,
 } from '../../lib/api/types'
 import {
   LINEAGE_KIND_LABEL, lineageCompletenessLabel, lineageSourceKindLabel, lineageStatusLabel,
@@ -17,6 +18,8 @@ interface Props {
   error: string | null
   onClose: () => void
   onOpenVersion: (versionId: string) => void
+  canEdit?: boolean
+  onUpdateDataset?: (datasetId: string, input: LineageDatasetUpdateInput) => Promise<DatasetDetail>
 }
 function formatTime(value: string | null | undefined): string | null {
   if (!value) return null
@@ -36,6 +39,11 @@ function displayJson(value: unknown): string {
 function isEmptyStructuredValue(value: unknown): boolean {
   if (Array.isArray(value)) return value.length === 0
   return value !== null && typeof value === 'object' && Object.keys(value).length === 0
+}
+
+function metadataText(metadata: Record<string, unknown>, key: string): string | null {
+  const value = metadata[key]
+  return typeof value === 'string' && value.trim() ? value : null
 }
 
 function Field({
@@ -96,6 +104,7 @@ function VersionDetail({ detail }: { detail: DatasetVersionDetail }) {
         <Field label="ファイル一覧URI" value={detail.manifestUri} mono />
         <Field label="ファイル一覧のハッシュ" value={detail.manifestHash} mono />
         <Field label="スキーマURI" value={detail.schemaUri} mono />
+        <Field label="処理時期" value={metadataText(detail.metadata, 'documentedProcessDate')} />
         <Field label="登録日時" value={formatTime(detail.createdAt)} />
         <Field label="補足情報" value={detail.metadata} json />
       </dl>
@@ -107,12 +116,88 @@ function VersionDetail({ detail }: { detail: DatasetVersionDetail }) {
   )
 }
 
-function DatasetDetailView({ detail, onOpenVersion }: { detail: DatasetDetail; onOpenVersion: (id: string) => void }) {
+function optionalText(value: string): string | null {
+  const trimmed = value.trim()
+  return trimmed === '' ? null : trimmed
+}
+
+function DatasetEditForm({
+  detail, onCancel, onSave,
+}: {
+  detail: DatasetDetail
+  onCancel: () => void
+  onSave: (input: LineageDatasetUpdateInput) => Promise<void>
+}) {
+  const [displayName, setDisplayName] = useState(detail.displayName ?? '')
+  const [aliases, setAliases] = useState(detail.aliases.join('\n'))
+  const [description, setDescription] = useState(detail.description ?? '')
+  const [mediaType, setMediaType] = useState(detail.mediaType ?? '')
+  const [owner, setOwner] = useState(detail.owner ?? '')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault()
+    setSaving(true)
+    setError(null)
+    try {
+      await onSave({
+        displayName: optionalText(displayName),
+        aliases: [...new Set(aliases.split(/[\n,]/).map(value => value.trim()).filter(Boolean))],
+        description: optionalText(description),
+        mediaType: optionalText(mediaType),
+        owner: optionalText(owner),
+      })
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : '更新できませんでした。')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <form className="lineage-detail__edit" onSubmit={event => void submit(event)}>
+      <label className="manual-field"><span>表示名</span><input value={displayName} onChange={event => setDisplayName(event.target.value)} maxLength={512} /></label>
+      <label className="manual-field"><span>別名（改行またはカンマ区切り）</span><textarea value={aliases} onChange={event => setAliases(event.target.value)} /></label>
+      <label className="manual-field"><span>データ形式</span><input value={mediaType} onChange={event => setMediaType(event.target.value)} maxLength={512} /></label>
+      <label className="manual-field"><span>管理者</span><input value={owner} onChange={event => setOwner(event.target.value)} maxLength={512} /></label>
+      <label className="manual-field"><span>説明</span><textarea value={description} onChange={event => setDescription(event.target.value)} maxLength={8192} /></label>
+      {error && <p className="error" role="alert">{error}</p>}
+      <div className="lineage-detail__edit-actions">
+        <button type="button" className="ghost" onClick={onCancel} disabled={saving}>キャンセル</button>
+        <button type="submit" disabled={saving}>{saving ? '保存中…' : '保存'}</button>
+      </div>
+    </form>
+  )
+}
+
+function DatasetDetailView({
+  detail, onOpenVersion, canEdit, onUpdate,
+}: {
+  detail: DatasetDetail
+  onOpenVersion: (id: string) => void
+  canEdit: boolean
+  onUpdate?: (datasetId: string, input: LineageDatasetUpdateInput) => Promise<DatasetDetail>
+}) {
+  const [editing, setEditing] = useState(false)
+
+  if (editing && detail.datasetId && onUpdate) {
+    return <DatasetEditForm detail={detail} onCancel={() => setEditing(false)} onSave={async input => {
+      await onUpdate(detail.datasetId!, input)
+      setEditing(false)
+    }} />
+  }
   return (
     <>
+      {canEdit && detail.datasetId && onUpdate && (
+        <div className="lineage-detail__dataset-actions">
+          <button type="button" className="ghost" onClick={() => setEditing(true)}>説明情報を編集</button>
+        </div>
+      )}
       <dl className="lineage-detail__fields">
         <Field label="表示名" value={detail.displayName} />
         <Field label="データセットキー" value={detail.datasetKey} mono />
+        <Field label="別名" value={detail.aliases.join(' / ')} />
         <Field label="データ形式" value={detail.mediaType} />
         <Field label="管理者" value={detail.owner} />
         <Field label="登録日時" value={formatTime(detail.createdAt)} />
@@ -124,7 +209,7 @@ function DatasetDetailView({ detail, onOpenVersion }: { detail: DatasetDetail; o
           <li key={version.id}>
             <button type="button" onClick={() => onOpenVersion(version.id)}>
               <strong>{version.version}</strong>
-              <span>{formatTime(version.createdAt)}</span>
+              <span>{metadataText(version.metadata, 'documentedProcessDate') ?? '処理時期不明'}</span>
             </button>
           </li>
         ))}
@@ -134,13 +219,18 @@ function DatasetDetailView({ detail, onOpenVersion }: { detail: DatasetDetail; o
 }
 
 function RunDetail({ detail }: { detail: LineageRunDetail }) {
+  const historicalTimeUnknown = detail.runtime.recordKind === 'historical-lineage-assertion'
+    && detail.runtime.executionTimeStatus === 'unknown'
+  const documentedProcessDate = metadataText(detail.runtime, 'documentedProcessDate')
   return (
     <>
       <dl className="lineage-detail__fields">
         <Field label="状態" value={lineageStatusLabel(detail.status)} />
         <Field label="処理" value={`${detail.jobNamespace} / ${detail.jobName}`} mono />
-        <Field label="開始日時" value={formatTime(detail.startedAt)} />
-        <Field label="終了日時" value={formatTime(detail.endedAt)} />
+        <Field label="処理時期" value={documentedProcessDate} />
+        {!historicalTimeUnknown && <Field label="開始日時" value={formatTime(detail.startedAt)} />}
+        {!historicalTimeUnknown && <Field label="終了日時" value={formatTime(detail.endedAt)} />}
+        <Field label="登録日時" value={formatTime(detail.createdAt)} />
         <Field label="Gitコミット" value={detail.gitSha} mono />
         <Field label="コンテナイメージ" value={detail.containerDigest} mono />
         <Field label="設定ファイルURI" value={detail.configUri} mono />
@@ -181,7 +271,9 @@ function EmbeddedNodeDetail({ node }: { node: LineageNodeSummary }) {
   )
 }
 
-export function LineageDetailPanel({ node, detail, loading, error, onClose, onOpenVersion }: Props) {
+export function LineageDetailPanel({
+  node, detail, loading, error, onClose, onOpenVersion, canEdit = false, onUpdateDataset,
+}: Props) {
   return (
     <aside className="lineage-detail" aria-label="選択項目の詳細">
       <header>
@@ -202,7 +294,7 @@ export function LineageDetailPanel({ node, detail, loading, error, onClose, onOp
       {detail && (isRun(detail)
         ? <RunDetail detail={detail} />
         : isDataset(detail)
-          ? <DatasetDetailView detail={detail} onOpenVersion={onOpenVersion} />
+          ? <DatasetDetailView detail={detail} onOpenVersion={onOpenVersion} canEdit={canEdit} onUpdate={onUpdateDataset} />
           : <VersionDetail detail={detail} />)}
     </aside>
   )

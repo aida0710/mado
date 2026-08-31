@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
 import { LineageDetailPanel } from './LineageDetailPanel'
@@ -14,6 +14,7 @@ const version = {
   createdAt: '2026-08-26T00:00:00Z',
   metadata: {
     recordKind: 'inventory-observation',
+    documentedProcessDate: '2026-01-09頃（厳密な時刻は不明）',
     evidence: { source: 'README.md', verified: true },
   },
   locations: [{
@@ -48,6 +49,7 @@ describe('LineageDetailPanel', () => {
     expect(screen.getByText('s3://metadata/callhome.manifest.jsonl')).toBeInTheDocument()
     expect(screen.getByText('sha256:manifest')).toBeInTheDocument()
     expect(screen.getByLabelText('補足情報 JSON').textContent).toBe(JSON.stringify(version.metadata, null, 2))
+    expect(screen.getByText('2026-01-09頃（厳密な時刻は不明）')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'この保存場所をStorageで開く' }))
       .toHaveAttribute('href', '/storage/conn%201/dataset/callhome/raw/')
   })
@@ -77,12 +79,16 @@ describe('LineageDetailPanel', () => {
       status: 'COMPLETE' as const,
       startedAt: '2026-08-27T00:00:00Z',
       endedAt: '2026-08-27T00:00:01Z',
+      createdAt: '2026-08-31T13:27:25Z',
       gitSha: null,
       containerDigest: null,
       configUri: null,
       configHash: null,
       modelRefs: [],
-      runtime: { recordKind: 'historical-lineage-assertion' },
+      runtime: {
+        recordKind: 'historical-lineage-assertion', executionTimeStatus: 'unknown',
+        documentedProcessDate: '2025-12-27〜2025-12-31頃',
+      },
       metrics: { conversations: 11699 },
       errorMessage: null,
       inputs: [],
@@ -105,6 +111,33 @@ describe('LineageDetailPanel', () => {
     expect(screen.getByLabelText('実行結果 JSON').textContent).toBe(JSON.stringify(run.metrics, null, 2))
     expect(screen.getByLabelText('入手元 JSON').textContent).toBe(JSON.stringify(run.sources, null, 2))
     expect(screen.queryByLabelText('使用モデル JSON')).toBeNull()
+    expect(screen.getByText('2025-12-27〜2025-12-31頃')).toBeInTheDocument()
+    expect(screen.queryByText('2026/8/27 9:00:00')).toBeNull()
+  })
+
+  it('権限がある場合にDatasetの説明情報を編集できる', async () => {
+    const onUpdateDataset = vi.fn().mockResolvedValue({})
+    const dataset = {
+      kind: 'dataset' as const, datasetId: '22222222-2222-4222-8222-222222222222',
+      datasetKey: 'podcast/raw', namespace: 'podcast', name: 'raw', displayName: 'Podcast raw',
+      aliases: ['raw'], description: 'before', mediaType: 'audio', owner: null,
+      currentVersionId: version.id, versionCount: 1, createdAt: '2026-08-31T00:00:00Z', versions: [version],
+    }
+    render(
+      <MemoryRouter>
+        <LineageDetailPanel
+          node={{ id: dataset.datasetId, kind: 'dataset', label: dataset.displayName, summary: {}, data: {} }}
+          detail={dataset} loading={false} error={null} onClose={vi.fn()} onOpenVersion={vi.fn()}
+          canEdit onUpdateDataset={onUpdateDataset}
+        />
+      </MemoryRouter>,
+    )
+    fireEvent.click(screen.getByRole('button', { name: '説明情報を編集' }))
+    fireEvent.change(screen.getByLabelText('説明'), { target: { value: 'after' } })
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+    await waitFor(() => expect(onUpdateDataset).toHaveBeenCalledWith(dataset.datasetId, expect.objectContaining({
+      description: 'after', displayName: 'Podcast raw', aliases: ['raw'],
+    })))
   })
 
   it('shows embedded source provenance in version graphs', () => {

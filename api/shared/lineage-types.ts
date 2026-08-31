@@ -152,6 +152,7 @@ export interface LineageRunDetail {
   status: 'RUNNING' | 'COMPLETE' | 'FAIL' | 'ABORT'
   startedAt: string
   endedAt: string | null
+  createdAt: string | null
   gitSha: string | null
   containerDigest: string | null
   configUri: string | null

@@ -131,6 +131,16 @@ export default function LineagePage() {
     }
   }
 
+  const updateDataset = async (
+    datasetId: string,
+    input: Parameters<typeof api.updateLineageDataset>[1],
+  ): Promise<DatasetDetail> => {
+    const updated = await api.updateLineageDataset(datasetId, input)
+    if (selectedNode) setDetailState({ nodeId: selectedNode.id, data: updated, error: null })
+    setRefreshToken(token => token + 1)
+    return updated
+  }
+
   const projection = graphState.data?.projection
   const projectionProblem = projection && projection.state !== 'synced'
   const detailForSelection = selectedNode && detailState.nodeId === selectedNode.id ? detailState : initialDetail
@@ -207,6 +217,8 @@ export default function LineagePage() {
             error={detailForSelection.error}
             onClose={() => patchRoute({ selectedId: '' })}
             onOpenVersion={versionId => patchRoute({ mode: 'versions', versionId, selectedId: versionId })}
+            canEdit={canCurate}
+            onUpdateDataset={updateDataset}
           />
         </div>
       )}

@@ -20,6 +20,9 @@ describe('audit activity', () => {
     expect(classifyActivity('POST', '/api/internal/lineage/curation/datasets')).toMatchObject({
       action: 'lineage.dataset.register', dedicatedSuccessAudit: true,
     })
+    expect(classifyActivity('PATCH', '/api/internal/lineage/curation/datasets/d1')).toMatchObject({
+      action: 'lineage.dataset.update', resourceId: 'd1', dedicatedSuccessAudit: true,
+    })
   })
 
   it('response outcomeとactorを記録する', async () => {

@@ -103,6 +103,32 @@ describe('Registry client', () => {
     expect(detail.versions[0].locations[0].isPrimary).toBe(true)
   })
 
+  it('Dataset更新をsnake_caseで送り、更新後の詳細を再取得する', async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ id: 'd1' }), {
+        status: 200, headers: { 'Content-Type': 'application/json' },
+      }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        id: 'd1', dataset_key: 'raw', namespace: 'speech', name: 'raw',
+        display_name: '更新後', aliases: ['audio'], description: null,
+        created_at: '2026-08-26T00:00:00Z', versions: [],
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    const client = createRegistryClient({ baseUrl: 'http://registry', token: 'secret', fetch })
+
+    const updated = await client.updateDataset('d1', {
+      displayName: '更新後', aliases: ['audio'], description: null,
+    })
+
+    expect(fetch).toHaveBeenCalledTimes(2)
+    expect(String(fetch.mock.calls[0][0])).toBe('http://registry/v1/datasets/d1')
+    expect(fetch.mock.calls[0][1]?.method).toBe('PATCH')
+    expect(JSON.parse(String(fetch.mock.calls[0][1]?.body))).toEqual({
+      display_name: '更新後', aliases: ['audio'], description: null,
+    })
+    expect(fetch.mock.calls[1][1]?.method).toBeUndefined()
+    expect(updated.displayName).toBe('更新後')
+  })
+
   it('手動登録はinternal credential付きの専用endpointへ送る', async () => {
     const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(new Response(JSON.stringify({
       dataset: { id: 'd1' }, version: { id: 'v1' },

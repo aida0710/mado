@@ -39,6 +39,7 @@ import type {
   ManualDatasetRegistrationInput,
   ManualStorageLocationInput,
   ManualLineageRegistrationInput,
+  LineageDatasetUpdateInput,
 } from './types'
 import { TTLCache } from './cache'
 
@@ -128,7 +129,7 @@ function buildUrl(path: string, params: Record<string, string | undefined>): str
 
 async function mutateJson<T extends z.ZodTypeAny>(
   url: string,
-  init: { method: 'POST' | 'PUT' | 'DELETE'; body?: unknown },
+  init: { method: 'POST' | 'PUT' | 'PATCH' | 'DELETE'; body?: unknown },
   schema: T | null,
 ): Promise<T extends z.ZodTypeAny ? z.infer<T> : void> {
   const res = await fetch(url, {
@@ -658,6 +659,13 @@ export const api = {
 
   lineageDataset: (datasetId: string) =>
     getJson(`${API_BASE}/lineage/datasets/${encodeURIComponent(datasetId)}`, DatasetDetail),
+
+  updateLineageDataset: (datasetId: string, input: LineageDatasetUpdateInput) =>
+    mutateJson(
+      `${API_BASE}/lineage/curation/datasets/${encodeURIComponent(datasetId)}`,
+      { method: 'PATCH', body: input },
+      DatasetDetail,
+    ),
 
   lineageVersion: (versionId: string) =>
     getJson(`${API_BASE}/lineage/versions/${encodeURIComponent(versionId)}`, DatasetVersionDetail),

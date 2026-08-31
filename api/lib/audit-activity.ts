@@ -69,7 +69,12 @@ export function classifyActivity(method: string, pathname: string): Activity | n
   if (verb === 'POST' && p[0] === 'jobs' && p[1] && p[2] === 'cancel') {
     return { action: 'job.cancel', resourceType: 'job', resourceId: decoded(p[1]) }
   }
-  if (verb === 'POST' && p[0] === 'lineage' && p[1] === 'curation') {
+  if (p[0] === 'lineage' && p[1] === 'curation') {
+    if (verb === 'PATCH' && p[2] === 'datasets' && p[3]) return {
+      action: 'lineage.dataset.update', resourceType: 'dataset', resourceId: decoded(p[3]),
+      dedicatedSuccessAudit: true,
+    }
+    if (verb !== 'POST') return null
     const kind = p[2] === 'datasets' ? 'dataset' : p[2] === 'locations' ? 'location'
       : p[2] === 'runs' ? 'run' : null
     if (kind) return {

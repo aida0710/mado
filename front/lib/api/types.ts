@@ -584,6 +584,14 @@ export interface ManualDatasetRegistrationInput {
   evidenceRefs: string[]
 }
 
+export interface LineageDatasetUpdateInput {
+  displayName?: string | null
+  aliases?: string[]
+  description?: string | null
+  mediaType?: string | null
+  owner?: string | null
+}
+
 export interface ManualTransformationInput {
   transformationKey: string
   name: string
@@ -741,6 +749,7 @@ export const LineageRunDetail = z.object({
   status: z.enum(['RUNNING', 'COMPLETE', 'FAIL', 'ABORT']),
   startedAt: z.string(),
   endedAt: z.string().nullable(),
+  createdAt: z.string().nullable(),
   gitSha: z.string().nullable(),
   containerDigest: z.string().nullable(),
   configUri: z.string().nullable(),

@@ -69,6 +69,14 @@ export interface RegistryManualLineageInput extends Record<string, unknown> {
   submitted_by: string
 }
 
+export interface RegistryDatasetUpdateInput {
+  displayName?: string | null
+  aliases?: string[]
+  description?: string | null
+  mediaType?: string | null
+  owner?: string | null
+}
+
 export interface RegistryClient {
   ingestOpenLineage(
     event: OpenLineageEvent,
@@ -84,6 +92,7 @@ export interface RegistryClient {
     limit?: number,
   ): Promise<{ uri: string; matches: RegistryStorageLocationMatch[]; totalCount: number }>
   getDataset(id: string): Promise<DatasetDetail>
+  updateDataset(id: string, input: RegistryDatasetUpdateInput): Promise<DatasetDetail>
   getVersion(id: string): Promise<DatasetVersionDetail>
   getRun(id: string): Promise<LineageRunDetail>
   getVersionGraph(
@@ -262,6 +271,7 @@ function runDetail(value: unknown): LineageRunDetail {
     status,
     startedAt: text(row.startedAt ?? row.started_at, '')!,
     endedAt: text(row.endedAt ?? row.ended_at),
+    createdAt: text(row.createdAt ?? row.created_at),
     gitSha: text(row.gitSha ?? row.git_sha),
     containerDigest: text(row.containerDigest ?? row.container_digest),
     configUri: text(row.configUri ?? row.config_uri),
@@ -371,6 +381,21 @@ export function createRegistryClient(options: RegistryClientOptions): RegistryCl
     },
 
     getDataset: id => request<unknown>(`/v1/datasets/${encodeURIComponent(id)}`).then(datasetDetail),
+    updateDataset: async (id, input) => {
+      const path = `/v1/datasets/${encodeURIComponent(id)}`
+      await request(path, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...(input.displayName !== undefined ? { display_name: input.displayName } : {}),
+          ...(input.aliases !== undefined ? { aliases: input.aliases } : {}),
+          ...(input.description !== undefined ? { description: input.description } : {}),
+          ...(input.mediaType !== undefined ? { media_type: input.mediaType } : {}),
+          ...(input.owner !== undefined ? { owner: input.owner } : {}),
+        }),
+      })
+      return request<unknown>(path).then(datasetDetail)
+    },
     getVersion: id => request<unknown>(`/v1/dataset-versions/${encodeURIComponent(id)}`).then(datasetVersion),
     getRun: id => request<unknown>(`/v1/runs/${encodeURIComponent(id)}`).then(runDetail),
 
