@@ -58,6 +58,7 @@ server {
     allow 10.15.0.0/16;
     allow 10.143.0.0/16;
     allow 172.17.8.0/24;
+    allow 163.220.179.117/32;
     deny all;
 
     location / {
