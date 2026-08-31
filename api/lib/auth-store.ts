@@ -17,8 +17,6 @@ interface AuthUserRow {
 
 interface LocalCredentialRow extends AuthUserRow {
   password_hash: string
-  failed_attempts: number
-  locked_until: Date | null
 }
 
 const AUTH_USER_FIELDS = `u.id, u.username, u.email, u.display_name, u.signature_name, u.status,
@@ -81,11 +79,8 @@ export interface AuthStore {
   hasOtherActiveAdmin(userId: string): Promise<boolean>
   getLocalCredential(identifier: string): Promise<(AuthUser & {
     passwordHash: string
-    failedAttempts: number
-    lockedUntil: Date | null
   }) | null>
   setLocalPassword(userId: string, hash: string, mustChange: boolean): Promise<boolean>
-  recordFailedLogin(userId: string, threshold: number, lockSeconds: number): Promise<void>
   recordSuccessfulLogin(userId: string): Promise<void>
   createSession(userId: string, cfg: SessionLifetime, metadata?: RequestMetadata, oidc?: OidcSessionContext): Promise<CreatedSession>
   authenticateSession(token: string, idleSeconds: number, touchIntervalSeconds?: number): Promise<SessionPrincipal | null>
@@ -303,12 +298,12 @@ export function createAuthStore(pool: Pool): AuthStore {
       const client = await pool.connect()
       try {
         await client.query('BEGIN')
+        if (!roles.includes('admin')) await assertAdminRemovalAllowed(client, userId)
         const exists = await client.query(`SELECT 1 FROM auth_users WHERE id = $1 FOR UPDATE`, [userId])
         if (exists.rowCount === 0) {
           await client.query('ROLLBACK')
           return null
         }
-        if (!roles.includes('admin')) await assertAdminRemovalAllowed(client, userId)
         await client.query(`DELETE FROM auth_user_roles WHERE user_id = $1`, [userId])
         for (const role of [...new Set(roles)]) {
           await client.query(
@@ -350,7 +345,7 @@ export function createAuthStore(pool: Pool): AuthStore {
 
     async getLocalCredential(identifier) {
       const r = await pool.query<LocalCredentialRow>(
-        `SELECT ${AUTH_USER_FIELDS}, lc.password_hash, lc.failed_attempts, lc.locked_until
+        `SELECT ${AUTH_USER_FIELDS}, lc.password_hash
            ${AUTH_USER_FROM}
            WHERE (lower(u.username) = lower($1) OR lower(u.email) = lower($1))
              AND lc.user_id IS NOT NULL AND u.deleted_at IS NULL`,
@@ -361,43 +356,25 @@ export function createAuthStore(pool: Pool): AuthStore {
       return {
         ...toUser(row),
         passwordHash: row.password_hash,
-        failedAttempts: row.failed_attempts,
-        lockedUntil: row.locked_until,
       }
     },
 
     async setLocalPassword(userId, hash, mustChange) {
       const r = await pool.query(
         `INSERT INTO auth_local_credentials
-           (user_id, password_hash, password_changed_at, failed_attempts, locked_until, must_change_password)
-         VALUES ($1, $2, now(), 0, NULL, $3)
+           (user_id, password_hash, password_changed_at, must_change_password)
+         VALUES ($1, $2, now(), $3)
          ON CONFLICT (user_id) DO UPDATE
            SET password_hash = EXCLUDED.password_hash,
-               password_changed_at = now(), failed_attempts = 0,
-               locked_until = NULL, must_change_password = EXCLUDED.must_change_password`,
+               password_changed_at = now(), must_change_password = EXCLUDED.must_change_password`,
         [userId, hash, mustChange],
       )
       return (r.rowCount ?? 0) > 0
     },
 
-    async recordFailedLogin(userId, threshold, lockSeconds) {
-      await pool.query(
-        `UPDATE auth_local_credentials
-            SET failed_attempts = failed_attempts + 1,
-                locked_until = CASE WHEN failed_attempts + 1 >= $2
-                  THEN now() + ($3 * interval '1 second') ELSE locked_until END
-          WHERE user_id = $1`,
-        [userId, threshold, lockSeconds],
-      )
-    },
-
     async recordSuccessfulLogin(userId) {
       await pool.query(
-        `WITH credential AS (
-           UPDATE auth_local_credentials SET failed_attempts = 0, locked_until = NULL
-            WHERE user_id = $1
-         )
-         UPDATE auth_users SET last_login_at = now(), updated_at = now() WHERE id = $1`,
+        `UPDATE auth_users SET last_login_at = now(), updated_at = now() WHERE id = $1`,
         [userId],
       )
     },
@@ -596,6 +573,11 @@ export function createAuthStore(pool: Pool): AuthStore {
         const before = await loadUserIncludingDeleted(userId, client)
         if (!before) throw new Error('oidc user missing')
         if (before.status !== 'active') throw new Error('user disabled')
+        if (input.managedRoles
+            && before.roles.includes('admin')
+            && !input.managedRoles.includes('admin')) {
+          await assertAdminRemovalAllowed(client, userId)
+        }
 
         await client.query(
           `INSERT INTO auth_oidc_identities

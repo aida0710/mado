@@ -4,6 +4,7 @@ import { closePools, createPools } from '../db.js'
 import { createAuditWriter } from '../lib/audit.js'
 import { createAuthStore } from '../lib/auth-store.js'
 import type { OidcProvider } from '../lib/auth-oidc.js'
+import { AuthRateLimiter } from '../lib/auth-rate-limit.js'
 import { hashPassword } from '../lib/password.js'
 import { mountAuthRoutes } from './auth.js'
 
@@ -79,6 +80,33 @@ describe('auth routes', () => {
       `SELECT outcome FROM audit_events WHERE action = 'auth.local.login'`,
     )
     expect(events.rows).toEqual([{ outcome: 'denied' }])
+  })
+
+  it('password失敗をUser単位で拒否せず正しいpasswordは通す', async () => {
+    const isolated = new Hono()
+    mountAuthRoutes(isolated, {
+      store,
+      audit,
+      config: {
+        localEnabled: true,
+        session: { idleSeconds: 3600, absoluteSeconds: 7200, secure: false, cookieName: 'mado_session' },
+        rateLimiter: new AuthRateLimiter(),
+      },
+    })
+    for (let attempt = 0; attempt < 21; attempt += 1) {
+      const denied = await isolated.request('/local/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ identifier: 'local-user', password: `wrong-${attempt}` }),
+      })
+      expect(denied.status).toBe(401)
+    }
+    const accepted = await isolated.request('/local/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ identifier: 'local-user', password: 'correct-password-123' }),
+    })
+    expect(accepted.status).toBe(200)
   })
 
   it('cookie無しの/meを401にする', async () => {

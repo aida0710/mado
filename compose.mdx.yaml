@@ -1,6 +1,7 @@
 # mdx deployment: Mado and its private lineage backends share one Compose
-# project and one bridge network. Only Mado nginx is published, on loopback;
-# host Apache is the sole LAN-facing entry point.
+# project and one bridge network. Mado nginx listeners are published on loopback;
+# host Apache serves the intranet UI, and a future host TLS proxy may expose only
+# the dedicated OpenLineage listener.
 name: mado-mdx
 
 services:
@@ -169,6 +170,7 @@ services:
         VITE_GIT_DATE: "${VITE_GIT_DATE:-}"
     ports:
       - "127.0.0.1:8080:8080"
+      - "127.0.0.1:8081:8081"
     depends_on:
       - api-internal
       - api-lineage

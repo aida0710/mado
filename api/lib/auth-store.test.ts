@@ -113,6 +113,27 @@ describe('AuthStore', () => {
     })).rejects.toThrow(/explicit oidc linking/)
   })
 
+  it('OIDC managed Role同期で最後のactive adminを降格しない', async () => {
+    const input = {
+      issuer: 'https://auth.example', subject: 'admin-subject',
+      email: 'sso-admin@example.com', emailVerified: true,
+      username: 'sso-admin', displayName: 'SSO Admin', groups: ['mado-admins'],
+      autoLinkVerifiedEmail: false, defaultRole: 'viewer' as const, managedRoles: ['admin'],
+    }
+    const provisioned = await store.provisionOidcUser(input)
+
+    await expect(store.provisionOidcUser({
+      ...input, groups: ['mado-users'], managedRoles: ['viewer'],
+    })).rejects.toThrow(/last active admin/)
+    expect((await store.getUser(provisioned.user.id))?.roles).toEqual(['admin'])
+
+    await store.createUser({ email: 'break-glass@example.com', displayName: 'Break Glass', roles: ['admin'] })
+    const demoted = await store.provisionOidcUser({
+      ...input, groups: ['mado-users'], managedRoles: ['viewer'],
+    })
+    expect(demoted.user.roles).toEqual(['viewer'])
+  })
+
   it('OIDC sid/sub単位でsessionを失効しlogout tokenのreplayを拒否する', async () => {
     const user = await store.createUser({ displayName: 'SSO', roles: ['viewer'] })
     const a = await store.createSession(user.id, { idleSeconds: 3600, absoluteSeconds: 7200 }, {}, {

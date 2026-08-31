@@ -86,9 +86,11 @@ services:
         VITE_GIT_DATE: "${VITE_GIT_DATE:-}"
     container_name: mado-prod-nginx
     # nginx は非 root user (uid 101) で動くため container 内では :8080 を listen する。
-    # host 側のみ 80 を晒す。
+    # UIもloopbackだけにbindし、host側intranet proxyからのみ公開する。
     ports:
-      - "80:8080"
+      - "127.0.0.1:8080:8080"
+      # 外部OpenLineage入口はhost TLS proxyからだけ到達可能にする。
+      - "127.0.0.1:8081:8081"
     depends_on:
       - api-internal
       - api-lineage

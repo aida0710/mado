@@ -19,8 +19,6 @@ export interface AuthRouteConfig {
     cookieName?: string
     secure: boolean
   }
-  loginFailureThreshold?: number
-  loginLockSeconds?: number
   rateLimiter?: AuthRateLimiter
   oidc?: OidcProvider
   oidcProvisioning?: {
@@ -92,8 +90,6 @@ function setSessionCookie(
 }
 
 export function mountAuthRoutes(app: Hono, deps: AuthRouteDeps): void {
-  const threshold = deps.config.loginFailureThreshold ?? 5
-  const lockSeconds = deps.config.loginLockSeconds ?? 15 * 60
   const cookieName = deps.config.session.cookieName ?? SESSION_COOKIE
   const limiter = deps.config.rateLimiter ?? new AuthRateLimiter()
   const oidcCookieName = deps.config.session.secure ? '__Host-mado_oidc_tx' : 'mado_oidc_tx'
@@ -128,11 +124,7 @@ export function mountAuthRoutes(app: Hono, deps: AuthRouteDeps): void {
     const metadata = requestMetadata(c)
     const normalizedIdentifier = identifier.trim().toLowerCase()
     const ipKey = `login:ip:${metadata.ipAddress ?? 'unknown'}`
-    const pairKey = `login:pair:${metadata.ipAddress ?? 'unknown'}:${normalizedIdentifier}`
-    const identifierKey = `login:identifier:${normalizedIdentifier}`
-    if (!limiter.consume(ipKey, 30, 60_000)
-        || !limiter.consume(pairKey, 5, 60_000)
-        || !limiter.consume(identifierKey, 20, 15 * 60_000)) {
+    if (!limiter.consume(ipKey, 30, 60_000)) {
       await deps.audit.write({
         actor: { type: 'anonymous' }, action: 'auth.local.login', outcome: 'denied',
         details: { identifier: normalizedIdentifier, reason: 'rate_limited' }, ...metadata,
@@ -148,7 +140,6 @@ export function mountAuthRoutes(app: Hono, deps: AuthRouteDeps): void {
       return c.json({ error: 'authentication busy' }, 429)
     }
     if (!credential || credential.status !== 'active' || !checked.value) {
-      if (credential) await deps.store.recordFailedLogin(credential.id, threshold, lockSeconds)
       await deps.audit.write({
         actor: { type: 'anonymous' }, action: 'auth.local.login', outcome: 'denied',
         details: { identifier: normalizedIdentifier, reason: 'invalid' },
@@ -165,7 +156,6 @@ export function mountAuthRoutes(app: Hono, deps: AuthRouteDeps): void {
       )
     }
     await deps.store.recordSuccessfulLogin(credential.id)
-    limiter.reset(pairKey, identifierKey)
     const session = await deps.store.createSession(credential.id, deps.config.session, metadata)
     setSessionCookie(c, session.token, deps.config.session)
     await deps.audit.write({

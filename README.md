@@ -243,7 +243,7 @@ dev の DB パスワードは未設定なら既定値 (`postgres` / `CHANGEME`) 
 
 ### 認証とLineageの初期化
 
-既存DBには、コードを起動する前に`021_auth.sql`から`027_durable_audit_intents.sql`までの未適用migrationを番号順に適用します。新規導入ではLocal Admin `admin` / `mado-admin!`が作成され、初回ログイン時に12文字以上の新しいパスワードへの変更が必須です。この変更完了まではサーバー側でも通常APIを拒否します。既存の`admin`がいる場合、migrationはパスワードを上書きしません。
+既存DBには`021_auth.sql`から`028_drop_local_login_lock.sql`までの未適用migrationを番号順に適用します。ただし`028`は旧APIが参照する列を削除するため、既存環境では**新APIを先に起動してから`028`を適用**してください（`021`〜`027`は従来どおりコード起動前に適用できます）。新規導入ではLocal Admin `admin` / `mado-admin!`が作成され、初回ログイン時に12文字以上の新しいパスワードへの変更が必須です。この変更完了まではサーバー側でも通常APIを拒否します。既存の`admin`がいる場合、migrationはパスワードを上書きしません。
 
 初期Adminを明示的に再設定する場合は、対話的なbootstrapコマンドを使います（パスワードを引数やshell historyへ残しません）。
 
@@ -252,7 +252,7 @@ docker compose -f compose.prod.yaml exec api-internal \
   npm run auth:bootstrap-admin -- --username admin
 ```
 
-Pipelineは`POST /api/openlineage/v1/lineage`へService Account keyをBearer送信します。Madoがprofile/scope/namespaceを検証し、keyを除いたprincipal envelopeをRegistryへ転送します。
+Pipelineは外部公開用hostnameの`POST /api/openlineage/v1/lineage`へService Account keyをBearer送信します。Madoがprofile/scope/namespaceを検証し、keyを除いたprincipal envelopeをRegistryへ転送します。production nginxはintranet UI用`:8080`とOpenLineage専用`:8081`を分離し、`:8081`ではこのPOSTだけを受け付け、その他のpath/methodを404にします。Composeは両listenerをhostのloopbackへだけpublishするため、それぞれ用途別のreverse proxyを前段に置いてください。
 
 ### 本番デプロイ
 
@@ -262,7 +262,7 @@ Pipelineは`POST /api/openlineage/v1/lineage`へService Account keyをBearer送�
 
 `deploy.sh` は稼働中コミットを About に焼くため git 情報を build に渡します。dev との差分:
 
-- nginx が `:80` (host) を listen し全トラフィックを受ける (api コンテナはホスト非公開)
+- nginx のintranet UI入口を`127.0.0.1:8080`、OpenLineage専用入口を`127.0.0.1:8081`へpublishし、どちらも用途別のhost reverse proxyを必須にする (api コンテナはホスト非公開)
 - api は image build 時の `tsc` 成果物 (`dist/`) を `node` で実行
 - nginx と api は **non-root user** で動作
 - 全コンテナが `restart: unless-stopped`
@@ -274,7 +274,8 @@ Pipelineは`POST /api/openlineage/v1/lineage`へService Account keyをBearer送�
 
 このダッシュボードは認証を備えていますが、公開入口のTLSとネットワーク制御は引き続き必要です:
 
-- **外部公開前にHTTPS必須**。現行compose.prodはHTTP `:80`のままなので、そのままInternetへ公開しません。TLS終端後に`AUTH_COOKIE_SECURE=true`と`AUTH_MODE=local|oidc|hybrid`を設定します。
+- **外部公開前にHTTPS必須**。Composeの入口はloopback上のHTTPだけなので、用途別のhost reverse proxyでTLSを終端します。Browser側TLS終端後に`AUTH_COOKIE_SECURE=true`と`AUTH_MODE=local|oidc|hybrid`を設定します。
+- Web UI、`/api/auth/`、`/api/internal/`はintranet内に閉じます。外部公開するhost TLS proxyは`127.0.0.1:8081`だけへ接続し、OpenLineage ingest以外を公開しません。公開入口には送信元IP 10 req/s（burst 50）・全体50 req/s（burst 200）のrate limit、送信元20・全体200のconnection limit、2 MiB body上限、timeout、`Cache-Control: no-store`を設定済みです。
 - productionは認証無効で起動できません。初期・一時passwordの変更完了前は、直接APIを呼んでも通常機能を利用できません。
 - Browser sessionとPipeline Service Account keyを分離し、API keyはhashだけを保存します。
 - RBACと接続capabilityを重ね、操作開始前にdurableな監査intentを保存します。認証拒否・重要read・変更・key発行を記録し、password/token/OIDC code/OpenLineage event本体は保存しません。
@@ -297,22 +298,24 @@ dev / prodとも、ブラウザsession用`api-internal`とPipeline key用`api-li
 ```
                  ┌─ docker compose ──────────────────────────────┐
 Browser ─:5173 ─►│ front (vite dev / dev)                        │
-   または :80    │   または                                      │
-                 │ nginx (静的 + リバプロ / prod)                │
+ またはhost proxy│   または                                      │
+                 │ nginx :8080 (intranet UI / prod)              │
                  │   └─► /api/internal/* → api-internal (Hono)   │
                  │   └─► /api/auth/*     → api-internal          │
-Pipeline ───────►│   └─► /api/openlineage/* → api-lineage        │
+Pipeline ─TLS proxy─► nginx :8081 (POST ingest only)              │
+                 │   └─► /api/openlineage/v1/lineage → api-lineage│
                  │                              ├─► media-worker │
                  │                              │    (ffmpeg)    │
                  │                          postgres             │
                  └───────────────────────────────────────────────┘
-                 公開ポート: dev=5173 のみ / prod=80 のみ (LAN/VPN 経由前提)
+                 公開ポート: dev=5173
+                 host loopback: prod UI=:8080 / OpenLineage=:8081
 ```
 
 | サービス | dev | prod |
 |---|---|---|
 | `front` | `vite dev` (HMR) | (なし、nginx に焼き込み) |
-| `nginx` | (なし、Vite proxy が代替) | 静的配信 + `/api/internal/*` リバプロ |
+| `nginx` | (なし、Vite proxy が代替) | `:8080` 静的配信・内部API + `:8081` OpenLineage POST専用 |
 | `api-internal` | `tsx watch internal.ts` | `node dist/internal.js` |
 | `api-lineage` | `tsx watch lineage.ts` | `node dist/lineage.js` |
 | `media-worker` | `tsx watch worker.ts` | `node dist/worker.js` |
