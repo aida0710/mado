@@ -12,7 +12,7 @@ import type {
   VersionLineageGraph,
 } from '../shared/lineage-types.js'
 import type { MarquezClient, MarquezGraphNode } from './marquez-client.js'
-import { marquezNodeId } from './marquez-client.js'
+import { MarquezClientError, marquezNodeId } from './marquez-client.js'
 import type { RegistryClient } from './registry-client.js'
 
 export interface LogicalGraphQuery {
@@ -113,8 +113,12 @@ export function createLineageService(deps: {
     let rawNodes: MarquezGraphNode[]
     try {
       rawNodes = (await deps.marquez.getGraph(query, query.depth)).graph
-    } catch {
-      warnings.push('Marquez lineage projection is unavailable')
+    } catch (error) {
+      const rootIsNotProjected = error instanceof MarquezClientError
+        && error.code === 'not_found'
+      if (!rootIsNotProjected) {
+        warnings.push('Marquez lineage projection is unavailable')
+      }
       let rootRegistry: RegistryDatasetSummary | null = null
       if (query.kind === 'dataset') {
         try {
@@ -139,7 +143,9 @@ export function createLineageService(deps: {
           latestRun: null,
         }],
         edges: [],
-        projection: unavailableProjection('Marquez lineage projection is unavailable'),
+        projection: rootIsNotProjected
+          ? await projectionPromise
+          : unavailableProjection('Marquez lineage projection is unavailable'),
         warnings,
       }
     }

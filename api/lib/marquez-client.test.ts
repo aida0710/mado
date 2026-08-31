@@ -22,4 +22,16 @@ describe('Marquez read client', () => {
   it('node IDはopaqueな文字列として生成する', () => {
     expect(marquezNodeId('job', 'a:b', 'c:d')).toBe('job:a:b:c:d')
   })
+
+  it('404をサービス停止ではなく未投影として区別する', async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(new Response(
+      JSON.stringify({ code: 404, message: 'Dataset not found' }),
+      { status: 404, headers: { 'Content-Type': 'application/json' } },
+    ))
+    const client = createMarquezClient({ baseUrl: 'http://marquez:5000', fetch })
+
+    await expect(client.getGraph(
+      { kind: 'dataset', namespace: 'speech', name: 'unconnected' }, 3,
+    )).rejects.toMatchObject({ code: 'not_found' })
+  })
 })

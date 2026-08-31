@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { MarquezClient } from './marquez-client.js'
+import { MarquezClientError, type MarquezClient } from './marquez-client.js'
 import type { RegistryClient } from './registry-client.js'
 import { createLineageService } from './lineage-service.js'
 
@@ -69,6 +69,35 @@ describe('lineage service', () => {
     expect(graph.nodes).toHaveLength(1)
     expect(graph.projection.state).toBe('unavailable')
     expect(graph.warnings[0]).toContain('Marquez')
+  })
+
+  it('Run未接続DatasetのMarquez 404は正常な空グラフとして返す', async () => {
+    const reg = registry({
+      resolveDatasets: vi.fn().mockResolvedValue([{
+        kind: 'dataset', datasetId: 'd1', datasetKey: 'unconnected',
+        namespace: 'speech', name: 'unconnected', displayName: 'Unconnected dataset',
+        aliases: [], description: null, mediaType: null, owner: null,
+        currentVersionId: 'v1', versionCount: 1,
+      }]),
+    })
+    const service = createLineageService({
+      registry: reg,
+      marquez: marquez({
+        getGraph: vi.fn().mockRejectedValue(
+          new MarquezClientError('Marquez returned HTTP 404', 'not_found'),
+        ),
+      }),
+    })
+
+    const graph = await service.logicalGraph({
+      kind: 'dataset', namespace: 'speech', name: 'unconnected', depth: 3,
+    })
+
+    expect(graph.nodes).toHaveLength(1)
+    expect(graph.nodes[0].registry?.datasetId).toBe('d1')
+    expect(graph.edges).toEqual([])
+    expect(graph.projection.state).toBe('synced')
+    expect(graph.warnings).toEqual([])
   })
 
   it('Registry検索とMarquez検索を統合しRegistryのdataset IDを優先する', async () => {

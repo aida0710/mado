@@ -1,5 +1,8 @@
 export class MarquezClientError extends Error {
-  constructor(message: string, readonly code: 'upstream' | 'timeout' | 'invalid_response') {
+  constructor(
+    message: string,
+    readonly code: 'upstream' | 'timeout' | 'invalid_response' | 'not_found',
+  ) {
     super(message)
     this.name = 'MarquezClientError'
   }
@@ -97,7 +100,12 @@ export function createMarquezClient(options: MarquezClientOptions): MarquezClien
         timeout ? 'timeout' : 'upstream',
       )
     }
-    if (!response.ok) throw new MarquezClientError(`Marquez returned HTTP ${response.status}`, 'upstream')
+    if (!response.ok) {
+      throw new MarquezClientError(
+        `Marquez returned HTTP ${response.status}`,
+        response.status === 404 ? 'not_found' : 'upstream',
+      )
+    }
     try {
       return await response.json() as T
     } catch {
