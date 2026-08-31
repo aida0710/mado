@@ -19,6 +19,7 @@ services:
       POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?.env に POSTGRES_PASSWORD を設定してください}"
       POSTGRES_DB: dashboard
       DASHBOARD_PASSWORD: "${DASHBOARD_PASSWORD:?.env に DASHBOARD_PASSWORD を設定してください (DATABASE_URL のパスワードと一致させること)}"
+      LINEAGE_DB_PASSWORD: "${LINEAGE_DB_PASSWORD:?.env に LINEAGE_DB_PASSWORD を設定してください}"
     volumes:
       - db_data:/var/lib/postgresql/data
       - ./db/init:/docker-entrypoint-initdb.d:ro
@@ -30,9 +31,15 @@ services:
       retries: 10
 
   api-internal:
-    build: ./api
+    build:
+      context: ./api
+      target: release
+      args:
+        MADO_VERSION: "${MADO_VERSION:-dev}"
+        VCS_REF: "${VITE_GIT_COMMIT:-}"
+        BUILD_DATE: "${VITE_GIT_DATE:-}"
     container_name: mado-prod-api-internal
-    command: ["sh", "-c", "npm run build && node dist/internal.js"]
+    command: ["node", "dist/internal.js"]
     env_file:
       - .env
     environment:
@@ -46,14 +53,22 @@ services:
     restart: unless-stopped
 
   api-lineage:
-    build: ./api
+    build:
+      context: ./api
+      target: release
+      args:
+        MADO_VERSION: "${MADO_VERSION:-dev}"
+        VCS_REF: "${VITE_GIT_COMMIT:-}"
+        BUILD_DATE: "${VITE_GIT_DATE:-}"
     container_name: mado-prod-api-lineage
-    command: ["sh", "-c", "npm run build && npm run start:lineage"]
-    env_file:
-      - .env
+    command: ["node", "dist/lineage.js"]
     environment:
-      MADO_ENV: production
       LINEAGE_API_PORT: 3001
+      DATABASE_URL_RW: "postgres://mado_lineage:${LINEAGE_DB_PASSWORD:?.env に LINEAGE_DB_PASSWORD を設定してください}@postgres:5432/dashboard"
+      DATABASE_URL_RO: "postgres://mado_lineage:${LINEAGE_DB_PASSWORD:?.env に LINEAGE_DB_PASSWORD を設定してください}@postgres:5432/dashboard"
+      DATASET_REGISTRY_URL: "${DATASET_REGISTRY_URL:?.env に DATASET_REGISTRY_URL を設定してください}"
+      DATASET_REGISTRY_TOKEN: "${DATASET_REGISTRY_TOKEN:?.env に DATASET_REGISTRY_TOKEN を設定してください}"
+      OPENLINEAGE_BODY_LIMIT_BYTES: "${OPENLINEAGE_BODY_LIMIT_BYTES:-2097152}"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
@@ -65,8 +80,13 @@ services:
     build:
       context: ./api
       dockerfile: Dockerfile.worker
+      target: release
+      args:
+        MADO_VERSION: "${MADO_VERSION:-dev}"
+        VCS_REF: "${VITE_GIT_COMMIT:-}"
+        BUILD_DATE: "${VITE_GIT_DATE:-}"
     container_name: mado-prod-media-worker
-    command: ["sh", "-c", "npm run build && node dist/worker.js"]
+    command: ["node", "dist/worker.js"]
     env_file:
       - .env
     environment:
@@ -82,8 +102,11 @@ services:
       dockerfile: nginx/Dockerfile
       # About 表示用のコミット情報を front ビルドへ渡す (deploy.sh が export する)。
       args:
+        MADO_VERSION: "${MADO_VERSION:-dev}"
         VITE_GIT_COMMIT: "${VITE_GIT_COMMIT:-}"
         VITE_GIT_DATE: "${VITE_GIT_DATE:-}"
+        VCS_REF: "${VITE_GIT_COMMIT:-}"
+        BUILD_DATE: "${VITE_GIT_DATE:-}"
     container_name: mado-prod-nginx
     # nginx は非 root user (uid 101) で動くため container 内では :8080 を listen する。
     # UIもloopbackだけにbindし、host側intranet proxyからのみ公開する。

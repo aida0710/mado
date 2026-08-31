@@ -1,7 +1,7 @@
 {
   "name": "@mado/api",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "license": "Apache-2.0",
   "type": "module",
   "scripts": {
@@ -14,7 +14,8 @@
     "test": "node --env-file-if-exists=../.env ./node_modules/vitest/vitest.mjs run",
     "test:watch": "node --env-file-if-exists=../.env ./node_modules/vitest/vitest.mjs",
     "pricing:fetch": "tsx scripts/fetch-pricing.ts",
-    "auth:bootstrap-admin": "tsx scripts/bootstrap-admin.ts"
+    "auth:bootstrap-admin": "node dist/scripts/bootstrap-admin.js",
+    "auth:bootstrap-admin:dev": "tsx scripts/bootstrap-admin.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1039.0",

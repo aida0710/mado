@@ -13,6 +13,7 @@ services:
       POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?.env に POSTGRES_PASSWORD を設定してください}"
       POSTGRES_DB: dashboard
       DASHBOARD_PASSWORD: "${DASHBOARD_PASSWORD:?.env に DASHBOARD_PASSWORD を設定してください}"
+      LINEAGE_DB_PASSWORD: "${LINEAGE_DB_PASSWORD:?.env に LINEAGE_DB_PASSWORD を設定してください}"
     volumes:
       - mado-db-data:/var/lib/postgresql/data
       - ./db/init:/docker-entrypoint-initdb.d:ro
@@ -111,8 +112,14 @@ services:
         condition: service_healthy
 
   api-internal:
-    build: ./api
-    command: ["sh", "-c", "npm run build && node dist/internal.js"]
+    build:
+      context: ./api
+      target: release
+      args:
+        MADO_VERSION: "${MADO_VERSION:-dev}"
+        VCS_REF: "${VITE_GIT_COMMIT:-}"
+        BUILD_DATE: "${VITE_GIT_DATE:-}"
+    command: ["node", "dist/internal.js"]
     env_file:
       - .env
     environment:
@@ -131,15 +138,21 @@ services:
     restart: unless-stopped
 
   api-lineage:
-    build: ./api
-    command: ["sh", "-c", "npm run build && npm run start:lineage"]
-    env_file:
-      - .env
+    build:
+      context: ./api
+      target: release
+      args:
+        MADO_VERSION: "${MADO_VERSION:-dev}"
+        VCS_REF: "${VITE_GIT_COMMIT:-}"
+        BUILD_DATE: "${VITE_GIT_DATE:-}"
+    command: ["node", "dist/lineage.js"]
     environment:
-      MADO_ENV: production
       LINEAGE_API_PORT: "3001"
+      DATABASE_URL_RW: "postgres://mado_lineage:${LINEAGE_DB_PASSWORD:?.env に LINEAGE_DB_PASSWORD を設定してください}@postgres:5432/dashboard"
+      DATABASE_URL_RO: "postgres://mado_lineage:${LINEAGE_DB_PASSWORD:?.env に LINEAGE_DB_PASSWORD を設定してください}@postgres:5432/dashboard"
       DATASET_REGISTRY_URL: http://registry-api:8080
       DATASET_REGISTRY_TOKEN: "${REGISTRY_INGEST_TOKEN:?REGISTRY_INGEST_TOKEN is required}"
+      OPENLINEAGE_BODY_LIMIT_BYTES: "${OPENLINEAGE_BODY_LIMIT_BYTES:-2097152}"
     depends_on:
       postgres:
         condition: service_healthy
@@ -151,7 +164,12 @@ services:
     build:
       context: ./api
       dockerfile: Dockerfile.worker
-    command: ["sh", "-c", "npm run build && node dist/worker.js"]
+      target: release
+      args:
+        MADO_VERSION: "${MADO_VERSION:-dev}"
+        VCS_REF: "${VITE_GIT_COMMIT:-}"
+        BUILD_DATE: "${VITE_GIT_DATE:-}"
+    command: ["node", "dist/worker.js"]
     env_file:
       - .env
     environment:
@@ -166,8 +184,11 @@ services:
       context: .
       dockerfile: nginx/Dockerfile
       args:
+        MADO_VERSION: "${MADO_VERSION:-dev}"
         VITE_GIT_COMMIT: "${VITE_GIT_COMMIT:-}"
         VITE_GIT_DATE: "${VITE_GIT_DATE:-}"
+        VCS_REF: "${VITE_GIT_COMMIT:-}"
+        BUILD_DATE: "${VITE_GIT_DATE:-}"
     ports:
       - "127.0.0.1:8080:8080"
       - "127.0.0.1:8081:8081"

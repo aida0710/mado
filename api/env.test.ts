@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { loadEnv } from './env.js'
+import { loadEnv, loadLineageEnv } from './env.js'
 
 const VALID_KEY = '0'.repeat(64)
 
@@ -161,6 +161,33 @@ describe('loadEnv', () => {
     expect(env.AUTH_MODE).toBe('local')
   })
 
+  it('local authのrelease設定では未使用optional値の空文字を未設定として扱う', () => {
+    const env = loadEnv({
+      MADO_ENV: 'production',
+      AUTH_MODE: 'local',
+      DATABASE_URL_RW: 'postgres://x',
+      DATABASE_URL_RO: 'postgres://x',
+      DATABASE_URL_RW_TEST: '',
+      ENCRYPTION_KEY: '0'.repeat(64),
+      ALLOWED_ORIGINS: 'https://mado.example',
+      OIDC_ISSUER_URL: '',
+      OIDC_CLIENT_ID: '',
+      OIDC_CLIENT_SECRET: '',
+      OIDC_REDIRECT_URI: '',
+      OIDC_POST_LOGOUT_REDIRECT_URI: '',
+      DATASET_REGISTRY_URL: 'http://registry.example',
+      DATASET_REGISTRY_TOKEN: 'registry-token-at-least-16',
+      MARQUEZ_URL: '',
+    })
+    expect(env.OIDC_ISSUER_URL).toBeUndefined()
+    expect(env.OIDC_CLIENT_ID).toBeUndefined()
+    expect(env.OIDC_CLIENT_SECRET).toBeUndefined()
+    expect(env.OIDC_REDIRECT_URI).toBeUndefined()
+    expect(env.OIDC_POST_LOGOUT_REDIRECT_URI).toBeUndefined()
+    expect(env.MARQUEZ_URL).toBeUndefined()
+    expect(env.DATASET_REGISTRY_URL).toBe('http://registry.example')
+  })
+
   it('OIDC利用時はgroup allowlistを必須にする', () => {
     expect(() => loadEnv({
       AUTH_MODE: 'oidc',
@@ -169,5 +196,28 @@ describe('loadEnv', () => {
       ENCRYPTION_KEY: '0'.repeat(64),
       ALLOWED_ORIGINS: 'https://mado.example',
     })).toThrow(/OIDC_ALLOWED_GROUPS/)
+  })
+})
+
+describe('loadLineageEnv', () => {
+  it('公開processに必要な最小設定だけを返す', () => {
+    const env = loadLineageEnv({
+      DATABASE_URL_RW: 'postgres://mado_lineage@postgres/dashboard',
+      DATABASE_URL_RO: 'postgres://mado_lineage@postgres/dashboard',
+      DATASET_REGISTRY_URL: 'http://registry-api:8080',
+      DATASET_REGISTRY_TOKEN: 'registry-token-at-least-16',
+      OIDC_CLIENT_SECRET: 'must-not-be-parsed',
+      ENCRYPTION_KEY: VALID_KEY,
+    })
+    expect(env.LINEAGE_API_PORT).toBe(3001)
+    expect(env).not.toHaveProperty('OIDC_CLIENT_SECRET')
+    expect(env).not.toHaveProperty('ENCRYPTION_KEY')
+  })
+
+  it('Registry URLとtokenを必須にする', () => {
+    expect(() => loadLineageEnv({
+      DATABASE_URL_RW: 'postgres://mado_lineage@postgres/dashboard',
+      DATABASE_URL_RO: 'postgres://mado_lineage@postgres/dashboard',
+    })).toThrow(/DATASET_REGISTRY/)
   })
 })

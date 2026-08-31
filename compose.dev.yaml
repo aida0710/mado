@@ -16,6 +16,7 @@ services:
       POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-postgres}"
       POSTGRES_DB: dashboard
       DASHBOARD_PASSWORD: "${DASHBOARD_PASSWORD:-CHANGEME}"
+      LINEAGE_DB_PASSWORD: "${LINEAGE_DB_PASSWORD:-lineage-dev-only}"
     ports:
       - "127.0.0.1:5432:5432"
     volumes:
@@ -29,7 +30,9 @@ services:
       retries: 10
 
   api-internal:
-    build: ./api
+    build:
+      context: ./api
+      target: development
     container_name: mado-dev-api-internal
     command: ["npx", "tsx", "watch", "internal.ts"]
     env_file:
@@ -46,13 +49,18 @@ services:
         condition: service_healthy
 
   api-lineage:
-    build: ./api
+    build:
+      context: ./api
+      target: development
     container_name: mado-dev-api-lineage
     command: ["npx", "tsx", "watch", "lineage.ts"]
-    env_file:
-      - .env
     environment:
       LINEAGE_API_PORT: 3001
+      DATABASE_URL_RW: "postgres://mado_lineage:${LINEAGE_DB_PASSWORD:-lineage-dev-only}@postgres:5432/dashboard"
+      DATABASE_URL_RO: "postgres://mado_lineage:${LINEAGE_DB_PASSWORD:-lineage-dev-only}@postgres:5432/dashboard"
+      DATASET_REGISTRY_URL: "${DATASET_REGISTRY_URL:-http://host.docker.internal:8088}"
+      DATASET_REGISTRY_TOKEN: "${DATASET_REGISTRY_TOKEN:-development-token-change-me}"
+      OPENLINEAGE_BODY_LIMIT_BYTES: "${OPENLINEAGE_BODY_LIMIT_BYTES:-2097152}"
     volumes:
       - ./api:/app
       - /app/node_modules
@@ -66,6 +74,7 @@ services:
     build:
       context: ./api
       dockerfile: Dockerfile.worker
+      target: development
     container_name: mado-dev-media-worker
     command: ["npx", "tsx", "watch", "worker.ts"]
     env_file:

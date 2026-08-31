@@ -34,3 +34,6 @@ __pycache__/
 *.sln
 *.sw?
 .claude/
+
+# Local screenshots and release validation output
+artifacts/

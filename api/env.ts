@@ -7,6 +7,9 @@ const hex32 = (name: string) =>
 
 const booleanString = z.enum(['true', 'false', '1', '0'])
 const roleId = z.enum(['viewer', 'curator', 'operator', 'admin'])
+const emptyStringAsUndefined = z.literal('').transform(() => undefined)
+const optionalString = z.union([z.string().min(1), emptyStringAsUndefined]).optional()
+const optionalUrl = z.union([z.string().url(), emptyStringAsUndefined]).optional()
 const oidcRoleMapping = z.string().default('{}').transform((value, ctx): Record<string, z.infer<typeof roleId>> => {
   try {
     const parsed = z.record(z.string().min(1), roleId).parse(JSON.parse(value))
@@ -22,7 +25,7 @@ const schema = z.object({
   PORT: z.coerce.number().default(3000),
   DATABASE_URL_RW: z.string().min(1),
   DATABASE_URL_RO: z.string().min(1),
-  DATABASE_URL_RW_TEST: z.string().optional(),
+  DATABASE_URL_RW_TEST: optionalString,
   ENCRYPTION_KEY: hex32('ENCRYPTION_KEY'),
   // CSRF 防御: /api/internal/* の write 系で許容する Origin (カンマ区切り)。
   // 例: dev = "http://localhost:5173"、prod = "http://lab-server"。
@@ -56,13 +59,13 @@ const schema = z.object({
   ),
   AUTH_SESSION_IDLE_SECONDS: z.coerce.number().int().min(300).default(28_800),
   AUTH_SESSION_ABSOLUTE_SECONDS: z.coerce.number().int().min(3600).default(604_800),
-  OIDC_ISSUER_URL: z.string().url().optional(),
-  OIDC_CLIENT_ID: z.string().min(1).optional(),
-  OIDC_CLIENT_SECRET: z.string().min(1).optional(),
-  OIDC_REDIRECT_URI: z.string().url().optional(),
+  OIDC_ISSUER_URL: optionalUrl,
+  OIDC_CLIENT_ID: optionalString,
+  OIDC_CLIENT_SECRET: optionalString,
+  OIDC_REDIRECT_URI: optionalUrl,
   OIDC_LABEL: z.string().min(1).default('SSO'),
   OIDC_SCOPES: z.string().min(1).default('openid email profile'),
-  OIDC_POST_LOGOUT_REDIRECT_URI: z.string().url().optional(),
+  OIDC_POST_LOGOUT_REDIRECT_URI: optionalUrl,
   OIDC_AUTO_LINK_VERIFIED_EMAIL: booleanString.default('false').transform(value =>
     value === 'true' || value === '1'
   ),
@@ -74,9 +77,11 @@ const schema = z.object({
 
   // Dataset Registryがmetadataの正本、Marquezはread-only projection。
   // 3値が揃った場合だけinternal UIにlineage routeをmountする。
-  DATASET_REGISTRY_URL: z.string().url().optional(),
-  DATASET_REGISTRY_TOKEN: z.string().min(16).optional(),
-  MARQUEZ_URL: z.string().url().optional(),
+  DATASET_REGISTRY_URL: optionalUrl,
+  DATASET_REGISTRY_TOKEN: z.union([
+    z.string().min(16), emptyStringAsUndefined,
+  ]).optional(),
+  MARQUEZ_URL: optionalUrl,
   LINEAGE_API_PORT: z.coerce.number().int().min(1).max(65535).default(3001),
   OPENLINEAGE_BODY_LIMIT_BYTES: z.coerce.number().int().min(1024).default(2 * 1024 * 1024),
 }).superRefine((env, ctx) => {
@@ -96,6 +101,17 @@ const schema = z.object({
 
 export type Env = z.infer<typeof schema>
 
+const lineageSchema = z.object({
+  DATABASE_URL_RW: z.string().min(1),
+  DATABASE_URL_RO: z.string().min(1),
+  DATASET_REGISTRY_URL: z.string().url(),
+  DATASET_REGISTRY_TOKEN: z.string().min(16),
+  LINEAGE_API_PORT: z.coerce.number().int().min(1).max(65535).default(3001),
+  OPENLINEAGE_BODY_LIMIT_BYTES: z.coerce.number().int().min(1024).default(2 * 1024 * 1024),
+})
+
+export type LineageEnv = z.infer<typeof lineageSchema>
+
 export function loadEnv(source: Record<string, string | undefined> = process.env): Env {
   const parsed = schema.safeParse(source)
   if (!parsed.success) {
@@ -103,6 +119,20 @@ export function loadEnv(source: Record<string, string | undefined> = process.env
       .map(i => `${i.path.join('.')}: ${i.message}`)
       .join('\n')
     throw new Error(`Invalid environment:\n${msg}`)
+  }
+  return parsed.data
+}
+
+/** Internet-facing lineage processへbrowser/storage用secretを渡さないための最小schema。 */
+export function loadLineageEnv(
+  source: Record<string, string | undefined> = process.env,
+): LineageEnv {
+  const parsed = lineageSchema.safeParse(source)
+  if (!parsed.success) {
+    const msg = parsed.error.issues
+      .map(i => `${i.path.join('.')}: ${i.message}`)
+      .join('\n')
+    throw new Error(`Invalid lineage environment:\n${msg}`)
   }
   return parsed.data
 }

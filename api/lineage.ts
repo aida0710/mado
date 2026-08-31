@@ -1,6 +1,6 @@
 import { serve } from '@hono/node-server'
 import { Hono } from 'hono'
-import { loadEnv } from './env.js'
+import { loadLineageEnv } from './env.js'
 import { closePools, createPools } from './db.js'
 import { createAuditWriter } from './lib/audit.js'
 import { createServiceAccountStore } from './lib/auth-api-keys.js'
@@ -9,10 +9,7 @@ import { createRegistryClient } from './lib/registry-client.js'
 import { mountOpenLineageRoutes } from './routes/openlineage.js'
 import { requestLogger } from './lib/request-logger.js'
 
-const env = loadEnv()
-if (!env.DATASET_REGISTRY_URL || !env.DATASET_REGISTRY_TOKEN) {
-  throw new Error('DATASET_REGISTRY_URL and DATASET_REGISTRY_TOKEN are required by api-lineage')
-}
+const env = loadLineageEnv()
 
 const pools = createPools({ rw: env.DATABASE_URL_RW, ro: env.DATABASE_URL_RO })
 const accounts = createServiceAccountStore(pools.rw)

@@ -4,11 +4,13 @@ set -euo pipefail
 # コンテナ初回作成時に一度だけ実行される。再実行するには名前付きボリューム `db_data` を削除する必要がある。
 
 PASSWORD="${DASHBOARD_PASSWORD:?DASHBOARD_PASSWORD must be set in compose.dev.yaml or compose.prod.yaml}"
+LINEAGE_PASSWORD="${LINEAGE_DB_PASSWORD:?LINEAGE_DB_PASSWORD must be set in compose}"
 
 # ロールとテスト DB を作成する。デフォルトの `dashboard` DB は POSTGRES_DB から作成済み。
 psql -v ON_ERROR_STOP=1 --username "postgres" <<-EOSQL
   CREATE ROLE dashboard_rw LOGIN PASSWORD '${PASSWORD}';
   CREATE ROLE dashboard_ro LOGIN PASSWORD '${PASSWORD}';
+  CREATE ROLE mado_lineage LOGIN PASSWORD '${LINEAGE_PASSWORD}';
 
   CREATE DATABASE dashboard_test OWNER postgres;
 

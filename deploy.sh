@@ -26,7 +26,8 @@ git pull origin main
 # About 表示用のコミット情報を front ビルドへ渡す (compose の build.args が参照)。
 VITE_GIT_COMMIT="$(git rev-parse HEAD)"
 VITE_GIT_DATE="$(git log -1 --format=%cI)"
-export VITE_GIT_COMMIT VITE_GIT_DATE
+MADO_VERSION="$(tr -d '[:space:]' < VERSION)"
+export VITE_GIT_COMMIT VITE_GIT_DATE MADO_VERSION
 
 echo "==> docker compose -f compose.prod.yaml up -d --build (commit ${VITE_GIT_COMMIT})"
 docker compose -f compose.prod.yaml up -d --build

@@ -191,10 +191,14 @@ openssl rand -hex 32
 # 3. 起動 (--build はコミット情報を About に焼くため初回 / 更新時に推奨)
 docker compose -f compose.dev.yaml up -d --build
 
-# 4. ブラウザで http://localhost:5173
+# 4. 初回Local Adminを作成（対話入力。既知の初期passwordは存在しない）
+docker compose -f compose.dev.yaml exec api-internal \
+  npm run auth:bootstrap-admin:dev -- --username admin
+
+# 5. ブラウザで http://localhost:5173
 ```
 
-dev の DB パスワードは未設定なら既定値 (`postgres` / `CHANGEME`) で動きます。初回起動時のみ `db/init/00-init.sh` が `dashboard_rw` / `dashboard_ro` ロールと `dashboard_test` DB を作成します。作り直したいときは `down -v` で volume を消してから上げ直してください。
+dev の DB パスワードは未設定なら開発用の既定値で動きます。初回起動時のみ `db/init/00-init.sh` が `dashboard_rw` / `dashboard_ro` / `mado_lineage` ロールと `dashboard_test` DB を作成します。作り直したいときは `down -v` で volume を消してから上げ直してください。
 
 ### 環境変数
 
@@ -206,6 +210,7 @@ dev の DB パスワードは未設定なら既定値 (`postgres` / `CHANGEME`) 
 | `DATABASE_URL_RW_TEST` | no | テスト用。host から接続するので `localhost`。未設定なら default に fallback |
 | `POSTGRES_PASSWORD` | prod:yes / dev:no | `postgres` スーパーユーザのパスワード。**prod は未設定だと起動失敗**、dev は既定 `postgres` |
 | `DASHBOARD_PASSWORD` | prod:yes / dev:no | `dashboard_rw` / `dashboard_ro` のパスワード。**`DATABASE_URL_*` のパスワードと一致必須**。dev 既定 `CHANGEME` |
+| `LINEAGE_DB_PASSWORD` | prod:yes / dev:no | Internet向け`api-lineage`専用の最小権限DB role。英数字hexの生成値を推奨 |
 | `ENCRYPTION_KEY` | yes | `storage_connections` の S3 認証情報を AES-256-GCM で暗号化するキー (32 byte hex) |
 | `ALLOWED_ORIGINS` | yes | CSRF 防御。write 系で許容する Origin (カンマ区切り)。dev: `http://localhost:5173` / prod: ダッシュボードを開く URL |
 | `MADO_ENV` | no | `development` / `test` / `production`。本番composeは`production`を固定し、安全でない認証設定を起動時に拒否 |
@@ -227,7 +232,7 @@ dev の DB パスワードは未設定なら既定値 (`postgres` / `CHANGEME`) 
 | `MEDIA_CACHE_MAX_AGE_DAYS` | no | 解析結果キャッシュ (`media_cache`) の保持日数 (default 30) |
 | `MEDIA_SPECTROGRAM_MAX_WIDTH` | no | スペクトログラム画像の最大幅 (px) (default 4096) |
 
-> ⚠️ `POSTGRES_PASSWORD` / `DASHBOARD_PASSWORD` は **DB ボリュームの初回作成時のみ** 反映されます。既存 DB のパスワード変更は env ではなく `psql` の `ALTER ROLE` が必要です (詳細は [`db/README.md`](db/README.md))。生成例: `openssl rand -hex 24`
+> ⚠️ `POSTGRES_PASSWORD` / `DASHBOARD_PASSWORD` / `LINEAGE_DB_PASSWORD` は **DB ボリュームの初回作成時のみ** 反映されます。既存 DB のパスワード変更は env ではなく `psql` の `ALTER ROLE` が必要です (詳細は [`db/README.md`](db/README.md))。生成例: `openssl rand -hex 24`
 
 ### 料金カタログの運用
 
@@ -243,7 +248,7 @@ dev の DB パスワードは未設定なら既定値 (`postgres` / `CHANGEME`) 
 
 ### 認証とLineageの初期化
 
-既存DBには`021_auth.sql`から`028_drop_local_login_lock.sql`までの未適用migrationを番号順に適用します。ただし`028`は旧APIが参照する列を削除するため、既存環境では**新APIを先に起動してから`028`を適用**してください（`021`〜`027`は従来どおりコード起動前に適用できます）。新規導入ではLocal Admin `admin` / `mado-admin!`が作成され、初回ログイン時に12文字以上の新しいパスワードへの変更が必須です。この変更完了まではサーバー側でも通常APIを拒否します。既存の`admin`がいる場合、migrationはパスワードを上書きしません。
+既存DBには`021_auth.sql`以降の未適用migrationを番号順に適用します。ただし`028`は旧APIが参照する列を削除するため、既存環境では**新APIを先に起動してから`028`を適用**してください（`021`〜`027`は従来どおりコード起動前に適用できます）。`029`は未使用の既知bootstrap credentialを削除し、OpenLineage API専用DB roleを追加します。新規導入では既定passwordを持つAdminを残さないため、Webを公開する前に次のoffline bootstrapを必ず実行します。
 
 初期Adminを明示的に再設定する場合は、対話的なbootstrapコマンドを使います（パスワードを引数やshell historyへ残しません）。
 
@@ -252,9 +257,25 @@ docker compose -f compose.prod.yaml exec api-internal \
   npm run auth:bootstrap-admin -- --username admin
 ```
 
+passwordはTTYからのみ読み、引数・環境変数・ログには渡しません。初回bootstrap時も入力した一時passwordは初回ログインで変更必須です。平常時はOIDC Adminを使う構成でも、IdP障害用に独立したLocal Adminを1つ維持してください。
+
 Pipelineは外部公開用hostnameの`POST /api/openlineage/v1/lineage`へService Account keyをBearer送信します。Madoがprofile/scope/namespaceを検証し、keyを除いたprincipal envelopeをRegistryへ転送します。production nginxはintranet UI用`:8080`とOpenLineage専用`:8081`を分離し、`:8081`ではこのPOSTだけを受け付け、その他のpath/methodを404にします。Composeは両listenerをhostのloopbackへだけpublishするため、それぞれ用途別のreverse proxyを前段に置いてください。
 
-### 本番デプロイ
+### OSSリリース
+
+MadoはSemVerを採用し、最初の正式版候補を`v1.0.0`とします。GitHub上のannotated tagだけがrelease workflowを起動し、通常の`main` pushや社内deployからOSS releaseが始まることはありません。
+
+公開時は同一commitからLinux amd64/arm64対応のcompiled OCI imageを3つ作り、GHCRへ配置します。
+
+- `ghcr.io/aida0710/mado-api:<tag>`: internal APIとOpenLineage API
+- `ghcr.io/aida0710/mado-media-worker:<tag>`: ffmpeg worker
+- `ghcr.io/aida0710/mado-web:<tag>`: Web UIと用途別nginx入口
+
+GitHub Releaseには、image digestを固定したCompose、DB初期化・全migration、設定例、licenseをまとめたbundleとSHA-256を添付します。OCI imageにはSBOMとbuild provenanceを付与します。release本文は[`docs/releases/`](docs/releases/README.md)、公開手順と安全条件は[`docs/releasing.md`](docs/releasing.md)を正本とします。
+
+OSS releaseと社内環境へのdeployは独立しています。release workflowはdeployment hostへ接続しません。
+
+### ソースからの社内デプロイ
 
 ```bash
 ./deploy.sh   # main を pull し、compose.prod.yaml で再ビルド + 再起動

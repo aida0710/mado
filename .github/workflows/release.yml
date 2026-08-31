@@ -1,0 +1,317 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "再実行する既存のrelease tag"
+        required: true
+        type: string
+
+env:
+  RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+
+concurrency:
+  group: release-publication
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  verify-source:
+    name: Verify release source
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      release-sha: ${{ steps.source.outputs.release_sha }}
+      version: ${{ steps.source.outputs.version }}
+      build-date: ${{ steps.source.outputs.build_date }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+          fetch-depth: 0
+      - name: Require annotated main tag with successful exact-SHA CI
+        id: source
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_REPOSITORY: ${{ github.repository }}
+        run: |
+          release_sha=$(RELEASE_TAG="$RELEASE_TAG" scripts/ci/verify-release-source.sh)
+          [ "$GITHUB_REF" = "refs/tags/$RELEASE_TAG" ] || {
+            echo "workflow_dispatch must run with --ref $RELEASE_TAG" >&2
+            exit 1
+          }
+          [ "$(git rev-parse "$GITHUB_SHA^{commit}")" = "$release_sha" ] || {
+            echo "GitHub event SHA does not resolve to the release commit" >&2
+            exit 1
+          }
+          scripts/release/verify-contract.sh "$RELEASE_TAG"
+          {
+            printf 'release_sha=%s\n' "$release_sha"
+            printf 'version=%s\n' "${RELEASE_TAG#v}"
+            printf 'build_date=%s\n' "$(git log -1 --format=%cI "$release_sha")"
+          } >> "$GITHUB_OUTPUT"
+
+  images:
+    name: Build image (${{ matrix.id }})
+    needs: [verify-source]
+    runs-on: ubuntu-24.04
+    environment: release
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: api
+            image: mado-api
+            context: api
+            file: api/Dockerfile
+          - id: worker
+            image: mado-media-worker
+            context: api
+            file: api/Dockerfile.worker
+          - id: web
+            image: mado-web
+            context: .
+            file: nginx/Dockerfile
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ needs.verify-source.outputs.release-sha }}
+      - uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8 # v4.2.0
+      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Reuse immutable staging image when resuming
+        id: staging
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          owner=${GITHUB_REPOSITORY_OWNER,,}
+          image="ghcr.io/$owner/${{ matrix.image }}"
+          ref="$image:$RELEASE_TAG-staging-${{ needs.verify-source.outputs.release-sha }}"
+          registry_token=$(curl -fsS --user "$GITHUB_ACTOR:$GH_TOKEN" --get \
+            --data-urlencode 'service=ghcr.io' \
+            --data-urlencode "scope=repository:$owner/${{ matrix.image }}:pull" \
+            https://ghcr.io/token | jq -er '.token')
+          headers=$(mktemp)
+          status=$(curl -sS -o /dev/null -D "$headers" -w '%{http_code}' \
+            -H "Authorization: Bearer $registry_token" \
+            -H 'Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json' \
+            -I "https://ghcr.io/v2/$owner/${{ matrix.image }}/manifests/$RELEASE_TAG-staging-${{ needs.verify-source.outputs.release-sha }}")
+          if [ "$status" = 200 ]; then
+            digest=$(awk 'tolower($1) == "docker-content-digest:" { sub("\\r$", "", $2); print $2; exit }' "$headers")
+            printf '%s\n' "$digest" | grep -Eq '^sha256:[0-9a-f]{64}$'
+            printf 'reuse=true\ndigest=%s\nref=%s\n' "$digest" "$ref" >> "$GITHUB_OUTPUT"
+          elif [ "$status" = 404 ]; then
+            printf 'reuse=false\nref=%s\n' "$ref" >> "$GITHUB_OUTPUT"
+          else
+            echo "GHCR staging lookup failed closed with HTTP $status" >&2
+            exit 1
+          fi
+      - name: Build and push immutable staging image
+        id: build
+        if: steps.staging.outputs.reuse != 'true'
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
+          target: release
+          platforms: linux/amd64,linux/arm64
+          outputs: type=image,name=ghcr.io/${{ github.repository_owner }}/${{ matrix.image }},push-by-digest=true,name-canonical=true,push=true
+          build-args: |
+            MADO_VERSION=${{ needs.verify-source.outputs.version }}
+            VCS_REF=${{ needs.verify-source.outputs.release-sha }}
+            BUILD_DATE=${{ needs.verify-source.outputs.build-date }}
+            VITE_GIT_COMMIT=${{ needs.verify-source.outputs.release-sha }}
+            VITE_GIT_DATE=${{ needs.verify-source.outputs.build-date }}
+          provenance: mode=max
+          sbom: true
+      - name: Resolve staged digest
+        id: resolved
+        env:
+          REUSED_DIGEST: ${{ steps.staging.outputs.digest }}
+          BUILT_DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          digest=${REUSED_DIGEST:-$BUILT_DIGEST}
+          printf '%s\n' "$digest" | grep -Eq '^sha256:[0-9a-f]{64}$'
+          printf 'digest=%s\n' "$digest" >> "$GITHUB_OUTPUT"
+      - name: Attest image provenance
+        if: steps.staging.outputs.reuse != 'true'
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}
+          subject-digest: ${{ steps.resolved.outputs.digest }}
+          push-to-registry: true
+      - name: Verify provenance before reusing staging image
+        if: steps.staging.outputs.reuse == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          image="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/${{ matrix.image }}"
+          gh attestation verify \
+            "oci://$image@${{ steps.resolved.outputs.digest }}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml" \
+            --source-ref "refs/tags/$RELEASE_TAG" \
+            --source-digest '${{ needs.verify-source.outputs.release-sha }}'
+      - name: Tag the attested staging image
+        if: steps.staging.outputs.reuse != 'true'
+        run: |
+          image="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/${{ matrix.image }}"
+          digest="${{ steps.resolved.outputs.digest }}"
+          docker buildx imagetools create \
+            --tag "${{ steps.staging.outputs.ref }}" "$image@$digest"
+          staged=$(docker buildx imagetools inspect "${{ steps.staging.outputs.ref }}" \
+            | awk '$1 == "Digest:" { print $2; exit }')
+          [ "$staged" = "$digest" ]
+      - name: Record immutable image
+        run: |
+          mkdir -p manifest
+          image="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/${{ matrix.image }}"
+          digest="${{ steps.resolved.outputs.digest }}"
+          printf 'id=%s\nimage=%s\ndigest=%s\nref=%s@%s\n' \
+            '${{ matrix.id }}' "$image" "$digest" "$image" "$digest" \
+            > 'manifest/${{ matrix.id }}.env'
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: manifest-${{ matrix.id }}
+          path: manifest/${{ matrix.id }}.env
+          if-no-files-found: error
+          retention-days: 3
+
+  publish:
+    name: Publish release
+    needs: [verify-source, images]
+    runs-on: ubuntu-24.04
+    environment: release
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      packages: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ needs.verify-source.outputs.release-sha }}
+          fetch-depth: 0
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          pattern: manifest-*
+          path: manifests
+          merge-multiple: true
+      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+      - name: Require public immutable image digests
+        run: |
+          [ "$(find manifests -name '*.env' -type f | wc -l)" -eq 3 ]
+          for id in api worker web; do
+            file="manifests/$id.env"
+            image=$(sed -n 's/^image=//p' "$file")
+            digest=$(sed -n 's/^digest=//p' "$file")
+            ref=$(sed -n 's/^ref=//p' "$file")
+            printf '%s\n' "$digest" | grep -Eq '^sha256:[0-9a-f]{64}$'
+            [ "$ref" = "$image@$digest" ]
+            docker buildx imagetools inspect "$ref" >/dev/null
+          done
+      - name: Create or resume a draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          notes_file="docs/releases/$RELEASE_TAG.md"
+          if gh release view "$RELEASE_TAG" --json isDraft >/tmp/release.json 2>/dev/null; then
+            jq -e '.isDraft == true' /tmp/release.json >/dev/null || {
+              echo "A published release already exists for $RELEASE_TAG" >&2
+              exit 1
+            }
+          else
+            gh release create "$RELEASE_TAG" --verify-tag --draft \
+              --title "Mado $RELEASE_TAG" --notes-file "$notes_file"
+          fi
+      - name: Build digest-pinned bundle
+        run: |
+          SOURCE_DATE_EPOCH=$(git log -1 --format=%ct '${{ needs.verify-source.outputs.release-sha }}') \
+            scripts/release/build-bundle.sh "$RELEASE_TAG" dist/release manifests
+      - name: Validate and upload release bundle
+        env:
+          POSTGRES_PASSWORD: release-validation-postgres
+          DASHBOARD_PASSWORD: release-validation-dashboard
+          LINEAGE_DB_PASSWORD: release-validation-lineage
+          DATASET_REGISTRY_URL: http://registry.invalid
+          DATASET_REGISTRY_TOKEN: release-validation-token
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          archive="dist/release/mado-$RELEASE_TAG.tar.gz"
+          checksum="$archive.sha256"
+          (cd "$(dirname "$checksum")" && sha256sum -c "$(basename "$checksum")")
+          mkdir -p /tmp/mado-release
+          tar -xzf "$archive" -C /tmp/mado-release
+          bundle="/tmp/mado-release/mado-$RELEASE_TAG"
+          cp "$bundle/.env.example" "$bundle/.env"
+          docker compose -f "$bundle/compose.yaml" config --quiet
+          gh release upload "$RELEASE_TAG" "$archive" "$checksum" --clobber
+      - name: Attest release bundle provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: dist/release/mado-${{ env.RELEASE_TAG }}.tar.gz
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Promote immutable version tags
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          owner=${GITHUB_REPOSITORY_OWNER,,}
+          for id in api worker web; do
+            file="manifests/$id.env"
+            image=$(sed -n 's/^image=//p' "$file")
+            digest=$(sed -n 's/^digest=//p' "$file")
+            image_name=${image##*/}
+            registry_token=$(curl -fsS --user "$GITHUB_ACTOR:$GH_TOKEN" --get \
+              --data-urlencode 'service=ghcr.io' \
+              --data-urlencode "scope=repository:$owner/$image_name:pull" \
+              https://ghcr.io/token | jq -er '.token')
+            headers=$(mktemp)
+            status=$(curl -sS -o /dev/null -D "$headers" -w '%{http_code}' \
+              -H "Authorization: Bearer $registry_token" \
+              -H 'Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json' \
+              -I "https://ghcr.io/v2/$owner/$image_name/manifests/$RELEASE_TAG")
+            if [ "$status" = 200 ]; then
+              existing=$(awk 'tolower($1) == "docker-content-digest:" { sub("\\r$", "", $2); print $2; exit }' "$headers")
+              printf '%s\n' "$existing" | grep -Eq '^sha256:[0-9a-f]{64}$'
+            elif [ "$status" = 404 ]; then
+              existing=
+            else
+              echo "GHCR version-tag lookup failed closed with HTTP $status" >&2
+              exit 1
+            fi
+            if [ -n "$existing" ] && [ "$existing" != "$digest" ]; then
+              echo "Refusing to move immutable tag $image:$RELEASE_TAG" >&2
+              exit 1
+            fi
+            if [ -z "$existing" ]; then
+              docker buildx imagetools create --tag "$image:$RELEASE_TAG" "$image@$digest"
+            fi
+            promoted=$(docker buildx imagetools inspect "$image:$RELEASE_TAG" \
+              | awk '$1 == "Digest:" { print $2; exit }')
+            [ "$promoted" = "$digest" ]
+          done
+      - name: Publish only after every artifact is complete
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release edit "$RELEASE_TAG" --draft=false --latest

@@ -1,0 +1,72 @@
+name: mado
+
+services:
+  postgres:
+    image: postgres:16-alpine@sha256:cf78e76683b9ca8c5733cbbdce6c9262b45b6767934dd0a95e671f9a0fc20685
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?.env に POSTGRES_PASSWORD を設定してください}"
+      POSTGRES_DB: dashboard
+      DASHBOARD_PASSWORD: "${DASHBOARD_PASSWORD:?.env に DASHBOARD_PASSWORD を設定してください}"
+      LINEAGE_DB_PASSWORD: "${LINEAGE_DB_PASSWORD:?.env に LINEAGE_DB_PASSWORD を設定してください}"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+      - ./db/migrations:/migrations:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d dashboard"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  api-internal:
+    image: "@@MADO_API_IMAGE@@"
+    command: ["node", "dist/internal.js"]
+    env_file: [.env]
+    environment:
+      MADO_ENV: production
+      PORT: "3000"
+    extra_hosts: ["host.docker.internal:host-gateway"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  api-lineage:
+    image: "@@MADO_API_IMAGE@@"
+    command: ["node", "dist/lineage.js"]
+    environment:
+      LINEAGE_API_PORT: "3001"
+      DATABASE_URL_RW: "postgres://mado_lineage:${LINEAGE_DB_PASSWORD:?.env に LINEAGE_DB_PASSWORD を設定してください}@postgres:5432/dashboard"
+      DATABASE_URL_RO: "postgres://mado_lineage:${LINEAGE_DB_PASSWORD:?.env に LINEAGE_DB_PASSWORD を設定してください}@postgres:5432/dashboard"
+      DATASET_REGISTRY_URL: "${DATASET_REGISTRY_URL:?.env に DATASET_REGISTRY_URL を設定してください}"
+      DATASET_REGISTRY_TOKEN: "${DATASET_REGISTRY_TOKEN:?.env に DATASET_REGISTRY_TOKEN を設定してください}"
+      OPENLINEAGE_BODY_LIMIT_BYTES: "${OPENLINEAGE_BODY_LIMIT_BYTES:-2097152}"
+    extra_hosts: ["host.docker.internal:host-gateway"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  media-worker:
+    image: "@@MADO_WORKER_IMAGE@@"
+    command: ["node", "dist/worker.js"]
+    env_file: [.env]
+    environment:
+      MADO_ENV: production
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  web:
+    image: "@@MADO_WEB_IMAGE@@"
+    ports:
+      - "127.0.0.1:8080:8080"
+      - "127.0.0.1:8081:8081"
+    depends_on: [api-internal, api-lineage]
+    restart: unless-stopped
+
+volumes:
+  db_data:

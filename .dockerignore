@@ -1,4 +1,11 @@
-node_modules
-front/node_modules
-api/node_modules
-metrics/node_modules
+# nginx/Dockerfileだけがrepository rootをbuild contextに使う。
+# Frontendとnginx設定以外を送らず、ローカルの.env・git履歴・成果物を
+# 誤ってBuildKit/GitHub Actionsのcontextへ含めない。
+*
+!front/
+!front/**
+!nginx/
+!nginx/**
+front/node_modules/
+front/dist/
+front/*.log

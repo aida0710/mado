@@ -1,54 +1,153 @@
-# PR / main push 時に api と front の typecheck を回す。
-#
-# 当面は typecheck だけにとどめる:
-# - lint: front 側に既存の累積エラー (react-hooks/set-state-in-effect 等) が
-#   12 件残っており、green にするには別途整理が必要。CI に入れてしまうと
-#   全 PR が即 red になるので、lint クリーンアップ PR を出してから合流させる。
-# - tests: api テストは Postgres service container が要る、front テストは
-#   @testing-library/jest-dom の取り回しの整備が要る。最低限の安全網として
-#   まず typecheck だけで動かす。
 name: CI
 
 on:
   pull_request:
   push:
     branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
 
 jobs:
-  typecheck-api:
-    name: api typecheck
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: api
+  release-contract:
+    name: Release contract
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - name: Verify version, notes, workflow, and bundle
+        run: |
+          scripts/release/verify-contract.sh
+          mkdir -p dist/release-manifests
+          digest="sha256:$(printf '%064d' 0)"
+          printf 'ref=ghcr.io/aida0710/mado-api@%s\n' "$digest" > dist/release-manifests/api.env
+          printf 'ref=ghcr.io/aida0710/mado-media-worker@%s\n' "$digest" > dist/release-manifests/worker.env
+          printf 'ref=ghcr.io/aida0710/mado-web@%s\n' "$digest" > dist/release-manifests/web.env
+          scripts/release/build-bundle.sh "v$(cat VERSION)" dist/release dist/release-manifests
+      - name: Validate generated release Compose
+        env:
+          POSTGRES_PASSWORD: ci-postgres-password
+          DASHBOARD_PASSWORD: ci-dashboard-password
+          LINEAGE_DB_PASSWORD: ci-lineage-password
+          DATASET_REGISTRY_URL: http://registry.invalid
+          DATASET_REGISTRY_TOKEN: ci-registry-token-not-a-secret
+        run: |
+          archive="dist/release/mado-v$(cat VERSION).tar.gz"
+          mkdir -p /tmp/mado-release-contract
+          tar -xzf "$archive" -C /tmp/mado-release-contract
+          bundle="/tmp/mado-release-contract/mado-v$(cat VERSION)"
+          cp "$bundle/.env.example" "$bundle/.env"
+          docker compose -f "$bundle/compose.yaml" config --quiet
+
+  api:
+    name: API
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      TZ: Asia/Tokyo
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: api/package-lock.json
       - run: npm ci
-      - run: npx tsc --noEmit
+        working-directory: api
+      - name: Start the schema-complete test database
+        run: |
+          cp .env.example .env
+          docker compose -f compose.dev.yaml up -d postgres
+          for _ in $(seq 1 60); do
+            [ "$(docker inspect -f '{{.State.Health.Status}}' mado-dev-postgres)" = healthy ] && exit 0
+            sleep 1
+          done
+          docker compose -f compose.dev.yaml logs postgres
+          exit 1
+      - name: Lint, test, and build
+        working-directory: api
+        run: |
+          npm run lint
+          npm test
+          npm run build
+          npm audit --omit=dev
+      - name: Stop test database
+        if: always()
+        run: docker compose -f compose.dev.yaml down -v
 
-  typecheck-front:
-    name: front typecheck
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: front
+  front:
+    name: Front
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      TZ: Asia/Tokyo
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: front/package-lock.json
       - run: npm ci
-      # front は project references (tsconfig.json が files: [] でルート参照のみ)
-      # なので tsc --noEmit ではなく tsc -b で参照プロジェクトを順次 typecheck
-      # する必要がある。referenced configs は noEmit:true なので emit はされない。
-      - run: npx tsc -b
+        working-directory: front
+      - name: Lint, test, and build
+        working-directory: front
+        run: |
+          npm run lint
+          npm test
+          npm run build
+          npm audit --omit=dev
+
+  images:
+    name: Image (${{ matrix.id }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: api
+            context: api
+            file: api/Dockerfile
+          - id: worker
+            context: api
+            file: api/Dockerfile.worker
+          - id: web
+            context: .
+            file: nginx/Dockerfile
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - name: Build compiled release image
+        run: |
+          version=$(cat VERSION)
+          commit=$(git rev-parse HEAD)
+          build_date=$(git log -1 --format=%cI)
+          docker build --target release \
+            --build-arg MADO_VERSION="$version" \
+            --build-arg VCS_REF="$commit" \
+            --build-arg BUILD_DATE="$build_date" \
+            --build-arg VITE_GIT_COMMIT="$commit" \
+            --build-arg VITE_GIT_DATE="$build_date" \
+            -f "${{ matrix.file }}" -t "mado-ci-${{ matrix.id }}:$commit" "${{ matrix.context }}"
+      - name: Smoke compiled image
+        run: |
+          image="mado-ci-${{ matrix.id }}:$(git rev-parse HEAD)"
+          case "${{ matrix.id }}" in
+            api)
+              docker run --rm "$image" node -e \
+                'const p=require("./package.json"); if(p.version!==process.argv[1]) process.exit(1)' \
+                "$(cat VERSION)"
+              ;;
+            worker)
+              docker run --rm "$image" ffmpeg -version >/dev/null
+              ;;
+            web)
+              docker run --rm --add-host api-internal:127.0.0.1 --add-host api-lineage:127.0.0.1 \
+                "$image" nginx -t
+              ;;
+          esac
