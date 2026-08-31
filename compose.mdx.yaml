@@ -1,7 +1,7 @@
 # mdx deployment: Mado and its private lineage backends share one Compose
 # project and one bridge network. Mado nginx listeners are published on loopback;
-# host Apache serves the intranet UI, and a future host TLS proxy may expose only
-# the dedicated OpenLineage listener.
+# The Compose-managed edge nginx terminates TLS for the intranet UI. A future
+# public API hostname must remain separate and proxy only the OpenLineage listener.
 name: mado-mdx
 
 services:
@@ -195,6 +195,40 @@ services:
     depends_on:
       - api-internal
       - api-lineage
+    restart: unless-stopped
+
+  edge:
+    image: nginxinc/nginx-unprivileged:alpine@sha256:901e944d1f4fc2bd077e8f5568b98c1f6f8cdacf6b97a87747c43134a339b9a7
+    user: "0:0"
+    network_mode: host
+    environment:
+      MADO_HOSTNAME: "${MADO_HOSTNAME:-mado.internal.dubguild.com}"
+      NGINX_ENVSUBST_FILTER: "^MADO_"
+    volumes:
+      - ./nginx/edge-nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/edge.conf.template:/etc/nginx/templates/default.conf.template:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+      - /var/www/letsencrypt:/var/www/letsencrypt:ro
+    tmpfs:
+      - /etc/nginx/conf.d:size=1m,mode=0755
+      - /tmp:size=32m,mode=1777
+    read_only: true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - NET_BIND_SERVICE
+      - SETGID
+      - SETUID
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "nginx", "-t"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    depends_on:
+      - nginx
     restart: unless-stopped
 
 volumes:

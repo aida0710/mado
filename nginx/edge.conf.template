@@ -1,0 +1,76 @@
+# Public HTTP serves only ACME HTTP-01 and redirects every other path to HTTPS.
+server {
+    listen 80 default_server;
+    listen [::]:80 default_server;
+    server_name _;
+    server_tokens off;
+
+    location ^~ /.well-known/acme-challenge/ {
+        root /var/www/letsencrypt;
+        default_type text/plain;
+        try_files $uri =404;
+    }
+
+    location / {
+        return 308 https://${MADO_HOSTNAME}$request_uri;
+    }
+}
+
+# Reject an unexpected Host before it reaches the application.
+server {
+    listen 443 ssl default_server;
+    listen [::]:443 ssl default_server;
+    server_name _;
+    server_tokens off;
+
+    ssl_certificate /etc/letsencrypt/live/${MADO_HOSTNAME}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${MADO_HOSTNAME}/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_session_cache shared:MadoTLS:10m;
+    ssl_session_timeout 1d;
+    ssl_session_tickets off;
+
+    return 421;
+}
+
+# Mado browser UI and internal API. This hostname is intranet-only even though
+# its certificate and ACME challenge are public.
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name ${MADO_HOSTNAME};
+    server_tokens off;
+
+    ssl_certificate /etc/letsencrypt/live/${MADO_HOSTNAME}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${MADO_HOSTNAME}/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_session_cache shared:MadoTLS:10m;
+    ssl_session_timeout 1d;
+    ssl_session_tickets off;
+
+    add_header Strict-Transport-Security "max-age=31536000" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "DENY" always;
+    add_header Referrer-Policy "no-referrer" always;
+
+    allow 127.0.0.1;
+    allow ::1;
+    allow 10.15.0.0/16;
+    allow 10.143.0.0/16;
+    allow 172.17.8.0/24;
+    deny all;
+
+    location / {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-Port 443;
+        proxy_set_header X-Request-Id $request_id;
+        proxy_set_header Connection "";
+        proxy_connect_timeout 5s;
+        proxy_read_timeout 300s;
+    }
+}
