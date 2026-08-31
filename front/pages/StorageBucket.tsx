@@ -77,7 +77,6 @@ export default function StorageBucket({ connId }: Props) {
         <Breadcrumb connId={connId} bucket={bucket} prefix={prefix} />
         <ConnectionSwitcher />
       </div>
-      <StorageLineagePanel connId={connId} bucket={bucket} path={selected ?? prefix} />
       {/* README はリスト幅に依存させない (常に full width)。identity を key にして、
           ディレクトリ遷移時は旧 README の取得・展開状態をまとめて破棄する。 */}
       <ReadmeView
@@ -86,6 +85,9 @@ export default function StorageBucket({ connId }: Props) {
         bucket={bucket}
         prefix={prefix}
       />
+      {/* 保存場所から解決したDatasetはREADMEの補足情報として、その直後に置く。
+          選択中のファイルがあればそのファイル、なければ現在prefixを解決する。 */}
+      <StorageLineagePanel connId={connId} bucket={bucket} path={selected ?? prefix} />
       {/* リスト + preview drawer を横並び。drawer 幅は drawer 左端のハンドルで
           リサイズでき、広げるとリストを圧縮せず上に重なる (useDrawerResize)。
           ハンドルは drawer 内に置き、その高さに収める。README には影響しない。 */}

@@ -19,6 +19,12 @@ function versionHref(versionId: string): string {
   return `/lineage?${query.toString()}`
 }
 
+function locationRelation(matchType: 'exact' | 'prefix'): string {
+  return matchType === 'exact'
+    ? 'この場所を保存先として登録済み'
+    : '登録済み保存先の配下'
+}
+
 export function StorageLineagePanel({ connId, bucket, path }: Props) {
   const requestKey = `${connId}\u0000${bucket}\u0000${path}`
   const [response, setResponse] = useState<{
@@ -40,18 +46,21 @@ export function StorageLineagePanel({ connId, bucket, path }: Props) {
   if (!resolution || resolution.matches.length === 0) return null
 
   return (
-    <aside className="storage-lineage" aria-label="この保存場所のDataset">
+    <aside className="storage-lineage" aria-label="この保存場所に関連するDataset">
       <span className="storage-lineage__label">Dataset</span>
       <div className="storage-lineage__matches">
         {resolution.matches.slice(0, 3).map(match => (
           <div className="storage-lineage__match" key={`${match.versionId}:${match.locationId}`}>
             <div>
               <strong>{match.displayName ?? match.name}</strong>
-              <span>{match.version} · {match.matchType === 'exact' ? '完全一致' : '親prefixから解決'}</span>
+              <span>
+                {locationRelation(match.matchType)}
+                {match.versionCount > 1 ? ` · バージョン ${match.version}` : ''}
+              </span>
             </div>
             <div className="storage-lineage__actions">
-              <Link to={versionHref(match.versionId)}>版のLineage</Link>
-              <Link to={lineageHref(match.namespace, match.name)}>全体を見る</Link>
+              <Link to={versionHref(match.versionId)}>処理の流れを見る</Link>
+              <Link to={lineageHref(match.namespace, match.name)}>データセット全体を見る</Link>
             </div>
           </div>
         ))}
