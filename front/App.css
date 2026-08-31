@@ -2014,6 +2014,78 @@ pre { font-size: 12px; }
   margin-top: var(--space-4);
   align-items: start;
 }
+.lineage-graph { min-width: 0; }
+.lineage-graph__tools {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding-bottom: var(--space-2);
+}
+.lineage-graph__search { position: relative; flex: 1 1 320px; max-width: 460px; }
+.lineage-graph__search label { display: grid; gap: 3px; }
+.lineage-graph__search label > span {
+  color: var(--ink-7);
+  font: 600 9.5px/1 var(--font-sans);
+  letter-spacing: .16em;
+  text-transform: uppercase;
+}
+.lineage-graph__search input {
+  width: 100%;
+  height: 32px;
+  padding: 5px 9px;
+  border: 1px solid var(--color-rule-strong);
+  background: var(--paper);
+  font: 400 12px/1 var(--font-sans);
+}
+.lineage-graph__search-results {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 4px);
+  left: 0;
+  width: 100%;
+  max-height: 320px;
+  overflow: auto;
+  border: 1px solid var(--color-rule-strong);
+  background: var(--paper);
+  box-shadow: 0 8px 24px rgba(10, 9, 4, .12);
+}
+.lineage-graph__search-results ul { margin: 0; padding: 0; list-style: none; }
+.lineage-graph__search-results li + li { border-top: 1px solid var(--rule); }
+.lineage-graph__search-results button {
+  display: grid;
+  width: 100%;
+  gap: 2px;
+  padding: 9px 11px;
+  cursor: pointer;
+  text-align: left;
+}
+.lineage-graph__search-results button:hover { background: var(--ink-0); }
+.lineage-graph__search-results strong { overflow-wrap: anywhere; font-size: 12px; }
+.lineage-graph__search-results span,
+.lineage-graph__search-results p,
+.lineage-graph__search-results small { color: var(--ink-7); font-size: 10.5px; }
+.lineage-graph__search-results p,
+.lineage-graph__search-results small { display: block; margin: 0; padding: 10px 11px; }
+.lineage-graph__direction-picker { display: grid; flex: 0 0 auto; gap: 3px; }
+.lineage-graph__direction-picker > span {
+  color: var(--ink-7);
+  font: 600 9.5px/1 var(--font-sans);
+  letter-spacing: .16em;
+  text-transform: uppercase;
+}
+.lineage-graph__directions { display: inline-flex; flex: 0 0 auto; }
+.lineage-graph__directions button {
+  height: 32px;
+  padding: 5px 10px;
+  border: 1px solid var(--color-rule-strong);
+  background: var(--paper);
+  color: var(--ink-7);
+  cursor: pointer;
+  font: 600 10px/1 var(--font-sans);
+}
+.lineage-graph__directions button + button { border-left: 0; }
+.lineage-graph__directions button[data-active] { border-color: var(--ink-12); background: var(--ink-12); color: var(--paper); }
 .lineage-canvas {
   width: 100%;
   height: clamp(520px, 68vh, 820px);
@@ -2024,6 +2096,17 @@ pre { font-size: 12px; }
 .lineage-canvas .react-flow__background { color: var(--ink-2); }
 .lineage-canvas .react-flow__edge-path { stroke: var(--ink-5); stroke-width: 1.35; }
 .lineage-canvas .react-flow__edge.selected .react-flow__edge-path { stroke: var(--ink-12); }
+.lineage-canvas .react-flow__node,
+.lineage-canvas .react-flow__edge { transition: opacity 160ms ease; }
+.lineage-canvas .react-flow__node.lineage-flow-node--muted,
+.lineage-canvas .react-flow__edge.lineage-flow-edge--muted { opacity: .18; }
+.lineage-canvas .react-flow__node.lineage-flow-node--path .lineage-node-card {
+  border-color: color-mix(in srgb, var(--color-link) 52%, var(--color-rule-strong));
+}
+.lineage-canvas .react-flow__edge.lineage-flow-edge--path .react-flow__edge-path {
+  stroke: var(--color-link);
+  stroke-width: 2.2;
+}
 .lineage-canvas .react-flow__controls,
 .lineage-canvas .react-flow__minimap { border-radius: 0; box-shadow: none; border: 1px solid var(--color-rule-strong); }
 .lineage-canvas .react-flow__controls-button { background: var(--paper); border-bottom-color: var(--rule); }
@@ -2200,6 +2283,9 @@ pre { font-size: 12px; }
   .lineage-toolbar__root label { flex: 1 1 140px; }
   .lineage-catalog__results button { grid-template-columns: minmax(0, 1fr) auto; }
   .lineage-catalog__description { grid-column: 1 / -1; }
+  .lineage-graph__tools { align-items: stretch; flex-direction: column; }
+  .lineage-graph__search { width: 100%; max-width: none; }
+  .lineage-graph__direction-picker { align-self: flex-start; }
   .storage-lineage { grid-template-columns: minmax(0, 1fr); }
   .storage-lineage__match { align-items: start; flex-direction: column; gap: 5px; }
   .manual-section { grid-template-columns: 100px minmax(0, 1fr); gap: var(--space-4); }
