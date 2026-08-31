@@ -12,7 +12,10 @@ const version = {
   manifestHash: 'sha256:manifest',
   schemaUri: null,
   createdAt: '2026-08-26T00:00:00Z',
-  metadata: {},
+  metadata: {
+    recordKind: 'inventory-observation',
+    evidence: { source: 'README.md', verified: true },
+  },
   locations: [{
     id: '33333333-3333-4333-8333-333333333333',
     uri: 's3://dataset/callhome/raw/',
@@ -44,6 +47,7 @@ describe('LineageDetailPanel', () => {
     )
     expect(screen.getByText('s3://metadata/callhome.manifest.jsonl')).toBeInTheDocument()
     expect(screen.getByText('sha256:manifest')).toBeInTheDocument()
+    expect(screen.getByLabelText('Metadata JSON').textContent).toBe(JSON.stringify(version.metadata, null, 2))
     expect(screen.getByRole('link', { name: 'この保存場所をStorageで開く' }))
       .toHaveAttribute('href', '/storage/conn%201/dataset/callhome/raw/')
   })
@@ -97,9 +101,10 @@ describe('LineageDetailPanel', () => {
         />
       </MemoryRouter>,
     )
-    expect(screen.getByText(/historical-lineage-assertion/)).toBeInTheDocument()
-    expect(screen.getByText(/vendor:\/\/ldc\/fisher-english/)).toBeInTheDocument()
-    expect(screen.getByText(/11699/)).toBeInTheDocument()
+    expect(screen.getByLabelText('Runtime JSON').textContent).toBe(JSON.stringify(run.runtime, null, 2))
+    expect(screen.getByLabelText('Metrics JSON').textContent).toBe(JSON.stringify(run.metrics, null, 2))
+    expect(screen.getByLabelText('Sources JSON').textContent).toBe(JSON.stringify(run.sources, null, 2))
+    expect(screen.queryByLabelText('Models JSON')).toBeNull()
   })
 
   it('shows embedded source provenance in version graphs', () => {

@@ -26,12 +26,36 @@ function display(value: unknown): string {
   try { return JSON.stringify(value) } catch { return String(value) }
 }
 
-function Field({ label, value, mono = false }: { label: string; value: unknown; mono?: boolean }) {
+function displayJson(value: unknown): string {
+  try { return JSON.stringify(value, null, 2) ?? String(value) } catch { return String(value) }
+}
+
+function isEmptyStructuredValue(value: unknown): boolean {
+  if (Array.isArray(value)) return value.length === 0
+  return value !== null && typeof value === 'object' && Object.keys(value).length === 0
+}
+
+function Field({
+  label,
+  value,
+  mono = false,
+  json = false,
+}: {
+  label: string
+  value: unknown
+  mono?: boolean
+  json?: boolean
+}) {
   if (value === null || value === undefined || value === '') return null
+  if (json && isEmptyStructuredValue(value)) return null
   return (
-    <div className="lineage-detail__field">
+    <div className={`lineage-detail__field${json ? ' lineage-detail__field--json' : ''}`}>
       <dt>{label}</dt>
-      <dd className={mono ? 'font-mono wrap-anywhere' : undefined}>{display(value)}</dd>
+      <dd className={mono ? 'font-mono wrap-anywhere' : undefined}>
+        {json
+          ? <pre className="lineage-detail__json" aria-label={`${label} JSON`}><code>{displayJson(value)}</code></pre>
+          : display(value)}
+      </dd>
     </div>
   )
 }
@@ -70,7 +94,7 @@ function VersionDetail({ detail }: { detail: DatasetVersionDetail }) {
         <Field label="Manifest hash" value={detail.manifestHash} mono />
         <Field label="Schema" value={detail.schemaUri} mono />
         <Field label="Created" value={formatTime(detail.createdAt)} />
-        <Field label="Metadata" value={Object.keys(detail.metadata).length > 0 ? detail.metadata : null} mono />
+        <Field label="Metadata" value={detail.metadata} json />
       </dl>
       <h4>保存場所 <span>{detail.locations.length}</span></h4>
       {detail.locations.length > 0
@@ -118,10 +142,10 @@ function RunDetail({ detail }: { detail: LineageRunDetail }) {
         <Field label="Container digest" value={detail.containerDigest} mono />
         <Field label="Config URI" value={detail.configUri} mono />
         <Field label="Config hash" value={detail.configHash} mono />
-        <Field label="Models" value={detail.modelRefs.length > 0 ? detail.modelRefs : null} mono />
-        <Field label="Runtime" value={Object.keys(detail.runtime).length > 0 ? detail.runtime : null} mono />
-        <Field label="Metrics" value={Object.keys(detail.metrics).length > 0 ? detail.metrics : null} mono />
-        <Field label="Sources" value={detail.sources.length > 0 ? detail.sources : null} mono />
+        <Field label="Models" value={detail.modelRefs} json />
+        <Field label="Runtime" value={detail.runtime} json />
+        <Field label="Metrics" value={detail.metrics} json />
+        <Field label="Sources" value={detail.sources} json />
         <Field label="Error" value={detail.errorMessage} />
       </dl>
       <h4>Inputs / Outputs</h4>
@@ -149,7 +173,7 @@ function EmbeddedNodeDetail({ node }: { node: LineageNodeSummary }) {
       {source && <Field label="Product" value={node.data.product} />}
       {source && <Field label="License" value={node.data.licenseRef} mono />}
       {source && <Field label="Contract" value={node.data.contractRef} mono />}
-      {source && <Field label="Metadata" value={node.data.metadata} mono />}
+      {source && <Field label="Metadata" value={node.data.metadata} json />}
     </dl>
   )
 }
