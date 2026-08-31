@@ -6,6 +6,7 @@ import type {
   LineageProjection, LineageRunDetail,
 } from '../lib/api/types'
 import { parseLineageRoute, patchLineageRoute } from '../lib/lineage/route'
+import { projectionStateLabel } from '../lib/lineage/labels'
 import { LineageGraph } from '../components/lineage/LineageGraph'
 import { LineageToolbar } from '../components/lineage/LineageToolbar'
 import { LineageDetailPanel, type LineageDetail } from '../components/lineage/LineageDetailPanel'
@@ -68,6 +69,10 @@ export default function LineagePage() {
   const { user } = useAuth()
   const canCurate = user?.permissions.includes('lineage:curate') ?? false
 
+  const patchRoute = useCallback((patch: Parameters<typeof patchLineageRoute>[1], replace = false) => {
+    setSearchParams(current => patchLineageRoute(current, patch), { replace })
+  }, [setSearchParams])
+
   const ready = route.mode === 'logical'
     ? route.namespace !== '' && route.name !== ''
     : route.versionId !== ''
@@ -96,6 +101,14 @@ export default function LineagePage() {
   const selectedNode = graphState.data?.nodes.find(node => node.id === route.selectedId) ?? null
 
   useEffect(() => {
+    if (route.mode !== 'versions' || route.selectedId || !graphState.data) return
+    const rootVersionId = graphState.data.rootVersionId ?? route.versionId
+    if (graphState.data.nodes.some(node => node.kind === 'version' && node.id === rootVersionId)) {
+      patchRoute({ selectedId: rootVersionId }, true)
+    }
+  }, [graphState.data, patchRoute, route.mode, route.selectedId, route.versionId])
+
+  useEffect(() => {
     let current = true
     if (!selectedNode) return () => { current = false }
     const request = detailRequest(selectedNode)
@@ -107,16 +120,12 @@ export default function LineagePage() {
     return () => { current = false }
   }, [selectedNode])
 
-  const patchRoute = useCallback((patch: Parameters<typeof patchLineageRoute>[1], replace = false) => {
-    setSearchParams(current => patchLineageRoute(current, patch), { replace })
-  }, [setSearchParams])
-
   const changeMode = (mode: LineageProjection) => {
     if (mode === route.mode) return
     if (mode === 'versions') {
       // Registry が明示する currentVersionId のみ使う。名前から latest を推測しない。
       const explicitVersion = selectedNode?.registry?.currentVersionId ?? route.versionId
-      patchRoute({ mode, versionId: explicitVersion ?? '', selectedId: '' })
+      patchRoute({ mode, versionId: explicitVersion ?? '', selectedId: explicitVersion ?? '' })
     } else {
       patchRoute({ mode, selectedId: '' })
     }
@@ -130,7 +139,7 @@ export default function LineagePage() {
   return (
     <section className="lineage-page">
       <header className="page-head">
-        <h2>Lineage</h2>
+        <h2>データの流れ</h2>
         {canCurate && <Link className="ghost" to="/lineage/register">手動で登録</Link>}
       </header>
 
@@ -156,13 +165,13 @@ export default function LineagePage() {
 
       {projectionProblem && (
         <div className="lineage-notice" role="status">
-          <strong>Lineage projection: {projection.state}</strong>
+          <strong>グラフ反映状態: {projectionStateLabel(projection.state)}</strong>
           <span>{projection.message ?? `${projection.pendingEvents ?? 0}件のイベントが反映待ちです。`}</span>
         </div>
       )}
       {graphState.data?.truncated && (
         <div className="lineage-notice" role="status">
-          グラフの一部のみ表示しています。Depthを変えるか、起点を絞ってください。
+          グラフの一部のみ表示しています。表示範囲を広げるか、起点を絞ってください。
         </div>
       )}
       {graphState.data?.warnings.map((warning, index) => (
@@ -171,16 +180,16 @@ export default function LineagePage() {
 
       {!ready && (
         <div className="empty-state lineage-empty">
-          <h3>{route.mode === 'logical' ? '登録一覧からDatasetを選んでください' : 'DatasetVersionを指定してください'}</h3>
+          <h3>{route.mode === 'logical' ? '登録一覧からデータセットを選んでください' : 'データのバージョンを指定してください'}</h3>
           <p>{route.mode === 'logical'
-            ? '名前、説明、S3 URIから検索できます。NamespaceとNameは技術IDとして詳細指定に残しています。'
-            : 'Datasetノードを選んで「版・Runを表示」へ切り替えるか、Version IDを入力してください。'}</p>
+            ? '名前、説明、S3 URIから検索できます。名前空間と技術名は詳細指定に残しています。'
+            : 'データセットを選んで「入出力と処理履歴」へ切り替えるか、バージョンIDを入力してください。'}</p>
         </div>
       )}
       {graphState.loading && <p className="lineage-loading">グラフを読み込み中…</p>}
       {graphState.error && <p className="error" role="alert">{graphState.error}</p>}
       {graphState.data && graphState.data.nodes.length === 0 && (
-        <div className="empty-state lineage-empty"><h3>Lineageがまだありません</h3><p>PipelineからOpenLineageイベントが届くとここに表示されます。</p></div>
+        <div className="empty-state lineage-empty"><h3>処理のつながりがまだありません</h3><p>処理履歴が登録されると、入力から出力への流れがここに表示されます。</p></div>
       )}
 
       {graphState.data && graphState.data.nodes.length > 0 && (
@@ -197,7 +206,7 @@ export default function LineagePage() {
             loading={detailLoading}
             error={detailForSelection.error}
             onClose={() => patchRoute({ selectedId: '' })}
-            onOpenVersion={versionId => patchRoute({ mode: 'versions', versionId, selectedId: '' })}
+            onOpenVersion={versionId => patchRoute({ mode: 'versions', versionId, selectedId: versionId })}
           />
         </div>
       )}

@@ -59,7 +59,7 @@ export function LineageCatalog({ hasSelection, onSelect }: Props) {
   const end = Math.min(offset + results.length, total)
 
   return (
-    <section className="lineage-catalog" aria-label="登録済みDataset">
+    <section className="lineage-catalog" aria-label="登録済みデータセット">
       <button
         type="button"
         className="lineage-catalog__toggle"
@@ -89,7 +89,7 @@ export function LineageCatalog({ hasSelection, onSelect }: Props) {
 
           {error && <p className="error" role="alert">{error}</p>}
           {!loading && !error && results.length === 0 && (
-            <p className="lineage-catalog__empty">一致するDatasetはありません。</p>
+            <p className="lineage-catalog__empty">条件に合うデータセットはありません。</p>
           )}
           <ul className="lineage-catalog__results">
             {results.map(dataset => (
@@ -108,7 +108,7 @@ export function LineageCatalog({ hasSelection, onSelect }: Props) {
                     {dataset.description ?? '説明は未登録です。'}
                   </span>
                   <span className="lineage-catalog__facts">
-                    {dataset.mediaType ?? 'media type未登録'} · {dataset.versionCount}版
+                    {dataset.mediaType ?? 'データ形式未登録'} · バージョン {dataset.versionCount}件
                   </span>
                   <span className="lineage-catalog__identity">
                     {dataset.namespace} / {dataset.name}

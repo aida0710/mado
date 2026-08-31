@@ -76,6 +76,6 @@ describe('StorageLineagePanel', () => {
       </MemoryRouter>,
     )
     await waitFor(() => expect(api.lineageResolveLocation).toHaveBeenCalled())
-    expect(screen.queryByLabelText('この保存場所に関連するDataset')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('この保存場所に関連するデータセット')).not.toBeInTheDocument()
   })
 })

@@ -23,7 +23,7 @@ describe('lineage graph model', () => {
     const result = toFlowElements(graph)
     expect(result.nodes.map(node => node.id)).toEqual(['d:raw', 'j:clean', 'd:out'])
     expect(result.edges.map(edge => edge.id)).toEqual(['e1', 'e2'])
-    expect(result.nodes[1].data.status).toBe('COMPLETE')
+    expect(result.nodes[1].data.status).toBe('完了')
   })
 
   it('does not expose storage locations as canvas nodes', () => {

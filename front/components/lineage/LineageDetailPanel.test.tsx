@@ -47,7 +47,7 @@ describe('LineageDetailPanel', () => {
     )
     expect(screen.getByText('s3://metadata/callhome.manifest.jsonl')).toBeInTheDocument()
     expect(screen.getByText('sha256:manifest')).toBeInTheDocument()
-    expect(screen.getByLabelText('Metadata JSON').textContent).toBe(JSON.stringify(version.metadata, null, 2))
+    expect(screen.getByLabelText('補足情報 JSON').textContent).toBe(JSON.stringify(version.metadata, null, 2))
     expect(screen.getByRole('link', { name: 'この保存場所をStorageで開く' }))
       .toHaveAttribute('href', '/storage/conn%201/dataset/callhome/raw/')
   })
@@ -101,10 +101,10 @@ describe('LineageDetailPanel', () => {
         />
       </MemoryRouter>,
     )
-    expect(screen.getByLabelText('Runtime JSON').textContent).toBe(JSON.stringify(run.runtime, null, 2))
-    expect(screen.getByLabelText('Metrics JSON').textContent).toBe(JSON.stringify(run.metrics, null, 2))
-    expect(screen.getByLabelText('Sources JSON').textContent).toBe(JSON.stringify(run.sources, null, 2))
-    expect(screen.queryByLabelText('Models JSON')).toBeNull()
+    expect(screen.getByLabelText('実行環境 JSON').textContent).toBe(JSON.stringify(run.runtime, null, 2))
+    expect(screen.getByLabelText('実行結果 JSON').textContent).toBe(JSON.stringify(run.metrics, null, 2))
+    expect(screen.getByLabelText('入手元 JSON').textContent).toBe(JSON.stringify(run.sources, null, 2))
+    expect(screen.queryByLabelText('使用モデル JSON')).toBeNull()
   })
 
   it('shows embedded source provenance in version graphs', () => {
@@ -126,7 +126,7 @@ describe('LineageDetailPanel', () => {
         />
       </MemoryRouter>,
     )
-    expect(screen.getByText('purchased')).toBeInTheDocument()
+    expect(screen.getByText('購入')).toBeInTheDocument()
     expect(screen.getByText('Linguistic Data Consortium')).toBeInTheDocument()
     expect(screen.getByText('license://pending')).toBeInTheDocument()
   })

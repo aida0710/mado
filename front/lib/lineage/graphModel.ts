@@ -1,5 +1,6 @@
 import { MarkerType, type Edge, type Node } from '@xyflow/react'
 import type { LineageGraph, LineageNodeKind, LineageNodeSummary } from '../api/types'
+import { lineageStatusLabel } from './labels'
 
 export type VisibleLineageNodeKind = Exclude<LineageNodeKind, 'location'>
 
@@ -29,17 +30,17 @@ function subtitleOf(node: LineageNodeSummary): string | null {
 }
 
 function statusOf(node: LineageNodeSummary): string | null {
-  return node.status
+  return lineageStatusLabel(node.status
     ?? node.latestRun?.state
     ?? stringData(node, 'status')
-    ?? stringData(node, 'state')
+    ?? stringData(node, 'state'))
 }
 
 function metaOf(node: LineageNodeSummary): string | null {
   if (node.kind === 'dataset' || node.kind === 'source') {
     const versions = node.registry?.versionCount
-    if (versions != null) return `${versions} version${versions === 1 ? '' : 's'}`
-    return node.completeness === 'unregistered' ? 'Registry 未登録' : null
+    if (versions != null) return `バージョン ${versions}件`
+    return node.completeness === 'unregistered' ? '台帳未登録' : null
   }
   if (node.kind === 'version') return stringData(node, 'version')
   return null

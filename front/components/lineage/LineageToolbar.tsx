@@ -34,7 +34,7 @@ export function LineageToolbar({ route, loading, onModeChange, onApply, onDepthC
 
   return (
     <div className="lineage-toolbar">
-      <div className="lineage-toolbar__modes" role="group" aria-label="Lineageの表示粒度">
+      <div className="lineage-toolbar__modes" role="group" aria-label="データの流れの表示方法">
         <button
           type="button"
           className="lineage-toolbar__mode"
@@ -42,7 +42,7 @@ export function LineageToolbar({ route, loading, onModeChange, onApply, onDepthC
           aria-pressed={route.mode === 'logical'}
           onClick={() => onModeChange('logical')}
         >
-          Dataset・Job
+          データセット全体
         </button>
         <button
           type="button"
@@ -51,12 +51,12 @@ export function LineageToolbar({ route, loading, onModeChange, onApply, onDepthC
           aria-pressed={route.mode === 'versions'}
           onClick={() => onModeChange('versions')}
         >
-          版・Runを表示
+          入出力と処理履歴
         </button>
       </div>
 
       <label className="lineage-toolbar__depth">
-        <span>Depth</span>
+        <span>表示範囲</span>
         <select value={route.depth} onChange={event => onDepthChange(Number(event.target.value))}>
           {[1, 2, 3, 4, 5, 6].map(depth => <option key={depth} value={depth}>{depth}</option>)}
         </select>
@@ -77,23 +77,23 @@ export function LineageToolbar({ route, loading, onModeChange, onApply, onDepthC
               <label>
                 <span>種類</span>
                 <select name="rootKind" defaultValue={route.rootKind}>
-                  <option value="dataset">Dataset</option>
-                  <option value="job">Job</option>
+                  <option value="dataset">データセット</option>
+                  <option value="job">処理</option>
                 </select>
               </label>
               <label>
-                <span>Namespace</span>
+                <span>名前空間</span>
                 <input name="namespace" defaultValue={route.namespace} placeholder="speech" />
               </label>
               <label className="lineage-toolbar__name">
-                <span>Name</span>
+                <span>技術名</span>
                 <input name="name" defaultValue={route.name} placeholder="callhome-raw" />
               </label>
             </>
           ) : (
             <label className="lineage-toolbar__name">
-              <span>Version ID</span>
-              <input name="versionId" defaultValue={route.versionId} placeholder="DatasetVersion UUID" />
+              <span>バージョンID</span>
+              <input name="versionId" defaultValue={route.versionId} placeholder="バージョンのUUID" />
             </label>
           )}
           <button type="submit" className="ghost">表示</button>

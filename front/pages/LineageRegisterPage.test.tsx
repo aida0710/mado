@@ -37,7 +37,7 @@ function renderPage(user: AuthUser = curator) {
 describe('LineageRegisterPage', () => {
   it('登録種別ごとに用途を分ける', async () => {
     renderPage()
-    expect(screen.getByRole('heading', { name: 'Dataset' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'データセット' })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '保存場所' }))
     expect(screen.getByText(/同じ内容を別の場所へコピー/)).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '処理履歴' }))
@@ -54,10 +54,10 @@ describe('LineageRegisterPage', () => {
   it('新しいDatasetとVersionを保存場所なしで登録する', async () => {
     renderPage()
     fireEvent.change(screen.getByLabelText('表示名'), { target: { value: 'Podcast 日本語 原本' } })
-    fireEvent.change(screen.getByLabelText('Dataset key'), { target: { value: 'podcast/ja/raw' } })
-    fireEvent.change(screen.getByLabelText('Namespace'), { target: { value: 'mdx-speech' } })
-    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'podcast/ja/raw' } })
-    fireEvent.change(screen.getByLabelText('Version'), { target: { value: '2026-08-27' } })
+    fireEvent.change(screen.getByLabelText('データセットキー'), { target: { value: 'podcast/ja/raw' } })
+    fireEvent.change(screen.getByLabelText('名前空間'), { target: { value: 'mdx-speech' } })
+    fireEvent.change(screen.getByLabelText('技術名'), { target: { value: 'podcast/ja/raw' } })
+    fireEvent.change(screen.getByLabelText('バージョン'), { target: { value: '2026-08-27' } })
     fireEvent.click(screen.getByLabelText('保存場所も登録する'))
     fireEvent.click(screen.getByRole('button', { name: '登録する' }))
 
@@ -69,6 +69,6 @@ describe('LineageRegisterPage', () => {
       version: expect.objectContaining({ version: '2026-08-27' }),
       evidenceRefs: [],
     })))
-    expect(await screen.findByText('Dataset Versionを登録しました。')).toBeInTheDocument()
+    expect(await screen.findByText('データのバージョンを登録しました。')).toBeInTheDocument()
   })
 })

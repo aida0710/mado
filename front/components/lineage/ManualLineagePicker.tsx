@@ -17,7 +17,7 @@ interface DatasetPickerProps {
   label?: string
 }
 
-export function DatasetPicker({ value, onChange, label = 'Dataset' }: DatasetPickerProps) {
+export function DatasetPicker({ value, onChange, label = 'データセット' }: DatasetPickerProps) {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<DatasetCatalogItem[]>([])
   const [loading, setLoading] = useState(false)
@@ -80,7 +80,7 @@ export function DatasetPicker({ value, onChange, label = 'Dataset' }: DatasetPic
             <li key={item.datasetId ?? `${item.namespace}/${item.name}`}>
                   <button type="button" onClick={() => { onChange(item); setQuery(''); setResults([]); setLoading(false) }}>
                 <strong>{item.displayName ?? item.name}</strong>
-                <span>{item.namespace} / {item.name} · {item.versionCount}版</span>
+                <span>{item.namespace} / {item.name} · バージョン {item.versionCount}件</span>
               </button>
             </li>
           ))}
@@ -96,7 +96,7 @@ interface VersionPickerProps {
   label?: string
 }
 
-export function VersionPicker({ value, onChange, label = 'Dataset Version' }: VersionPickerProps) {
+export function VersionPicker({ value, onChange, label = 'データのバージョン' }: VersionPickerProps) {
   const [dataset, setDataset] = useState<DatasetCatalogItem | null>(null)
   const [versions, setVersions] = useState<Array<{ id: string; version: string }>>([])
   const [loading, setLoading] = useState(false)
@@ -142,7 +142,7 @@ export function VersionPicker({ value, onChange, label = 'Dataset Version' }: Ve
       }} label={label} />
       {dataset && (
         <label className="manual-field">
-          <span>Version</span>
+          <span>バージョン</span>
           <select
             value=""
             disabled={loading || versions.length === 0}
@@ -159,7 +159,7 @@ export function VersionPicker({ value, onChange, label = 'Dataset Version' }: Ve
               })
             }}
           >
-            <option value="">{loading ? '読み込み中…' : versions.length === 0 ? 'Versionがありません' : 'Versionを選択'}</option>
+            <option value="">{loading ? '読み込み中…' : versions.length === 0 ? 'バージョンがありません' : 'バージョンを選択'}</option>
             {versions.map(version => <option key={version.id} value={version.id}>{version.version}</option>)}
           </select>
         </label>

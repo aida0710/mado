@@ -69,7 +69,7 @@ const ACTION_LABELS: Record<string, string> = {
   'setting.update': '設定を変更',
   'pricing.refresh': '料金を更新',
   'job.cancel': 'ジョブを中断',
-  'lineage.read': 'Lineageを閲覧',
+  'lineage.read': 'データの流れを閲覧',
   'service_account.create': 'Service Accountを作成',
   'service_account.update': 'Service Accountを変更',
   'service_account.key.issue': 'API keyを発行',
@@ -91,7 +91,7 @@ const OUTCOME_LABELS: Record<AuditEventRow['outcome'], string> = {
 }
 
 const ROLE_OPTIONS = [
-  { id: 'viewer', label: 'Viewer — 閲覧のみ', help: 'StorageとLineageを閲覧できます。' },
+  { id: 'viewer', label: 'Viewer — 閲覧のみ', help: 'Storageとデータの流れを閲覧できます。' },
   { id: 'curator', label: 'Curator — 内容編集', help: '閲覧に加え、README・ノート・タグなどを編集できます。' },
   { id: 'operator', label: 'Operator — ジョブ実行', help: '閲覧に加え、走査・料金更新・ジョブ中断を実行できます。' },
   { id: 'admin', label: 'Admin — すべて管理', help: '接続・設定・ユーザー・API key・監査ログを含む全操作ができます。' },
@@ -365,7 +365,7 @@ function ServiceAccountsPage() {
           <button type="submit">作成</button>
         </form>
         <form className="admin-form" onSubmit={issueKey}>
-          <h4>Lineage API keyを発行</h4>
+          <h4>OpenLineage APIキーを発行</h4>
           <label className="admin-field"><span>Service Account</span><select name="accountId" required defaultValue=""><option value="" disabled>選択してください</option>{accounts.filter(a => a.status === 'active').map(account => <option key={account.id} value={account.id}>{account.name}</option>)}</select></label>
           <label className="admin-field"><span>Key名</span><input name="name" placeholder="例: production-2026-08" required /></label>
           <label className="admin-field"><span>許可するNamespace</span><input name="namespaces" placeholder="speech,podcast（カンマ区切り）" required /></label>

@@ -46,8 +46,8 @@ export function StorageLineagePanel({ connId, bucket, path }: Props) {
   if (!resolution || resolution.matches.length === 0) return null
 
   return (
-    <aside className="storage-lineage" aria-label="この保存場所に関連するDataset">
-      <span className="storage-lineage__label">Dataset</span>
+    <aside className="storage-lineage" aria-label="この保存場所に関連するデータセット">
+      <span className="storage-lineage__label">データセット</span>
       <div className="storage-lineage__matches">
         {resolution.matches.slice(0, 3).map(match => (
           <div className="storage-lineage__match" key={`${match.versionId}:${match.locationId}`}>

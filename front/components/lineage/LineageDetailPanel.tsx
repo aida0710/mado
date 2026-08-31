@@ -3,6 +3,9 @@ import type {
   DatasetDetail, DatasetVersionDetail, LineageNodeSummary, LineageRunDetail,
   LineageStorageLocationDetail,
 } from '../../lib/api/types'
+import {
+  LINEAGE_KIND_LABEL, lineageCompletenessLabel, lineageSourceKindLabel, lineageStatusLabel,
+} from '../../lib/lineage/labels'
 import { encPath, parseS3Path } from '../../lib/route'
 
 export type LineageDetail = DatasetDetail | DatasetVersionDetail | LineageRunDetail
@@ -75,10 +78,10 @@ function Location({ location }: { location: LineageStorageLocationDetail }) {
     <li className="lineage-location">
       <div className="flex items-center justify-between gap-2">
         <strong>{location.storageKind}</strong>
-        <span data-status={location.status}>{location.status}</span>
+        <span data-status={location.status}>{lineageStatusLabel(location.status)}</span>
       </div>
       <p className="font-mono wrap-anywhere">{location.uri}</p>
-      <small>{location.isPrimary ? 'Primary · ' : ''}{formatTime(location.observedAt)}</small>
+      <small>{location.isPrimary ? '主な保存場所 · ' : ''}{formatTime(location.observedAt)}</small>
       {to && <Link to={to}>この保存場所をStorageで開く</Link>}
     </li>
   )
@@ -88,13 +91,13 @@ function VersionDetail({ detail }: { detail: DatasetVersionDetail }) {
   return (
     <>
       <dl className="lineage-detail__fields">
-        <Field label="Version" value={detail.version} />
-        <Field label="Content hash" value={detail.contentHash} mono />
-        <Field label="Manifest" value={detail.manifestUri} mono />
-        <Field label="Manifest hash" value={detail.manifestHash} mono />
-        <Field label="Schema" value={detail.schemaUri} mono />
-        <Field label="Created" value={formatTime(detail.createdAt)} />
-        <Field label="Metadata" value={detail.metadata} json />
+        <Field label="バージョン" value={detail.version} />
+        <Field label="内容のハッシュ" value={detail.contentHash} mono />
+        <Field label="ファイル一覧URI" value={detail.manifestUri} mono />
+        <Field label="ファイル一覧のハッシュ" value={detail.manifestHash} mono />
+        <Field label="スキーマURI" value={detail.schemaUri} mono />
+        <Field label="登録日時" value={formatTime(detail.createdAt)} />
+        <Field label="補足情報" value={detail.metadata} json />
       </dl>
       <h4>保存場所 <span>{detail.locations.length}</span></h4>
       {detail.locations.length > 0
@@ -109,13 +112,13 @@ function DatasetDetailView({ detail, onOpenVersion }: { detail: DatasetDetail; o
     <>
       <dl className="lineage-detail__fields">
         <Field label="表示名" value={detail.displayName} />
-        <Field label="Dataset key" value={detail.datasetKey} mono />
-        <Field label="Media type" value={detail.mediaType} />
-        <Field label="Owner" value={detail.owner} />
-        <Field label="Created" value={formatTime(detail.createdAt)} />
-        <Field label="Description" value={detail.description} />
+        <Field label="データセットキー" value={detail.datasetKey} mono />
+        <Field label="データ形式" value={detail.mediaType} />
+        <Field label="管理者" value={detail.owner} />
+        <Field label="登録日時" value={formatTime(detail.createdAt)} />
+        <Field label="説明" value={detail.description} />
       </dl>
-      <h4>Versions <span>{detail.versionCount}</span></h4>
+      <h4>バージョン <span>{detail.versionCount}</span></h4>
       <ul className="lineage-detail__versions">
         {detail.versions.map(version => (
           <li key={version.id}>
@@ -134,24 +137,24 @@ function RunDetail({ detail }: { detail: LineageRunDetail }) {
   return (
     <>
       <dl className="lineage-detail__fields">
-        <Field label="Status" value={detail.status} />
-        <Field label="Job" value={`${detail.jobNamespace} / ${detail.jobName}`} mono />
-        <Field label="Started" value={formatTime(detail.startedAt)} />
-        <Field label="Ended" value={formatTime(detail.endedAt)} />
-        <Field label="Git SHA" value={detail.gitSha} mono />
-        <Field label="Container digest" value={detail.containerDigest} mono />
-        <Field label="Config URI" value={detail.configUri} mono />
-        <Field label="Config hash" value={detail.configHash} mono />
-        <Field label="Models" value={detail.modelRefs} json />
-        <Field label="Runtime" value={detail.runtime} json />
-        <Field label="Metrics" value={detail.metrics} json />
-        <Field label="Sources" value={detail.sources} json />
-        <Field label="Error" value={detail.errorMessage} />
+        <Field label="状態" value={lineageStatusLabel(detail.status)} />
+        <Field label="処理" value={`${detail.jobNamespace} / ${detail.jobName}`} mono />
+        <Field label="開始日時" value={formatTime(detail.startedAt)} />
+        <Field label="終了日時" value={formatTime(detail.endedAt)} />
+        <Field label="Gitコミット" value={detail.gitSha} mono />
+        <Field label="コンテナイメージ" value={detail.containerDigest} mono />
+        <Field label="設定ファイルURI" value={detail.configUri} mono />
+        <Field label="設定ファイルのハッシュ" value={detail.configHash} mono />
+        <Field label="使用モデル" value={detail.modelRefs} json />
+        <Field label="実行環境" value={detail.runtime} json />
+        <Field label="実行結果" value={detail.metrics} json />
+        <Field label="入手元" value={detail.sources} json />
+        <Field label="エラー" value={detail.errorMessage} />
       </dl>
-      <h4>Inputs / Outputs</h4>
+      <h4>入力 / 出力</h4>
       <ul className="lineage-detail__io">
-        {detail.inputs.map(input => <li key={`in:${input.versionId}`}><span>IN</span>{input.namespace} / {input.name} @ {input.version}</li>)}
-        {detail.outputs.map(output => <li key={`out:${output.versionId}`}><span>OUT</span>{output.namespace} / {output.name} @ {output.version}</li>)}
+        {detail.inputs.map(input => <li key={`in:${input.versionId}`}><span>入力</span>{input.namespace} / {input.name} @ {input.version}</li>)}
+        {detail.outputs.map(output => <li key={`out:${output.versionId}`}><span>出力</span>{output.namespace} / {output.name} @ {output.version}</li>)}
       </ul>
     </>
   )
@@ -164,33 +167,33 @@ function EmbeddedNodeDetail({ node }: { node: LineageNodeSummary }) {
   const source = node.kind === 'source'
   return (
     <dl className="lineage-detail__fields">
-      <Field label="Status" value={node.status ?? node.latestRun?.state} />
-      <Field label="Registry" value={node.completeness} />
-      <Field label="Updated" value={formatTime(node.updatedAt)} />
-      {source && <Field label="Source kind" value={node.data.sourceKind} />}
+      <Field label="状態" value={lineageStatusLabel(node.status ?? node.latestRun?.state)} />
+      <Field label="台帳登録" value={lineageCompletenessLabel(node.completeness)} />
+      <Field label="更新日時" value={formatTime(node.updatedAt)} />
+      {source && <Field label="入手方法" value={lineageSourceKindLabel(node.data.sourceKind)} />}
       {source && <Field label="URI" value={node.data.uri} mono />}
-      {source && <Field label="Vendor" value={node.data.vendor} />}
-      {source && <Field label="Product" value={node.data.product} />}
-      {source && <Field label="License" value={node.data.licenseRef} mono />}
-      {source && <Field label="Contract" value={node.data.contractRef} mono />}
-      {source && <Field label="Metadata" value={node.data.metadata} json />}
+      {source && <Field label="提供元" value={node.data.vendor} />}
+      {source && <Field label="製品名" value={node.data.product} />}
+      {source && <Field label="ライセンス参照" value={node.data.licenseRef} mono />}
+      {source && <Field label="契約参照" value={node.data.contractRef} mono />}
+      {source && <Field label="補足情報" value={node.data.metadata} json />}
     </dl>
   )
 }
 
 export function LineageDetailPanel({ node, detail, loading, error, onClose, onOpenVersion }: Props) {
   return (
-    <aside className="lineage-detail" aria-label="Lineage node detail">
+    <aside className="lineage-detail" aria-label="選択項目の詳細">
       <header>
         <div>
-          <span>{node?.kind ?? 'Detail'}</span>
-          <h3>{node?.label ?? 'ノードを選択'}</h3>
+          <span>{node ? LINEAGE_KIND_LABEL[node.kind] : '詳細'}</span>
+          <h3>{node?.label ?? '項目を選択'}</h3>
           {node?.namespace && <p>{node.namespace}</p>}
         </div>
         {node && <button type="button" className="ghost" onClick={onClose} aria-label="詳細を閉じる">✕</button>}
       </header>
 
-      {!node && <p className="lineage-detail__muted">グラフのノードを選ぶと、版・保存場所・実行条件を表示します。</p>}
+      {!node && <p className="lineage-detail__muted">グラフの項目を選ぶと、バージョン、保存場所、実行条件を表示します。</p>}
       {loading && <p className="lineage-detail__muted">詳細を読み込み中…</p>}
       {error && <p className="error" role="alert">{error}</p>}
       {node && !loading && !error && !detail && (

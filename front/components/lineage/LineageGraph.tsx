@@ -1,7 +1,7 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import {
   Background, BackgroundVariant, Controls, MiniMap, ReactFlow, ReactFlowProvider,
-  type NodeMouseHandler,
+  type NodeMouseHandler, useReactFlow,
 } from '@xyflow/react'
 import type { LineageGraph as LineageGraphDto, LineageNodeSummary } from '../../lib/api/types'
 import { toFlowElements, type LineageFlowNode } from '../../lib/lineage/graphModel'
@@ -18,6 +18,8 @@ interface Props {
 }
 
 function Canvas({ graph, selectedId, onSelect, onClearSelection }: Props) {
+  const { fitView } = useReactFlow<LineageFlowNode>()
+  const focusedSelection = useRef('')
   const { nodes, edges } = useMemo(() => {
     const elements = toFlowElements(graph)
     const layout = layoutLineage(elements.nodes, elements.edges)
@@ -34,8 +36,23 @@ function Canvas({ graph, selectedId, onSelect, onClearSelection }: Props) {
   }
   const graphKey = `${nodes.map(node => node.id).join('|')}::${edges.map(edge => edge.id).join('|')}`
 
+  useEffect(() => {
+    if (!selectedId) {
+      focusedSelection.current = ''
+      return
+    }
+    const selectedNodes = nodes.filter(node => node.id === selectedId)
+    const focusKey = `${graphKey}::${selectedId}`
+    if (selectedNodes.length === 0 || focusedSelection.current === focusKey) return
+    focusedSelection.current = focusKey
+    const frame = window.requestAnimationFrame(() => {
+      void fitView({ nodes: selectedNodes, padding: 1.1, minZoom: 0.9, maxZoom: 1.35, duration: 350 })
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [fitView, graphKey, nodes, selectedId])
+
   return (
-    <div className="lineage-canvas" aria-label="Dataset lineage graph">
+    <div className="lineage-canvas" aria-label="データの流れグラフ">
       <ReactFlow
         key={graphKey}
         nodes={nodes}

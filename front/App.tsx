@@ -50,7 +50,7 @@ function Tabs() {
     <nav className="mado-tabs flex items-stretch gap-4 sm:gap-6" aria-label="メインナビゲーション">
       <Tab to="/"            label="Home" />
       <Tab to="/storage"     label="Storage" />
-      <Tab to="/lineage"     label="Lineage" />
+      <Tab to="/lineage"     label="データの流れ" />
       <Tab to="/settings"    label="Settings" />
     </nav>
   )
