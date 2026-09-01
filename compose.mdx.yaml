@@ -203,6 +203,7 @@ services:
     network_mode: host
     environment:
       MADO_HOSTNAME: "${MADO_HOSTNAME:-mado.internal.dubguild.com}"
+      MADO_API_HOSTNAME: "${MADO_API_HOSTNAME:-mado-api.internal.dubguild.com}"
       NGINX_ENVSUBST_FILTER: "^MADO_"
     volumes:
       - ./nginx/edge-nginx.conf:/etc/nginx/nginx.conf:ro

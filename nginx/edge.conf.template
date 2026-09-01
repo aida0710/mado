@@ -1,4 +1,5 @@
-# Public HTTP serves only ACME HTTP-01 and redirects every other path to HTTPS.
+# Public HTTP serves ACME HTTP-01 for every hostname. Unknown hosts do not get
+# redirected to either the intranet UI or the public API.
 server {
     listen 80 default_server;
     listen [::]:80 default_server;
@@ -12,7 +13,41 @@ server {
     }
 
     location / {
+        return 421;
+    }
+}
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name ${MADO_HOSTNAME};
+    server_tokens off;
+
+    location ^~ /.well-known/acme-challenge/ {
+        root /var/www/letsencrypt;
+        default_type text/plain;
+        try_files $uri =404;
+    }
+
+    location / {
         return 308 https://${MADO_HOSTNAME}$request_uri;
+    }
+}
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name ${MADO_API_HOSTNAME};
+    server_tokens off;
+
+    location ^~ /.well-known/acme-challenge/ {
+        root /var/www/letsencrypt;
+        default_type text/plain;
+        try_files $uri =404;
+    }
+
+    location / {
+        return 308 https://${MADO_API_HOSTNAME}$request_uri;
     }
 }
 
@@ -73,5 +108,58 @@ server {
         proxy_set_header Connection "";
         proxy_connect_timeout 5s;
         proxy_read_timeout 300s;
+    }
+}
+
+# Public pipeline endpoint. Browser UI, SSO, internal API, assets and health are
+# deliberately absent. The loopback listener applies its own method, request,
+# connection and body limits before forwarding to api-lineage.
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name ${MADO_API_HOSTNAME};
+    server_tokens off;
+
+    ssl_certificate /etc/letsencrypt/live/${MADO_API_HOSTNAME}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${MADO_API_HOSTNAME}/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_session_cache shared:MadoTLS:10m;
+    ssl_session_timeout 1d;
+    ssl_session_tickets off;
+
+    add_header Strict-Transport-Security "max-age=31536000" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "DENY" always;
+    add_header Referrer-Policy "no-referrer" always;
+    add_header Cache-Control "no-store" always;
+
+    client_max_body_size 2m;
+    client_body_timeout 10s;
+    client_header_timeout 10s;
+    send_timeout 30s;
+
+    location = /api/openlineage/v1/lineage {
+        if ($request_method != POST) {
+            return 404;
+        }
+
+        proxy_pass http://127.0.0.1:8081;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-Port 443;
+        proxy_set_header X-Request-Id $request_id;
+        proxy_set_header Connection "";
+        proxy_connect_timeout 5s;
+        proxy_send_timeout 30s;
+        proxy_read_timeout 30s;
+        proxy_request_buffering off;
+        proxy_buffering off;
+    }
+
+    location / {
+        return 404;
     }
 }
