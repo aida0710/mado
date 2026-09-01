@@ -4,6 +4,8 @@ import { markAuditNoChange } from '../lib/audit-activity.js'
 import { nanoid } from 'nanoid'
 import type { Pools } from '../db.js'
 import type { CryptoModule } from '../crypto.js'
+import { managesConnections, visibleConnectionIds } from '../lib/connection-access.js'
+import { getSessionPrincipal } from '../lib/rbac.js'
 import {
   CONNECTION_SETTINGS_SUBQUERY,
   capabilitySettingKey,
@@ -18,8 +20,8 @@ import {
   settingsToProfile,
 } from '../lib/pricing.js'
 
-// すべてのエンドポイントは認証なし。README/お気に入りのオナーシステム契約を踏襲し、
-// 防御は LAN 境界に委ねる (ハンドラ内には持たない)。
+// ルート単位のRBACは internal.ts で適用する。接続一覧はさらにここでユーザー別に
+// 絞り込み、非許可の接続は存在自体を返さない。
 // 認証情報は ENCRYPTION_KEY で保存時に暗号化されるため、
 // 不正な作成/更新が既存のキーを漏洩させることはない。
 export interface ConnectionsDeps {
@@ -74,6 +76,18 @@ const CapabilitiesBody = z.object({
 // 更新は差分。送られたキーだけ書き換える (UI がトグル 1 個だけ送れるように)。
 const CapabilitiesPatch = CapabilitiesBody.partial()
 
+const VisibilityMode = z.enum(['public', 'whitelist'])
+const AllowedUserIds = z.array(z.string().uuid()).max(256)
+  .transform(ids => [...new Set(ids)].sort())
+const VisibilityCreate = z.object({
+  mode: VisibilityMode.default('public'),
+  allowedUserIds: AllowedUserIds.default([]),
+}).prefault({})
+const VisibilityPatch = z.object({
+  mode: VisibilityMode.optional(),
+  allowedUserIds: AllowedUserIds.optional(),
+}).strict()
+
 /** connection_settings への upsert。値は TEXT なので 'true' / 'false' で持つ。
  *  「行が無い = 既定 (有効)」なので、既定に戻すだけなら DELETE でもよいが、
  *  設定画面で明示的に入れた値がそのまま行として見えるほうが追いやすいので
@@ -125,6 +139,34 @@ async function upsertCapabilities(
      ON CONFLICT (connection_id, key)
        DO UPDATE SET value = EXCLUDED.value, updated_at = now()`,
     [connId, entries.map(e => e[0]), entries.map(e => e[1])],
+  )
+}
+
+async function allowedUsersExist(
+  q: { query: (sql: string, values: unknown[]) => Promise<{ rows: unknown[] }> },
+  userIds: readonly string[],
+): Promise<boolean> {
+  if (userIds.length === 0) return true
+  const result = await q.query(
+    `SELECT id FROM auth_users
+      WHERE id = ANY($1::uuid[]) AND deleted_at IS NULL`,
+    [userIds],
+  )
+  return result.rows.length === userIds.length
+}
+
+async function replaceAllowedUsers(
+  q: { query: (sql: string, values: unknown[]) => Promise<unknown> },
+  connectionId: string,
+  userIds: readonly string[],
+  addedBy: string | null,
+): Promise<void> {
+  await q.query('DELETE FROM connection_user_allowlist WHERE connection_id = $1', [connectionId])
+  if (userIds.length === 0) return
+  await q.query(
+    `INSERT INTO connection_user_allowlist (connection_id, user_id, added_by)
+       SELECT $1, user_id, $3::uuid FROM UNNEST($2::uuid[]) AS selected(user_id)`,
+    [connectionId, userIds, addedBy],
   )
 }
 
@@ -202,6 +244,7 @@ const CreateBody = z.object({
   // prefault: 入力側の既定。`capabilities` 自体が省略されたら `{}` を通し、
   // 各キーの .default(true) を効かせる (.default は出力側の型を要求するため使えない)。
   capabilities: CapabilitiesBody.prefault({}),
+  visibility: VisibilityCreate,
 })
 
 const UpdateBody = z.object({
@@ -217,7 +260,16 @@ const UpdateBody = z.object({
   scanEnabled: z.boolean().optional(),
   listCacheTtlSec: z.number().int().positive().optional(),
   pricing: PricingPatch.optional(),
+  visibility: VisibilityPatch.optional(),
 })
+
+interface AllowedUserRow {
+  id: string
+  displayName: string
+  username: string | null
+  email: string | null
+  status: 'active' | 'disabled'
+}
 
 interface ConnectionRow {
   id: string
@@ -230,9 +282,11 @@ interface ConnectionRow {
   force_path_style: boolean
   list_objects_version: 'v1' | 'v2'
   is_default: boolean
+  visibility_mode: 'public' | 'whitelist'
   created_at: Date
   updated_at: Date
   settings: Record<string, string>
+  allowed_users: AllowedUserRow[]
 }
 
 // 接続 1 件を返すための SELECT。connection_settings は別テーブルなので、
@@ -242,11 +296,25 @@ const SELECT_CONN =
   `SELECT c.id, c.name, c.endpoint, c.region, c.access_key_id_masked,
           c.access_key_id_enc, c.secret_access_key_enc,
           c.force_path_style, c.list_objects_version, c.is_default,
+          c.visibility_mode,
           c.created_at, c.updated_at,
-          ${CONNECTION_SETTINGS_SUBQUERY}
+          ${CONNECTION_SETTINGS_SUBQUERY},
+          COALESCE((
+            SELECT jsonb_agg(jsonb_build_object(
+              'id', allowed_user.id,
+              'displayName', allowed_user.display_name,
+              'username', allowed_user.username,
+              'email', allowed_user.email,
+              'status', allowed_user.status
+            ) ORDER BY lower(allowed_user.display_name), allowed_user.id)
+              FROM connection_user_allowlist allowed
+              JOIN auth_users allowed_user ON allowed_user.id = allowed.user_id
+             WHERE allowed.connection_id = c.id
+               AND allowed_user.deleted_at IS NULL
+          ), '[]'::jsonb) AS allowed_users
      FROM storage_connections c`
 
-function toMasked(row: ConnectionRow) {
+function toMasked(row: ConnectionRow, includeAllowedUsers = true) {
   // 見積もりプロファイルは「設定 + 推定 + 既定」を畳んだ実効値を返す。
   // 何が明示設定で何が既定かは providerExplicit と各 override の null で分かる。
   const profile = settingsToProfile(row, row.settings)
@@ -261,6 +329,10 @@ function toMasked(row: ConnectionRow) {
     forcePathStyle: row.force_path_style,
     listObjectsVersion: row.list_objects_version,
     isDefault: row.is_default,
+    visibility: {
+      mode: row.visibility_mode,
+      allowedUsers: includeAllowedUsers ? row.allowed_users : [],
+    },
     capabilities: settingsToCapabilities(row.settings),
     scanEnabled: settingsToScanEnabled(row.settings),
     listCacheTtlSec: settingsToListCacheTtlSec(row.settings),
@@ -305,16 +377,45 @@ function toMasked(row: ConnectionRow) {
 
 export function mountConnectionsRoutes(app: Hono, deps: ConnectionsDeps): void {
   app.get('/connections', async c => {
+    const visible = await visibleConnectionIds(deps.pools.ro, c)
+    const includeAllowedUsers = managesConnections(c)
     const r = await deps.pools.ro.query<ConnectionRow>(
       `${SELECT_CONN} ORDER BY c.name`,
     )
-    return c.json(r.rows.map(toMasked))
+    return c.json(r.rows
+      .filter(row => visible === null || visible.has(row.id))
+      .map(row => toMasked(row, includeAllowedUsers)))
+  })
+
+  app.get('/connections/access-users', async c => {
+    const result = await deps.pools.ro.query<{
+      id: string
+      display_name: string
+      username: string | null
+      email: string | null
+      status: 'active' | 'disabled'
+    }>(
+      `SELECT id, display_name, username, email, status
+         FROM auth_users
+        WHERE deleted_at IS NULL
+        ORDER BY lower(display_name), id`,
+    )
+    return c.json({ users: result.rows.map(user => ({
+      id: user.id,
+      displayName: user.display_name,
+      username: user.username,
+      email: user.email,
+      status: user.status,
+    })) })
   })
 
   app.post('/connections', async c => {
     const parsed = CreateBody.safeParse(await c.req.json().catch(() => null))
     if (!parsed.success) return c.json({ error: parsed.error.message }, 400)
-    const { name, endpoint, region, accessKeyId, secretAccessKey, forcePathStyle, listObjectsVersion, capabilities } = parsed.data
+    const {
+      name, endpoint, region, accessKeyId, secretAccessKey, forcePathStyle,
+      listObjectsVersion, capabilities, visibility,
+    } = parsed.data
     if (capabilities.readmeWrite && !capabilities.readmeRead) {
       return c.json({ error: 'README の編集には読み込みが必要です' }, 400)
     }
@@ -326,8 +427,9 @@ export function mountConnectionsRoutes(app: Hono, deps: ConnectionsDeps): void {
       await client.query('BEGIN')
       await client.query(
         `INSERT INTO storage_connections
-           (id, name, endpoint, region, access_key_id_enc, secret_access_key_enc, access_key_id_masked, force_path_style, list_objects_version)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+           (id, name, endpoint, region, access_key_id_enc, secret_access_key_enc,
+            access_key_id_masked, force_path_style, list_objects_version, visibility_mode)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
         [
           id, name, endpoint, region,
           deps.crypto.encrypt(accessKeyId),
@@ -335,9 +437,17 @@ export function mountConnectionsRoutes(app: Hono, deps: ConnectionsDeps): void {
           deps.crypto.mask(accessKeyId),
           forcePathStyle,
           listObjectsVersion,
+          visibility.mode,
         ],
       )
+      if (!await allowedUsersExist(client, visibility.allowedUserIds)) {
+        await client.query('ROLLBACK')
+        return c.json({ error: 'ホワイトリストに存在しないユーザーが含まれています' }, 400)
+      }
       await upsertCapabilities(client, id, capabilities)
+      await replaceAllowedUsers(
+        client, id, visibility.allowedUserIds, getSessionPrincipal(c)?.user.id ?? null,
+      )
       const r = await client.query<ConnectionRow>(`${SELECT_CONN} WHERE c.id = $1`, [id])
       await client.query('COMMIT')
       return c.json(toMasked(r.rows[0]))
@@ -406,6 +516,10 @@ export function mountConnectionsRoutes(app: Hono, deps: ConnectionsDeps): void {
       sets.push(`list_objects_version = $${i++}`)
       values.push(u.listObjectsVersion)
     }
+    if (u.visibility?.mode !== undefined) {
+      sets.push(`visibility_mode = $${i++}`)
+      values.push(u.visibility.mode)
+    }
     if (u.accessKeyId !== undefined) {
       sets.push(`access_key_id_enc = $${i++}`);    values.push(deps.crypto.encrypt(u.accessKeyId))
       sets.push(`access_key_id_masked = $${i++}`); values.push(deps.crypto.mask(u.accessKeyId))
@@ -434,9 +548,10 @@ export function mountConnectionsRoutes(app: Hono, deps: ConnectionsDeps): void {
       ? splitPricingPatch(u.pricing)
       : { upserts: [], deletes: [] as string[] }
     extraSettings.push(...pricing.upserts)
+    const allowedUserIds = u.visibility?.allowedUserIds
 
     if (sets.length === 0 && capKeys.length === 0 && extraSettings.length === 0
-        && pricing.deletes.length === 0) {
+        && pricing.deletes.length === 0 && allowedUserIds === undefined) {
       // 更新するフィールドがない — 現在の行をそのまま返す。
       const r = await deps.pools.ro.query<ConnectionRow>(
         `${SELECT_CONN} WHERE c.id = $1`, [id],
@@ -471,6 +586,14 @@ export function mountConnectionsRoutes(app: Hono, deps: ConnectionsDeps): void {
         }
       }
       const currentCaps = settingsToCapabilities(current.settings)
+      const currentAllowedUserIds = current.allowed_users.map(user => user.id).sort()
+      const allowedUsersChanged = allowedUserIds !== undefined
+        && (allowedUserIds.length !== currentAllowedUserIds.length
+          || allowedUserIds.some((userId, index) => userId !== currentAllowedUserIds[index]))
+      if (allowedUsersChanged && !await allowedUsersExist(client, allowedUserIds!)) {
+        await client.query('ROLLBACK')
+        return c.json({ error: 'ホワイトリストに存在しないユーザーが含まれています' }, 400)
+      }
       const credentialsChanged = (u.accessKeyId !== undefined
           && u.accessKeyId !== deps.crypto.decrypt(current.access_key_id_enc))
         || (u.secretAccessKey !== undefined
@@ -481,10 +604,11 @@ export function mountConnectionsRoutes(app: Hono, deps: ConnectionsDeps): void {
         || (u.region !== undefined && u.region !== current.region)
         || (u.forcePathStyle !== undefined && u.forcePathStyle !== current.force_path_style)
         || (u.listObjectsVersion !== undefined && u.listObjectsVersion !== current.list_objects_version)
+        || (u.visibility?.mode !== undefined && u.visibility.mode !== current.visibility_mode)
       const capsChanged = capKeys.some(key => caps[key] !== currentCaps[key])
       const settingsChanged = extraSettings.some(([key, value]) => current.settings[key] !== value)
         || pricing.deletes.some(key => current.settings[key] !== undefined)
-      if (!rowChanged && !capsChanged && !settingsChanged) {
+      if (!rowChanged && !capsChanged && !settingsChanged && !allowedUsersChanged) {
         await client.query('COMMIT')
         markAuditNoChange(c)
         return c.json(toMasked(current))
@@ -504,6 +628,15 @@ export function mountConnectionsRoutes(app: Hono, deps: ConnectionsDeps): void {
       await upsertCapabilities(client, id, caps)
       await upsertSettings(client, id, extraSettings)
       await deleteSettings(client, id, pricing.deletes)
+      if (allowedUsersChanged) {
+        await replaceAllowedUsers(
+          client, id, allowedUserIds!, getSessionPrincipal(c)?.user.id ?? null,
+        )
+        // allowlistだけを変更した場合も接続の更新日時を進める。
+        if (sets.length === 0) {
+          await client.query('UPDATE storage_connections SET updated_at = now() WHERE id = $1', [id])
+        }
+      }
 
       const r = await client.query<ConnectionRow>(`${SELECT_CONN} WHERE c.id = $1`, [id])
       await client.query('COMMIT')

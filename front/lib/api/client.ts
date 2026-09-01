@@ -2,6 +2,7 @@ import { z } from 'zod'
 import {
   Connection,
   ConnectionList,
+  ConnectionAccessUsers,
   FavoriteBuckets,
   ListBuckets,
   MediaAnalyze,
@@ -176,6 +177,9 @@ export const api = {
   },
 
   listConnections: () => getJson(`${API_BASE}/connections`, ConnectionList),
+
+  listConnectionAccessUsers: () =>
+    getJson(`${API_BASE}/connections/access-users`, ConnectionAccessUsers),
 
   createConnection: (input: ConnectionCreateInput) =>
     mutateJson(`${API_BASE}/connections`, { method: 'POST', body: input }, Connection),

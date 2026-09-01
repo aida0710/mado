@@ -18,6 +18,7 @@ const conn = (id: string, createdAt: string, isDefault = false) => ({
   forcePathStyle: true, listObjectsVersion: 'v2' as const,
   capabilities: ALL_CAPABILITIES_ON,
   createdAt, updatedAt: createdAt, isDefault,
+  visibility: { mode: 'public' as const, allowedUsers: [] },
   scanEnabled: true, listCacheTtlSec: 86400,
   pricing: PRICING_FIXTURE,
 })

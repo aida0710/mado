@@ -1,11 +1,13 @@
-import { useReducer } from 'react'
+import { useEffect, useReducer, useState } from 'react'
 import {
   ALL_CAPABILITIES_ON, CAPABILITY_UI, PROVIDER_LABELS, STORAGE_CLASS_OPTIONS,
 } from '../lib/api/types'
+import { api } from '../lib/api/client'
 import type {
   Capabilities,
   Capability,
   Connection,
+  ConnectionAccessUser,
   ConnectionCreateInput,
   ConnectionPricingInput,
   ConnectionUpdateInput,
@@ -36,6 +38,8 @@ interface FormState {
   forcePathStyle: boolean
   listObjectsVersion: ListObjectsVersion
   capabilities: Capabilities
+  visibilityMode: 'public' | 'whitelist'
+  allowedUserIds: string[]
   /** 配下の走査を許可するか。 */
   scanEnabled: boolean
   /** 一覧キャッシュの保持秒数。 */
@@ -58,11 +62,12 @@ interface FormState {
   error: string | null
 }
 
-type FieldName = Exclude<keyof FormState, 'saving' | 'error' | 'capabilities'>
+type FieldName = Exclude<keyof FormState, 'saving' | 'error' | 'capabilities' | 'allowedUserIds'>
 
 type Action =
   | { type: 'setField'; field: FieldName; value: FormState[FieldName] }
   | { type: 'toggleCapability'; cap: Capability; value: boolean }
+  | { type: 'toggleAllowedUser'; userId: string; value: boolean }
   | { type: 'startSave' }
   | { type: 'saveFailed'; error: string }
   | { type: 'saveDone' }
@@ -78,6 +83,12 @@ function reducer(state: FormState, action: Action): FormState {
       // 編集も一緒に落として、保存してから怒られるのを防ぐ。
       if (action.cap === 'readmeRead' && !action.value) capabilities.readmeWrite = false
       return { ...state, capabilities }
+    }
+    case 'toggleAllowedUser': {
+      const allowedUserIds = action.value
+        ? [...new Set([...state.allowedUserIds, action.userId])].sort()
+        : state.allowedUserIds.filter(id => id !== action.userId)
+      return { ...state, allowedUserIds }
     }
     case 'startSave':
       return { ...state, saving: true, error: null }
@@ -100,6 +111,8 @@ function initialState(current: Connection | null): FormState {
     forcePathStyle: current?.forcePathStyle ?? true,
     listObjectsVersion: current?.listObjectsVersion ?? 'v2',
     capabilities: current?.capabilities ?? ALL_CAPABILITIES_ON,
+    visibilityMode: current?.visibility.mode ?? 'public',
+    allowedUserIds: current?.visibility.allowedUsers.map(user => user.id).sort() ?? [],
     scanEnabled: current?.scanEnabled ?? true,
     listCacheTtlSec: current?.listCacheTtlSec ?? 86400,
     pricingProvider: current?.pricing.providerExplicit ? current.pricing.provider : '',
@@ -122,14 +135,27 @@ export function ConnectionForm({ mode, onClose, presentation = 'modal' }: Props)
   const current = mode.kind === 'edit' ? mode.current : null
 
   const [state, dispatch] = useReducer(reducer, current, initialState)
+  const [accessUsers, setAccessUsers] = useState<ConnectionAccessUser[]>([])
+  const [accessUsersError, setAccessUsersError] = useState<string | null>(null)
   const {
     name, endpoint, region, accessKeyId, secretAccessKey,
     forcePathStyle, listObjectsVersion, capabilities, showSecret, saving, error,
+    visibilityMode, allowedUserIds,
     scanEnabled,
     listCacheTtlSec,
     pricingProvider, pricingStorageClass, pricingReadMbps, pricingWriteMbps,
     pricingCapacityTb, pricingInstability, pricingStoragePerGbMonth,
   } = state
+
+  useEffect(() => {
+    let active = true
+    api.listConnectionAccessUsers()
+      .then(body => { if (active) setAccessUsers(body.users) })
+      .catch(cause => {
+        if (active) setAccessUsersError(cause instanceof Error ? cause.message : 'ユーザーを取得できませんでした')
+      })
+    return () => { active = false }
+  }, [])
 
   const titleId = 'connection-form-title'
 
@@ -163,6 +189,7 @@ export function ConnectionForm({ mode, onClose, presentation = 'modal' }: Props)
           forcePathStyle,
           listObjectsVersion,
           capabilities,
+          visibility: { mode: visibilityMode, allowedUserIds },
         }
         await mode.onSubmit(input)
       } else {
@@ -179,6 +206,12 @@ export function ConnectionForm({ mode, onClose, presentation = 'modal' }: Props)
           if (capabilities[key] !== cur.capabilities[key]) capChanges[key] = capabilities[key]
         }
         if (Object.keys(capChanges).length > 0) input.capabilities = capChanges
+        const currentAllowedUserIds = cur.visibility.allowedUsers.map(user => user.id).sort()
+        const allowedUsersChanged = allowedUserIds.length !== currentAllowedUserIds.length
+          || allowedUserIds.some((id, index) => id !== currentAllowedUserIds[index])
+        if (visibilityMode !== cur.visibility.mode || allowedUsersChanged) {
+          input.visibility = { mode: visibilityMode, allowedUserIds }
+        }
         if (scanEnabled !== cur.scanEnabled) input.scanEnabled = scanEnabled
         if (listCacheTtlSec !== cur.listCacheTtlSec) input.listCacheTtlSec = listCacheTtlSec
 
@@ -293,6 +326,61 @@ export function ConnectionForm({ mode, onClose, presentation = 'modal' }: Props)
             </button>
           </div>
         </label>
+
+        <fieldset className="modal-field">
+          <legend className="label">ユーザーからの表示</legend>
+          <small className="mb-1 block text-ink-7">
+            通常は全員に表示します。ホワイトリストでは、選択したユーザーと接続管理者だけが利用できます。
+            許可されていないユーザーには接続自体が表示されず、URLを直接開いても404になります。
+          </small>
+          <label className="modal-choice">
+            <input
+              type="radio"
+              name="visibilityMode"
+              aria-label="全員に表示"
+              checked={visibilityMode === 'public'}
+              onChange={() => dispatch({ type: 'setField', field: 'visibilityMode', value: 'public' })}
+            />
+            <div><strong>全員に表示</strong><small>既定。ログインできる全ユーザーがこの接続を利用できます。</small></div>
+          </label>
+          <label className="modal-choice">
+            <input
+              type="radio"
+              name="visibilityMode"
+              aria-label="ホワイトリスト"
+              checked={visibilityMode === 'whitelist'}
+              onChange={() => dispatch({ type: 'setField', field: 'visibilityMode', value: 'whitelist' })}
+            />
+            <div><strong>ホワイトリスト</strong><small>下で選択したユーザーだけに表示します。接続管理者は常にアクセスできます。</small></div>
+          </label>
+          {visibilityMode === 'whitelist' && (
+            <div className="mt-2 grid gap-1" aria-label="接続を許可するユーザー">
+              {accessUsersError && <p className="error" role="alert">{accessUsersError}</p>}
+              {!accessUsersError && accessUsers.length === 0 && (
+                <small className="text-ink-7">選択できるユーザーがいません。接続管理者だけが利用できます。</small>
+              )}
+              {accessUsers.map(user => (
+                <label className="modal-choice" key={user.id}>
+                  <input
+                    type="checkbox"
+                    aria-label={`${user.displayName}を許可`}
+                    checked={allowedUserIds.includes(user.id)}
+                    onChange={event => dispatch({
+                      type: 'toggleAllowedUser', userId: user.id, value: event.target.checked,
+                    })}
+                  />
+                  <div>
+                    <strong>{user.displayName}{user.status === 'disabled' ? '（無効）' : ''}</strong>
+                    <small>{user.username ?? user.email ?? user.id}</small>
+                  </div>
+                </label>
+              ))}
+              {allowedUserIds.length === 0 && (
+                <small className="text-ink-7">誰も選択しない場合、接続管理者だけが利用できます。</small>
+              )}
+            </div>
+          )}
+        </fieldset>
 
         <h4 className="connection-form__section-title">互換性</h4>
         {/* Path-style URL: 単一の選択肢として ListObjects と同じ構造で扱う。 */}

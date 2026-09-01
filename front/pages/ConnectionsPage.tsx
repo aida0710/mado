@@ -17,7 +17,7 @@ import { invalidateCapabilitiesCache } from '../lib/useCapabilities'
 // 取り込む側でファイルに書き足してもらう。
 interface ConnectionsExport {
   mado: 'connections'
-  version: 1
+  version: 2
   connections: Array<{
     name: string
     endpoint: string
@@ -28,7 +28,25 @@ interface ConnectionsExport {
     listObjectsVersion: 'v1' | 'v2'
     // 権限も持ち回す。省略されたファイル (v1 初期のエクスポート) は全許可扱い。
     capabilities?: Partial<Capabilities>
+    // v2。ホワイトリストを公開接続として復元する fail-open を防ぐ。
+    visibility?: {
+      mode: 'public' | 'whitelist'
+      allowedUserIds: string[]
+    }
   }>
+}
+
+function sanitizeVisibility(raw: unknown): {
+  mode: 'public' | 'whitelist'
+  allowedUserIds: string[]
+} {
+  if (!raw || typeof raw !== 'object') return { mode: 'public', allowedUserIds: [] }
+  const value = raw as Record<string, unknown>
+  const mode = value.mode === 'whitelist' ? 'whitelist' : 'public'
+  const allowedUserIds = Array.isArray(value.allowedUserIds)
+    ? [...new Set(value.allowedUserIds.filter((id): id is string => typeof id === 'string'))].sort()
+    : []
+  return { mode, allowedUserIds }
 }
 
 /** インポートしたファイルの capabilities を Capabilities に正規化する。
@@ -114,7 +132,7 @@ export default function ConnectionsPage() {
   const handleExport = () => {
     const body: ConnectionsExport = {
       mado: 'connections',
-      version: 1,
+      version: 2,
       connections: connections.map(c => ({
         name: c.name,
         endpoint: c.endpoint,
@@ -125,6 +143,10 @@ export default function ConnectionsPage() {
         forcePathStyle: c.forcePathStyle,
         listObjectsVersion: c.listObjectsVersion,
         capabilities: c.capabilities,
+        visibility: {
+          mode: c.visibility.mode,
+          allowedUserIds: c.visibility.allowedUsers.map(user => user.id).sort(),
+        },
       })),
     }
     downloadJson('mado-connections.json', body)
@@ -182,6 +204,7 @@ export default function ConnectionsPage() {
           forcePathStyle: c.forcePathStyle !== false,
           listObjectsVersion: c.listObjectsVersion === 'v1' ? 'v1' : 'v2',
           capabilities: sanitizeCapabilities(c.capabilities),
+          visibility: sanitizeVisibility(c.visibility),
         })
         existing.add(c.name)
         summary.added++
@@ -255,6 +278,15 @@ export default function ConnectionsPage() {
                         title="Storage タブはこの接続を開きます"
                       >
                         DEFAULT
+                      </span>
+                    ) : null}
+                    {conn.visibility.mode === 'whitelist' ? (
+                      <span
+                        className="ml-2 align-middle text-[9.5px] font-semibold uppercase tracking-[0.12em] text-ink-7"
+                        style={{ border: '1px solid var(--rule)', borderRadius: 2, padding: '1px 5px' }}
+                        title={`${conn.visibility.allowedUsers.length}人を許可`}
+                      >
+                        WHITELIST · {conn.visibility.allowedUsers.length}
                       </span>
                     ) : null}
                   </strong>

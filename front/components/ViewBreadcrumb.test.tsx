@@ -18,6 +18,7 @@ const conn: Connection = {
   accessKeyIdMasked: '****', forcePathStyle: true, listObjectsVersion: 'v2',
   capabilities: ALL_CAPABILITIES_ON,
   createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z', isDefault: false,
+  visibility: { mode: 'public', allowedUsers: [] },
   scanEnabled: true, listCacheTtlSec: 86400,
   pricing: PRICING_FIXTURE,
 }

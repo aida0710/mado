@@ -23,6 +23,7 @@ const conn = {
   accessKeyIdMasked: '20a1…7a30', forcePathStyle: true, listObjectsVersion: 'v2' as const,
   capabilities: ALL_CAPABILITIES_ON,
   createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z', isDefault: false,
+  visibility: { mode: 'public' as const, allowedUsers: [] },
   scanEnabled: true, listCacheTtlSec: 86400,
   pricing: PRICING_FIXTURE,
 }
@@ -122,6 +123,7 @@ describe('ConnectionsPage インポート / エクスポート', () => {
       accessKeyId: 'AKIA', secretAccessKey: 'sec',
       forcePathStyle: true, listObjectsVersion: 'v2',
       capabilities: ALL_CAPABILITIES_ON,
+      visibility: { mode: 'public', allowedUserIds: [] },
     }))
     expect(await screen.findByText('追加 1 件 / スキップ 0 件')).toBeInTheDocument()
   })

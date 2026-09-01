@@ -42,9 +42,18 @@ Local UserまたはOIDC SSOでログインでき、Pipelineは人とは別のSer
 - **エンドポイント / リージョン**
 - **アクセスキー / シークレットキー** — 保存時に暗号化されます ([セキュリティ](#セキュリティ))
 - **path-style / ListObjects バージョン** — 互換ストレージに合わせて選択
+- **ユーザーからの表示** — 通常は全員、例外だけホワイトリストで利用者を限定
 - **この接続で許可する操作** — 危険な導線を接続単位で閉じられます (下記)
 
 登録した接続は後から編集・削除でき、Storage タブが開くデフォルト接続もここで変更できます。
+
+#### ユーザーからの表示
+
+接続は既定でログイン済みの全ユーザーに表示されます。一部だけ隠したい場合は
+**ホワイトリスト**を選び、利用を許可するユーザーを選択します。許可されていないユーザーには
+接続一覧・転送候補・関連ジョブが表示されず、StorageやDataLineageのURLを直接開いても
+存在を明かさないため404になります。`connections:manage`権限を持つ管理者は、空の
+ホワイトリストを修正できるよう常にアクセスできます。
 
 #### この接続で許可する操作
 
@@ -306,6 +315,7 @@ OSS releaseと社内環境へのdeployは独立しています。release workflo
 - **CSRF 防御**: write 系 (POST/PUT/DELETE) は `ALLOWED_ORIGINS` と Origin/Referer を照合し、不一致なら 403。
 - **PG ロール分離**: ブラウザ由来の経路は `dashboard_rw` / `dashboard_ro` を使い分け、Postgres レベルで `DROP TABLE` 等を防ぐ。
 - **接続ごとのcapability**はRBACとは別層です。Adminであっても接続側で無効なdownload等は実行できません。
+- **接続ホワイトリスト**は通常接続を全員公開のまま保ち、例外の接続だけUser単位で隠します。非許可時は一覧・Storage API・DataLineage解決・関連job・転送候補を404相当で隠します。
 
 Authentikとの接続、JIT User、group RBAC、Front/Back-channel logoutの登録値は
 [`docs/authentik.md`](docs/authentik.md)にまとめています。

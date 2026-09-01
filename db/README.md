@@ -94,6 +94,10 @@ docker compose -f compose.prod.yaml exec -T postgres \
 docker compose -f compose.prod.yaml exec -T postgres \
   psql -v ON_ERROR_STOP=1 -U postgres -d dashboard -f /migrations/029_harden_lineage_and_bootstrap.sql
 
+# 030は旧APIとも互換なので、新APIを起動する前に適用してよい
+docker compose -f compose.prod.yaml exec -T postgres \
+  psql -v ON_ERROR_STOP=1 -U postgres -d dashboard -f /migrations/030_connection_user_allowlist.sql
+
 # 6. enable the dedicated login with the generated LINEAGE_DB_PASSWORD
 docker compose -f compose.prod.yaml exec -T postgres \
   psql -v ON_ERROR_STOP=1 -U postgres -d dashboard -c \

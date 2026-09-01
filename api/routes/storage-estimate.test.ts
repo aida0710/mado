@@ -7,6 +7,7 @@ import { CATALOG, PRICING_SETTING_KEYS as K } from '../lib/pricing.js'
 import { mountStorageEstimateRoutes } from './storage-estimate.js'
 import { SCAN_KIND, scanDedupKey } from './storage-scan.js'
 import { PRICING_REFRESH_DEDUP_KEY, PRICING_REFRESH_KIND } from './pricing.js'
+import { setSessionPrincipal } from '../lib/rbac.js'
 
 const RW = process.env.DATABASE_URL_RW_TEST
   ?? 'postgres://dashboard_rw:CHANGEME@localhost:5432/dashboard_test'
@@ -139,6 +140,36 @@ describe('GET /storage/:connId/estimate', () => {
     expect(body.scan.scannedAt).not.toBeNull()
     expect(body.candidates).toHaveLength(2)
     expect(body.candidates.map(c => c.name).sort()).toEqual(['jamstec-s3', 'mdx-s3'])
+  })
+
+  it('転送候補から非許可のホワイトリスト接続を除外する', async () => {
+    const src = 'src'.padEnd(10, '0')
+    const hidden = 'hidden'.padEnd(10, '0')
+    await addConnection(src, 'source', 'https://source.lan:9000')
+    await addConnection(hidden, 'hidden', 'https://hidden.lan:9000')
+    await pools.rw.query(
+      "UPDATE storage_connections SET visibility_mode = 'whitelist' WHERE id = $1", [hidden],
+    )
+    await addScan(src, 'b', 'd/', { objectCount: 1, totalBytes: GIB })
+
+    const userApp = new Hono()
+    userApp.use('*', async (c, next) => {
+      setSessionPrincipal(c, {
+        kind: 'user', sessionId: 's',
+        user: {
+          id: '33333333-3333-4333-8333-333333333333', username: null,
+          email: 'viewer@example.com', displayName: '閲覧者', signatureName: '閲覧者',
+          status: 'active', roles: [], permissions: [], mustChangePassword: false,
+          authMethods: ['sso'],
+        },
+      })
+      await next()
+    })
+    mountStorageEstimateRoutes(userApp, { pools, store, pricing, now: () => today })
+    const res = await userApp.request(`/storage/${src}/estimate?bucket=b&prefix=d/`)
+    expect(res.status).toBe(200)
+    const body = await res.json() as EstimateBody
+    expect(body.candidates.map(candidate => candidate.connId)).toEqual([src])
   })
 
   it('移動元自身も候補に残り、同一接続の印が立つ', async () => {

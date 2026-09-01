@@ -241,6 +241,22 @@ export const ConnectionPricing = z.object({
 })
 export type ConnectionPricing = z.infer<typeof ConnectionPricing>
 
+export const ConnectionAccessUser = z.object({
+  id: z.string().uuid(),
+  displayName: z.string(),
+  username: z.string().nullable(),
+  email: z.string().nullable(),
+  status: z.enum(['active', 'disabled']),
+})
+export type ConnectionAccessUser = z.infer<typeof ConnectionAccessUser>
+export const ConnectionAccessUsers = z.object({ users: z.array(ConnectionAccessUser) })
+
+export const ConnectionVisibility = z.object({
+  mode: z.enum(['public', 'whitelist']),
+  allowedUsers: z.array(ConnectionAccessUser),
+})
+export type ConnectionVisibility = z.infer<typeof ConnectionVisibility>
+
 export const Connection = z.object({
   id: z.string(),
   name: z.string(),
@@ -259,6 +275,7 @@ export const Connection = z.object({
   createdAt: z.string(),
   updatedAt: z.string(),
   isDefault: z.boolean(),
+  visibility: ConnectionVisibility.default({ mode: 'public', allowedUsers: [] }),
 })
 export type Connection = z.infer<typeof Connection>
 
@@ -275,6 +292,7 @@ export interface ConnectionCreateInput {
   forcePathStyle: boolean
   listObjectsVersion: ListObjectsVersion
   capabilities: Capabilities
+  visibility?: { mode: 'public' | 'whitelist'; allowedUserIds: string[] }
 }
 
 // PUT /api/internal/connections/:id — 部分更新。認証情報フィールドを省略すると既存の値が保持される。
@@ -288,6 +306,7 @@ export interface ConnectionUpdateInput {
   forcePathStyle?: boolean
   listObjectsVersion?: ListObjectsVersion
   capabilities?: Partial<Capabilities>
+  visibility?: { mode?: 'public' | 'whitelist'; allowedUserIds?: string[] }
   scanEnabled?: boolean
   listCacheTtlSec?: number
   /** 見積もり設定の差分。**null = 既定に戻す** (設定行を消す)、

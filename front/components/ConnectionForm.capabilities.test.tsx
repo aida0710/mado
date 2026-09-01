@@ -1,10 +1,11 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ConnectionForm } from './ConnectionForm'
 import { ALL_CAPABILITIES_ON } from '../lib/api/types'
 import { PRICING_FIXTURE } from '../lib/api/fixtures'
 import type { Connection } from '../lib/api/types'
+import { api } from '../lib/api/client'
 
 const conn: Connection = {
   id: 'c1', name: 'primary', endpoint: 'https://s3.example.com/', region: 'auto',
@@ -14,7 +15,10 @@ const conn: Connection = {
   listCacheTtlSec: 86400,
   pricing: PRICING_FIXTURE,
   createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z', isDefault: false,
+  visibility: { mode: 'public', allowedUsers: [] },
 }
+
+afterEach(() => vi.restoreAllMocks())
 
 describe('ConnectionForm の権限トグル', () => {
   it('新規作成では全許可で送る', async () => {
@@ -76,5 +80,27 @@ describe('ConnectionForm の権限トグル', () => {
     expect(screen.getByRole('checkbox', { name: 'ファイルのダウンロード' })).not.toBeChecked()
     expect(screen.getByRole('checkbox', { name: '圧縮ファイル (tar / tar.gz / tar.xz) を開く' })).not.toBeChecked()
     expect(screen.getByRole('checkbox', { name: 'バケット / オブジェクトの一覧' })).toBeChecked()
+  })
+
+  it('ホワイトリストで選んだユーザーIDだけを送る', async () => {
+    vi.spyOn(api, 'listConnectionAccessUsers').mockResolvedValue({
+      users: [{
+        id: '11111111-1111-4111-8111-111111111111',
+        displayName: '許可ユーザー', username: null, email: 'allowed@example.com', status: 'active',
+      }],
+    })
+    const onSubmit = vi.fn().mockResolvedValue(undefined)
+    render(<ConnectionForm mode={{ kind: 'edit', current: conn, onSubmit }} onClose={() => {}} />)
+
+    await userEvent.click(screen.getByRole('radio', { name: 'ホワイトリスト' }))
+    await userEvent.click(await screen.findByRole('checkbox', { name: '許可ユーザーを許可' }))
+    await userEvent.click(screen.getByRole('button', { name: '保存' }))
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledWith({
+      visibility: {
+        mode: 'whitelist',
+        allowedUserIds: ['11111111-1111-4111-8111-111111111111'],
+      },
+    }))
   })
 })

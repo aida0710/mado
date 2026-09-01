@@ -3,6 +3,9 @@ import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPools, closePools } from '../db.js'
 import { createCrypto } from '../crypto.js'
 import { mountConnectionsRoutes } from './connections.js'
+import { requireConnectionAccess } from '../lib/connection-access.js'
+import { setSessionPrincipal } from '../lib/rbac.js'
+import type { SessionPrincipal } from '../lib/auth-types.js'
 
 const RW = process.env.DATABASE_URL_RW_TEST
   ?? 'postgres://dashboard_rw:CHANGEME@localhost:5432/dashboard_test'
@@ -17,9 +20,48 @@ const invalidate = vi.fn<(id: string) => void>()
 const app = new Hono()
 mountConnectionsRoutes(app, { pools, crypto, invalidate })
 
+const ALLOWED_USER_ID = '11111111-1111-4111-8111-111111111111'
+const OTHER_USER_ID = '22222222-2222-4222-8222-222222222222'
+
+function principal(userId: string, permissions: string[] = []): SessionPrincipal {
+  return {
+    kind: 'user',
+    sessionId: `session-${userId}`,
+    user: {
+      id: userId,
+      username: null,
+      email: `${userId.slice(0, 8)}@example.com`,
+      displayName: userId === ALLOWED_USER_ID ? '許可ユーザー' : 'その他ユーザー',
+      signatureName: 'テスト',
+      status: 'active',
+      roles: [],
+      permissions,
+      mustChangePassword: false,
+      authMethods: ['sso'],
+    },
+  }
+}
+
+function appFor(userId: string, permissions: string[] = []): Hono {
+  const userApp = new Hono()
+  userApp.use('*', async (c, next) => {
+    setSessionPrincipal(c, principal(userId, permissions))
+    await next()
+  })
+  mountConnectionsRoutes(userApp, { pools, crypto, invalidate })
+  return userApp
+}
+
 beforeEach(async () => {
   invalidate.mockReset()
   await pools.rw.query('TRUNCATE storage_connections CASCADE')
+  await pools.rw.query(
+    `INSERT INTO auth_users (id, email, display_name, signature_name, status, deleted_at)
+     VALUES ($1, 'allowed@example.com', '許可ユーザー', '許可ユーザー', 'active', NULL),
+            ($2, 'other@example.com', 'その他ユーザー', 'その他ユーザー', 'active', NULL)
+     ON CONFLICT (id) DO UPDATE SET deleted_at = NULL, status = 'active'`,
+    [ALLOWED_USER_ID, OTHER_USER_ID],
+  )
 })
 afterAll(() => closePools(pools))
 
@@ -32,6 +74,10 @@ interface MaskedConnection {
   forcePathStyle: boolean
   listObjectsVersion: 'v1' | 'v2'
   isDefault: boolean
+  visibility: {
+    mode: 'public' | 'whitelist'
+    allowedUsers: Array<{ id: string; displayName: string }>
+  }
   capabilities: Record<string, boolean>
   createdAt: string
   updatedAt: string
@@ -53,6 +99,7 @@ async function createOne(overrides: Partial<{
   forcePathStyle: boolean
   listObjectsVersion: 'v1' | 'v2'
   capabilities: Record<string, boolean>
+  visibility: { mode: 'public' | 'whitelist'; allowedUserIds: string[] }
 }> = {}): Promise<MaskedConnection> {
   const body: Record<string, unknown> = {
     name: overrides.name ?? 'primary',
@@ -67,6 +114,9 @@ async function createOne(overrides: Partial<{
   }
   if (overrides.capabilities !== undefined) {
     body.capabilities = overrides.capabilities
+  }
+  if (overrides.visibility !== undefined) {
+    body.visibility = overrides.visibility
   }
   const res = await app.request('/connections', {
     method: 'POST',
@@ -96,6 +146,43 @@ describe('GET /connections', () => {
     expect(dump).not.toContain('super-secret-value-9999')
     expect(dump).not.toContain('AKIAEXAMPLE12345')
   })
+
+  it('通常接続は全員、ホワイトリスト接続は許可ユーザーと管理者だけに返す', async () => {
+    const publicConn = await createOne({ name: 'public' })
+    const privateConn = await createOne({
+      name: 'private',
+      visibility: { mode: 'whitelist', allowedUserIds: [ALLOWED_USER_ID] },
+    })
+
+    const allowed = await (await appFor(ALLOWED_USER_ID).request('/connections')).json() as MaskedConnection[]
+    expect(allowed.map(row => row.id).sort()).toEqual([privateConn.id, publicConn.id].sort())
+    expect(allowed.find(row => row.id === privateConn.id)?.visibility.allowedUsers).toEqual([])
+
+    const other = await (await appFor(OTHER_USER_ID).request('/connections')).json() as MaskedConnection[]
+    expect(other.map(row => row.id)).toEqual([publicConn.id])
+
+    const manager = await (await appFor(OTHER_USER_ID, ['connections:manage'])
+      .request('/connections')).json() as MaskedConnection[]
+    expect(manager.map(row => row.id).sort()).toEqual([privateConn.id, publicConn.id].sort())
+    expect(manager.find(row => row.id === privateConn.id)?.visibility.allowedUsers)
+      .toMatchObject([{ id: ALLOWED_USER_ID }])
+  })
+
+  it('非許可ユーザーのURL直打ちは存在を隠して404にする', async () => {
+    const privateConn = await createOne({
+      name: 'private',
+      visibility: { mode: 'whitelist', allowedUserIds: [ALLOWED_USER_ID] },
+    })
+    const guarded = new Hono()
+    guarded.use('*', async (c, next) => {
+      setSessionPrincipal(c, principal(OTHER_USER_ID))
+      await next()
+    })
+    guarded.use('/storage/:connId/*', requireConnectionAccess(pools.ro))
+    guarded.get('/storage/:connId/buckets', c => c.json({ ok: true }))
+
+    expect((await guarded.request(`/storage/${privateConn.id}/buckets`)).status).toBe(404)
+  })
 })
 
 describe('POST /connections', () => {
@@ -109,6 +196,7 @@ describe('POST /connections', () => {
     expect(created.forcePathStyle).toBe(true)
     // 既定値は 'v2' (AWS / R2 / MinIO 等の新しい実装向け)。
     expect(created.listObjectsVersion).toBe('v2')
+    expect(created.visibility).toEqual({ mode: 'public', allowedUsers: [] })
     expect(typeof created.createdAt).toBe('string')
     expect(typeof created.updatedAt).toBe('string')
     // 平文フィールドはレスポンスに含まれてはならない。

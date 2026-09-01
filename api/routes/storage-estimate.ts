@@ -4,6 +4,7 @@ import type { Pools } from '../db.js'
 import type { JobStore } from '../lib/jobs.js'
 import { CONNECTION_SETTINGS_SUBQUERY } from '../storage.js'
 import { effectiveRates, settingsToProfile } from '../lib/pricing.js'
+import { visibleConnectionIds } from '../lib/connection-access.js'
 import type { PricingStore } from '../lib/pricing-store.js'
 import { estimateTransfer, type Endpoint } from '../lib/transfer-estimate.js'
 import { SCAN_KIND, scanDedupKey } from './storage-scan.js'
@@ -68,7 +69,9 @@ export function mountStorageEstimateRoutes(app: Hono, deps: StorageEstimateDeps)
       return c.json({ error: '走査結果を読めませんでした。再走査してください' }, 409)
     }
 
-    const rows = (await deps.pools.ro.query<ConnRow>(SELECT_CONNS)).rows
+    const visible = await visibleConnectionIds(deps.pools.ro, c)
+    const allRows = (await deps.pools.ro.query<ConnRow>(SELECT_CONNS)).rows
+    const rows = allRows.filter(row => visible === null || visible.has(row.id))
     const srcRow = rows.find(r => r.id === connId)
     if (!srcRow) return c.json({ error: 'connection not found' }, 404)
 

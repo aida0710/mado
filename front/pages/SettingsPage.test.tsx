@@ -57,6 +57,7 @@ describe('SettingsPage', () => {
       accessKeyIdMasked: 'AKIA…TEST', forcePathStyle: true, listObjectsVersion: 'v2',
       capabilities: ALL_CAPABILITIES_ON, scanEnabled: true, listCacheTtlSec: 86400,
       pricing: PRICING_FIXTURE, isDefault: true,
+      visibility: { mode: 'public', allowedUsers: [] },
       createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z',
     }])
     render(

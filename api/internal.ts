@@ -7,6 +7,9 @@ import { createCrypto } from './crypto.js'
 import { createStorageFactory } from './storage.js'
 import { requireSafeOrigin } from './lib/originCheck.js'
 import { requireCapability } from './lib/capabilityGuard.js'
+import {
+  canAccessConnection, requireConnectionAccess, requireConnectionQueryAccess,
+} from './lib/connection-access.js'
 import type { Capability } from './storage.js'
 import { explainStorageError } from './lib/storageError.js'
 import { mountStorageListRoutes } from './routes/storage-list.js'
@@ -144,6 +147,7 @@ if (authEnabled) {
 
   // 既存routeのmethod単位RBAC。connection capabilityとは別の「誰が操作できるか」。
   api.on('POST', '/connections', requirePermission('connections:manage'))
+  api.on('GET', '/connections/access-users', requirePermission('connections:manage'))
   api.on(['PUT', 'DELETE'], '/connections/:id', requirePermission('connections:manage'))
   api.on('PUT', '/connections/:id/default', requirePermission('connections:manage'))
   api.on('PUT', '/notes/:slug', requirePermission('content:write'))
@@ -157,6 +161,13 @@ if (authEnabled) {
   api.on('POST', '/pricing/refresh', requirePermission('jobs:operate'))
   api.on('POST', '/jobs/:id/cancel', requirePermission('jobs:operate'))
   api.use('/lineage/*', requirePermission('lineage:read'))
+}
+
+// ホワイトリスト接続は、一覧から隠すだけでなく全Storage APIのURL直打ちも遮断する。
+// 非許可Userへは存在を明かさないため403ではなく404を返す。
+if (authEnabled) {
+  api.use('/storage/:connId/*', requireConnectionAccess(pools.ro))
+  api.use('/lineage/resolve-location', requireConnectionQueryAccess(pools.ro))
 }
 
 // 接続ごとの権限ガード。「どのエンドポイントがどの権限に属するか」をここ 1 箇所に
@@ -203,7 +214,12 @@ mountStorageMediaRoutes(api, {
   pools,
   env,
 })
-mountJobRoutes(api, { store: jobStore })
+mountJobRoutes(api, {
+  store: jobStore,
+  canAccessConnection: authEnabled
+    ? (c, connectionId) => canAccessConnection(pools.ro, c, connectionId)
+    : undefined,
+})
 mountStorageScanRoutes(api, { store: jobStore, getConnectionConfig: storageFactory.getConnectionConfig })
 // 見積もりは S3 を叩かないので cap() のガードには載せない (上のコメント参照)。
 mountStorageEstimateRoutes(api, { pools, store: jobStore, pricing: pricingStore })
