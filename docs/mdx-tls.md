@@ -21,7 +21,7 @@ sudo ufw default allow outgoing
 sudo ufw default deny routed
 sudo ufw limit 22/tcp comment 'SSH public key only'
 sudo ufw allow 80/tcp comment 'ACME HTTP-01 and HTTPS redirect'
-sudo ufw allow 443/tcp comment 'Public Mado OpenLineage API'
+sudo ufw allow proto tcp from 0.0.0.0/0 to any port 443 comment 'Public Mado OpenLineage API'
 sudo ufw allow in on ens160 from 10.15.0.0/16 comment 'MDX service network'
 sudo ufw allow in on ens192 from 10.143.0.0/16 comment 'MDX secondary network'
 sudo ufw allow in on ens192 from 172.17.8.0/24 comment 'MDX routed internal network'
@@ -32,6 +32,7 @@ sudo ufw --force enable
 `:443`自体は公開APIのためInternetへ開きます。`nginx/edge.conf.template`はSNI/Hostで分離し、
 Browser hostnameだけへCIDR ACLを適用します。公開API hostnameは完全一致する
 `POST /api/openlineage/v1/lineage`だけをloopbackの専用listenerへ転送します。
+AAAA recordを公開していない場合は、UFWのIPv6 `443/tcp`を開けません。
 
 ## 初回証明書
 
