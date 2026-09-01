@@ -1,5 +1,6 @@
 import type { Hono } from 'hono'
 import type { Pools } from '../db.js'
+import { markAuditNoChange } from '../lib/audit-activity.js'
 
 // アプリ全体の設定 (接続に紐づかない、Mado 全体で 1 つ)。
 // LAN 共有・認証なしで、README / Favorites と同じオナーシステム契約を踏襲する
@@ -32,11 +33,14 @@ export function mountSettingsRoutes(app: Hono, deps: SettingsDeps): void {
     const value = body?.value
     if (typeof value !== 'string') return c.json({ error: 'value must be a string' }, 400)
 
-    await deps.pools.rw.query(
+    const result = await deps.pools.rw.query(
       `INSERT INTO app_settings(key, value) VALUES ($1, $2)
-         ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()`,
+         ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()
+           WHERE app_settings.value IS DISTINCT FROM EXCLUDED.value
+         RETURNING key`,
       [key, value],
     )
+    if ((result.rowCount ?? 0) === 0) markAuditNoChange(c)
     return c.json({ ok: true })
   })
 }

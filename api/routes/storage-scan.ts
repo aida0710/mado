@@ -1,6 +1,7 @@
 import type { Hono } from 'hono'
 import type { JobStore } from '../lib/jobs.js'
 import type { ConnectionConfig } from '../storage.js'
+import { markAuditNoChange } from '../lib/audit-activity.js'
 
 // 走査ジョブの投入 (spec: 2026-08-18-directory-scan-design.md)。
 // 汎用の POST /jobs は作らない。任意の kind と payload を外から投げられる口は
@@ -34,11 +35,12 @@ export function mountStorageScanRoutes(app: Hono, deps: StorageScanDeps): void {
       return c.json({ error: 'この接続では走査が無効になっています' }, 403)
     }
 
-    const jobId = await deps.store.enqueue(
+    const result = await deps.store.enqueueWithResult(
       SCAN_KIND,
       scanDedupKey(connId, bucket, prefix),
       { connId, bucket, prefix },
     )
-    return c.json({ jobId })
+    if (!result.created) markAuditNoChange(c)
+    return c.json({ jobId: result.id })
   })
 }

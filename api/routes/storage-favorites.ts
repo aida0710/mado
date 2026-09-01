@@ -1,5 +1,6 @@
 import type { Hono } from 'hono'
 import type { Pools } from '../db.js'
+import { markAuditNoChange } from '../lib/audit-activity.js'
 
 // LAN 共有のお気に入り: LAN の任意ユーザーがバケットをピン留め/解除できる。
 // リストは接続ごとにグローバル。PUT/DELETE は認証なしで、
@@ -25,11 +26,12 @@ export function mountStorageFavoritesRoutes(app: Hono, deps: StorageFavoritesDep
     const connId = c.req.param('connId')
     const bucket = c.req.param('bucket')
     if (!bucket) return c.json({ error: 'bucket required' }, 400)
-    await deps.pools.rw.query(
+    const result = await deps.pools.rw.query(
       `INSERT INTO storage_favorite_buckets(connection_id, bucket) VALUES ($1, $2)
          ON CONFLICT (connection_id, bucket) DO NOTHING`,
       [connId, bucket],
     )
+    if ((result.rowCount ?? 0) === 0) markAuditNoChange(c)
     return c.json({ ok: true })
   })
 
@@ -37,11 +39,12 @@ export function mountStorageFavoritesRoutes(app: Hono, deps: StorageFavoritesDep
     const connId = c.req.param('connId')
     const bucket = c.req.param('bucket')
     if (!bucket) return c.json({ error: 'bucket required' }, 400)
-    await deps.pools.rw.query(
+    const result = await deps.pools.rw.query(
       `DELETE FROM storage_favorite_buckets
          WHERE connection_id = $1 AND bucket = $2`,
       [connId, bucket],
     )
+    if ((result.rowCount ?? 0) === 0) markAuditNoChange(c)
     return c.json({ ok: true })
   })
 }

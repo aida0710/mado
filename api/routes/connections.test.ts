@@ -222,6 +222,45 @@ describe('POST /connections', () => {
 })
 
 describe('PUT /connections/:id', () => {
+  it('同じ内容の再保存ではcacheを破棄しない', async () => {
+    const created = await createOne()
+    invalidate.mockClear()
+    const res = await app.request(`/connections/${created.id}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: created.name,
+        endpoint: created.endpoint,
+        region: created.region,
+        forcePathStyle: created.forcePathStyle,
+        listObjectsVersion: created.listObjectsVersion,
+      }),
+    })
+    expect(res.status).toBe(200)
+    expect(invalidate).not.toHaveBeenCalled()
+  })
+
+  it('同じ認証情報の再保存では暗号文とcacheを変更しない', async () => {
+    const created = await createOne()
+    const before = await pools.rw.query<DbRow>(
+      `SELECT id, access_key_id_enc, secret_access_key_enc, access_key_id_masked
+         FROM storage_connections WHERE id = $1`, [created.id],
+    )
+    invalidate.mockClear()
+    const res = await app.request(`/connections/${created.id}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        accessKeyId: 'AKIAEXAMPLE12345', secretAccessKey: 'super-secret-value-9999',
+      }),
+    })
+    expect(res.status).toBe(200)
+    const after = await pools.rw.query<DbRow>(
+      `SELECT id, access_key_id_enc, secret_access_key_enc, access_key_id_masked
+         FROM storage_connections WHERE id = $1`, [created.id],
+    )
+    expect(after.rows[0]).toEqual(before.rows[0])
+    expect(invalidate).not.toHaveBeenCalled()
+  })
+
   it('updates name only: returns updated record, encrypted keys unchanged in DB', async () => {
     const created = await createOne()
     const before = await pools.rw.query<DbRow>(

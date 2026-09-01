@@ -300,7 +300,8 @@ OSS releaseと社内環境へのdeployは独立しています。release workflo
 - Web UI、`/api/auth/`、`/api/internal/`はintranet内に閉じます。外部公開するhost TLS proxyは`127.0.0.1:8081`だけへ接続し、OpenLineage ingest以外を公開しません。公開入口には送信元IP 10 req/s（burst 50）・全体50 req/s（burst 200）のrate limit、送信元20・全体200のconnection limit、2 MiB body上限、timeout、`Cache-Control: no-store`を設定済みです。
 - productionは認証無効で起動できません。初期・一時passwordの変更完了前は、直接APIを呼んでも通常機能を利用できません。
 - Browser sessionとPipeline Service Account keyを分離し、API keyはhashだけを保存します。
-- RBACと接続capabilityを重ね、操作開始前にdurableな監査intentを保存します。認証拒否・重要read・変更・key発行を記録し、password/token/OIDC code/OpenLineage event本体は保存しません。
+- RBACと接続capabilityを重ね、監査ログには成功して実際に状態が変わった操作だけを残します。閲覧、認証拒否、失敗した操作、同じ値の再保存、既存ジョブへの合流は記録しません。変更操作は開始時にdurableなintentを置き、失敗・変更なしなら破棄します。password/token/OIDC code/OpenLineage event本体は保存しません。
+- sessionの利用時刻、login attempt、response cache、API keyの最終利用時刻など、認証・cache維持のための内部更新は操作監査の対象外です。
 - **`ENCRYPTION_KEY`** で `storage_connections` の S3 認証情報を保存時暗号化 (AES-256-GCM)。DB ダンプだけ漏れても解読不能。
 - **CSRF 防御**: write 系 (POST/PUT/DELETE) は `ALLOWED_ORIGINS` と Origin/Referer を照合し、不一致なら 403。
 - **PG ロール分離**: ブラウザ由来の経路は `dashboard_rw` / `dashboard_ro` を使い分け、Postgres レベルで `DROP TABLE` 等を防ぐ。

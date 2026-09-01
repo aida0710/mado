@@ -4,6 +4,7 @@ import type { AuditWriter } from '../lib/audit.js'
 import type { ServiceAccountStore } from '../lib/auth-api-keys.js'
 import { getSessionPrincipal, requirePermission } from '../lib/rbac.js'
 import { requestMetadata } from '../lib/request-metadata.js'
+import { markAuditChangeCommitted } from '../lib/audit-activity.js'
 
 export interface ServiceAccountsDeps {
   store: ServiceAccountStore
@@ -38,6 +39,7 @@ export function mountServiceAccountRoutes(app: Hono, deps: ServiceAccountsDeps):
     if (!parsed.success) return c.json({ error: 'invalid body' }, 400)
     try {
       const account = await deps.store.createAccount({ ...parsed.data, createdBy: principal.user.id })
+      markAuditChangeCommitted(c)
       await deps.audit.write({
         actor: { type: 'user', userId: principal.user.id }, action: 'service_account.create', outcome: 'success',
         resourceType: 'service_account', resourceId: account.id, ...requestMetadata(c),
@@ -57,13 +59,16 @@ export function mountServiceAccountRoutes(app: Hono, deps: ServiceAccountsDeps):
     if (!z.string().uuid().safeParse(id).success) return c.json({ error: 'invalid account id' }, 400)
     const parsed = PatchAccount.safeParse(await c.req.json().catch(() => null))
     if (!parsed.success) return c.json({ error: 'invalid body' }, 400)
-    const account = await deps.store.updateAccount(id, parsed.data)
-    if (!account) return c.json({ error: 'service account not found' }, 404)
+    const result = await deps.store.updateAccountIfChanged(id, parsed.data)
+    if (!result) return c.json({ error: 'service account not found' }, 404)
+    if (result.changedFields.length === 0) return c.json({ account: result.account })
+    markAuditChangeCommitted(c)
     await deps.audit.write({
       actor: { type: 'user', userId: principal.user.id }, action: 'service_account.update', outcome: 'success',
-      resourceType: 'service_account', resourceId: id, details: { fields: Object.keys(parsed.data) }, ...requestMetadata(c),
+      resourceType: 'service_account', resourceId: id,
+      details: { fields: result.changedFields }, ...requestMetadata(c),
     })
-    return c.json({ account })
+    return c.json({ account: result.account })
   })
 
   app.get('/service-accounts/:id/keys', async c => {
@@ -89,6 +94,7 @@ export function mountServiceAccountRoutes(app: Hono, deps: ServiceAccountsDeps):
         expiresAt,
         createdBy: principal.user.id,
       })
+      markAuditChangeCommitted(c)
       await deps.audit.write({
         actor: { type: 'user', userId: principal.user.id }, action: 'service_account.key.issue', outcome: 'success',
         resourceType: 'service_account_key', resourceId: key.id,
@@ -112,6 +118,7 @@ export function mountServiceAccountRoutes(app: Hono, deps: ServiceAccountsDeps):
       return c.json({ error: 'invalid id' }, 400)
     }
     if (!await deps.store.revokeKey(accountId, keyId)) return c.json({ error: 'key not found or already revoked' }, 404)
+    markAuditChangeCommitted(c)
     await deps.audit.write({
       actor: { type: 'user', userId: principal.user.id }, action: 'service_account.key.revoke', outcome: 'success',
       resourceType: 'service_account_key', resourceId: keyId, details: { serviceAccountId: accountId }, ...requestMetadata(c),

@@ -58,6 +58,9 @@ mountStorageReadmeRoutes(app, {
 
 beforeEach(async () => {
   storageMock.reset()
+  storageMock.on(GetObjectCommand).rejects(
+    new NoSuchKey({ message: 'no', $metadata: {} })
+  )
   cache = passthroughCache()
   // CASCADE で接続シードと一緒に storage_readme_meta もクリアされる。
   await pools.rw.query('TRUNCATE storage_connections CASCADE')
@@ -254,6 +257,24 @@ describe('PUT /storage/:connId/readme — 履歴記録', () => {
     expect(r.rows.length).toBe(2)
     expect(r.rows[0]).toMatchObject({ body: 'v1', editor: 'tanaka', size_bytes: 2 })
     expect(r.rows[1]).toMatchObject({ body: 'v2 updated', editor: 'sato', size_bytes: 10 })
+  })
+
+  it('同じ本文の再保存ではS3 PUTと履歴追加をしない', async () => {
+    storageMock.on(GetObjectCommand, { Bucket: 'b', Key: 'p/README.md' }).resolves({
+      Body: Readable.from(Buffer.from('same')) as never,
+    })
+    storageMock.on(PutObjectCommand).resolves({})
+    const res = await app.request(`/storage/${TEST_CONN_ID}/readme`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ bucket: 'b', prefix: 'p/', body: 'same', editor: 'sato' }),
+    })
+    expect(res.status).toBe(200)
+    expect(storageMock.commandCalls(PutObjectCommand)).toHaveLength(0)
+    const r = await pools.rw.query(
+      `SELECT count(*)::text AS count FROM storage_readme_history WHERE connection_id = $1`,
+      [TEST_CONN_ID],
+    )
+    expect(r.rows[0].count).toBe('0')
   })
 })
 

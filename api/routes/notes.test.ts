@@ -119,6 +119,30 @@ describe('PUT /notes/:slug — 履歴記録', () => {
     expect(r.rows[0]).toMatchObject({ body: 'v1', editor: 'tanaka', size_bytes: 2 })
     expect(r.rows[1]).toMatchObject({ body: 'v2 updated', editor: 'sato', size_bytes: 10 })
   })
+
+  it('同じ本文の再保存では履歴を追加しない', async () => {
+    for (const editor of ['tanaka', 'sato']) {
+      await app.request('/notes/home', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ body: 'same', editor }),
+      })
+    }
+    const r = await pools.rw.query(
+      `SELECT body, editor FROM notes_history WHERE slug = 'home'`,
+    )
+    expect(r.rows).toEqual([{ body: 'same', editor: 'tanaka' }])
+  })
+
+  it('同じ新規本文の同時保存でも履歴は1件だけ', async () => {
+    await Promise.all(['a', 'b'].map(editor => app.request('/notes/new-note', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ body: 'same', editor }),
+    })))
+    const r = await pools.rw.query<{ count: string }>(
+      `SELECT count(*)::text AS count FROM notes_history WHERE slug = 'new-note'`,
+    )
+    expect(r.rows[0].count).toBe('1')
+  })
 })
 
 describe('GET /notes/:slug/history', () => {

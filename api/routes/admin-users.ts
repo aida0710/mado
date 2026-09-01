@@ -6,6 +6,7 @@ import { LastActiveAdminError, type AuthStore } from '../lib/auth-store.js'
 import { requirePermission, getSessionPrincipal } from '../lib/rbac.js'
 import { requestMetadata } from '../lib/request-metadata.js'
 import { hashPassword } from '../lib/password.js'
+import { markAuditChangeCommitted } from '../lib/audit-activity.js'
 
 export interface AdminUsersDeps {
   store: AuthStore
@@ -47,6 +48,7 @@ export function mountAdminUsersRoutes(app: Hono, deps: AdminUsersDeps): void {
         roles: parsed.data.roles,
         createdBy: principal.user.id,
       })
+      markAuditChangeCommitted(c)
       if (parsed.data.password) {
         await deps.store.setLocalPassword(user.id, await hashPassword(parsed.data.password), true)
       }
@@ -74,11 +76,9 @@ export function mountAdminUsersRoutes(app: Hono, deps: AdminUsersDeps): void {
     if (!z.string().uuid().safeParse(id).success) return c.json({ error: 'invalid user id' }, 400)
     const parsed = PatchBody.safeParse(await c.req.json().catch(() => null))
     if (!parsed.success) return c.json({ error: 'invalid body' }, 400)
-    const current = await deps.store.getUser(id)
-    if (!current) return c.json({ error: 'user not found' }, 404)
-    let user
+    let result
     try {
-      user = await deps.store.updateUser(id, parsed.data)
+      result = await deps.store.updateUserIfChanged(id, parsed.data)
     } catch (e) {
       if (e instanceof LastActiveAdminError) {
         return c.json({ error: 'cannot disable the last active admin' }, 409)
@@ -88,27 +88,29 @@ export function mountAdminUsersRoutes(app: Hono, deps: AdminUsersDeps): void {
       }
       throw e
     }
-    if (parsed.data.status === 'disabled') await deps.store.revokeUserSessions(id)
+    if (!result) return c.json({ error: 'user not found' }, 404)
+    if (result.changedFields.length === 0) return c.json({ user: result.user })
+    markAuditChangeCommitted(c)
+    const labels = { displayName: '表示名', username: 'ユーザーID', status: '状態' } as const
+    const changes = result.changedFields.map(field => ({
+      field,
+      label: labels[field as keyof typeof labels],
+      before: result.before[field as keyof typeof result.before],
+      after: result.user[field as keyof typeof result.user],
+    }))
+    if (result.changedFields.includes('status') && result.user.status === 'disabled') {
+      await deps.store.revokeUserSessions(id)
+    }
     await deps.audit.write({
       actor: { type: 'user', userId: principal.user.id }, action: 'user.update', outcome: 'success',
       resourceType: 'user', resourceId: id,
       details: {
-        target: { displayName: current.displayName, username: current.username },
-        changes: [
-          parsed.data.displayName !== undefined && parsed.data.displayName !== current.displayName
-            ? { field: 'displayName', label: '表示名', before: current.displayName, after: parsed.data.displayName }
-            : null,
-          parsed.data.username !== undefined && parsed.data.username !== current.username
-            ? { field: 'username', label: 'ユーザーID', before: current.username, after: parsed.data.username }
-            : null,
-          parsed.data.status !== undefined && parsed.data.status !== current.status
-            ? { field: 'status', label: '状態', before: current.status, after: parsed.data.status }
-            : null,
-        ].filter(Boolean),
+        target: { displayName: result.before.displayName, username: result.before.username },
+        changes,
       },
       ...requestMetadata(c),
     })
-    return c.json({ user })
+    return c.json({ user: result.user })
   })
 
   app.put('/users/:id/roles', async c => {
@@ -118,28 +120,30 @@ export function mountAdminUsersRoutes(app: Hono, deps: AdminUsersDeps): void {
     const parsed = RolesBody.safeParse(await c.req.json().catch(() => null))
     if (!parsed.success) return c.json({ error: 'invalid body' }, 400)
     if (!await deps.store.rolesExist(parsed.data.roles)) return c.json({ error: 'unknown role' }, 400)
-    const current = await deps.store.getUser(id)
-    if (!current) return c.json({ error: 'user not found' }, 404)
-    let user
+    const nextRoles = [...new Set(parsed.data.roles)].sort()
+    let result
     try {
-      user = await deps.store.setUserRoles(id, parsed.data.roles, principal.user.id)
+      result = await deps.store.setUserRolesIfChanged(id, nextRoles, principal.user.id)
     } catch (error) {
       if (error instanceof LastActiveAdminError) {
         return c.json({ error: 'cannot remove the last active admin role' }, 409)
       }
       throw error
     }
+    if (!result) return c.json({ error: 'user not found' }, 404)
+    if (result.changedFields.length === 0) return c.json({ user: result.user })
+    markAuditChangeCommitted(c)
     await deps.store.revokeUserSessions(id)
     await deps.audit.write({
       actor: { type: 'user', userId: principal.user.id }, action: 'user.roles.update', outcome: 'success',
       resourceType: 'user', resourceId: id,
       details: {
-        target: { displayName: current.displayName, username: current.username },
-        changes: [{ field: 'roles', label: '権限', before: current.roles, after: parsed.data.roles }],
+        target: { displayName: result.before.displayName, username: result.before.username },
+        changes: [{ field: 'roles', label: '権限', before: result.before.roles, after: result.user.roles }],
       },
       ...requestMetadata(c),
     })
-    return c.json({ user })
+    return c.json({ user: result.user })
   })
 
   app.post('/users/:id/reset-password', async c => {
@@ -155,6 +159,7 @@ export function mountAdminUsersRoutes(app: Hono, deps: AdminUsersDeps): void {
     }
     const temporaryPassword = parsed.data.password ?? `Mado-${randomToken(18)}`
     await deps.store.setLocalPassword(id, await hashPassword(temporaryPassword), true)
+    markAuditChangeCommitted(c)
     await deps.store.revokeUserSessions(id)
     await deps.audit.write({
       actor: { type: 'user', userId: principal.user.id }, action: 'user.password.reset', outcome: 'success',
@@ -178,6 +183,7 @@ export function mountAdminUsersRoutes(app: Hono, deps: AdminUsersDeps): void {
     if (!current) return c.json({ error: 'user not found' }, 404)
     try {
       if (!await deps.store.deleteUser(id)) return c.json({ error: 'user not found' }, 404)
+      markAuditChangeCommitted(c)
     } catch (error) {
       if (error instanceof LastActiveAdminError) {
         return c.json({ error: 'cannot delete the last active admin' }, 409)

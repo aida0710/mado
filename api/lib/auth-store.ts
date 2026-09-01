@@ -67,14 +67,23 @@ export interface CreateUserInput {
   createdBy?: string | null
 }
 
+export interface AuthUserMutationResult {
+  before: AuthUser
+  user: AuthUser
+  changedFields: string[]
+}
+
 export interface AuthStore {
   listUsers(): Promise<AuthUser[]>
   getUser(id: string): Promise<AuthUser | null>
   createUser(input: CreateUserInput, client?: PoolClient): Promise<AuthUser>
   updateUser(id: string, patch: { username?: string | null; email?: string | null; displayName?: string; status?: UserStatus }): Promise<AuthUser | null>
+  updateUserIfChanged(id: string, patch: { username?: string | null; email?: string | null; displayName?: string; status?: UserStatus }): Promise<AuthUserMutationResult | null>
   deleteUser(id: string): Promise<boolean>
   updateSignatureName(id: string, signatureName: string): Promise<AuthUser | null>
   setUserRoles(userId: string, roles: string[], grantedBy: string): Promise<AuthUser | null>
+  setUserRolesIfChanged(userId: string, roles: string[], grantedBy: string): Promise<AuthUserMutationResult | null>
+  updateProfileIfChanged(id: string, patch: { username?: string | null; displayName?: string; signatureName: string }): Promise<AuthUserMutationResult | null>
   rolesExist(roles: string[]): Promise<boolean>
   hasOtherActiveAdmin(userId: string): Promise<boolean>
   getLocalCredential(identifier: string): Promise<(AuthUser & {
@@ -128,6 +137,7 @@ export interface OidcProvisionResult {
   created: boolean
   linkedExisting: boolean
   rolesBefore: string[]
+  profileChanged: boolean
 }
 
 export interface OidcBackchannelLogout {
@@ -174,6 +184,151 @@ export function createAuthStore(pool: Pool): AuthStore {
         WHERE u.status = 'active' AND u.deleted_at IS NULL`,
     )
     if (Number(admins.rows[0]?.count ?? 0) <= 1) throw new LastActiveAdminError()
+  }
+
+  async function updateUserIfChanged(
+    id: string,
+    patch: { username?: string | null; email?: string | null; displayName?: string; status?: UserStatus },
+  ): Promise<AuthUserMutationResult | null> {
+    const client = await pool.connect()
+    try {
+      await client.query('BEGIN')
+      // 管理者不変条件を触る経路は全て advisory lock → user row の順に統一する。
+      if (patch.status === 'disabled') await assertAdminRemovalAllowed(client, id)
+      const locked = await client.query(
+        `SELECT id FROM auth_users WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`, [id],
+      )
+      if (locked.rowCount === 0) {
+        await client.query('ROLLBACK')
+        return null
+      }
+      const before = await loadUser(id, client)
+      if (!before) throw new Error('locked user disappeared')
+      const normalized = {
+        username: patch.username === undefined ? undefined : patch.username?.trim().toLowerCase() || null,
+        email: patch.email === undefined ? undefined : patch.email?.trim().toLowerCase() || null,
+        displayName: patch.displayName?.trim(),
+        status: patch.status,
+      }
+      const changedFields = (Object.keys(normalized) as Array<keyof typeof normalized>)
+        .filter(key => normalized[key] !== undefined && normalized[key] !== before[key])
+      if (changedFields.length === 0) {
+        await client.query('COMMIT')
+        return { before, user: before, changedFields: [] }
+      }
+      const fields: string[] = []
+      const values: unknown[] = []
+      const columns = { username: 'username', email: 'email', displayName: 'display_name', status: 'status' } as const
+      for (const key of changedFields) {
+        values.push(normalized[key])
+        fields.push(`${columns[key]} = $${values.length}`)
+      }
+      values.push(id)
+      await client.query(
+        `UPDATE auth_users SET ${fields.join(', ')}, updated_at = now() WHERE id = $${values.length}`,
+        values,
+      )
+      const user = await loadUser(id, client)
+      if (!user) throw new Error('updated user disappeared')
+      await client.query('COMMIT')
+      return { before, user, changedFields }
+    } catch (e) {
+      await client.query('ROLLBACK')
+      throw e
+    } finally {
+      client.release()
+    }
+  }
+
+  async function setUserRolesIfChanged(
+    userId: string, roles: string[], grantedBy: string,
+  ): Promise<AuthUserMutationResult | null> {
+    const nextRoles = [...new Set(roles)].sort()
+    const client = await pool.connect()
+    try {
+      await client.query('BEGIN')
+      // delete/updateUser と同じ lock 順にしてdeadlockを避ける。
+      if (!nextRoles.includes('admin')) await assertAdminRemovalAllowed(client, userId)
+      const locked = await client.query(
+        `SELECT id FROM auth_users WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`, [userId],
+      )
+      if (locked.rowCount === 0) {
+        await client.query('ROLLBACK')
+        return null
+      }
+      const before = await loadUser(userId, client)
+      if (!before) throw new Error('locked user disappeared')
+      if ([...before.roles].sort().join('\0') === nextRoles.join('\0')) {
+        await client.query('COMMIT')
+        return { before, user: before, changedFields: [] }
+      }
+      await client.query(`DELETE FROM auth_user_roles WHERE user_id = $1`, [userId])
+      for (const role of nextRoles) {
+        await client.query(
+          `INSERT INTO auth_user_roles (user_id, role_id, granted_by) VALUES ($1, $2, $3)`,
+          [userId, role, grantedBy],
+        )
+      }
+      const user = await loadUser(userId, client)
+      if (!user) throw new Error('updated user disappeared')
+      await client.query('COMMIT')
+      return { before, user, changedFields: ['roles'] }
+    } catch (e) {
+      await client.query('ROLLBACK')
+      throw e
+    } finally {
+      client.release()
+    }
+  }
+
+  async function updateProfileIfChanged(
+    id: string, patch: { username?: string | null; displayName?: string; signatureName: string },
+  ): Promise<AuthUserMutationResult | null> {
+    const client = await pool.connect()
+    try {
+      await client.query('BEGIN')
+      const locked = await client.query(
+        `SELECT id FROM auth_users WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`, [id],
+      )
+      if (locked.rowCount === 0) {
+        await client.query('ROLLBACK')
+        return null
+      }
+      const before = await loadUser(id, client)
+      if (!before) throw new Error('locked user disappeared')
+      const normalized = {
+        username: patch.username === undefined ? undefined : patch.username?.trim().toLowerCase() || null,
+        displayName: patch.displayName?.trim(),
+        signatureName: patch.signatureName.trim(),
+      }
+      const changedFields = (Object.keys(normalized) as Array<keyof typeof normalized>)
+        .filter(key => normalized[key] !== undefined && normalized[key] !== before[key])
+      if (changedFields.length === 0) {
+        await client.query('COMMIT')
+        return { before, user: before, changedFields: [] }
+      }
+      const fields: string[] = []
+      const values: unknown[] = []
+      const columns = { username: 'username', displayName: 'display_name', signatureName: 'signature_name' } as const
+      for (const key of changedFields) {
+        values.push(normalized[key])
+        fields.push(`${columns[key]} = $${values.length}`)
+      }
+      values.push(id)
+      await client.query(
+        `UPDATE auth_users SET ${fields.join(', ')}, updated_at = now() WHERE id = $${values.length}`,
+        values,
+      )
+      const user = await loadUser(id, client)
+      if (!user) throw new Error('updated user disappeared')
+      await client.query('COMMIT')
+      return { before, user, changedFields }
+    } catch (e) {
+      await client.query('ROLLBACK')
+      throw e
+    } finally {
+      client.release()
+    }
   }
 
   return {
@@ -261,6 +416,8 @@ export function createAuthStore(pool: Pool): AuthStore {
       }
     },
 
+    updateUserIfChanged,
+
     async deleteUser(id) {
       const client = await pool.connect()
       try {
@@ -321,6 +478,9 @@ export function createAuthStore(pool: Pool): AuthStore {
         client.release()
       }
     },
+
+    setUserRolesIfChanged,
+    updateProfileIfChanged,
 
     async rolesExist(roles) {
       const unique = [...new Set(roles)]
@@ -573,6 +733,8 @@ export function createAuthStore(pool: Pool): AuthStore {
         const before = await loadUserIncludingDeleted(userId, client)
         if (!before) throw new Error('oidc user missing')
         if (before.status !== 'active') throw new Error('user disabled')
+        const managedRolesChanged = input.managedRoles !== undefined
+          && [...before.roles].sort().join('\0') !== [...new Set(input.managedRoles)].sort().join('\0')
         if (input.managedRoles
             && before.roles.includes('admin')
             && !input.managedRoles.includes('admin')) {
@@ -598,7 +760,7 @@ export function createAuthStore(pool: Pool): AuthStore {
             WHERE id = $1 AND deleted_at IS NULL`,
           [userId, input.displayName.trim(), input.emailVerified && Boolean(input.email), input.email ?? null],
         )
-        if (input.managedRoles) {
+        if (input.managedRoles && managedRolesChanged) {
           await client.query(`DELETE FROM auth_user_roles WHERE user_id = $1`, [userId])
           for (const role of [...new Set(input.managedRoles)]) {
             await client.query(
@@ -610,7 +772,10 @@ export function createAuthStore(pool: Pool): AuthStore {
         const user = await loadUser(userId, client)
         if (!user) throw new Error('oidc user disappeared')
         await client.query('COMMIT')
-        return { user, created, linkedExisting, rolesBefore: before.roles }
+        const profileChanged = before.displayName !== user.displayName
+          || before.email !== user.email
+          || managedRolesChanged
+        return { user, created, linkedExisting, rolesBefore: before.roles, profileChanged }
       } catch (e) {
         await client.query('ROLLBACK')
         throw e

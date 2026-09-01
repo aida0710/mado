@@ -11,7 +11,7 @@ const Query = z.object({
   limit: z.coerce.number().int().min(1).max(200).default(50),
   beforeId: z.coerce.number().int().positive().optional(),
   action: z.string().min(1).max(128).optional(),
-  outcome: z.enum(['pending', 'success', 'denied', 'failure']).optional(),
+  outcome: z.literal('success').optional(),
   actorUserId: z.string().uuid().optional(),
   actorServiceAccountId: z.string().uuid().optional(),
 })
@@ -22,6 +22,15 @@ export const ROUTINE_AUDIT_ACTIONS = [
   'auth.logout',
   'auth.session.denied',
   'audit.read',
+  'note.read',
+  'storage.readme.read',
+  'storage.download.raw',
+  'storage.download.tar',
+  'storage.download.tar-entry',
+  'storage.preview.text',
+  'storage.preview.image',
+  'lineage.read',
+  'lineage.authenticate',
 ] as const
 
 export function mountAuditRoutes(app: Hono, deps: AuditRoutesDeps): void {
@@ -38,6 +47,7 @@ export function mountAuditRoutes(app: Hono, deps: AuditRoutesDeps): void {
     }
     values.push([...ROUTINE_AUDIT_ACTIONS])
     where.push(`NOT (e.action = ANY($${values.length}::text[]))`)
+    where.push(`e.outcome = 'success'`)
     if (q.beforeId !== undefined) add('e.id < ?', q.beforeId)
     if (q.action !== undefined) add('e.action = ?', q.action)
     if (q.outcome !== undefined) add('e.outcome = ?', q.outcome)

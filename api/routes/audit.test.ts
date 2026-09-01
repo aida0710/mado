@@ -11,7 +11,7 @@ const admin = {
 }
 
 describe('audit routes', () => {
-  it('通常一覧から閲覧・login・logoutのroutine eventを除外する', async () => {
+  it('通常一覧を成功した変更だけへ限定する', async () => {
     const query = vi.fn().mockResolvedValue({ rows: [] })
     const app = new Hono()
     app.use('*', async (c, next) => {
@@ -26,6 +26,19 @@ describe('audit routes', () => {
 
     const [sql, values] = query.mock.calls[0] as [string, unknown[]]
     expect(sql).toContain('NOT (e.action = ANY($1::text[]))')
+    expect(sql).toContain("e.outcome = 'success'")
     expect(values).toEqual([[...ROUTINE_AUDIT_ACTIONS], 31])
+  })
+
+  it('成功以外のoutcome filterを受け付けない', async () => {
+    const query = vi.fn()
+    const app = new Hono()
+    app.use('*', async (c, next) => {
+      setSessionPrincipal(c, { kind: 'user', sessionId: 'session', user: admin })
+      await next()
+    })
+    mountAuditRoutes(app, { pool: { query } as unknown as Pool })
+    expect((await app.request('/audit-events?outcome=failure')).status).toBe(400)
+    expect(query).not.toHaveBeenCalled()
   })
 })

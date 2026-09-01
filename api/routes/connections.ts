@@ -1,5 +1,6 @@
 import type { Hono } from 'hono'
 import { z } from 'zod'
+import { markAuditNoChange } from '../lib/audit-activity.js'
 import { nanoid } from 'nanoid'
 import type { Pools } from '../db.js'
 import type { CryptoModule } from '../crypto.js'
@@ -224,6 +225,8 @@ interface ConnectionRow {
   endpoint: string
   region: string
   access_key_id_masked: string
+  access_key_id_enc: string
+  secret_access_key_enc: string
   force_path_style: boolean
   list_objects_version: 'v1' | 'v2'
   is_default: boolean
@@ -237,6 +240,7 @@ interface ConnectionRow {
 // エイリアスは `c` 固定 — CONNECTION_SETTINGS_SUBQUERY が `c.id` を参照する。
 const SELECT_CONN =
   `SELECT c.id, c.name, c.endpoint, c.region, c.access_key_id_masked,
+          c.access_key_id_enc, c.secret_access_key_enc,
           c.force_path_style, c.list_objects_version, c.is_default,
           c.created_at, c.updated_at,
           ${CONNECTION_SETTINGS_SUBQUERY}
@@ -360,15 +364,20 @@ export function mountConnectionsRoutes(app: Hono, deps: ConnectionsDeps): void {
       // 全解除 UPDATE が並行コミットされた新デフォルト行を見えないため、
       // ロック無しだと部分ユニークインデックス違反で 500 になりうる。
       await client.query("SELECT pg_advisory_xact_lock(hashtext('storage_connections_default'))")
-      await client.query('UPDATE storage_connections SET is_default = false WHERE is_default')
-      const r = await client.query(
-        'UPDATE storage_connections SET is_default = true WHERE id = $1',
-        [id],
+      const current = await client.query<{ is_default: boolean }>(
+        'SELECT is_default FROM storage_connections WHERE id = $1 FOR UPDATE', [id],
       )
-      if (r.rowCount === 0) {
+      if (!current.rows[0]) {
         await client.query('ROLLBACK')
         return c.json({ error: 'connection not found' }, 404)
       }
+      if (current.rows[0].is_default) {
+        await client.query('COMMIT')
+        markAuditNoChange(c)
+        return c.json({ ok: true })
+      }
+      await client.query('UPDATE storage_connections SET is_default = false WHERE is_default')
+      await client.query('UPDATE storage_connections SET is_default = true WHERE id = $1', [id])
       await client.query('COMMIT')
     } catch (e) {
       await client.query('ROLLBACK')
@@ -433,6 +442,7 @@ export function mountConnectionsRoutes(app: Hono, deps: ConnectionsDeps): void {
         `${SELECT_CONN} WHERE c.id = $1`, [id],
       )
       if (!r.rows[0]) return c.json({ error: 'not found' }, 404)
+      markAuditNoChange(c)
       return c.json(toMasked(r.rows[0]))
     }
 
@@ -441,28 +451,43 @@ export function mountConnectionsRoutes(app: Hono, deps: ConnectionsDeps): void {
     try {
       await client.query('BEGIN')
 
-      // connection_settings 側だけを更新する場合、下の UPDATE が走らないので
-      // 存在チェックがどこにも無くなる。行が無いまま upsert すると FK 違反の
-      // 500 になってしまうため、ここで先に見る。
-      if (capKeys.length > 0 || extraSettings.length > 0 || pricing.deletes.length > 0) {
-        const cur = await client.query<ConnectionRow>(
-          `${SELECT_CONN} WHERE c.id = $1 FOR UPDATE OF c`, [id],
-        )
-        if (!cur.rows[0]) {
+      // 実変更の有無を、同じtransactionで対象行をlockした状態で判定する。
+      // これにより同値PUTを記録せず、並行更新を古いreadで取り落とさない。
+      const cur = await client.query<ConnectionRow>(
+        `${SELECT_CONN} WHERE c.id = $1 FOR UPDATE OF c`, [id],
+      )
+      if (!cur.rows[0]) {
+        await client.query('ROLLBACK')
+        return c.json({ error: 'not found' }, 404)
+      }
+      const current = cur.rows[0]
+      if (capKeys.length > 0) {
+        const now = settingsToCapabilities(current.settings)
+        const read  = caps.readmeRead  ?? now.readmeRead
+        const write = caps.readmeWrite ?? now.readmeWrite
+        if (write && !read) {
           await client.query('ROLLBACK')
-          return c.json({ error: 'not found' }, 404)
+          return c.json({ error: 'README の編集には読み込みが必要です' }, 400)
         }
-        // 「README 編集には読み込みが必要」。key/value テーブルでは CHECK 制約に
-        // できないので、送られなかった側の現在値と突き合わせてここで弾く。
-        if (capKeys.length > 0) {
-          const now = settingsToCapabilities(cur.rows[0].settings)
-          const read  = caps.readmeRead  ?? now.readmeRead
-          const write = caps.readmeWrite ?? now.readmeWrite
-          if (write && !read) {
-            await client.query('ROLLBACK')
-            return c.json({ error: 'README の編集には読み込みが必要です' }, 400)
-          }
-        }
+      }
+      const currentCaps = settingsToCapabilities(current.settings)
+      const credentialsChanged = (u.accessKeyId !== undefined
+          && u.accessKeyId !== deps.crypto.decrypt(current.access_key_id_enc))
+        || (u.secretAccessKey !== undefined
+          && u.secretAccessKey !== deps.crypto.decrypt(current.secret_access_key_enc))
+      const rowChanged = credentialsChanged
+        || (u.name !== undefined && u.name !== current.name)
+        || (u.endpoint !== undefined && u.endpoint !== current.endpoint)
+        || (u.region !== undefined && u.region !== current.region)
+        || (u.forcePathStyle !== undefined && u.forcePathStyle !== current.force_path_style)
+        || (u.listObjectsVersion !== undefined && u.listObjectsVersion !== current.list_objects_version)
+      const capsChanged = capKeys.some(key => caps[key] !== currentCaps[key])
+      const settingsChanged = extraSettings.some(([key, value]) => current.settings[key] !== value)
+        || pricing.deletes.some(key => current.settings[key] !== undefined)
+      if (!rowChanged && !capsChanged && !settingsChanged) {
+        await client.query('COMMIT')
+        markAuditNoChange(c)
+        return c.json(toMasked(current))
       }
 
       if (sets.length > 0) {

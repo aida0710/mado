@@ -2,6 +2,7 @@ import type { Hono } from 'hono'
 import type { Pools } from '../db.js'
 import type { JobStore } from '../lib/jobs.js'
 import type { CatalogSnapshot, PricingStore } from '../lib/pricing-store.js'
+import { markAuditNoChange } from '../lib/audit-activity.js'
 
 // 料金カタログの状態確認と更新 (spec: 2026-08-22-transfer-estimate-design.md)。
 //
@@ -91,9 +92,10 @@ export function mountPricingRoutes(app: Hono, deps: PricingRoutesDeps): void {
   })
 
   app.post('/pricing/refresh', async c => {
-    const jobId = await deps.store.enqueue(
+    const result = await deps.store.enqueueWithResult(
       PRICING_REFRESH_KIND, PRICING_REFRESH_DEDUP_KEY, {},
     )
-    return c.json({ jobId })
+    if (!result.created) markAuditNoChange(c)
+    return c.json({ jobId: result.id })
   })
 }

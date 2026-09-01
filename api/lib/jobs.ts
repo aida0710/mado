@@ -63,6 +63,7 @@ function toRow(r: DbJobRow): JobRow {
 
 export interface JobStore {
   enqueue(kind: string, dedupKey: string, payload: unknown): Promise<number>
+  enqueueWithResult(kind: string, dedupKey: string, payload: unknown): Promise<{ id: number; created: boolean }>
   get(id: number): Promise<JobRow | null>
   latestDone(kind: string, dedupKey: string): Promise<JobRow | null>
   /** 実行中 (queued/running) があればそれを、無ければ最後に成功したジョブを返す。
@@ -76,7 +77,7 @@ export interface JobStore {
   heartbeat(id: number, progress: JobProgress | null): Promise<void>
   finish(id: number, result: unknown): Promise<void>
   fail(id: number, message: string): Promise<void>
-  cancel(id: number): Promise<void>
+  cancel(id: number): Promise<boolean>
   isCanceled(id: number): Promise<boolean>
   /** heartbeat の途絶えた running を queued に戻す。上限到達分は error にする。
    *  戻り値は処理した件数。 */
@@ -87,25 +88,36 @@ export interface JobStore {
 }
 
 export function createJobStore(pools: Pools): JobStore {
-  return {
-    /** 実行中の同一対象があれば新規作成せずその id を返す (部分一意インデックスで合流)。 */
-    async enqueue(kind, dedupKey, payload) {
+  const enqueueWithResult = async (
+    kind: string, dedupKey: string, payload: unknown,
+  ): Promise<{ id: number; created: boolean }> => {
+    for (;;) {
       const r = await pools.rw.query<{ id: number }>(
         `INSERT INTO jobs (kind, dedup_key, payload) VALUES ($1, $2, $3)
          ON CONFLICT DO NOTHING
          RETURNING id`,
         [kind, dedupKey, JSON.stringify(payload)],
       )
-      if (r.rows[0]) return r.rows[0].id
+      if (r.rows[0]) return { id: r.rows[0].id, created: true }
 
-      // 競合 = 実行中の同一対象が既にある。その id を返す。
+      // 競合 = 実行中の同一対象が既にある。その id を返す。SELECTまでに
+      // 既存jobが完了して消えた場合は、次のloopで新しいjobを投入する。
       const existing = await pools.rw.query<{ id: number }>(
         `SELECT id FROM jobs
           WHERE kind = $1 AND dedup_key = $2 AND status IN ('queued','running')`,
         [kind, dedupKey],
       )
-      return existing.rows[0].id
+      if (existing.rows[0]) return { id: existing.rows[0].id, created: false }
+    }
+  }
+
+  return {
+    /** 実行中の同一対象があれば新規作成せずその id を返す (部分一意インデックスで合流)。 */
+    async enqueue(kind, dedupKey, payload) {
+      return (await enqueueWithResult(kind, dedupKey, payload)).id
     },
+
+    enqueueWithResult,
 
     async get(id) {
       const r = await pools.ro.query<DbJobRow>(
@@ -189,11 +201,12 @@ export function createJobStore(pools: Pools): JobStore {
 
     // 終端状態のジョブは触らない (done を canceled に落とさない)。
     async cancel(id) {
-      await pools.rw.query(
+      const result = await pools.rw.query(
         `UPDATE jobs SET status = 'canceled', finished_at = now()
           WHERE id = $1 AND status IN ('queued','running')`,
         [id],
       )
+      return (result.rowCount ?? 0) > 0
     },
 
     async isCanceled(id) {

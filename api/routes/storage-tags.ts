@@ -2,6 +2,7 @@ import type { Hono } from 'hono'
 import { z } from 'zod'
 import { nanoid } from 'nanoid'
 import type { Pools } from '../db.js'
+import { markAuditNoChange } from '../lib/audit-activity.js'
 
 // README/favorites と同じ「オナーシステム」— 認証なし。
 // 防御は LAN 境界 (requireSafeOrigin ミドルウェア) に委ねる。
@@ -89,16 +90,26 @@ export function mountStorageTagsRoutes(app: Hono, deps: StorageTagsDeps): void {
         `SELECT id, name, color FROM storage_tags WHERE id = $1`, [id],
       )
       if (!r.rows[0]) return c.json({ error: 'not found' }, 404)
+      markAuditNoChange(c)
       return c.json(r.rows[0])
     }
     values.push(id)
     try {
       const r = await deps.pools.rw.query<TagRow>(
         `UPDATE storage_tags SET ${sets.join(', ')} WHERE id = $${i}
+           AND (${u.name !== undefined ? `name IS DISTINCT FROM $1` : 'FALSE'}
+                OR ${u.color !== undefined ? `color IS DISTINCT FROM $${u.name !== undefined ? 2 : 1}` : 'FALSE'})
          RETURNING id, name, color`,
         values,
       )
-      if (!r.rows[0]) return c.json({ error: 'not found' }, 404)
+      if (!r.rows[0]) {
+        const current = await deps.pools.ro.query<TagRow>(
+          `SELECT id, name, color FROM storage_tags WHERE id = $1`, [id],
+        )
+        if (!current.rows[0]) return c.json({ error: 'not found' }, 404)
+        markAuditNoChange(c)
+        return c.json(current.rows[0])
+      }
       return c.json(r.rows[0])
     } catch (e) {
       const msg = (e as Error).message
@@ -145,12 +156,13 @@ export function mountStorageTagsRoutes(app: Hono, deps: StorageTagsDeps): void {
     const parsed = AssignmentBody.safeParse(await c.req.json().catch(() => null))
     if (!parsed.success) return c.json({ error: parsed.error.message }, 400)
     const { bucket, kind, path, tagId } = parsed.data
-    await deps.pools.rw.query(
+    const result = await deps.pools.rw.query(
       `INSERT INTO storage_tag_assignments (tag_id, connection_id, bucket, target_kind, target_path)
        VALUES ($1, $2, $3, $4, $5)
        ON CONFLICT (connection_id, bucket, target_kind, target_path, tag_id) DO NOTHING`,
       [tagId, connId, bucket, kind, normalizePath(kind, path)],
     )
+    if ((result.rowCount ?? 0) === 0) markAuditNoChange(c)
     return c.json({ ok: true })
   })
 
@@ -159,12 +171,13 @@ export function mountStorageTagsRoutes(app: Hono, deps: StorageTagsDeps): void {
     const parsed = AssignmentBody.safeParse(await c.req.json().catch(() => null))
     if (!parsed.success) return c.json({ error: parsed.error.message }, 400)
     const { bucket, kind, path, tagId } = parsed.data
-    await deps.pools.rw.query(
+    const result = await deps.pools.rw.query(
       `DELETE FROM storage_tag_assignments
          WHERE tag_id = $1 AND connection_id = $2 AND bucket = $3
            AND target_kind = $4 AND target_path = $5`,
       [tagId, connId, bucket, kind, normalizePath(kind, path)],
     )
+    if ((result.rowCount ?? 0) === 0) markAuditNoChange(c)
     return c.json({ ok: true })
   })
 

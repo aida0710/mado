@@ -4,7 +4,6 @@ import { loadLineageEnv } from './env.js'
 import { closePools, createPools } from './db.js'
 import { createAuditWriter } from './lib/audit.js'
 import { createServiceAccountStore } from './lib/auth-api-keys.js'
-import { AuthRateLimiter } from './lib/auth-rate-limit.js'
 import { createRegistryClient } from './lib/registry-client.js'
 import { mountOpenLineageRoutes } from './routes/openlineage.js'
 import { requestLogger } from './lib/request-logger.js'
@@ -14,9 +13,6 @@ const env = loadLineageEnv()
 const pools = createPools({ rw: env.DATABASE_URL_RW, ro: env.DATABASE_URL_RO })
 const accounts = createServiceAccountStore(pools.rw)
 const audit = createAuditWriter(pools.rw)
-// Public edgeの制限を迂回された場合も、invalid keyでaudit DBを増幅させない。
-// 認証結果自体は常に401/503へ倒し、ここでは匿名失敗の記録頻度だけを抑える。
-const authFailureAuditLimiter = new AuthRateLimiter()
 const registry = createRegistryClient({
   baseUrl: env.DATASET_REGISTRY_URL,
   token: env.DATASET_REGISTRY_TOKEN,
@@ -30,30 +26,14 @@ const api = new Hono()
 mountOpenLineageRoutes(api, {
   auth: {
     authenticate: token => accounts.authenticate(token),
-    async recordAuthFailure(event) {
-      if (!authFailureAuditLimiter.consume(
-        `lineage:auth-denied:${event.ipAddress ?? 'unknown'}`,
-        30,
-        60_000,
-      )) return
-      await audit.write({
-        actor: { type: 'anonymous' }, action: 'lineage.authenticate', outcome: 'denied',
-        resourceType: 'service_account_key', resourceId: event.tokenPrefix,
-        details: { reason: event.reason },
-        ipAddress: event.ipAddress, userAgent: event.userAgent, requestId: event.requestId,
-      })
-    },
     async recordUse(event) {
-      const outcome = event.outcome === 'accepted'
-        ? 'success'
-        : event.outcome === 'upstream_error' ? 'failure' : 'denied'
       await audit.write({
         actor: {
           type: 'service_account',
           serviceAccountId: event.principal.serviceAccountId,
         },
         action: 'lineage.ingest',
-        outcome,
+        outcome: 'success',
         resourceType: 'openlineage_run',
         resourceId: event.runId,
         details: {

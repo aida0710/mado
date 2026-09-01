@@ -48,4 +48,19 @@ describe('service account routes', () => {
     expect(JSON.stringify(await list.json())).not.toContain(issued.token)
     expect(await keys.authenticate(issued.token)).not.toBeNull()
   })
+
+  it('同じaccount内容の再保存はauditへ残さない', async () => {
+    const admin = (await auth.listUsers())[0]
+    const account = await keys.createAccount({ name: 'same', description: 'desc', createdBy: admin.id })
+    const response = await app.request(`/service-accounts/${account.id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'same', description: 'desc', status: 'active' }),
+    })
+    expect(response.status).toBe(200)
+    const events = await pools.rw.query<{ count: string }>(
+      `SELECT count(*)::text AS count FROM audit_events
+        WHERE resource_id = $1 AND action = 'service_account.update'`, [account.id],
+    )
+    expect(events.rows[0].count).toBe('0')
+  })
 })

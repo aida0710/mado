@@ -1,4 +1,4 @@
-import type { Context, Hono } from 'hono'
+import type { Hono } from 'hono'
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
 import { z } from 'zod'
 import type { AuditWriter } from '../lib/audit.js'
@@ -11,6 +11,7 @@ import { requirePasswordChangeComplete, requireSession } from '../lib/auth-middl
 import { SESSION_COOKIE } from '../lib/auth-types.js'
 import { getSessionPrincipal } from '../lib/rbac.js'
 import { requestMetadata } from '../lib/request-metadata.js'
+import { markAuditChangeCommitted } from '../lib/audit-activity.js'
 import { hashPassword, passwordNeedsRehash, verifyPassword } from '../lib/password.js'
 
 export interface AuthRouteConfig {
@@ -93,18 +94,9 @@ export function mountAuthRoutes(app: Hono, deps: AuthRouteDeps): void {
   const cookieName = deps.config.session.cookieName ?? SESSION_COOKIE
   const limiter = deps.config.rateLimiter ?? new AuthRateLimiter()
   const oidcCookieName = deps.config.session.secure ? '__Host-mado_oidc_tx' : 'mado_oidc_tx'
-  const deniedSessionAudit = async (c: Context, reason: 'missing' | 'invalid') => {
-    const metadata = requestMetadata(c)
-    if (!limiter.consume(`session:denied:${metadata.ipAddress ?? 'unknown'}`, 30, 60_000)) return
-    await deps.audit.write({
-      actor: { type: 'anonymous' }, action: 'auth.session.denied', outcome: 'denied',
-      details: { reason }, ...metadata,
-    })
-  }
   const sessionGuard = requireSession(deps.store, {
     idleSeconds: deps.config.session.idleSeconds,
     cookieName,
-    onDenied: deniedSessionAudit,
   })
   // 存在しないuserでもArgon2を1回計算し、email列挙のtiming差を小さくする。
   const dummyHash = hashPassword(`not-a-real-password-${randomToken(16)}`)
@@ -122,13 +114,8 @@ export function mountAuthRoutes(app: Hono, deps: AuthRouteDeps): void {
     if (!parsed.success) return c.json({ error: 'invalid identifier or password' }, 401)
     const identifier = parsed.data.identifier ?? parsed.data.email!
     const metadata = requestMetadata(c)
-    const normalizedIdentifier = identifier.trim().toLowerCase()
     const ipKey = `login:ip:${metadata.ipAddress ?? 'unknown'}`
     if (!limiter.consume(ipKey, 30, 60_000)) {
-      await deps.audit.write({
-        actor: { type: 'anonymous' }, action: 'auth.local.login', outcome: 'denied',
-        details: { identifier: normalizedIdentifier, reason: 'rate_limited' }, ...metadata,
-      })
       c.header('Retry-After', '60')
       return c.json({ error: 'too many login attempts' }, 429)
     }
@@ -140,11 +127,6 @@ export function mountAuthRoutes(app: Hono, deps: AuthRouteDeps): void {
       return c.json({ error: 'authentication busy' }, 429)
     }
     if (!credential || credential.status !== 'active' || !checked.value) {
-      await deps.audit.write({
-        actor: { type: 'anonymous' }, action: 'auth.local.login', outcome: 'denied',
-        details: { identifier: normalizedIdentifier, reason: 'invalid' },
-        ...metadata,
-      })
       return c.json({ error: 'invalid identifier or password' }, 401)
     }
 
@@ -158,10 +140,6 @@ export function mountAuthRoutes(app: Hono, deps: AuthRouteDeps): void {
     await deps.store.recordSuccessfulLogin(credential.id)
     const session = await deps.store.createSession(credential.id, deps.config.session, metadata)
     setSessionCookie(c, session.token, deps.config.session)
-    await deps.audit.write({
-      actor: { type: 'user', userId: credential.id }, action: 'auth.local.login', outcome: 'success',
-      resourceType: 'session', resourceId: session.id, ...metadata,
-    })
     return c.json({ user: publicUser(credential) })
   })
 
@@ -227,24 +205,21 @@ export function mountAuthRoutes(app: Hono, deps: AuthRouteDeps): void {
         issuer: profile.issuer, subject: profile.subject, sid: profile.sid,
       })
       setSessionCookie(c, session.token, deps.config.session)
-      await deps.audit.write({
-        actor: { type: 'user', userId: user.id }, action: 'auth.oidc.login', outcome: 'success',
-        resourceType: 'session', resourceId: session.id,
-        details: {
-          created: provisioned.created,
-          linkedExisting: provisioned.linkedExisting,
-          rolesBefore: provisioned.rolesBefore,
-          rolesAfter: user.roles,
-        },
-        ...metadata,
-      })
+      if (provisioned.created || provisioned.linkedExisting || provisioned.profileChanged) {
+        await deps.audit.write({
+          actor: { type: 'user', userId: user.id }, action: 'auth.oidc.sync', outcome: 'success',
+          resourceType: 'user', resourceId: user.id,
+          details: {
+            created: provisioned.created,
+            linkedExisting: provisioned.linkedExisting,
+            rolesBefore: provisioned.rolesBefore,
+            rolesAfter: user.roles,
+          },
+          ...metadata,
+        })
+      }
       return c.redirect(profile.returnTo, 303)
-    } catch (e) {
-      await deps.audit.write({
-        actor: { type: 'anonymous' }, action: 'auth.oidc.login', outcome: 'denied',
-        // OAuth callback errorにはcode/state等が含まれ得るためmessageを監査ログへ入れない。
-        details: { errorType: e instanceof Error ? e.name : 'unknown' }, ...metadata,
-      })
+    } catch {
       return c.json({ error: 'oidc login failed' }, 401)
     }
   })
@@ -258,11 +233,13 @@ export function mountAuthRoutes(app: Hono, deps: AuthRouteDeps): void {
     }
     const revoked = await deps.store.revokeOidcSessions({ issuer: deps.config.oidc.issuer, sid })
     deleteCookie(c, cookieName, { path: '/', secure: deps.config.session.secure })
-    await deps.audit.write({
-      actor: { type: 'system' }, action: 'auth.oidc.session_revoke', outcome: 'success',
-      resourceType: 'oidc_session', resourceId: sid, details: { channel: 'front', revoked },
-      ...requestMetadata(c),
-    })
+    if (revoked > 0) {
+      await deps.audit.write({
+        actor: { type: 'system' }, action: 'auth.oidc.session_revoke', outcome: 'success',
+        resourceType: 'oidc_session', resourceId: sid, details: { channel: 'front', revoked },
+        ...requestMetadata(c),
+      })
+    }
     c.header('Cache-Control', 'no-store')
     return c.body(null, 204)
   })
@@ -281,19 +258,16 @@ export function mountAuthRoutes(app: Hono, deps: AuthRouteDeps): void {
       if (!result.accepted) {
         return c.json({ error: 'logout_token already used' }, 400)
       }
-      await deps.audit.write({
-        actor: { type: 'system' }, action: 'auth.oidc.session_revoke', outcome: 'success',
-        resourceType: 'oidc_identity', resourceId: claims.subject ?? claims.sid,
-        details: { channel: 'back', revoked: result.revoked }, ...requestMetadata(c),
-      })
+      if (result.revoked > 0) {
+        await deps.audit.write({
+          actor: { type: 'system' }, action: 'auth.oidc.session_revoke', outcome: 'success',
+          resourceType: 'oidc_identity', resourceId: claims.subject ?? claims.sid,
+          details: { channel: 'back', revoked: result.revoked }, ...requestMetadata(c),
+        })
+      }
       c.header('Cache-Control', 'no-store')
       return c.body(null, 204)
-    } catch (e) {
-      await deps.audit.write({
-        actor: { type: 'anonymous' }, action: 'auth.oidc.session_revoke', outcome: 'denied',
-        details: { channel: 'back', errorType: e instanceof Error ? e.name : 'unknown' },
-        ...requestMetadata(c),
-      })
+    } catch {
       return c.json({ error: 'invalid logout_token' }, 400)
     }
   })
@@ -312,47 +286,44 @@ export function mountAuthRoutes(app: Hono, deps: AuthRouteDeps): void {
     if (!principal) return c.json({ error: 'unauthorized' }, 401)
     const parsed = ProfileBody.safeParse(await c.req.json().catch(() => null))
     if (!parsed.success) return c.json({ error: 'invalid profile' }, 400)
-    const changes = [
-      { field: 'displayName', label: '表示名', before: principal.user.displayName, after: parsed.data.displayName ?? principal.user.displayName },
-      { field: 'username', label: 'ユーザーID', before: principal.user.username, after: parsed.data.username ?? principal.user.username },
-      { field: 'signatureName', label: '署名', before: principal.user.signatureName, after: parsed.data.signatureName },
-    ].filter(change => change.before !== change.after)
-    let user
+    let result
     try {
-      user = await deps.store.updateUser(principal.user.id, {
+      result = await deps.store.updateProfileIfChanged(principal.user.id, {
         displayName: parsed.data.displayName,
         username: parsed.data.username,
+        signatureName: parsed.data.signatureName,
       })
-      if (user) user = await deps.store.updateSignatureName(principal.user.id, parsed.data.signatureName)
     } catch (e) {
       if (e instanceof Error && 'code' in e && e.code === '23505') {
         return c.json({ error: 'username already exists' }, 409)
       }
       throw e
     }
-    if (!user) return c.json({ error: 'user not found' }, 404)
+    if (!result) return c.json({ error: 'user not found' }, 404)
+    if (result.changedFields.length === 0) return c.json({ user: publicUser(result.user) })
+    markAuditChangeCommitted(c)
+    const labels = { displayName: '表示名', username: 'ユーザーID', signatureName: '署名' } as const
+    const changes = result.changedFields.map(field => ({
+      field,
+      label: labels[field as keyof typeof labels],
+      before: result.before[field as keyof typeof result.before],
+      after: result.user[field as keyof typeof result.user],
+    }))
     await deps.audit.write({
       actor: { type: 'user', userId: principal.user.id },
       action: 'auth.profile.update', outcome: 'success',
       resourceType: 'user', resourceId: principal.user.id,
       details: { changes }, ...requestMetadata(c),
     })
-    return c.json({ user: publicUser(user) })
+    return c.json({ user: publicUser(result.user) })
   })
 
   app.use('/logout', sessionGuard)
   app.post('/logout', async c => {
-    const principal = getSessionPrincipal(c)
     const token = getCookie(c, cookieName)
     const oidcContext = token ? await deps.store.getSessionOidcContext(token) : null
     if (token) await deps.store.revokeSession(token)
     deleteCookie(c, cookieName, { path: '/', secure: deps.config.session.secure })
-    if (principal) {
-      await deps.audit.write({
-        actor: { type: 'user', userId: principal.user.id }, action: 'auth.logout', outcome: 'success',
-        resourceType: 'session', resourceId: principal.sessionId, ...requestMetadata(c),
-      })
-    }
     const logoutUrl = oidcContext && deps.config.oidc?.matchesIssuer(oidcContext.issuer)
       ? (await deps.config.oidc.logoutUrl()).href
       : null
@@ -374,6 +345,7 @@ export function mountAuthRoutes(app: Hono, deps: AuthRouteDeps): void {
     const hash = await hashPassword(parsed.data.newPassword).catch(() => null)
     if (!hash) return c.json({ error: 'invalid new password' }, 400)
     await deps.store.setLocalPassword(principal.user.id, hash, false)
+    markAuditChangeCommitted(c)
     await deps.store.revokeUserSessions(principal.user.id)
     const metadata = requestMetadata(c)
     const session = await deps.store.createSession(principal.user.id, deps.config.session, metadata)

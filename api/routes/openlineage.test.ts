@@ -57,36 +57,32 @@ function request(body: unknown, token = 'mado_lin_key.secret'): Request {
 
 describe('OpenLineage ingest route', () => {
   it('Bearerなしを拒否する', async () => {
-    const recordAuthFailure = vi.fn().mockResolvedValue(undefined)
+    const recordUse = vi.fn().mockResolvedValue(undefined)
     const app = new Hono()
-    mountOpenLineageRoutes(app, { auth: auth({ recordAuthFailure }), registry: registry() })
+    mountOpenLineageRoutes(app, { auth: auth({ recordUse }), registry: registry() })
     const res = await app.request(OPENLINEAGE_INGEST_PATH, { method: 'POST', body: '{}' })
     expect(res.status).toBe(401)
     expect(res.headers.get('WWW-Authenticate')).toBe('Bearer')
-    expect(recordAuthFailure).toHaveBeenCalledWith(expect.objectContaining({
-      reason: 'missing', tokenPrefix: null,
-    }))
+    expect(recordUse).not.toHaveBeenCalled()
   })
 
-  it('無効なkeyは安全なprefixだけを監査する', async () => {
-    const recordAuthFailure = vi.fn().mockResolvedValue(undefined)
+  it('無効なkeyは拒否するが変更監査を作らない', async () => {
+    const recordUse = vi.fn().mockResolvedValue(undefined)
     const app = new Hono()
     mountOpenLineageRoutes(app, {
-      auth: auth({ authenticate: vi.fn().mockResolvedValue(null), recordAuthFailure }),
+      auth: auth({ authenticate: vi.fn().mockResolvedValue(null), recordUse }),
       registry: registry(),
     })
     const response = await app.request(request(event(), 'mado_lin_abcdefgh12345678.super-secret'))
     expect(response.status).toBe(401)
-    expect(recordAuthFailure).toHaveBeenCalledWith(expect.objectContaining({
-      reason: 'invalid', tokenPrefix: 'mado_lin_abcdefgh12345678',
-    }))
-    expect(JSON.stringify(recordAuthFailure.mock.calls)).not.toContain('super-secret')
+    expect(recordUse).not.toHaveBeenCalled()
   })
 
   it('Originなしでもservice keyで受け、Registryへだけwriteする', async () => {
     const reg = registry()
+    const recordUse = vi.fn().mockResolvedValue(undefined)
     const app = new Hono()
-    mountOpenLineageRoutes(app, { auth: auth(), registry: reg })
+    mountOpenLineageRoutes(app, { auth: auth({ recordUse }), registry: reg })
     const res = await app.request(request(event()))
     expect(res.status).toBe(200)
     expect(reg.ingestOpenLineage).toHaveBeenCalledTimes(1)
@@ -94,6 +90,20 @@ describe('OpenLineage ingest route', () => {
     expect(principal).toEqual({
       serviceAccountId: 'sa-1', keyId: 'key-1', allowedNamespaces: ['speech'],
     })
+    expect(recordUse).toHaveBeenCalledWith(expect.objectContaining({ outcome: 'accepted' }))
+  })
+
+  it('重複eventはRegistryへ送るが変更監査を作らない', async () => {
+    const reg = registry()
+    vi.mocked(reg.ingestOpenLineage).mockResolvedValue({
+      accepted: true, duplicate: true, eventId: 'evt-1',
+      runId: event().run.runId, projection: 'synced', warnings: [],
+    })
+    const recordUse = vi.fn().mockResolvedValue(undefined)
+    const app = new Hono()
+    mountOpenLineageRoutes(app, { auth: auth({ recordUse }), registry: reg })
+    expect((await app.request(request(event()))).status).toBe(200)
+    expect(recordUse).not.toHaveBeenCalled()
   })
 
   it('lineage:write scopeなしを拒否する', async () => {

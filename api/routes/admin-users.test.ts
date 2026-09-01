@@ -72,6 +72,23 @@ describe('admin user routes', () => {
     })).status).toBe(400)
   })
 
+  it('同じユーザー情報・権限の再保存はauditへ残さない', async () => {
+    const user = await store.createUser({ username: 'same', displayName: 'Same', roles: ['viewer'] })
+    expect((await app.request(`/users/${user.id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: 'same', displayName: 'Same', status: 'active' }),
+    })).status).toBe(200)
+    expect((await app.request(`/users/${user.id}/roles`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ roles: ['viewer'] }),
+    })).status).toBe(200)
+    const events = await pools.rw.query<{ count: string }>(
+      `SELECT count(*)::text AS count FROM audit_events
+        WHERE resource_id = $1 AND action IN ('user.update', 'user.roles.update')`, [user.id],
+    )
+    expect(events.rows[0].count).toBe('0')
+  })
+
   it('自分自身は削除できず、別ユーザーは削除してauditへ残す', async () => {
     expect((await app.request(`/users/${adminId}`, { method: 'DELETE' })).status).toBe(409)
     const user = await store.createUser({ username: 'delete-me', displayName: 'Delete Me', roles: ['viewer'] })

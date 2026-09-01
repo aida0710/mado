@@ -14,6 +14,12 @@ const user = {
 
 function appWith(registryOverrides: Partial<RegistryClient> = {}) {
   const registry = {
+    getDataset: vi.fn().mockResolvedValue({
+      datasetId: '00000000-0000-4000-8000-000000000010',
+      namespace: 'speech', name: 'raw', displayName: '更新前', aliases: [],
+      description: null, mediaType: null, owner: null, currentVersionId: null,
+      versionCount: 0, createdAt: '2026-08-31T00:00:00Z', versions: [], kind: 'dataset', datasetKey: 'raw',
+    }),
     updateDataset: vi.fn().mockResolvedValue({
       datasetId: '00000000-0000-4000-8000-000000000010',
       namespace: 'speech', name: 'raw', displayName: '更新後', aliases: [],
@@ -58,6 +64,18 @@ describe('lineage curation routes', () => {
       action: 'lineage.dataset.update', resourceId: datasetId,
       details: { changedFields: ['displayName', 'aliases'] },
     }))
+  })
+
+  it('Datasetの同値更新はRegistry変更と監査を行わない', async () => {
+    const { app, registry, audit } = appWith()
+    const datasetId = '00000000-0000-4000-8000-000000000010'
+    const res = await app.request(`/lineage/curation/datasets/${datasetId}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ displayName: '更新前', aliases: [] }),
+    })
+    expect(res.status).toBe(200)
+    expect(registry.updateDataset).not.toHaveBeenCalled()
+    expect(audit.write).not.toHaveBeenCalled()
   })
 
   it('Mado接続をRegistryの保存場所へ変換してDatasetを登録する', async () => {

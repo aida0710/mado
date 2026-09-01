@@ -6,11 +6,12 @@ import type { ConnectionConfig } from '../storage.js'
 
 let enqueued: Array<[string, string, unknown]> = []
 let scanEnabled = true
+let created = true
 
 const store = {
-  enqueue: async (kind: string, dedupKey: string, payload: unknown) => {
+  enqueueWithResult: async (kind: string, dedupKey: string, payload: unknown) => {
     enqueued.push([kind, dedupKey, payload])
-    return 7
+    return { id: 7, created }
   },
 } as unknown as JobStore
 
@@ -25,7 +26,7 @@ mountStorageScanRoutes(app, {
   } as ConnectionConfig),
 })
 
-beforeEach(() => { enqueued = []; scanEnabled = true })
+beforeEach(() => { enqueued = []; scanEnabled = true; created = true })
 
 describe('POST /storage/:connId/scan', () => {
   it('ジョブを投入して id を返す', async () => {
@@ -40,6 +41,13 @@ describe('POST /storage/:connId/scan', () => {
   it('prefix 省略はバケット root として扱う', async () => {
     await app.request('/storage/c1/scan?bucket=b1', { method: 'POST' })
     expect(enqueued[0][2]).toEqual({ connId: 'c1', bucket: 'b1', prefix: '' })
+  })
+
+  it('実行中の同一ジョブには既存idで合流する', async () => {
+    created = false
+    const res = await app.request('/storage/c1/scan?bucket=b1&prefix=p/', { method: 'POST' })
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ jobId: 7 })
   })
 
   it('bucket が無ければ 400', async () => {

@@ -7,6 +7,7 @@ import type { Hono } from 'hono'
 import { z } from 'zod'
 import type { Pools } from '../db.js'
 import { getSessionPrincipal } from '../lib/rbac.js'
+import { markAuditNoChange } from '../lib/audit-activity.js'
 import type { ResponseCache } from '../lib/storage-cache.js'
 import { resolveStorageOrFail, type GetStorage } from './_connId.js'
 
@@ -24,9 +25,26 @@ export interface StorageReadmeDeps {
 const PutBody = z.object({
   bucket: z.string().min(1),
   prefix: z.string(),       // '' (ルート) または '/' で終わる
-  body: z.string(),
+  body: z.string().max(1_000_000),
   editor: z.string().min(1).optional(),
 })
+
+const readmeWriteTails = new Map<string, Promise<void>>()
+
+async function withReadmeWriteLock<T>(key: string, operation: () => Promise<T>): Promise<T> {
+  const previous = readmeWriteTails.get(key) ?? Promise.resolve()
+  let release!: () => void
+  const current = new Promise<void>(resolve => { release = resolve })
+  const tail = previous.then(() => current)
+  readmeWriteTails.set(key, tail)
+  await previous
+  try {
+    return await operation()
+  } finally {
+    release()
+    if (readmeWriteTails.get(key) === tail) readmeWriteTails.delete(key)
+  }
+}
 
 async function streamToString(stream: NodeJS.ReadableStream): Promise<string> {
   const chunks: Buffer[] = []
@@ -96,62 +114,70 @@ export function mountStorageReadmeRoutes(app: Hono, deps: StorageReadmeDeps): vo
     const actorUserId = principal?.user.id ?? null
     const Key = prefix + 'README.md'
     const buf = Buffer.from(body, 'utf-8')
+    return withReadmeWriteLock(`${connId}\0${bucket}\0${Key}`, async () => {
+      // S3 I/O中はDB connectionを保持しない。同じobjectへのMado内のPUTだけを
+      // 直列化し、本文が同じならS3・履歴・監査をいずれも増やさない。
+      try {
+        let currentBody: string | null = null
+        try {
+          const current = await storage.send(new GetObjectCommand({ Bucket: bucket, Key }))
+          currentBody = await streamToString(current.Body as unknown as NodeJS.ReadableStream)
+        } catch (e) {
+          if (!(e instanceof NoSuchKey)) throw e
+        }
+        if (currentBody === body) {
+          markAuditNoChange(c)
+          return c.json({ ok: true, size_bytes: buf.byteLength })
+        }
+        await storage.send(new PutObjectCommand({
+          Bucket: bucket, Key, Body: buf, ContentType: 'text/markdown',
+        }))
+      } catch (e) {
+        console.error('storage README write failed', {
+          name: e instanceof Error ? e.name : 'unknown',
+          status: (e as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode,
+        })
+        return c.json({ error: 'storage request failed' }, 500)
+      }
 
-    try {
-      await storage.send(new PutObjectCommand({
-        Bucket: bucket, Key, Body: buf, ContentType: 'text/markdown',
-      }))
-    } catch (e) {
-      console.error('storage README write failed', {
-        name: e instanceof Error ? e.name : 'unknown',
-        status: (e as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode,
-      })
-      return c.json({ error: 'storage request failed' }, 500)
-    }
+      // README.md が一覧に現れる / 消えるので、S3 PUT直後にcacheを捨てる。
+      await deps.cache.invalidateScope(connId, bucket, prefix)
 
-    // README.md が一覧に現れる / 消えるので、この prefix の一覧キャッシュを捨てる。
-    // meta の書き込みが後で失敗しても S3 の実体は変わっているため、
-    // トランザクションの前 = PUT 成功直後に捨てるのが正しい。
-    await deps.cache.invalidateScope(connId, bucket, prefix)
-
-    // Storage PUT 成功。続けて history (append) と meta (upsert) を 1 トランザクションで
-    // 同期させる。両方落ちたときも同じ状態 (rollback) になり、片方だけが残る
-    // 中間状態を避ける。DB 失敗時でも README 本体は既に S3 にあるので 200 を返し、
-    // meta_stale: true でフロントが警告を出せるようにする。
-    const client = await deps.pools.rw.connect()
-    try {
-      await client.query('BEGIN')
-      await client.query(
-        `INSERT INTO storage_readme_history
-           (connection_id, bucket, prefix, body, size_bytes, editor, actor_user_id)
-         VALUES($1,$2,$3,$4,$5,$6,$7)`,
-        [connId, bucket, prefix, body, buf.byteLength, editor, actorUserId]
-      )
-      await client.query(
-        `INSERT INTO storage_readme_meta
-           (connection_id, bucket, prefix, last_editor, last_editor_user_id, last_edited_at, size_bytes)
-         VALUES($1,$2,$3,$4,$5, now(), $6)
-         ON CONFLICT (connection_id, bucket, prefix) DO UPDATE
-           SET last_editor    = EXCLUDED.last_editor,
-               last_editor_user_id = EXCLUDED.last_editor_user_id,
-               last_edited_at = EXCLUDED.last_edited_at,
-               size_bytes     = EXCLUDED.size_bytes`,
-        [connId, bucket, prefix, editor, actorUserId, buf.byteLength]
-      )
-      await client.query('COMMIT')
-    } catch (e) {
-      await client.query('ROLLBACK').catch(() => {})
-      console.error(JSON.stringify({
-        ev: 'storage.readme.meta_failed',
-        connId, bucket, prefix, editor,
-        errorName: e instanceof Error ? e.name : 'unknown',
-      }))
-      client.release()
-      return c.json({ ok: true, meta_stale: true, size_bytes: buf.byteLength })
-    }
-    client.release()
-
-    return c.json({ ok: true, size_bytes: buf.byteLength })
+      // S3 I/O後にだけDB connectionを借り、historyとmetaを一緒に更新する。
+      const client = await deps.pools.rw.connect()
+      try {
+        await client.query('BEGIN')
+        await client.query(
+          `INSERT INTO storage_readme_history
+             (connection_id, bucket, prefix, body, size_bytes, editor, actor_user_id)
+           VALUES($1,$2,$3,$4,$5,$6,$7)`,
+          [connId, bucket, prefix, body, buf.byteLength, editor, actorUserId]
+        )
+        await client.query(
+          `INSERT INTO storage_readme_meta
+             (connection_id, bucket, prefix, last_editor, last_editor_user_id, last_edited_at, size_bytes)
+           VALUES($1,$2,$3,$4,$5, now(), $6)
+           ON CONFLICT (connection_id, bucket, prefix) DO UPDATE
+             SET last_editor    = EXCLUDED.last_editor,
+                 last_editor_user_id = EXCLUDED.last_editor_user_id,
+                 last_edited_at = EXCLUDED.last_edited_at,
+                 size_bytes     = EXCLUDED.size_bytes`,
+          [connId, bucket, prefix, editor, actorUserId, buf.byteLength]
+        )
+        await client.query('COMMIT')
+      } catch (e) {
+        await client.query('ROLLBACK').catch(() => {})
+        console.error(JSON.stringify({
+          ev: 'storage.readme.meta_failed',
+          connId, bucket, prefix, editor,
+          errorName: e instanceof Error ? e.name : 'unknown',
+        }))
+        return c.json({ ok: true, meta_stale: true, size_bytes: buf.byteLength })
+      } finally {
+        client.release()
+      }
+      return c.json({ ok: true, size_bytes: buf.byteLength })
+    })
   })
 
   // 編集履歴 (path 単位)。

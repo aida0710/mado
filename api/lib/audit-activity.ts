@@ -1,4 +1,4 @@
-import type { MiddlewareHandler } from 'hono'
+import type { Context, MiddlewareHandler } from 'hono'
 import type { AuditWriter } from './audit.js'
 import { getSessionPrincipal } from './rbac.js'
 import { requestMetadata } from './request-metadata.js'
@@ -9,6 +9,20 @@ interface Activity {
   resourceId: string | null
   /** Route自身がsuccess auditを書く場合、共通middlewareは失敗・拒否だけ補完する。 */
   dedicatedSuccessAudit?: boolean
+}
+
+const AUDIT_CHANGED_KEY = 'madoAuditChanged'
+const AUDIT_COMMITTED_KEY = 'madoAuditCommitted'
+
+/** 成功応答でも永続状態が変わらなかったことを共通監査へ伝える。 */
+export function markAuditNoChange(c: Context): void {
+  c.set(AUDIT_CHANGED_KEY, false)
+}
+
+/** 専用監査routeでdomain変更がcommit済みであることを示す。後続処理が失敗しても
+ *  durable intentを捨てず、最低限の成功記録へ確定するために使う。 */
+export function markAuditChangeCommitted(c: Context): void {
+  c.set(AUDIT_COMMITTED_KEY, true)
 }
 
 function decoded(value: string | undefined): string | null {
@@ -34,9 +48,6 @@ export function classifyActivity(method: string, pathname: string): Activity | n
   if (verb === 'PUT' && p[0] === 'notes' && p[1]) {
     return { action: 'note.update', resourceType: 'note', resourceId: decoded(p[1]) }
   }
-  if (verb === 'GET' && p[0] === 'notes' && p[1]) {
-    return { action: 'note.read', resourceType: 'note', resourceId: decoded(p[1]) }
-  }
   if (p[0] === 'tags') {
     if (verb === 'POST' && p.length === 1) return { action: 'tag.create', resourceType: 'tag', resourceId: null }
     if (verb === 'PUT' && p[1]) return { action: 'tag.update', resourceType: 'tag', resourceId: decoded(p[1]) }
@@ -45,7 +56,6 @@ export function classifyActivity(method: string, pathname: string): Activity | n
   if (p[0] === 'storage' && p[1]) {
     const connectionId = decoded(p[1])
     if (verb === 'PUT' && p[2] === 'readme') return { action: 'storage.readme.update', resourceType: 'connection', resourceId: connectionId }
-    if (verb === 'GET' && p[2] === 'readme') return { action: 'storage.readme.read', resourceType: 'connection', resourceId: connectionId }
     if ((verb === 'PUT' || verb === 'DELETE') && p[2] === 'favorites') {
       return { action: verb === 'PUT' ? 'storage.favorite.add' : 'storage.favorite.remove', resourceType: 'storage_path', resourceId: `${connectionId}/${decoded(p[3]) ?? ''}` }
     }
@@ -53,12 +63,6 @@ export function classifyActivity(method: string, pathname: string): Activity | n
       return { action: verb === 'PUT' ? 'storage.tag.assign' : 'storage.tag.remove', resourceType: 'storage_path', resourceId: connectionId }
     }
     if (verb === 'POST' && p[2] === 'scan') return { action: 'storage.scan.start', resourceType: 'connection', resourceId: connectionId }
-    if (verb === 'GET' && p[2] === 'preview' && ['raw', 'tar', 'tar-entry'].includes(p[3] ?? '')) {
-      return { action: `storage.download.${p[3]}`, resourceType: 'connection', resourceId: connectionId }
-    }
-    if (verb === 'GET' && p[2] === 'preview' && ['text', 'image'].includes(p[3] ?? '')) {
-      return { action: `storage.preview.${p[3]}`, resourceType: 'connection', resourceId: connectionId }
-    }
   }
   if (verb === 'PUT' && p[0] === 'settings' && p[1]) {
     return { action: 'setting.update', resourceType: 'setting', resourceId: decoded(p[1]) }
@@ -82,15 +86,18 @@ export function classifyActivity(method: string, pathname: string): Activity | n
       dedicatedSuccessAudit: true,
     }
   }
-  if (verb === 'GET' && p[0] === 'lineage') {
-    return { action: 'lineage.read', resourceType: 'lineage', resourceId: p.slice(1).map(decoded).join('/').slice(0, 1024) || null }
-  }
   // These routes already record successful mutations with richer details.
   if (p[0] === 'users' && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(verb)) {
     return { action: 'user.manage', resourceType: 'user', resourceId: decoded(p[1]), dedicatedSuccessAudit: true }
   }
   if (p[0] === 'service-accounts' && ['POST', 'PATCH', 'DELETE'].includes(verb)) {
     return { action: 'service_account.manage', resourceType: 'service_account', resourceId: decoded(p[1]), dedicatedSuccessAudit: true }
+  }
+  if (verb === 'PUT' && p[0] === 'profile') {
+    return { action: 'auth.profile.update', resourceType: 'user', resourceId: null, dedicatedSuccessAudit: true }
+  }
+  if (verb === 'POST' && p[0] === 'change-password') {
+    return { action: 'auth.password.change', resourceType: 'user', resourceId: null, dedicatedSuccessAudit: true }
   }
   return null
 }
@@ -115,16 +122,25 @@ export function auditActivity(audit: AuditWriter): MiddlewareHandler {
     try {
       await next()
     } catch (error) {
-      await audit.finish(intentId, 'failure', {
-        method: c.req.method, status: 500, state: 'completed',
-      }).catch(auditError => console.error('audit intent completion failed', auditError))
+      if (c.get(AUDIT_COMMITTED_KEY) === true) {
+        await audit.finish(intentId, 'success', {
+          method: c.req.method, state: 'committed', completionInterrupted: true,
+        }).catch(auditError => console.error('committed audit intent completion failed', auditError))
+      } else {
+        await audit.discard(intentId).catch(auditError => console.error('audit intent discard failed', auditError))
+      }
       throw error
     }
 
     const status = c.res.status
     const outcome = status >= 200 && status < 400 ? 'success'
       : status === 401 || status === 403 ? 'denied' : 'failure'
-    if (activity.dedicatedSuccessAudit && outcome === 'success') {
+    const changed = c.get(AUDIT_CHANGED_KEY) !== false
+    if (c.get(AUDIT_COMMITTED_KEY) === true && outcome !== 'success') {
+      await audit.finish(intentId, 'success', {
+        method: c.req.method, status, state: 'committed', completionInterrupted: true,
+      }).catch(error => console.error('committed audit intent completion failed', error))
+    } else if (outcome !== 'success' || !changed || activity.dedicatedSuccessAudit) {
       await audit.discard(intentId).catch(error => console.error('audit intent discard failed', error))
     } else {
       await audit.finish(intentId, outcome, {

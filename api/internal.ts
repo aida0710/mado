@@ -42,8 +42,6 @@ import { createLineageService, type StorageBindingResolver } from './lib/lineage
 import { mountLineageRoutes } from './routes/lineage.js'
 import { mountLineageCurationRoutes } from './routes/lineage-curation.js'
 import { requestLogger } from './lib/request-logger.js'
-import { AuthRateLimiter } from './lib/auth-rate-limit.js'
-import { requestMetadata } from './lib/request-metadata.js'
 
 // LAN ダッシュボード: 1 つのストリーム teardown 起因の未捕捉例外で全ユーザーの
 // リクエストを巻き添えにしない。root cause は都度直す前提の最後の砦 (ログは大声で)。
@@ -57,7 +55,6 @@ const storageFactory = createStorageFactory({ pools, crypto })
 const authEnabled = env.AUTH_MODE !== 'disabled'
 const authStore = createAuthStore(pools.rw)
 const audit = createAuditWriter(pools.rw)
-const deniedSessionLimiter = new AuthRateLimiter()
 const serviceAccounts = createServiceAccountStore(pools.rw)
 const authCleanupTimer = authEnabled ? setInterval(() => {
   void Promise.all([
@@ -138,16 +135,8 @@ if (authEnabled) {
   api.use('*', requireSession(authStore, {
     idleSeconds: env.AUTH_SESSION_IDLE_SECONDS,
     cookieName: env.AUTH_COOKIE_SECURE ? '__Host-mado_session' : 'mado_session',
-    onDenied: async (c, reason) => {
-      const metadata = requestMetadata(c)
-      if (!deniedSessionLimiter.consume(`session:denied:${metadata.ipAddress ?? 'unknown'}`, 30, 60_000)) return
-      await audit.write({
-        actor: { type: 'anonymous' }, action: 'auth.session.denied', outcome: 'denied',
-        details: { reason }, ...metadata,
-      })
-    },
   }))
-  // 認証済みrequestの拒否・失敗も残せるよう、権限checkより先に監査する。
+  // 成功した変更だけを残せるよう、権限checkより先に変更intentを開始する。
   api.use('*', auditActivity(audit))
   api.use('*', requirePasswordChangeComplete())
   // すべてのbuilt-in roleが持つbaseline。Roleなしuserへの意図しない公開を防ぐ。

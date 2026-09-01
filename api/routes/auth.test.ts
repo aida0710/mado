@@ -65,9 +65,21 @@ describe('auth routes', () => {
     expect(events.rows[0].details.changes).toEqual(expect.arrayContaining([
       expect.objectContaining({ field: 'username', before: 'local-user', after: 'renamed-user' }),
     ]))
+
+    await pools.rw.query(`DELETE FROM audit_events WHERE action = 'auth.profile.update'`)
+    const sameProfile = await app.request('/profile', {
+      method: 'PUT',
+      headers: { Cookie: cookie!.split(';')[0], 'Content-Type': 'application/json' },
+      body: JSON.stringify({ displayName: '新しい表示名', username: 'renamed-user', signatureName: '新しい署名' }),
+    })
+    expect(sameProfile.status).toBe(200)
+    const repeated = await pools.rw.query(
+      `SELECT id FROM audit_events WHERE action = 'auth.profile.update'`,
+    )
+    expect(repeated.rows).toEqual([])
   })
 
-  it('password誤りはgeneric 401でauditし、sessionを発行しない', async () => {
+  it('password誤りはgeneric 401で、変更監査やsessionを作らない', async () => {
     const res = await app.request('/local/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -79,7 +91,7 @@ describe('auth routes', () => {
     const events = await pools.rw.query(
       `SELECT outcome FROM audit_events WHERE action = 'auth.local.login'`,
     )
-    expect(events.rows).toEqual([{ outcome: 'denied' }])
+    expect(events.rows).toEqual([])
   })
 
   it('password失敗をUser単位で拒否せず正しいpasswordは通す', async () => {

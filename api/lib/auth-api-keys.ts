@@ -91,8 +91,14 @@ function toKey(row: KeyRow): ServiceAccountKey {
 
 export interface ServiceAccountStore {
   listAccounts(): Promise<ServiceAccount[]>
+  getAccount(id: string): Promise<ServiceAccount | null>
   createAccount(input: { name: string; description?: string; createdBy: string }): Promise<ServiceAccount>
   updateAccount(id: string, patch: { name?: string; description?: string; status?: 'active' | 'disabled' }): Promise<ServiceAccount | null>
+  updateAccountIfChanged(id: string, patch: { name?: string; description?: string; status?: 'active' | 'disabled' }): Promise<{
+    before: ServiceAccount
+    account: ServiceAccount
+    changedFields: string[]
+  } | null>
   listKeys(accountId: string): Promise<ServiceAccountKey[]>
   issueKey(input: {
     accountId: string
@@ -114,6 +120,15 @@ export function createServiceAccountStore(pool: Pool): ServiceAccountStore {
            FROM service_accounts ORDER BY name`,
       )
       return r.rows.map(toAccount)
+    },
+
+    async getAccount(id) {
+      const r = await pool.query<AccountRow>(
+        `SELECT id, name, description, status, created_at, updated_at
+           FROM service_accounts WHERE id = $1`,
+        [id],
+      )
+      return r.rows[0] ? toAccount(r.rows[0]) : null
     },
 
     async createAccount(input) {
@@ -158,6 +173,54 @@ export function createServiceAccountStore(pool: Pool): ServiceAccountStore {
         values,
       )
       return r.rows[0] ? toAccount(r.rows[0]) : null
+    },
+
+    async updateAccountIfChanged(id, patch) {
+      const client = await pool.connect()
+      try {
+        await client.query('BEGIN')
+        const current = await client.query<AccountRow>(
+          `SELECT id, name, description, status, created_at, updated_at
+             FROM service_accounts WHERE id = $1 FOR UPDATE`,
+          [id],
+        )
+        if (!current.rows[0]) {
+          await client.query('ROLLBACK')
+          return null
+        }
+        const before = toAccount(current.rows[0])
+        const normalized = {
+          name: patch.name?.trim(),
+          description: patch.description?.trim(),
+          status: patch.status,
+        }
+        const changedFields = (Object.keys(normalized) as Array<keyof typeof normalized>)
+          .filter(key => normalized[key] !== undefined && normalized[key] !== before[key])
+        if (changedFields.length === 0) {
+          await client.query('COMMIT')
+          return { before, account: before, changedFields: [] }
+        }
+        const fields: string[] = []
+        const values: unknown[] = []
+        for (const key of changedFields) {
+          values.push(normalized[key])
+          fields.push(`${key} = $${values.length}`)
+        }
+        values.push(id)
+        const updated = await client.query<AccountRow>(
+          `UPDATE service_accounts SET ${fields.join(', ')}, updated_at = now()
+            WHERE id = $${values.length}
+            RETURNING id, name, description, status, created_at, updated_at`,
+          values,
+        )
+        await client.query('COMMIT')
+        return { before, account: toAccount(updated.rows[0]), changedFields }
+      } catch (e) {
+        await client.query('ROLLBACK')
+        throw e
+      } finally {
+        client.release()
+      }
     },
 
     async listKeys(accountId) {

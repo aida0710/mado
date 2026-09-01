@@ -10,6 +10,7 @@ import type {
   RegistryManualLocationInput,
 } from '../lib/registry-client.js'
 import { RegistryClientError } from '../lib/registry-client.js'
+import { markAuditChangeCommitted } from '../lib/audit-activity.js'
 
 const Text = z.string().trim().min(1).max(1024)
 const OptionalText = z.string().trim().max(8192).optional()
@@ -143,6 +144,23 @@ export interface LineageCurationDeps {
   audit: AuditWriter
 }
 
+const datasetMutationTails = new Map<string, Promise<void>>()
+
+async function withDatasetMutationLock<T>(datasetId: string, operation: () => Promise<T>): Promise<T> {
+  const previous = datasetMutationTails.get(datasetId) ?? Promise.resolve()
+  let release!: () => void
+  const current = new Promise<void>(resolve => { release = resolve })
+  const tail = previous.then(() => current)
+  datasetMutationTails.set(datasetId, tail)
+  await previous
+  try {
+    return await operation()
+  } finally {
+    release()
+    if (datasetMutationTails.get(datasetId) === tail) datasetMutationTails.delete(datasetId)
+  }
+}
+
 function compact<T extends Record<string, unknown>>(input: T): Record<string, unknown> {
   return Object.fromEntries(Object.entries(input).filter(([, value]) => value !== undefined && value !== ''))
 }
@@ -234,19 +252,30 @@ export function mountLineageCurationRoutes(app: Hono, deps: LineageCurationDeps)
     if (!Uuid.safeParse(datasetId).success) return c.json({ error: 'Dataset IDを確認してください。' }, 400)
     const parsed = DatasetUpdate.safeParse(await c.req.json().catch(() => null))
     if (!parsed.success) return c.json({ error: '入力内容を確認してください。' }, 400)
-    try {
-      const result = await deps.registry.updateDataset(datasetId, parsed.data)
-      await deps.audit.write({
-        actor: { type: 'user', userId: principal.user.id },
-        action: 'lineage.dataset.update', outcome: 'success',
-        resourceType: 'dataset', resourceId: datasetId,
-        details: { changedFields: Object.keys(parsed.data) },
-        ...requestMetadata(c),
-      })
-      return c.json(result)
-    } catch (error) {
-      return mutationError(c, error)
-    }
+    return withDatasetMutationLock(datasetId, async () => {
+      try {
+        const current = await deps.registry.getDataset(datasetId)
+        const unchanged = Object.entries(parsed.data).every(([key, value]) => {
+          const existing = current[key as keyof typeof current]
+          return Array.isArray(value) && Array.isArray(existing)
+            ? JSON.stringify(value) === JSON.stringify(existing)
+            : value === existing
+        })
+        if (unchanged) return c.json(current)
+        const result = await deps.registry.updateDataset(datasetId, parsed.data)
+        markAuditChangeCommitted(c)
+        await deps.audit.write({
+          actor: { type: 'user', userId: principal.user.id },
+          action: 'lineage.dataset.update', outcome: 'success',
+          resourceType: 'dataset', resourceId: datasetId,
+          details: { changedFields: Object.keys(parsed.data) },
+          ...requestMetadata(c),
+        })
+        return c.json(result)
+      } catch (error) {
+        return mutationError(c, error)
+      }
+    })
   })
 
   app.post('/lineage/curation/datasets', async c => {
@@ -286,6 +315,7 @@ export function mountLineageCurationRoutes(app: Hono, deps: LineageCurationDeps)
         evidence_refs: parsed.data.evidenceRefs,
         submitted_by: principal.user.id,
       })
+      markAuditChangeCommitted(c)
       const dataset = result.dataset as Record<string, unknown> | undefined
       const version = result.version as Record<string, unknown> | undefined
       await deps.audit.write({
@@ -325,6 +355,7 @@ export function mountLineageCurationRoutes(app: Hono, deps: LineageCurationDeps)
         evidence_refs: parsed.data.evidenceRefs,
         submitted_by: principal.user.id,
       })
+      markAuditChangeCommitted(c)
       await deps.audit.write({
         actor: { type: 'user', userId: principal.user.id },
         action: 'lineage.location.register', outcome: 'success',
@@ -363,6 +394,7 @@ export function mountLineageCurationRoutes(app: Hono, deps: LineageCurationDeps)
         occurred_at: parsed.data.occurredAt,
         submitted_by: principal.user.id,
       })
+      markAuditChangeCommitted(c)
       await deps.audit.write({
         actor: { type: 'user', userId: principal.user.id },
         action: 'lineage.run.register', outcome: 'success',

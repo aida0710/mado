@@ -2,6 +2,7 @@ import type { Hono } from 'hono'
 import { z } from 'zod'
 import type { Pools } from '../db.js'
 import { getSessionPrincipal } from '../lib/rbac.js'
+import { markAuditNoChange } from '../lib/audit-activity.js'
 
 // 認証有効時の編集者はsession userのアカウント署名を正本にする。
 // editor request値は認証無効の開発・test環境との互換用。
@@ -57,6 +58,16 @@ export function mountNotesRoutes(app: Hono, deps: NotesDeps): void {
     const client = await deps.pools.rw.connect()
     try {
       await client.query('BEGIN')
+      // 新規slugにはrow lock対象がないため、slug単位のadvisory lockも取る。
+      await client.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [`note:${slug}`])
+      const current = await client.query<{ body: string }>(
+        `SELECT body FROM notes WHERE slug = $1 FOR UPDATE`, [slug],
+      )
+      if (current.rows[0]?.body === body) {
+        await client.query('COMMIT')
+        markAuditNoChange(c)
+        return c.json({ ok: true })
+      }
       await client.query(
         `INSERT INTO notes_history (slug, body, size_bytes, editor, actor_user_id)
          VALUES ($1, $2, $3, $4, $5)`,

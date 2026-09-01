@@ -1,5 +1,6 @@
 import type { Hono } from 'hono'
 import type { JobStore } from '../lib/jobs.js'
+import { markAuditNoChange } from '../lib/audit-activity.js'
 
 // ジョブの参照とキャンセル (spec: 2026-08-18-job-queue-design.md)。
 // 投入は種別ごとのエンドポイントが行うので、ここには作らない。
@@ -31,7 +32,7 @@ export function mountJobRoutes(app: Hono, deps: JobRoutesDeps): void {
   app.post('/jobs/:id/cancel', async c => {
     const id = Number(c.req.param('id'))
     if (!Number.isInteger(id)) return c.json({ error: 'invalid id' }, 400)
-    await deps.store.cancel(id)
+    if (!await deps.store.cancel(id)) markAuditNoChange(c)
     return c.json({ ok: true })
   })
 }
