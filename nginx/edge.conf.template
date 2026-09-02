@@ -20,6 +20,17 @@ server {
 server {
     listen 80;
     listen [::]:80;
+    server_name ${MADO_LEGACY_HOSTNAME};
+    server_tokens off;
+
+    location / {
+        return 308 https://${MADO_HOSTNAME}$request_uri;
+    }
+}
+
+server {
+    listen 80;
+    listen [::]:80;
     server_name ${MADO_HOSTNAME};
     server_tokens off;
 

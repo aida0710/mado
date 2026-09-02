@@ -53,6 +53,7 @@ Browser hostnameをpublic DNSでprivate IPv4へ向ける場合、Let's Encrypt�
 ```dotenv
 MADO_HOSTNAME=mado.internal.example
 MADO_API_HOSTNAME=mado-api.internal.example
+MADO_LEGACY_HOSTNAME=mado.mdx.internel
 ALLOWED_ORIGINS=https://mado.internal.example
 AUTH_COOKIE_SECURE=true
 ```
@@ -76,6 +77,7 @@ docker compose -f compose.mdx.yaml ps edge
 docker compose -f compose.mdx.yaml exec -T edge nginx -t
 curl -I "https://$MADO_HOSTNAME/"
 curl -I "http://$MADO_HOSTNAME/"
+curl -I "http://$MADO_LEGACY_HOSTNAME/"
 curl -I "https://$MADO_API_HOSTNAME/"
 curl -X POST "https://$MADO_API_HOSTNAME/api/openlineage/v1/lineage"
 sudo ufw status verbose
@@ -84,4 +86,7 @@ systemctl status certbot.timer
 
 Browser hostnameはHTTPS 200、HTTP 308、HSTSありです。公開API hostnameは対象POSTが
 Service Account keyなしで401、その他のpath/methodが404、HTTPは同じhostnameのHTTPSへ308です。
-未知Hostは421とし、`/.well-known/acme-challenge/`以外のHTTP本文を配信しません。
+`MADO_LEGACY_HOSTNAME`へのHTTPアクセスは、pathとqueryを保ったまま
+`https://$MADO_HOSTNAME`へ308 redirectします。`.internel`のような内部専用名には
+公開CAの証明書を発行できないため、legacy hostnameのHTTPS redirectは提供しません。
+それ以外の未知Hostは421とし、`/.well-known/acme-challenge/`以外のHTTP本文を配信しません。
