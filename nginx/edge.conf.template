@@ -119,6 +119,10 @@ server {
         proxy_set_header Connection "";
         proxy_connect_timeout 5s;
         proxy_read_timeout 300s;
+        # MP4/audioなどのRange応答をedgeの32 MiB tmpfsへ書き出さず、そのまま
+        # clientへ流す。bufferすると大きな206応答でpwritevが失敗し、
+        # Content-Lengthより短い本文が返ってbrowser側で再生不能になる。
+        proxy_buffering off;
     }
 }
 
