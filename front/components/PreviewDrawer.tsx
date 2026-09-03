@@ -6,6 +6,7 @@ import { useCapabilities } from '../lib/useCapabilities'
 import { PreviewText } from './PreviewText'
 import { PreviewImage } from './PreviewImage'
 import { PreviewAudio } from './PreviewAudio'
+import { PreviewVideo } from './PreviewVideo'
 import { PreviewArchive } from './PreviewArchive'
 
 interface Props {
@@ -121,6 +122,9 @@ export function PreviewDrawer({
         {kind === 'image' && caps.preview && <PreviewImage connId={connId} bucket={bucket} k={k} />}
         {kind === 'audio' && caps.preview && (
           <PreviewAudio key={`${connId}|${bucket}|${k}`} connId={connId} bucket={bucket} k={k} />
+        )}
+        {kind === 'video' && caps.preview && (
+          <PreviewVideo key={`${connId}|${bucket}|${k}`} connId={connId} bucket={bucket} k={k} />
         )}
         {kind === 'archive' && caps.archive && (
           <PreviewArchive

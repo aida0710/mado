@@ -8,6 +8,7 @@ import { useCapabilities } from '../lib/useCapabilities'
 import { CopyablePath } from './CopyablePath'
 import { PreviewImage } from './PreviewImage'
 import { PreviewAudio } from './PreviewAudio'
+import { PreviewVideo } from './PreviewVideo'
 import { PreviewArchive } from './PreviewArchive'
 import { UnsupportedPreview } from './UnsupportedPreview'
 
@@ -66,7 +67,10 @@ function PinnedPreviewBody({ item }: { item: PinnedItem }) {
     if (kind === 'image') {
       return <PinnedEntryImage connId={connId} bucket={bucket} archiveKey={key} entry={entryPath} />
     }
-    // 画像・音声以外はすべてテキスト表示に落とし、中身で判定する。
+    if (kind === 'video') {
+      return <PreviewVideo connId={connId} bucket={bucket} k={key} entryPath={entryPath} />
+    }
+    // 画像・音声・動画以外はすべてテキスト表示に落とし、中身で判定する。
     // head モードで先頭だけ抽出させる。バイナリエントリのために 100MB を
     // サーバーで解凍させない (レスポンスも 64KB で済む)。
     return (
@@ -80,6 +84,7 @@ function PinnedPreviewBody({ item }: { item: PinnedItem }) {
   const kind = classify(key)
   if (kind === 'image')   return <PreviewImage connId={connId} bucket={bucket} k={key} />
   if (kind === 'audio')   return <PreviewAudio connId={connId} bucket={bucket} k={key} />
+  if (kind === 'video')   return <PreviewVideo connId={connId} bucket={bucket} k={key} />
   if (kind === 'archive') return <PreviewArchive connId={connId} bucket={bucket} k={key} />
   return <PinnedTextBody name={key} url={api.textPreviewUrl(connId, bucket, key)} />
 }

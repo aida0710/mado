@@ -151,7 +151,7 @@ export const CAPABILITY_UI: ReadonlyArray<{
 }> = [
   { key: 'list',             label: 'バケット / オブジェクトの一覧',
     help: '接続の基本機能。オフにするとこの接続では何も見られなくなります (完全に凍結したいとき用)。' },
-  { key: 'preview',          label: 'ファイルのプレビュー (テキスト / 画像 / 音声)',
+  { key: 'preview',          label: 'ファイルのプレビュー (テキスト / 画像 / 音声 / 動画)',
     help: 'ファイル本体を読みます。Deep Archive など GetObject が失敗する / 課金されるバケットではオフに。' },
   { key: 'download',         label: 'ファイルのダウンロード',
     help: '行メニューやプレビューの DL ボタン。オフにするとボタンが消え、共有 URL を直接叩いても 403 になります。' },

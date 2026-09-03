@@ -9,6 +9,7 @@ import { TEXT_HEAD_BYTES } from '../lib/textSniff'
 import { useSniffedText } from '../lib/useSniffedText'
 import { CopyMenu, type MenuItem } from './CopyMenu'
 import { PreviewAudio } from './PreviewAudio'
+import { PreviewVideo } from './PreviewVideo'
 import { UnsupportedPreview } from './UnsupportedPreview'
 
 interface Props {
@@ -126,9 +127,20 @@ export function TarEntryModal({ connId, bucket, archiveKey, entry, onClose }: Pr
               entryPath={entry.name}
             />
           )}
-          {/* 画像 / 音声以外はすべてテキストとして開こうとする。
+          {kind === 'video' && (
+            <PreviewVideo
+              key={`${connId}|${bucket}|${archiveKey}|${entry.name}`}
+              connId={connId}
+              bucket={bucket}
+              k={archiveKey}
+              entryPath={entry.name}
+            />
+          )}
+          {/* 画像 / 音声 / 動画以外はすべてテキストとして開こうとする。
               中身がバイナリなら TextBody が「プレビュー非対応」を出す。 */}
-          {kind !== 'image' && kind !== 'audio' && <TextBody url={headUrl} name={entry.name} />}
+          {kind !== 'image' && kind !== 'audio' && kind !== 'video' && (
+            <TextBody url={headUrl} name={entry.name} />
+          )}
         </div>
       </div>
     </div>

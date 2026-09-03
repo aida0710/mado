@@ -23,7 +23,7 @@ export type ListObjectsVersion = 'v1' | 'v2'
 export interface Capabilities {
   /** バケット / オブジェクトの一覧 (`/buckets`, `/list`)。 */
   list: boolean
-  /** テキスト / 画像 / 音声のプレビュー (`/preview/text|image|audio`)。 */
+  /** テキスト / 画像 / 音声 / 動画のプレビュー (`/preview/text|image|audio|video`)。 */
   preview: boolean
   /** 元ファイルのダウンロード (`/preview/raw`)。 */
   download: boolean

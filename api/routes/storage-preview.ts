@@ -56,6 +56,12 @@ const AUDIO_MIME: Record<string, string> = {
   wma:  'audio/x-ms-wma',
 }
 
+// front/lib/api/mime.ts の video 拡張子集合と対応させること。
+// 動画はブラウザが途中から読み込めるよう、audio と同じく Range を透過する。
+const VIDEO_MIME: Record<string, string> = {
+  mp4: 'video/mp4',
+}
+
 function ext(key: string): string {
   const m = /\.([a-z0-9]+)$/i.exec(key)
   return m ? m[1].toLowerCase() : ''
@@ -81,6 +87,7 @@ function entryContentType(name: string): string {
   const e = ext(name)
   if (IMAGE_MIME[e]) return IMAGE_MIME[e]
   if (AUDIO_MIME[e]) return AUDIO_MIME[e]
+  if (VIDEO_MIME[e]) return VIDEO_MIME[e]
   if (e === 'json') return 'application/json; charset=utf-8'
   if (TEXT_EXT.has(e)) return 'text/plain; charset=utf-8'
   return 'application/octet-stream'
@@ -247,6 +254,44 @@ export function mountStoragePreviewRoutes(app: Hono, deps: StoragePreviewDeps): 
       return storageError(c, e)
     }
     const mime = AUDIO_MIME[ext(key)] ?? 'application/octet-stream'
+    const headers: Record<string, string> = {
+      'Content-Type': mime,
+      'Accept-Ranges': 'bytes',
+      'Cache-Control': 'private, no-store',
+    }
+    if (contentLength != null) headers['Content-Length'] = String(contentLength)
+    if (contentRange) headers['Content-Range'] = contentRange
+    const status = contentRange ? 206 : 200
+    return new Response(
+      Readable.toWeb(stream) as unknown as ReadableStream<Uint8Array>,
+      { status, headers },
+    )
+  })
+
+  app.get('/storage/:connId/preview/video', async c => {
+    const r0 = await resolveStorageOrFail(c, deps.getStorage)
+    if (r0 instanceof Response) return r0
+    const storage = r0
+    const bucket = c.req.query('bucket')
+    const key = c.req.query('key')
+    if (!bucket || !key) {
+      return c.json({ error: 'bucket and key required' }, 400)
+    }
+    const range = c.req.header('Range')
+    let stream: Readable
+    let contentLength: number | undefined
+    let contentRange: string | undefined
+    try {
+      const r = await storage.send(new GetObjectCommand({
+        Bucket: bucket, Key: key, Range: range,
+      }))
+      stream = r.Body as unknown as Readable
+      contentLength = r.ContentLength
+      contentRange = r.ContentRange
+    } catch (e) {
+      return storageError(c, e)
+    }
+    const mime = VIDEO_MIME[ext(key)] ?? 'application/octet-stream'
     const headers: Record<string, string> = {
       'Content-Type': mime,
       'Accept-Ranges': 'bytes',

@@ -14,6 +14,11 @@ vi.mock('../lib/api/client', () => ({
 vi.mock('../lib/clipboard', () => ({
   copyToClipboard: vi.fn(async () => true),
 }))
+vi.mock('./PreviewVideo', () => ({
+  PreviewVideo: ({ entryPath }: { entryPath?: string }) => (
+    <div data-testid="preview-video">video:{entryPath}</div>
+  ),
+}))
 
 import { api } from '../lib/api/client'
 import { copyToClipboard } from '../lib/clipboard'
@@ -66,6 +71,14 @@ describe('TarEntryModal - スニッフ', () => {
     vi.mocked(api.readHead).mockResolvedValue(new Uint8Array([0x93, 0x4e, 0x00]))
     renderEntry('feat.npy')
     expect(await screen.findByText(/プレビュー非対応/)).toBeInTheDocument()
+  })
+})
+
+describe('TarEntryModal - MP4', () => {
+  it('MP4エントリを動画プレビューで開く', () => {
+    renderEntry('clip.mp4')
+    expect(screen.getByTestId('preview-video')).toHaveTextContent('video:clip.mp4')
+    expect(api.readHead).not.toHaveBeenCalled()
   })
 })
 

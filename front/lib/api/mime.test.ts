@@ -19,14 +19,16 @@ describe('classify - その他種別は影響を受けない', () => {
     ['a.png', 'image'],
     ['a.tar.xz', 'archive'],
     ['a.bin', 'unknown'],
-    ['a.m4v', 'unknown'], // 動画は audio に巻き込まない
+    ['a.mp4', 'video'],
+    ['a.m4v', 'unknown'],
   ] as const)('%s -> %s', (key, kind) => {
     expect(classify(key)).toBe(kind)
   })
 
-  it('tar エントリでは archive を unknown に落とすが audio は残す', () => {
+  it('tar エントリではarchiveをunknownに落とすがaudioとvideoは残す', () => {
     expect(classifyEntry('inner.tar')).toBe('unknown')
     expect(classifyEntry('clip.m4a')).toBe('audio')
+    expect(classifyEntry('clip.MP4')).toBe('video')
   })
 })
 

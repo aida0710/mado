@@ -10,6 +10,7 @@ import type { Capabilities, Connection } from '../lib/api/types'
 vi.mock('./PreviewText',    () => ({ PreviewText:    () => <div>text-preview</div> }))
 vi.mock('./PreviewImage',   () => ({ PreviewImage:   () => <div>image-preview</div> }))
 vi.mock('./PreviewAudio',   () => ({ PreviewAudio:   () => <div>audio-preview</div> }))
+vi.mock('./PreviewVideo',   () => ({ PreviewVideo:   () => <div>video-preview</div> }))
 vi.mock('./PreviewArchive', () => ({ PreviewArchive: () => <div>archive-preview</div> }))
 
 afterEach(() => vi.restoreAllMocks())
@@ -47,6 +48,17 @@ describe('PreviewDrawer の権限による出し分け', () => {
   it('プレビューが無効なら本体を出さず理由を表示する', () => {
     renderDrawer({ preview: false })
     expect(screen.queryByText('text-preview')).not.toBeInTheDocument()
+    expect(screen.getByText(/ファイルのプレビュー/)).toBeInTheDocument()
+  })
+
+  it('MP4は動画プレビューを表示する', () => {
+    renderDrawer({}, 'a/clip.mp4')
+    expect(screen.getByText('video-preview')).toBeInTheDocument()
+  })
+
+  it('previewが無効ならMP4も開けない', () => {
+    renderDrawer({ preview: false }, 'a/clip.mp4')
+    expect(screen.queryByText('video-preview')).not.toBeInTheDocument()
     expect(screen.getByText(/ファイルのプレビュー/)).toBeInTheDocument()
   })
 

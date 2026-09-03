@@ -15,6 +15,7 @@ vi.mock('../lib/api/client', () => ({
     textPreviewUrl: vi.fn(() => 'http://x/text'),
     tarEntryUrl: vi.fn(() => 'http://x/entry'),
     imageUrl: vi.fn(() => 'http://x/image'),
+    videoUrl: vi.fn(() => 'http://x/video'),
     readHead: vi.fn(async () => new Uint8Array(0)),
   },
 }))
@@ -24,6 +25,12 @@ vi.mock('../lib/api/client', () => ({
 vi.mock('./PreviewAudio', () => ({
   PreviewAudio: ({ k, entryPath }: { k: string; entryPath?: string }) => (
     <div data-testid="preview-audio">audio:{k}{entryPath ? `>${entryPath}` : ''}</div>
+  ),
+}))
+
+vi.mock('./PreviewVideo', () => ({
+  PreviewVideo: ({ k, entryPath }: { k: string; entryPath?: string }) => (
+    <div data-testid="preview-video">video:{k}{entryPath ? `>${entryPath}` : ''}</div>
   ),
 }))
 
@@ -61,6 +68,18 @@ describe('PinnedPreviewCard - kind branching', () => {
   it('renders PreviewAudio with entryPath for a tar-entry audio pin', () => {
     render(<PinnedPreviewCard item={item({ key: 'shard.tar', entryPath: 'u1.wav', id: 'c|b|shard.tar|u1.wav' })} />)
     expect(screen.getByTestId('preview-audio')).toHaveTextContent('audio:shard.tar>u1.wav')
+  })
+
+  it('renders PreviewVideo for a direct MP4 file', () => {
+    render(<PinnedPreviewCard item={item({ key: 'clip.mp4' })} />)
+    expect(screen.getByTestId('preview-video')).toHaveTextContent('video:clip.mp4')
+  })
+
+  it('renders PreviewVideo with entryPath for a tar-entry MP4 pin', () => {
+    render(<PinnedPreviewCard item={item({
+      key: 'shard.tar', entryPath: 'clip.mp4', id: 'c|b|shard.tar|clip.mp4',
+    })} />)
+    expect(screen.getByTestId('preview-video')).toHaveTextContent('video:shard.tar>clip.mp4')
   })
 
   it('renders a lightweight tarEntryText body for a tar-entry text pin', async () => {

@@ -231,6 +231,51 @@ describe('GET /storage/:connId/preview/audio', () => {
   })
 })
 
+describe('GET /storage/:connId/preview/video', () => {
+  it('MP4のRange headerをstorageへ渡して206を返す', async () => {
+    storageMock.on(GetObjectCommand, {
+      Bucket: 'b', Key: 'clip.mp4', Range: 'bytes=100-199',
+    }).resolves({
+      Body: Readable.from(Buffer.alloc(100)) as never,
+      ContentLength: 100,
+      ContentRange: 'bytes 100-199/1000',
+    })
+    const res = await app.request(`/storage/${TEST_CONN_ID}/preview/video?bucket=b&key=clip.mp4`, {
+      headers: { Range: 'bytes=100-199' },
+    })
+    expect(res.status).toBe(206)
+    expect(res.headers.get('content-range')).toBe('bytes 100-199/1000')
+    expect(res.headers.get('content-length')).toBe('100')
+    expect(res.headers.get('content-type')).toBe('video/mp4')
+    expect(res.headers.get('accept-ranges')).toBe('bytes')
+  })
+
+  it('RangeなしではMP4全体を200でstreamする', async () => {
+    storageMock.on(GetObjectCommand).resolves({
+      Body: Readable.from(Buffer.from('full')) as never,
+      ContentLength: 4,
+    })
+    const res = await app.request(`/storage/${TEST_CONN_ID}/preview/video?bucket=b&key=clip.mp4`)
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-type')).toBe('video/mp4')
+    expect(res.headers.get('accept-ranges')).toBe('bytes')
+    expect(res.headers.get('content-range')).toBeNull()
+  })
+
+  it('bucketまたはkeyが無ければ400', async () => {
+    const res = await app.request(`/storage/${TEST_CONN_ID}/preview/video?bucket=b`)
+    expect(res.status).toBe(400)
+  })
+
+  it('storageにobjectが無ければ404', async () => {
+    storageMock.on(GetObjectCommand).rejects(
+      new NoSuchKey({ message: 'no', $metadata: {} }),
+    )
+    const res = await app.request(`/storage/${TEST_CONN_ID}/preview/video?bucket=b&key=missing.mp4`)
+    expect(res.status).toBe(404)
+  })
+})
+
 interface NdjsonEntryLine { entry: { name: string; size: number; type: string } }
 interface NdjsonDoneLine {
   done: { truncated: boolean; hasMore: boolean; offset: number; limit: number }
@@ -488,6 +533,13 @@ describe('GET /storage/:connId/preview/tar-entry', () => {
     expect(res.headers.get('Content-Type')).toBe('text/plain; charset=utf-8')
     expect(res.headers.get('X-Preview-Truncated')).toBeNull()
     expect((await res.arrayBuffer()).byteLength).toBe(100)
+  })
+
+  it('MP4エントリをvideo/mp4で返す', async () => {
+    serveTar(await packOneEntryTar('clip.mp4', 100))
+    const res = await entryApp.request(entryUrl('clip.mp4'))
+    expect(res.status).toBe(200)
+    expect(res.headers.get('Content-Type')).toBe('video/mp4')
   })
 
   it('maxBytes 無しで上限を超えるエントリは 413', async () => {

@@ -1,9 +1,9 @@
 // 拡張子から判別できる種別だけを返す。テキストかどうかは拡張子では決めない —
 // 中身の先頭バイトを見て決める (front/lib/textSniff.ts)。拡張子リストを持つと
 // README / Dockerfile / .py / .lab … と際限なく足し続けることになるため。
-// image / audio / archive はサーバーが拡張子から Content-Type を決める
-// (api/routes/storage-preview.ts の IMAGE_MIME / AUDIO_MIME) ので拡張子判定のまま。
-export type PreviewKind = 'image' | 'audio' | 'archive' | 'unknown'
+// image / audio / video / archive はサーバーが拡張子からContent-Typeを決めるので
+// 拡張子判定のまま。
+export type PreviewKind = 'image' | 'audio' | 'video' | 'archive' | 'unknown'
 
 export function classify(key: string): PreviewKind {
   const k = key.toLowerCase()
@@ -22,6 +22,7 @@ export function classify(key: string): PreviewKind {
     'm4a', 'm4b', 'aac', 'weba',
     'aiff', 'aif', 'wma',
   ].includes(ext)) return 'audio'
+  if (ext === 'mp4') return 'video'
   return 'unknown'
 }
 
