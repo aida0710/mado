@@ -45,6 +45,8 @@ import { createLineageService, type StorageBindingResolver } from './lib/lineage
 import { mountLineageRoutes } from './routes/lineage.js'
 import { mountLineageCurationRoutes } from './routes/lineage-curation.js'
 import { requestLogger } from './lib/request-logger.js'
+import { createCapacityStore } from './lib/capacity-store.js'
+import { mountStorageCapacityRoutes } from './routes/storage-capacity.js'
 
 // LAN ダッシュボード: 1 つのストリーム teardown 起因の未捕捉例外で全ユーザーの
 // リクエストを巻き添えにしない。root cause は都度直す前提の最後の砦 (ログは大声で)。
@@ -78,6 +80,7 @@ const jobStore = createJobStore(pools)
 // 料金カタログ (同梱 → DB キャッシュ → プロセス内メモリの 3 層)。
 // 取得そのものは worker の pricing.refresh ジョブが行う。
 const pricingStore = createPricingStore(pools)
+const capacityStore = createCapacityStore(pools)
 
 const app = new Hono()
 app.use('*', requestLogger())
@@ -158,6 +161,7 @@ if (authEnabled) {
   api.on(['PUT', 'DELETE'], '/storage/:connId/tags', requirePermission('content:write'))
   api.on('PUT', '/settings/:key', requirePermission('settings:manage'))
   api.on('POST', '/storage/:connId/scan', requirePermission('jobs:operate'))
+  api.on('PUT', '/storage/:connId/capacity/tracking', requirePermission('connections:manage'))
   api.on('POST', '/pricing/refresh', requirePermission('jobs:operate'))
   api.on('POST', '/jobs/:id/cancel', requirePermission('jobs:operate'))
   api.use('/lineage/*', requirePermission('lineage:read'))
@@ -176,6 +180,8 @@ if (authEnabled) {
 const cap = (k: Capability) => requireCapability(k, storageFactory.getConnectionConfig)
 api.use('/storage/:connId/buckets',           cap('list'))
 api.use('/storage/:connId/list',              cap('list'))
+api.use('/storage/:connId/capacity',          cap('list'))
+api.use('/storage/:connId/capacity/*',        cap('list'))
 api.use('/storage/:connId/preview/text',      cap('preview'))
 api.use('/storage/:connId/preview/image',     cap('preview'))
 api.use('/storage/:connId/preview/audio',     cap('preview'))
@@ -222,6 +228,11 @@ mountJobRoutes(api, {
     : undefined,
 })
 mountStorageScanRoutes(api, { store: jobStore, getConnectionConfig: storageFactory.getConnectionConfig })
+mountStorageCapacityRoutes(api, {
+  store: capacityStore,
+  pools,
+  getConnectionConfig: storageFactory.getConnectionConfig,
+})
 // 見積もりは S3 を叩かないので cap() のガードには載せない (上のコメント参照)。
 mountStorageEstimateRoutes(api, { pools, store: jobStore, pricing: pricingStore })
 mountPricingRoutes(api, { pools, store: jobStore, pricing: pricingStore })

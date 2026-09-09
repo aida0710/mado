@@ -4,6 +4,7 @@ import type { GetStorage } from '../routes/_connId.js'
 import type { ConnectionConfig } from '../storage.js'
 import type { JobContext, JobHandler } from './job-runner.js'
 import { createScanAccumulator } from './scan.js'
+import type { CapacityStore } from './capacity-store.js'
 
 // storage.scan ハンドラ (spec: 2026-08-18-directory-scan-design.md)。
 //
@@ -24,62 +25,78 @@ const PAGE_SIZE = 1000
 export interface ScanHandlerDeps {
   getStorage: GetStorage
   getConnectionConfig: (connId: string) => Promise<ConnectionConfig>
+  capacity?: Pick<CapacityStore, 'recordSuccess' | 'recordPartial' | 'recordError'>
 }
 
 export function createScanHandler(deps: ScanHandlerDeps): JobHandler {
   return async (ctx: JobContext) => {
     const { connId, bucket, prefix } = Payload.parse(ctx.payload)
-    const storage = await deps.getStorage(connId)
-    const config = await deps.getConnectionConfig(connId)
-    const useV1 = config.listObjectsVersion === 'v1'
+    const isBucketRoot = prefix === ''
+    try {
+      const storage = await deps.getStorage(connId)
+      const config = await deps.getConnectionConfig(connId)
+      const useV1 = config.listObjectsVersion === 'v1'
 
-    const acc = createScanAccumulator(prefix)
-    let cursor: string | undefined
-    let partial = false
+      const acc = createScanAccumulator(prefix)
+      let cursor: string | undefined
+      let partial = false
 
-    for (;;) {
-      if (ctx.signal.aborted) break
+      for (;;) {
+        if (ctx.signal.aborted) break
 
-      let contents: Array<{ Key?: string; Size?: number }>
-      let next: string | undefined
-      try {
-        if (useV1) {
-          const out = await storage.send(new ListObjectsCommand({
-            Bucket: bucket, Prefix: prefix, Marker: cursor, MaxKeys: PAGE_SIZE,
+        let contents: Array<{ Key?: string; Size?: number }>
+        let next: string | undefined
+        try {
+          if (useV1) {
+            const out = await storage.send(new ListObjectsCommand({
+              Bucket: bucket, Prefix: prefix, Marker: cursor, MaxKeys: PAGE_SIZE,
+            }))
+            contents = out.Contents ?? []
+            // V1 は Delimiter 無しだと NextMarker を返さないことがあるので、
+            // 最後のキーで marker フォールバックする (s3cmd と同じ手法)。
+            next = out.IsTruncated
+              ? out.NextMarker ?? contents[contents.length - 1]?.Key
+              : undefined
+          } else {
+            const out = await storage.send(new ListObjectsV2Command({
+              Bucket: bucket, Prefix: prefix, ContinuationToken: cursor, MaxKeys: PAGE_SIZE,
+            }))
+            contents = out.Contents ?? []
+            next = out.IsTruncated ? out.NextContinuationToken : undefined
+          }
+        } catch (e) {
+          // ここまでの集計は返す。数十万キー数えた後に 1 ページの失敗で
+          // 全部捨てるのは損なので。
+          console.error(JSON.stringify({
+            ev: 'storage.scan.page_failed', connId, bucket, prefix,
+            scanned: acc.count(), error: (e as Error).message,
           }))
-          contents = out.Contents ?? []
-          // V1 は Delimiter 無しだと NextMarker を返さないことがあるので、
-          // 最後のキーで marker フォールバックする (s3cmd と同じ手法)。
-          next = out.IsTruncated
-            ? out.NextMarker ?? contents[contents.length - 1]?.Key
-            : undefined
-        } else {
-          const out = await storage.send(new ListObjectsV2Command({
-            Bucket: bucket, Prefix: prefix, ContinuationToken: cursor, MaxKeys: PAGE_SIZE,
-          }))
-          contents = out.Contents ?? []
-          next = out.IsTruncated ? out.NextContinuationToken : undefined
+          partial = true
+          break
         }
-      } catch (e) {
-        // ここまでの集計は返す。数十万キー数えた後に 1 ページの失敗で
-        // 全部捨てるのは損なので。
-        console.error(JSON.stringify({
-          ev: 'storage.scan.page_failed', connId, bucket, prefix,
-          scanned: acc.count(), error: (e as Error).message,
-        }))
-        partial = true
-        break
+
+        for (const o of contents) {
+          if (o.Key) acc.add({ key: o.Key, size: o.Size ?? 0 })
+        }
+        ctx.setProgress({ kind: 'count', done: acc.count(), label: '件を走査' })
+
+        if (!next) break
+        cursor = next
       }
 
-      for (const o of contents) {
-        if (o.Key) acc.add({ key: o.Key, size: o.Size ?? 0 })
+      const result = acc.result(partial)
+      if (isBucketRoot && !ctx.signal.aborted && deps.capacity) {
+        if (partial) await deps.capacity.recordPartial(connId, bucket)
+        else await deps.capacity.recordSuccess(ctx.jobId, connId, bucket, result)
       }
-      ctx.setProgress({ kind: 'count', done: acc.count(), label: '件を走査' })
-
-      if (!next) break
-      cursor = next
+      return result
+    } catch (error) {
+      if (isBucketRoot && !ctx.signal.aborted && deps.capacity) {
+        await deps.capacity.recordError(connId, bucket, error).catch(recordError => {
+          console.error('capacity status update failed', recordError)
+        })
+      }
+      throw error
     }
-
-    return acc.result(partial)
   }
 }

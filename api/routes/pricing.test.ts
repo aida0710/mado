@@ -34,7 +34,7 @@ interface PricingBody {
 
 beforeEach(async () => {
   today = new Date('2026-08-22T00:00:00Z')
-  await pools.rw.query('TRUNCATE jobs RESTART IDENTITY')
+  await pools.rw.query('TRUNCATE jobs RESTART IDENTITY CASCADE')
   await pools.rw.query('TRUNCATE pricing_cache')
   await pools.rw.query('DELETE FROM app_settings WHERE key = $1', ['pricing_refresh_days'])
 })

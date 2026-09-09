@@ -19,6 +19,10 @@ describe('audit activity', () => {
     expect(classifyActivity('GET', '/api/internal/storage/c1/readme')).toBeNull()
     expect(classifyActivity('GET', '/api/internal/lineage/datasets/d1')).toBeNull()
     expect(classifyActivity('GET', '/api/internal/storage/c1/list')).toBeNull()
+    expect(classifyActivity('GET', '/api/internal/storage/c1/capacity')).toBeNull()
+    expect(classifyActivity('PUT', '/api/internal/storage/c1/capacity/tracking')).toMatchObject({
+      action: 'storage.capacity.tracking.update', resourceId: 'c1',
+    })
     expect(classifyActivity('GET', '/api/internal/audit-events')).toBeNull()
     expect(classifyActivity('POST', '/api/internal/lineage/curation/datasets')).toMatchObject({
       action: 'lineage.dataset.register', dedicatedSuccessAudit: true,

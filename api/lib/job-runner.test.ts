@@ -36,6 +36,14 @@ describe('createJobRunner', () => {
     expect(calls.finish).toEqual([[1, { echoed: { a: 1 } }]])
   })
 
+  it('ハンドラへ永続ジョブIDを渡す', async () => {
+    const { store } = fakeStore({ id: 42, kind: 'k', payload: null })
+    let received = 0
+    const runner = createJobRunner({ store, handlers: { k: async ctx => { received = ctx.jobId } } })
+    await runner.runOnce()
+    expect(received).toBe(42)
+  })
+
   it('ハンドラが throw したら fail にメッセージが渡る', async () => {
     const { store, calls } = fakeStore({ id: 1, kind: 'k', payload: {} })
     const handler: JobHandler = async () => { throw new Error('S3 が落ちています') }

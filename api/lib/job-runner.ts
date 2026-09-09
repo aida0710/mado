@@ -5,6 +5,8 @@ import type { JobProgress, JobStore } from './jobs.js'
 // 制御フローと、進捗の間引き・キャンセルの伝播だけを持つ。
 
 export interface JobContext {
+  /** 永続ジョブID。副作用を重複排除するときに使う。 */
+  jobId: number
   payload: unknown
   /** canceled になったら abort される。長い処理はこれを見て抜ける。 */
   signal: AbortSignal
@@ -48,6 +50,7 @@ export function createJobRunner(deps: JobRunnerDeps): { runOnce(): Promise<boole
       let lastCancelCheckAt = -Infinity
 
       const ctx: JobContext = {
+        jobId: job.id,
         payload: job.payload,
         signal: ac.signal,
         setProgress(p) {

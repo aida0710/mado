@@ -8,6 +8,31 @@ export const ListBuckets = z.object({
   buckets: z.array(Bucket),
 })
 
+export const CapacityTracking = z.object({
+  enabled: z.boolean(),
+  intervalSeconds: z.number().int(),
+  nextRunAt: z.string().nullable(),
+  lastAttemptAt: z.string().nullable(),
+  lastSuccessAt: z.string().nullable(),
+  lastStatus: z.enum(['waiting', 'queued', 'success', 'partial', 'error', 'paused']).nullable(),
+  lastError: z.string().nullable(),
+  consecutiveFailures: z.number().int().nonnegative(),
+})
+export const CapacityHistory = z.object({
+  connectionId: z.string(),
+  bucket: z.string(),
+  days: z.number().int(),
+  capacityBytes: z.number().positive().nullable(),
+  tracking: CapacityTracking,
+  points: z.array(z.object({
+    totalBytes: z.number().nonnegative(),
+    objectCount: z.number().int().nonnegative(),
+    collectedAt: z.string(),
+  })),
+})
+export type CapacityHistory = z.infer<typeof CapacityHistory>
+export const CapacityTrackingResponse = z.object({ tracking: CapacityTracking })
+
 export const StorageFile = z.object({
   key: z.string(),
   size: z.number(),

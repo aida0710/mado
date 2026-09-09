@@ -21,6 +21,7 @@ function ctx(): JobContext & { progress: JobProgress[] } {
   const progress: JobProgress[] = []
   return {
     progress,
+    jobId: 1,
     payload: {},
     signal: new AbortController().signal,
     setProgress: (p: JobProgress) => progress.push(p),

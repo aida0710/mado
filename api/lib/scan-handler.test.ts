@@ -1,6 +1,6 @@
 import { ListObjectsV2Command, S3Client } from '@aws-sdk/client-s3'
 import { mockClient } from 'aws-sdk-client-mock'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createScanHandler } from './scan-handler.js'
 import type { JobContext } from './job-runner.js'
 import type { ScanResult } from './scan.js'
@@ -17,7 +17,7 @@ const deps = {
 }
 
 function ctx(payload: unknown, signal = new AbortController().signal): JobContext {
-  return { payload, signal, setProgress: () => {} }
+  return { jobId: 1, payload, signal, setProgress: () => {} }
 }
 
 beforeEach(() => storageMock.reset())
@@ -78,5 +78,36 @@ describe('createScanHandler', () => {
   it('payload が不正なら throw する', async () => {
     const handler = createScanHandler(deps)
     await expect(handler(ctx({ connId: 'c1' }))).rejects.toThrow()
+  })
+
+  it('バケットrootの完全走査だけを容量履歴へ保存する', async () => {
+    storageMock.on(ListObjectsV2Command).resolves({
+      Contents: [{ Key: 'a.tar', Size: 123 }], IsTruncated: false,
+    })
+    const recordSuccess = vi.fn()
+    const handler = createScanHandler({
+      ...deps,
+      capacity: { recordSuccess, recordPartial: vi.fn(), recordError: vi.fn() },
+    })
+    await handler({ ...ctx({ connId: 'c1', bucket: 'b', prefix: '' }), jobId: 81 })
+    expect(recordSuccess).toHaveBeenCalledWith(81, 'c1', 'b', expect.objectContaining({
+      totalBytes: 123, objectCount: 1,
+    }))
+
+    await handler({ ...ctx({ connId: 'c1', bucket: 'b', prefix: 'dir/' }), jobId: 82 })
+    expect(recordSuccess).toHaveBeenCalledTimes(1)
+  })
+
+  it('partialなroot走査は履歴へ保存しない', async () => {
+    storageMock.on(ListObjectsV2Command).rejects(new Error('boom'))
+    const recordSuccess = vi.fn()
+    const recordPartial = vi.fn()
+    const handler = createScanHandler({
+      ...deps,
+      capacity: { recordSuccess, recordPartial, recordError: vi.fn() },
+    })
+    await handler(ctx({ connId: 'c1', bucket: 'b', prefix: '' }))
+    expect(recordSuccess).not.toHaveBeenCalled()
+    expect(recordPartial).toHaveBeenCalledWith('c1', 'b')
   })
 })

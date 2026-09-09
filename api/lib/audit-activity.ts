@@ -63,6 +63,9 @@ export function classifyActivity(method: string, pathname: string): Activity | n
       return { action: verb === 'PUT' ? 'storage.tag.assign' : 'storage.tag.remove', resourceType: 'storage_path', resourceId: connectionId }
     }
     if (verb === 'POST' && p[2] === 'scan') return { action: 'storage.scan.start', resourceType: 'connection', resourceId: connectionId }
+    if (verb === 'PUT' && p[2] === 'capacity' && p[3] === 'tracking') {
+      return { action: 'storage.capacity.tracking.update', resourceType: 'connection', resourceId: connectionId }
+    }
   }
   if (verb === 'PUT' && p[0] === 'settings' && p[1]) {
     return { action: 'setting.update', resourceType: 'setting', resourceId: decoded(p[1]) }

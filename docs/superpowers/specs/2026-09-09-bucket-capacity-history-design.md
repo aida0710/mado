@@ -337,10 +337,12 @@ SSO group と Mado role の同期方式は変更しない。
 
 ### 配置
 
-bucket root (`prefix === ''`) の Storage 画面で、README の上に「容量の推移」card を表示する。
-prefix 内では表示しない。bucket 一覧への現在値の埋め込みは第 2 弾とする。
+connection単位の専用画面 `?view=capacity` に「バケット容量メトリクス」を表示し、画面内の
+selectでbucketを切り替える。connectionトップとbucket root (`prefix === ''`) のREADME直下へ
+この画面のリンクを置く。prefix内ではリンクを表示しない。bucket一覧への現在値の埋め込みは
+第2弾とする。
 
-card の上段:
+画面の上段:
 
 - 現在容量
 - 前回 snapshot との差分と増減率

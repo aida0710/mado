@@ -55,6 +55,12 @@ function mountWithOneBucket() {
 }
 
 describe('StorageIndex バケット行の ⋯ メニュー', () => {
+  it('接続トップに容量メトリクスへの導線を表示する', async () => {
+    mountWithOneBucket()
+    const link = await screen.findByRole('link', { name: 'バケット容量メトリクスを見る' })
+    expect(link).toHaveAttribute('href', '/?view=capacity')
+  })
+
   it('タグ編集と URL コピーを 1 つのメニューにまとめて出す', async () => {
     const user = userEvent.setup()
     mountWithOneBucket()

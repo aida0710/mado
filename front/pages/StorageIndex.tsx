@@ -193,11 +193,10 @@ export default function StorageIndex({connId}: Props) {
             <S3PathPanel connId={connId}/>
             {/* タグ検索は別ビューへのリンクにする。畳んだパネルとして
                 ここに積むと、README 検索・S3 パス貼付と合わせて一覧の前が混み合う。 */}
-            {tagsEnabled && (
-                <nav className="mt-3 mb-4 flex flex-wrap items-center gap-x-4 gap-y-1">
-                    <Link className={subLinkClass} to="?view=tags">タグ検索</Link>
-                </nav>
-            )}
+            <nav className="mt-3 mb-4 flex flex-wrap items-center gap-x-4 gap-y-1">
+                <Link className={subLinkClass} to="?view=capacity">バケット容量メトリクスを見る</Link>
+                {tagsEnabled && <Link className={subLinkClass} to="?view=tags">タグ検索</Link>}
+            </nav>
 
             {error && <p className="error">{error}</p>}
             {loading && buckets.length === 0 && (

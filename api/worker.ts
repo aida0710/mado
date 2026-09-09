@@ -17,6 +17,8 @@ import { createPricingStore } from './lib/pricing-store.js'
 import { createPricingRefreshHandler } from './lib/pricing-refresh-handler.js'
 import { PRICING_REFRESH_KIND } from './routes/pricing.js'
 import { requestLogger } from './lib/request-logger.js'
+import { createCapacityStore } from './lib/capacity-store.js'
+import { createCapacityScheduler } from './lib/capacity-scheduler.js'
 
 // LAN ダッシュボード: 1 つのストリーム teardown 起因の未捕捉例外で全ユーザーの
 // リクエストを巻き添えにしない。root cause は都度直す前提の最後の砦 (ログは大声で)。
@@ -35,6 +37,7 @@ const service = createMediaService({
 })
 
 const jobStore = createJobStore(pools)
+const capacityStore = createCapacityStore(pools)
 const jobRunner = createJobRunner({
   store: jobStore,
   // 新しいジョブ種別はここに 1 行足す。
@@ -42,6 +45,7 @@ const jobRunner = createJobRunner({
     [SCAN_KIND]: createScanHandler({
       getStorage: storageFactory.getStorage,
       getConnectionConfig: storageFactory.getConnectionConfig,
+      capacity: capacityStore,
     }),
     // 料金カタログの取得。**外部 (AWS) を叩く唯一のジョブ**。
     // 外に出られない環境では失敗するが、その場合も同梱カタログで見積もりは出る。
@@ -113,16 +117,32 @@ staleTimer.unref()
 
 // 完了ジョブの掃除。最新の done は結果ストアを兼ねるので残る。
 const pruneTimer = setInterval(() => {
-  jobStore.pruneFinished(7).catch(e => console.error('pruneFinished error', e))
+  Promise.all([jobStore.pruneFinished(7), capacityStore.prune(400)])
+    .catch(e => console.error('daily prune error', e))
 }, 24 * 60 * 60 * 1000)
 pruneTimer.unref()
 void jobStore.pruneFinished(7).catch(() => {})
+
+// 追跡を明示的に有効化したバケットだけを定期走査する。storage.scan と同じ
+// dedup key を使うため、手動走査と重なっても S3 全走査は1本に合流する。
+const capacityScheduler = createCapacityScheduler({
+  capacity: capacityStore,
+  jobs: jobStore,
+  getConnectionConfig: storageFactory.getConnectionConfig,
+})
+const capacityTimer = setInterval(() => {
+  capacityScheduler.runOnce().catch(e => console.error('capacity scheduler error', e))
+}, 60_000)
+capacityTimer.unref()
+void capacityScheduler.runOnce().catch(e => console.error('capacity scheduler startup error', e))
+void capacityStore.prune(400).catch(() => {})
 
 let shuttingDown = false
 const shutdown = async (): Promise<void> => {
   if (shuttingDown) return
   shuttingDown = true
   jobLoopStopping = true
+  clearInterval(capacityTimer)
   setTimeout(() => process.exit(1), 10_000).unref()
   await new Promise<void>(resolve => server.close(() => resolve()))
   await storageFactory.close()

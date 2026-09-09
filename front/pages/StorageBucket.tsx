@@ -1,5 +1,5 @@
 import { useCallback } from 'react'
-import { Navigate, useParams, useSearchParams } from 'react-router-dom'
+import { Link, Navigate, useParams, useSearchParams } from 'react-router-dom'
 import { Breadcrumb } from '../components/Breadcrumb'
 import { ConnectionSwitcher } from '../components/ConnectionSwitcher'
 import { StorageBrowser } from '../components/StorageBrowser'
@@ -85,6 +85,16 @@ export default function StorageBucket({ connId }: Props) {
         bucket={bucket}
         prefix={prefix}
       />
+      {prefix === '' && (
+        <nav className="mt-2 mb-4 text-[12px]">
+          <Link
+            className="text-link no-underline hover:text-link-hover hover:underline"
+            to={`/storage/${encodeURIComponent(connId)}/?view=capacity&bucket=${encodeURIComponent(bucket)}`}
+          >
+            バケットの容量メトリクスを見る →
+          </Link>
+        </nav>
+      )}
       {/* 保存場所から解決したDatasetはREADMEの補足情報として、その直後に置く。
           選択中のファイルがあればそのファイル、なければ現在prefixを解決する。 */}
       <StorageLineagePanel connId={connId} bucket={bucket} path={selected ?? prefix} />

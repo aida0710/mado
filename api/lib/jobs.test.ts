@@ -8,7 +8,7 @@ const RO = RW.replace('dashboard_rw', 'dashboard_ro')
 const pools = createPools({ rw: RW, ro: RO })
 const store = createJobStore(pools)
 
-beforeEach(() => pools.rw.query('TRUNCATE jobs'))
+beforeEach(() => pools.rw.query('TRUNCATE jobs CASCADE'))
 afterAll(() => closePools(pools))
 
 describe('enqueue / get', () => {
