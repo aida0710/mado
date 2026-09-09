@@ -369,17 +369,35 @@ card の下段:
 
 ### graph 実装
 
-第 1 弾は chart library を追加せず、React + SVG で実装する。
+第 1 弾から **Recharts v3** を使用する。Mado の React 19 構成に対応し、期間切替、tooltip、
+responsive layout、基準線を declarative に実装できるため、自前 SVG より保守しやすい。
+`recharts` と同じ React 19 系の `react-is` を production dependency に追加する。
 
-- 1 系列、最大 1,600 点なので描画要件は単純
-- `<svg role="img">`、`<title>`、軸 label を持たせる
-- 最新値と差分は graph 外の text でも提供する
-- point の詳細は pointer だけでなく keyboard focus でも読めるようにする
-- Y 軸は表示範囲の最小 / 最大へ padding を持たせ、軸の下限値を明記する
-- 容量上限が設定されていれば水平線で表示する
+主な component と設定:
 
-zoom、複数 bucket 比較、annotation 等が必要になった時点で `uPlot` 等の軽量 library、または
-Grafana を検討する。単純な 1 系列のためだけに初期 bundle と依存を増やさない。
+- `LineChart responsive`: container 幅に追従。親要素には明示的な高さと最小幅を与える
+- `XAxis type="number" scale="time"`: `collectedAt` の epoch milliseconds
+- `YAxis`: 表示範囲の最小 / 最大へ padding を持たせ、軸の下限値を明記する
+- `CartesianGrid`: Mado の color token を使った薄い補助線
+- `Tooltip`: JST日時、正確な容量、object 数を表示する custom content
+- `Line type="linear"`: 観測点間を直線で結ぶ。実測していない曲線を描かない
+- `ReferenceLine`: connection に容量上限が設定されている場合の水平線
+- `isAnimationActive={false}`: 最大 1,600 点の再描画を安定させ、測定値の変化を演出で歪めない
+
+欠測は、隣接 snapshot が設定 interval の 2.5 倍以上離れた位置へ `null` の synthetic point を
+挿入し、`connectNulls={false}` で線を切る。取得できなかった期間を補間して正常に見せない。
+
+Recharts の `accessibilityLayer` は有効のまま使用する。ただし chart だけを情報源にせず、最新値と
+差分は graph 外の text でも提供し、全 snapshot を日時順に読める screen-reader 用 table を置く。
+tooltip は pointer と keyboard の双方で確認できることを component test と実 browser で検証する。
+
+Recharts は現在の front には無い比較的大きな依存群を持つため、`BucketCapacityChart` を
+`React.lazy` で別 chunk にし、snapshot が2点以上ある bucket root でだけ読み込む。導入時は
+Vite の production build 出力を変更前後で比較し、main chunk に Recharts が混入していないことを
+確認する。version は lockfile で固定し、依存監査の対象に含める。
+
+zoom、複数 bucket 比較、annotation 等が必要になった時点で Recharts の `Brush` / 同期 chart、
+または Grafana を検討する。別の chart library へ同時に依存しない。
 
 ## エラーと縮退
 
@@ -470,6 +488,8 @@ rollback 時は UI / scheduler を旧 image へ戻す。追加 table は直ち�
 - permission ごとの操作表示
 - tracking、手動更新、job 完了後の再取得
 - keyboard で point 詳細を確認できる
+- Recharts の accessibility layer と screen-reader 用 table の内容が snapshot と一致する
+- chart component が別 chunk になり、graph のない画面で読み込まれない
 - narrow viewport で横 overflow しない
 
 ## 受け入れ確認
@@ -494,3 +514,10 @@ rollback 時は UI / scheduler を旧 image へ戻す。追加 table は直ち�
 - 複数 bucket / connection の比較画面
 - Prometheus exporter と Grafana dashboard
 - prefix / Dataset 単位の明示的な追跡。bucket と同じ表へ安易に混在させず、走査費用と cardinality を再設計する
+
+## 関連資料
+
+- [Recharts: Chart size](https://recharts.github.io/en-US/guide/sizes/)
+- [Recharts: Line](https://recharts.github.io/en-US/api/Line/)
+- [Recharts: ReferenceLine](https://recharts.github.io/en-US/api/ReferenceLine/)
+- [Recharts npm package](https://www.npmjs.com/package/recharts)
