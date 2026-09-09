@@ -382,6 +382,7 @@ connection単位の専用画面`?view=capacity`に「バケット容量メトリ
 - `connections:manage`を持つUser: 「今すぐ全バケットを計測」とconnection編集画面の追跡toggle／周期select
 - 権限がないUser: 設定値、合計、各bucketの指標とgraphだけを表示
 - `scan_enabled = false`: 強制計測をdisabledにする
+- `capacity_metrics_enabled = false`: 強制計測と定期計測設定をdisabledにする。未設定時はtrue
 - 周期設定は容量画面に置かず、connectionの他の動作設定と同じ編集画面に置く
 
 ### graph 実装

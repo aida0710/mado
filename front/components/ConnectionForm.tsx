@@ -46,6 +46,7 @@ interface FormState {
   allowedUserIds: string[]
   /** 配下の走査を許可するか。 */
   scanEnabled: boolean
+  capacityMetricsEnabled: boolean
   /** 一覧キャッシュの保持秒数。 */
   listCacheTtlSec: number
   /** connection配下の全bucketに適用する容量計測設定。 */
@@ -86,6 +87,9 @@ function reducer(state: FormState, action: Action): FormState {
       if (action.field === 'scanEnabled' && action.value === false) {
         return { ...state, scanEnabled: false, capacityTrackingEnabled: false }
       }
+      if (action.field === 'capacityMetricsEnabled' && action.value === false) {
+        return { ...state, capacityMetricsEnabled: false, capacityTrackingEnabled: false }
+      }
       return { ...state, [action.field]: action.value }
     case 'toggleCapability': {
       const capabilities = { ...state.capabilities, [action.cap]: action.value }
@@ -124,6 +128,7 @@ function initialState(current: Connection | null): FormState {
     visibilityMode: current?.visibility.mode ?? 'public',
     allowedUserIds: current?.visibility.allowedUsers.map(user => user.id).sort() ?? [],
     scanEnabled: current?.scanEnabled ?? true,
+    capacityMetricsEnabled: current?.capacityMetricsEnabled ?? true,
     listCacheTtlSec: current?.listCacheTtlSec ?? 86400,
     capacityTrackingEnabled: current?.capacityTracking?.enabled ?? false,
     capacityTrackingIntervalSeconds: current?.capacityTracking?.intervalSeconds ?? 86400,
@@ -154,6 +159,7 @@ export function ConnectionForm({ mode, onClose, presentation = 'modal' }: Props)
     forcePathStyle, listObjectsVersion, capabilities, showSecret, saving, error,
     visibilityMode, allowedUserIds,
     scanEnabled,
+    capacityMetricsEnabled,
     listCacheTtlSec,
     capacityTrackingEnabled, capacityTrackingIntervalSeconds,
     pricingProvider, pricingStorageClass, pricingReadMbps, pricingWriteMbps,
@@ -226,6 +232,9 @@ export function ConnectionForm({ mode, onClose, presentation = 'modal' }: Props)
           input.visibility = { mode: visibilityMode, allowedUserIds }
         }
         if (scanEnabled !== cur.scanEnabled) input.scanEnabled = scanEnabled
+        if (capacityMetricsEnabled !== (cur.capacityMetricsEnabled ?? true)) {
+          input.capacityMetricsEnabled = capacityMetricsEnabled
+        }
         if (listCacheTtlSec !== cur.listCacheTtlSec) input.listCacheTtlSec = listCacheTtlSec
         const currentCapacityTracking = cur.capacityTracking ?? { enabled: false, intervalSeconds: 86400 }
         if (capacityTrackingEnabled !== currentCapacityTracking.enabled
@@ -511,13 +520,28 @@ export function ConnectionForm({ mode, onClose, presentation = 'modal' }: Props)
             </div>
           </label>
           {isEdit && (
+            <label className="modal-choice">
+              <input
+                type="checkbox"
+                aria-label="バケットのメトリクス集計を許可する"
+                checked={capacityMetricsEnabled}
+                disabled={!scanEnabled}
+                onChange={e => dispatch({ type: 'setField', field: 'capacityMetricsEnabled', value: e.target.checked })}
+              />
+              <div>
+                <strong>バケットのメトリクス集計を許可する</strong>
+                <small>全バケットの容量とオブジェクト数を集計する操作を許可します。</small>
+              </div>
+            </label>
+          )}
+          {isEdit && (
             <div className="mt-3 border-t border-rule pt-3">
-              <label className="modal-choice">
+              <label className={`modal-choice ${!scanEnabled || !capacityMetricsEnabled ? 'opacity-50' : ''}`}>
                 <input
                   type="checkbox"
                   aria-label="全バケットの容量を定期計測する"
                   checked={capacityTrackingEnabled}
-                  disabled={!scanEnabled}
+                  disabled={!scanEnabled || !capacityMetricsEnabled}
                   onChange={e => dispatch({ type: 'setField', field: 'capacityTrackingEnabled', value: e.target.checked })}
                 />
                 <div>
@@ -525,11 +549,11 @@ export function ConnectionForm({ mode, onClose, presentation = 'modal' }: Props)
                   <small>このコネクションにある全バケットの容量とオブジェクト数を記録します。</small>
                 </div>
               </label>
-              <label className="modal-choice">
+              <label className={`modal-choice ${!scanEnabled || !capacityMetricsEnabled || !capacityTrackingEnabled ? 'opacity-50' : ''}`}>
                 <select
                   aria-label="容量の計測周期"
                   value={capacityTrackingIntervalSeconds}
-                  disabled={!scanEnabled || !capacityTrackingEnabled}
+                  disabled={!scanEnabled || !capacityMetricsEnabled || !capacityTrackingEnabled}
                   onChange={e => dispatch({
                     type: 'setField', field: 'capacityTrackingIntervalSeconds', value: Number(e.target.value),
                   })}

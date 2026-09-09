@@ -22,6 +22,7 @@ const getConnectionConfig = async (): Promise<ConnectionConfig> => ({
   listObjectsVersion,
   capabilities: {} as never,
   scanEnabled: true,
+  capacityMetricsEnabled: true,
   listCacheTtlSec: 86400,
 })
 

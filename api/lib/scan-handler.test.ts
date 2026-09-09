@@ -9,7 +9,8 @@ import type { ConnectionConfig } from '../storage.js'
 const storageMock = mockClient(S3Client)
 const storage = new S3Client({})
 const config = {
-  listObjectsVersion: 'v2', capabilities: {}, scanEnabled: true, listCacheTtlSec: 86400,
+  listObjectsVersion: 'v2', capabilities: {}, scanEnabled: true,
+  capacityMetricsEnabled: true, listCacheTtlSec: 86400,
 } as unknown as ConnectionConfig
 const deps = {
   getStorage: async (): Promise<S3Client> => storage,

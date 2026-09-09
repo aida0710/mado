@@ -50,7 +50,7 @@ export function createCapacityScheduler(deps: CapacitySchedulerDeps): { runOnce(
       for (const connectionId of due) {
         try {
           const config = await deps.getConnectionConfig(connectionId)
-          if (!config.scanEnabled) {
+          if (!config.scanEnabled || !config.capacityMetricsEnabled) {
             await deps.capacity.markConnectionPaused(connectionId)
             continue
           }

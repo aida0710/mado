@@ -79,6 +79,7 @@ interface MaskedConnection {
     allowedUsers: Array<{ id: string; displayName: string }>
   }
   capabilities: Record<string, boolean>
+  capacityMetricsEnabled: boolean
   capacityTracking: { enabled: boolean; intervalSeconds: number }
   createdAt: string
   updatedAt: string
@@ -198,6 +199,7 @@ describe('POST /connections', () => {
     // 既定値は 'v2' (AWS / R2 / MinIO 等の新しい実装向け)。
     expect(created.listObjectsVersion).toBe('v2')
     expect(created.visibility).toEqual({ mode: 'public', allowedUsers: [] })
+    expect(created.capacityMetricsEnabled).toBe(true)
     expect(created.capacityTracking).toEqual({ enabled: false, intervalSeconds: 86400 })
     expect(typeof created.createdAt).toBe('string')
     expect(typeof created.updatedAt).toBe('string')
@@ -470,6 +472,22 @@ describe('PUT /connections/:id', () => {
       }),
     })
     expect(response.status).toBe(400)
+  })
+
+  it('バケットのメトリクス集計を無効化でき、定期計測との矛盾は拒否する', async () => {
+    const created = await createOne()
+    const disabled = await app.request(`/connections/${created.id}`, {
+      method: 'PUT', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ capacityMetricsEnabled: false }),
+    })
+    expect(disabled.status).toBe(200)
+    expect((await disabled.json() as MaskedConnection).capacityMetricsEnabled).toBe(false)
+
+    const invalid = await app.request(`/connections/${created.id}`, {
+      method: 'PUT', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ capacityTracking: { enabled: true, intervalSeconds: 86400 } }),
+    })
+    expect(invalid.status).toBe(400)
   })
 
   it('updates listObjectsVersion v2 → v1 and back', async () => {

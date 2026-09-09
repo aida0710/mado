@@ -93,4 +93,24 @@ describe('CapacityMetricsPage', () => {
     expect(screen.queryByRole('button', { name: '今すぐ全バケットを計測' })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'コネクション設定' })).not.toBeInTheDocument()
   })
+
+  it('メトリクス集計が無効なconnectionでは強制計測を無効にする', async () => {
+    const restricted = { ...connection, capacityMetricsEnabled: false }
+    vi.spyOn(api, 'capacityOverview').mockResolvedValue({
+      connectionId: 'c1', days: 90, capacityBytes: null,
+      tracking: {
+        enabled: false, intervalSeconds: 86400, nextRunAt: null,
+        lastAttemptAt: null, lastStatus: 'paused', lastError: null, consecutiveFailures: 0,
+      },
+      buckets: [],
+    })
+    render(
+      <MemoryRouter initialEntries={['/?view=capacity']}>
+        <ConnectionContext.Provider value={restricted}>
+          <CapacityMetricsPage connId="c1" />
+        </ConnectionContext.Provider>
+      </MemoryRouter>,
+    )
+    expect(await screen.findByRole('button', { name: '今すぐ全バケットを計測' })).toBeDisabled()
+  })
 })

@@ -102,7 +102,7 @@ export default function CapacityMetricsPage({ connId }: { connId: string }) {
           <div className="flex flex-wrap gap-2">
             <button type="button" className="ghost" disabled={loading} onClick={() => void refresh()}>表示を更新</button>
             {canManage && (
-              <button type="button" className="ghost" disabled={scanning || !connection.scanEnabled} onClick={() => void scanAll()}>
+              <button type="button" className="ghost" disabled={scanning || !connection.scanEnabled || connection.capacityMetricsEnabled === false} onClick={() => void scanAll()}>
                 {scanning ? '開始中…' : '今すぐ全バケットを計測'}
               </button>
             )}

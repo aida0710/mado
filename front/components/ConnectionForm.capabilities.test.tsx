@@ -119,6 +119,26 @@ describe('ConnectionForm の権限トグル', () => {
     }))
   })
 
+  it('メトリクス集計を無効にすると定期計測と周期をグレーアウトする', async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined)
+    const tracked: Connection = {
+      ...conn, capacityTracking: { enabled: true, intervalSeconds: 86400 },
+    }
+    render(<ConnectionForm mode={{ kind: 'edit', current: tracked, onSubmit }} onClose={() => {}} />)
+
+    const allow = screen.getByRole('checkbox', { name: 'バケットのメトリクス集計を許可する' })
+    expect(allow).toBeChecked()
+    await userEvent.click(allow)
+    expect(screen.getByRole('checkbox', { name: '全バケットの容量を定期計測する' })).toBeDisabled()
+    expect(screen.getByRole('combobox', { name: '容量の計測周期' })).toBeDisabled()
+
+    await userEvent.click(screen.getByRole('button', { name: '保存' }))
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledWith({
+      capacityMetricsEnabled: false,
+      capacityTracking: { enabled: false, intervalSeconds: 86400 },
+    }))
+  })
+
   it('走査を無効にすると容量の定期計測も無効にする', async () => {
     const onSubmit = vi.fn().mockResolvedValue(undefined)
     const tracked: Connection = {

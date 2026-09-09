@@ -301,6 +301,8 @@ export const Connection = z.object({
   capabilities: Capabilities,
   /** 配下の走査を許可するか。巨大バケットを抱える接続でのガード。 */
   scanEnabled: z.boolean(),
+  /** bucket容量メトリクスの集計許可。未返却の旧APIは有効として扱う。 */
+  capacityMetricsEnabled: z.boolean().optional(),
   /** 一覧キャッシュの保持秒数。既定 86400 (24 時間)。 */
   listCacheTtlSec: z.number(),
   /** connection配下の全bucketへ適用する容量計測設定。 */
@@ -346,6 +348,7 @@ export interface ConnectionUpdateInput {
   capabilities?: Partial<Capabilities>
   visibility?: { mode?: 'public' | 'whitelist'; allowedUserIds?: string[] }
   scanEnabled?: boolean
+  capacityMetricsEnabled?: boolean
   listCacheTtlSec?: number
   capacityTracking?: { enabled: boolean; intervalSeconds: number }
   /** 見積もり設定の差分。**null = 既定に戻す** (設定行を消す)、

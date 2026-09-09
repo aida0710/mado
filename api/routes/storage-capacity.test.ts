@@ -11,12 +11,13 @@ const attachJob = vi.fn()
 const enqueueWithResult = vi.fn()
 const listBuckets = vi.fn()
 let scanEnabled = true
+let capacityMetricsEnabled = true
 const store = { overview, syncBuckets, attachJob } as unknown as CapacityStore
 const app = new Hono()
 mountStorageCapacityRoutes(app, {
   store,
   jobs: { enqueueWithResult } as Pick<JobStore, 'enqueueWithResult'>,
-  getConnectionConfig: async () => ({ scanEnabled } as ConnectionConfig),
+  getConnectionConfig: async () => ({ scanEnabled, capacityMetricsEnabled } as ConnectionConfig),
   listBuckets,
 })
 
@@ -29,6 +30,7 @@ beforeEach(() => {
   enqueueWithResult.mockReset().mockResolvedValue({ id: 7, created: true })
   listBuckets.mockReset().mockResolvedValue(['archive', 'data'])
   scanEnabled = true
+  capacityMetricsEnabled = true
 })
 
 describe('storage capacity routes', () => {
@@ -55,6 +57,14 @@ describe('storage capacity routes', () => {
 
   it('走査無効接続では一括計測を開始しない', async () => {
     scanEnabled = false
+    const response = await app.request('/storage/c1/capacity/scan', { method: 'POST' })
+    expect(response.status).toBe(403)
+    expect(listBuckets).not.toHaveBeenCalled()
+    expect(enqueueWithResult).not.toHaveBeenCalled()
+  })
+
+  it('メトリクス集計無効接続では一括計測を開始しない', async () => {
+    capacityMetricsEnabled = false
     const response = await app.request('/storage/c1/capacity/scan', { method: 'POST' })
     expect(response.status).toBe(403)
     expect(listBuckets).not.toHaveBeenCalled()

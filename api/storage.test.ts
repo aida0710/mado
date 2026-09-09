@@ -96,7 +96,22 @@ describe('接続ごとの走査可否とキャッシュ TTL', () => {
     try {
       const cfg = await f.getConnectionConfig('conn000010')
       expect(cfg.scanEnabled).toBe(true)
+      expect(cfg.capacityMetricsEnabled).toBe(true)
       expect(cfg.listCacheTtlSec).toBe(86400)
+    } finally {
+      await f.close()
+    }
+  })
+
+  it("capacity_metrics_enabled='false' で容量メトリクス集計が無効になる", async () => {
+    await insertConnection('conn000014')
+    await pools.rw.query(
+      `INSERT INTO connection_settings (connection_id, key, value) VALUES ($1, 'capacity_metrics_enabled', 'false')`,
+      ['conn000014'],
+    )
+    const f = createStorageFactory({ pools, crypto })
+    try {
+      expect((await f.getConnectionConfig('conn000014')).capacityMetricsEnabled).toBe(false)
     } finally {
       await f.close()
     }

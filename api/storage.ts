@@ -64,6 +64,8 @@ export interface ConnectionConfig {
   /** 配下の走査 (storage.scan ジョブ) を許可するか。既定 true。
    *  巨大バケットを抱える接続で、重い走査を投入させないためのガード。 */
   scanEnabled: boolean
+  /** バケット容量メトリクス用の全体走査を許可するか。既定 true。 */
+  capacityMetricsEnabled: boolean
   /** 一覧キャッシュ (storage_response_cache) の保持秒数。既定 86400 (24 時間)。
    *  更新の激しい接続は短くする。 */
   listCacheTtlSec: number
@@ -111,6 +113,11 @@ interface DbRow {
 /** 走査を許可するか。'false' だけを無効とみなす (capabilities と同じ約束)。 */
 export function settingsToScanEnabled(settings: Record<string, string>): boolean {
   return settings['scan_enabled'] !== 'false'
+}
+
+/** 容量メトリクスの集計を許可するか。未設定は後方互換のため有効。 */
+export function settingsToCapacityMetricsEnabled(settings: Record<string, string>): boolean {
+  return settings['capacity_metrics_enabled'] !== 'false'
 }
 
 /** 一覧キャッシュの保持秒数。壊れた値や 0 以下は既定に倒す。 */
@@ -194,6 +201,7 @@ export function createStorageFactory(deps: StorageFactoryDeps): StorageFactory {
         listObjectsVersion: row.list_objects_version,
         capabilities: settingsToCapabilities(row.settings),
         scanEnabled: settingsToScanEnabled(row.settings),
+        capacityMetricsEnabled: settingsToCapacityMetricsEnabled(row.settings),
         listCacheTtlSec: settingsToListCacheTtlSec(row.settings),
       },
     }

@@ -41,6 +41,9 @@ export function mountStorageCapacityRoutes(app: Hono, deps: StorageCapacityDeps)
     const connectionId = c.req.param('connId')
     const config = await deps.getConnectionConfig(connectionId)
     if (!config.scanEnabled) return c.json({ error: 'この接続では走査が無効になっています' }, 403)
+    if (!config.capacityMetricsEnabled) {
+      return c.json({ error: 'この接続ではバケットのメトリクス集計が無効になっています' }, 403)
+    }
 
     const buckets = await deps.listBuckets(connectionId)
     const jobs = await enqueueCapacityScans({ capacity: deps.store, jobs: deps.jobs }, connectionId, buckets)

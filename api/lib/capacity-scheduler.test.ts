@@ -16,7 +16,7 @@ describe('capacity scheduler', () => {
         markConnectionPaused: vi.fn(), recordConnectionError: vi.fn(),
       },
       jobs: { enqueueWithResult },
-      getConnectionConfig: vi.fn().mockResolvedValue({ scanEnabled: true }),
+      getConnectionConfig: vi.fn().mockResolvedValue({ scanEnabled: true, capacityMetricsEnabled: true }),
       listBuckets: vi.fn().mockResolvedValue(['archive', 'data']),
     })
     expect(await scheduler.runOnce()).toBe(1)
@@ -42,7 +42,25 @@ describe('capacity scheduler', () => {
         markConnectionPaused, recordConnectionError: vi.fn(),
       },
       jobs: { enqueueWithResult },
-      getConnectionConfig: vi.fn().mockResolvedValue({ scanEnabled: false }),
+      getConnectionConfig: vi.fn().mockResolvedValue({ scanEnabled: false, capacityMetricsEnabled: true }),
+      listBuckets: vi.fn(),
+    })
+    await scheduler.runOnce()
+    expect(markConnectionPaused).toHaveBeenCalledWith('c1')
+    expect(enqueueWithResult).not.toHaveBeenCalled()
+  })
+
+  it('メトリクス集計無効connectionはpausedにして投入しない', async () => {
+    const markConnectionPaused = vi.fn()
+    const enqueueWithResult = vi.fn()
+    const scheduler = createCapacityScheduler({
+      capacity: {
+        reserveDueConnections: vi.fn().mockResolvedValue(['c1']),
+        syncBuckets: vi.fn(), attachJob: vi.fn(), markConnectionScheduled: vi.fn(),
+        markConnectionPaused, recordConnectionError: vi.fn(),
+      },
+      jobs: { enqueueWithResult },
+      getConnectionConfig: vi.fn().mockResolvedValue({ scanEnabled: true, capacityMetricsEnabled: false }),
       listBuckets: vi.fn(),
     })
     await scheduler.runOnce()

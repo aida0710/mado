@@ -11,6 +11,7 @@ import {
   capabilitySettingKey,
   settingsToCapabilities,
   settingsToScanEnabled,
+  settingsToCapacityMetricsEnabled,
   settingsToListCacheTtlSec,
   type Capabilities,
 } from '../storage.js'
@@ -307,6 +308,7 @@ const UpdateBody = z.object({
   capabilities: CapabilitiesPatch.optional(),
   // 走査の可否と一覧キャッシュ TTL も connection_settings 側 (capabilities と同じ)。
   scanEnabled: z.boolean().optional(),
+  capacityMetricsEnabled: z.boolean().optional(),
   listCacheTtlSec: z.number().int().positive().optional(),
   capacityTracking: CapacityTrackingPatch.optional(),
   pricing: PricingPatch.optional(),
@@ -393,6 +395,7 @@ function toMasked(row: ConnectionRow, includeAllowedUsers = true) {
     },
     capabilities: settingsToCapabilities(row.settings),
     scanEnabled: settingsToScanEnabled(row.settings),
+    capacityMetricsEnabled: settingsToCapacityMetricsEnabled(row.settings),
     listCacheTtlSec: settingsToListCacheTtlSec(row.settings),
     capacityTracking: row.capacity_tracking,
     pricing: {
@@ -597,6 +600,9 @@ export function mountConnectionsRoutes(app: Hono, deps: ConnectionsDeps): void {
     if (u.scanEnabled !== undefined) {
       extraSettings.push(['scan_enabled', u.scanEnabled ? 'true' : 'false'])
     }
+    if (u.capacityMetricsEnabled !== undefined) {
+      extraSettings.push(['capacity_metrics_enabled', u.capacityMetricsEnabled ? 'true' : 'false'])
+    }
     if (u.listCacheTtlSec !== undefined) {
       extraSettings.push(['list_cache_ttl_sec', String(u.listCacheTtlSec)])
     }
@@ -647,10 +653,16 @@ export function mountConnectionsRoutes(app: Hono, deps: ConnectionsDeps): void {
       }
       const currentCaps = settingsToCapabilities(current.settings)
       const effectiveScanEnabled = u.scanEnabled ?? settingsToScanEnabled(current.settings)
+      const effectiveCapacityMetricsEnabled = u.capacityMetricsEnabled
+        ?? settingsToCapacityMetricsEnabled(current.settings)
       const effectiveCapacityEnabled = u.capacityTracking?.enabled ?? current.capacity_tracking.enabled
       if (effectiveCapacityEnabled && !effectiveScanEnabled) {
         await client.query('ROLLBACK')
         return c.json({ error: '容量の定期計測には配下の走査を許可する必要があります' }, 400)
+      }
+      if (effectiveCapacityEnabled && !effectiveCapacityMetricsEnabled) {
+        await client.query('ROLLBACK')
+        return c.json({ error: '容量の定期計測にはバケットのメトリクス集計を許可する必要があります' }, 400)
       }
       const currentAllowedUserIds = current.allowed_users.map(user => user.id).sort()
       const allowedUsersChanged = allowedUserIds !== undefined
