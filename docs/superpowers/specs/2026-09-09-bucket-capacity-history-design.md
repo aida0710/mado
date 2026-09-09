@@ -431,6 +431,8 @@ zoom、複数 bucket 比較、annotation 等が必要になった時点で Recha
 
 1 bucket、1 日 1 回、547,259 objects の場合、`MaxKeys=1000` で約 548 LIST request / day。
 connection単位の定期計測を初期状態で無効にすることで、導入直後のrequest増加を0にする。
+旧bucket単位の追跡設定が存在しても、対象範囲が全bucketへ広がるmigrationでは自動的に
+有効化しない。周期だけを引き継ぎ、管理者がconnection設定から明示的に再有効化する。
 
 次を application log / 将来の Prometheus metric に出す。
 

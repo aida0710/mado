@@ -1,6 +1,6 @@
 -- 容量計測の有効化と周期はbucket単位ではなくconnection単位で管理する。
--- migrationだけでは新しい定期走査を開始しない。既存のbucket別設定がある場合だけ
--- 最短周期を引き継ぎ、1件でも有効ならconnection全体を有効として移行する。
+-- migrationだけでは新しい定期走査を開始しない。既存のbucket別設定がある場合も、
+-- 1 bucketから全bucketへ対象が拡大するため、周期だけ引き継いで明示的な再有効化を待つ。
 
 CREATE TABLE IF NOT EXISTS storage_capacity_settings (
   connection_id        TEXT        PRIMARY KEY REFERENCES storage_connections(id) ON DELETE CASCADE,
@@ -20,10 +20,10 @@ CREATE TABLE IF NOT EXISTS storage_capacity_settings (
 INSERT INTO storage_capacity_settings
   (connection_id, enabled, interval_seconds, next_run_at, last_status)
 SELECT connection_id,
-       bool_or(enabled),
+       false,
        min(interval_seconds),
-       CASE WHEN bool_or(enabled) THEN min(next_run_at) ELSE NULL END,
-       CASE WHEN bool_or(enabled) THEN 'waiting' ELSE 'paused' END
+       NULL,
+       'paused'
   FROM storage_capacity_targets
  GROUP BY connection_id
 ON CONFLICT (connection_id) DO NOTHING;
