@@ -23,11 +23,23 @@ beforeEach(async () => {
     setSessionPrincipal(c, { kind: 'user', sessionId: 'test', user: admin })
     await next()
   })
-  mountAdminUsersRoutes(app, { store, audit })
+  mountAdminUsersRoutes(app, {
+    store,
+    audit,
+    ssoRoleMapping: { 'mado-users': 'viewer', 'mado-admins': 'admin' },
+  })
 })
 afterAll(() => closePools(pools))
 
 describe('admin user routes', () => {
+  it('User一覧と実際のSSO Role mappingを返す', async () => {
+    const res = await app.request('/users')
+    expect(res.status).toBe(200)
+    expect(await res.json()).toMatchObject({
+      ssoRoleMapping: { 'mado-users': 'viewer', 'mado-admins': 'admin' },
+    })
+  })
+
   it('最後のactive adminを無効化できない', async () => {
     const res = await app.request(`/users/${adminId}`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },

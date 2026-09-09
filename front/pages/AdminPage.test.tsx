@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -84,6 +84,46 @@ describe('AdminPage', () => {
     expect(screen.getByText('aida@example.jp')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'パスワードを再発行' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '削除' })).toBeInTheDocument()
+  })
+
+  it('SSOユーザーの権限を読み取り専用にしてAuthentikの対応表を表示する', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+      users: [{
+        id: 'sso-user-1', username: 'sso-user', email: 'sso@example.jp', displayName: 'SSO User',
+        status: 'active', roles: ['admin'], authMethods: ['sso'],
+      }],
+      ssoRoleMapping: {
+        'mado-users': 'viewer', 'mado-curators': 'curator',
+        'mado-operators': 'operator', 'mado-admins': 'admin',
+      },
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    render(
+      <AuthContext.Provider value={auth}>
+        <MemoryRouter initialEntries={['/settings/access/users']}>
+          <Routes><Route path="/settings/access/*" element={<AdminPage />} /></Routes>
+        </MemoryRouter>
+      </AuthContext.Provider>,
+    )
+
+    const summaryName = await screen.findByText('SSO User')
+    await userEvent.click(summaryName)
+    const details = summaryName.closest('details')!
+    expect(within(details).getByLabelText(/^権限/)).toBeDisabled()
+    expect(within(details).getByText('SSO側で管理されるため、Madoからは変更できません。')).toBeInTheDocument()
+
+    const guidance = screen.getByText(/以下のAuthentikグループ/).closest('blockquote')!
+    expect(guidance).toHaveTextContent('mado-users→Viewer — 閲覧のみ')
+    expect(guidance).toHaveTextContent('mado-curators→Curator — 内容編集')
+    expect(guidance).toHaveTextContent('mado-operators→Operator — ジョブ実行')
+    expect(guidance).toHaveTextContent('mado-admins→Admin — すべて管理')
+
+    await userEvent.click(within(details).getByRole('button', { name: '保存' }))
+    await waitFor(() => expect(fetch).toHaveBeenCalledWith(
+      '/api/internal/users/sso-user-1', expect.objectContaining({ method: 'PATCH' }),
+    ))
+    expect(fetch).not.toHaveBeenCalledWith(
+      '/api/internal/users/sso-user-1/roles', expect.anything(),
+    )
   })
 
   it('Auditタブ直下で監査ログ見出しを重複させない', async () => {

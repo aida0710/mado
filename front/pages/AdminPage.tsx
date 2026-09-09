@@ -105,6 +105,20 @@ const ROLE_OPTIONS = [
 
 type RoleId = (typeof ROLE_OPTIONS)[number]['id']
 
+interface UsersResponse {
+  users: UserRow[]
+  ssoRoleMapping?: Record<string, string>
+}
+
+function normalizeSsoRoleMapping(mapping: Record<string, string> | undefined) {
+  const roleOrder = new Map(ROLE_OPTIONS.map((option, index) => [option.id, index]))
+  return Object.entries(mapping ?? {})
+    .filter((entry): entry is [string, RoleId] => roleOrder.has(entry[1] as RoleId))
+    .map(([group, role]) => ({ group, role }))
+    .sort((a, b) => (roleOrder.get(a.role) ?? 0) - (roleOrder.get(b.role) ?? 0)
+      || a.group.localeCompare(b.group))
+}
+
 function formatAuditValue(value: unknown): string {
   if (value === null || value === undefined || value === '') return '—'
   if (Array.isArray(value)) return value.length ? value.map(formatAuditValue).join(', ') : '—'
@@ -124,6 +138,7 @@ async function jsonRequest<T>(url: string, init?: RequestInit): Promise<T> {
 function UsersPage() {
   const { user: currentUser } = useAuth()
   const [users, setUsers] = useState<UserRow[]>([])
+  const [ssoRoleMappings, setSsoRoleMappings] = useState<Array<{ group: string; role: RoleId }>>([])
   const [notice, setNotice] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [role, setRole] = useState<RoleId>('viewer')
@@ -132,8 +147,9 @@ function UsersPage() {
   const reload = useCallback(async () => {
     setError(null)
     try {
-      const body = await jsonRequest<{ users: UserRow[] }>('/api/internal/users')
+      const body = await jsonRequest<UsersResponse>('/api/internal/users')
       setUsers(body.users)
+      setSsoRoleMappings(normalizeSsoRoleMapping(body.ssoRoleMapping))
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'ユーザーを取得できませんでした')
     }
@@ -141,8 +157,12 @@ function UsersPage() {
 
   useEffect(() => {
     let current = true
-    jsonRequest<{ users: UserRow[] }>('/api/internal/users')
-      .then(body => { if (current) setUsers(body.users) })
+    jsonRequest<UsersResponse>('/api/internal/users')
+      .then(body => {
+        if (!current) return
+        setUsers(body.users)
+        setSsoRoleMappings(normalizeSsoRoleMapping(body.ssoRoleMapping))
+      })
       .catch(cause => {
         if (current) setError(cause instanceof Error ? cause.message : 'ユーザーを取得できませんでした')
       })
@@ -185,12 +205,16 @@ function UsersPage() {
           status: form.get('status'),
         }),
       })
-      const nextRole = String(form.get('role'))
-      if (user.roles.length !== 1 || user.roles[0] !== nextRole) {
-        await jsonRequest(`/api/internal/users/${encodeURIComponent(user.id)}/roles`, {
-          method: 'PUT', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ roles: [nextRole] }),
-        })
+      // SSO連携済みUserのRoleはAuthentikを正本としてlogin時に同期する。
+      // disabledなform controlはFormDataに含まれないため、API呼び出し自体も明示的に省く。
+      if (!user.authMethods.includes('sso')) {
+        const nextRole = String(form.get('role'))
+        if (user.roles.length !== 1 || user.roles[0] !== nextRole) {
+          await jsonRequest(`/api/internal/users/${encodeURIComponent(user.id)}/roles`, {
+            method: 'PUT', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ roles: [nextRole] }),
+          })
+        }
       }
       setNotice(`${String(form.get('displayName'))}を更新しました。`)
       await reload()
@@ -248,7 +272,22 @@ function UsersPage() {
               <label className="admin-field"><span>表示名</span><input name="displayName" defaultValue={user.displayName} maxLength={128} required /></label>
               <label className="admin-field"><span>ユーザーID（ログインID）</span><input name="username" defaultValue={user.username ?? ''} pattern="[A-Za-z0-9][A-Za-z0-9_.-]{0,63}" required /></label>
               {user.email && <div className="account-readonly"><span>メールアドレス</span><strong>{user.email}</strong><small>{user.authMethods.includes('sso') ? 'SSO側を正本とし、Madoからは変更できません。' : '認証識別子のため、Madoからは変更できません。'}</small></div>}
-              <label className="admin-field"><span>権限</span><select name="role" defaultValue={user.roles[0] ?? 'viewer'}>{ROLE_OPTIONS.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}</select></label>
+              <label className="admin-field">
+                <span>権限</span>
+                <select
+                  name="role"
+                  defaultValue={user.roles[0] ?? 'viewer'}
+                  disabled={user.authMethods.includes('sso')}
+                  aria-describedby={user.authMethods.includes('sso') ? `sso-role-help-${user.id}` : undefined}
+                >
+                  {ROLE_OPTIONS.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}
+                </select>
+                {user.authMethods.includes('sso') && (
+                  <small id={`sso-role-help-${user.id}`} className="admin-field__help">
+                    SSO側で管理されるため、Madoからは変更できません。
+                  </small>
+                )}
+              </label>
               <label className="admin-field"><span>状態</span><select name="status" defaultValue={user.status}><option value="active">Active</option><option value="disabled">Disabled</option></select></label>
               <div className="admin-user__meta"><span>内部ID</span><code>{user.id}</code><span>認証</span><strong>{user.authMethods.join(' + ') || '未設定'}</strong></div>
               <div className="admin-user__actions">
@@ -275,6 +314,19 @@ function UsersPage() {
         </label>
         <button type="submit">作成</button>
       </form>
+      <blockquote className="admin-sso-guidance">
+        <p>SSOの場合、以下のAuthentikグループがMadoの権限と対応しています。権限はログイン時に同期されます。</p>
+        <ul>
+          {ssoRoleMappings.map(({ group, role }) => (
+            <li key={group}>
+              <code>{group}</code>
+              <span aria-hidden="true">→</span>
+              <strong>{ROLE_OPTIONS.find(option => option.id === role)?.label}</strong>
+            </li>
+          ))}
+          {ssoRoleMappings.length === 0 && <li>SSO権限マッピングは設定されていません。</li>}
+        </ul>
+      </blockquote>
     </section>
   )
 }

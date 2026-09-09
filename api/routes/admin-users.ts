@@ -11,6 +11,7 @@ import { markAuditChangeCommitted } from '../lib/audit-activity.js'
 export interface AdminUsersDeps {
   store: AuthStore
   audit: AuditWriter
+  ssoRoleMapping: Record<string, string>
 }
 
 const Role = z.string().regex(/^[a-z][a-z0-9_.:-]{0,63}$/)
@@ -33,7 +34,10 @@ export function mountAdminUsersRoutes(app: Hono, deps: AdminUsersDeps): void {
   app.use('/users', requirePermission('users:manage'))
   app.use('/users/*', requirePermission('users:manage'))
 
-  app.get('/users', async c => c.json({ users: await deps.store.listUsers() }))
+  app.get('/users', async c => c.json({
+    users: await deps.store.listUsers(),
+    ssoRoleMapping: deps.ssoRoleMapping,
+  }))
 
   app.post('/users', async c => {
     const principal = getSessionPrincipal(c)!

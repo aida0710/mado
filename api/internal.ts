@@ -269,7 +269,11 @@ if (env.DATASET_REGISTRY_URL && env.DATASET_REGISTRY_TOKEN && env.MARQUEZ_URL) {
 }
 
 if (authEnabled) {
-  mountAdminUsersRoutes(api, { store: authStore, audit })
+  mountAdminUsersRoutes(api, {
+    store: authStore,
+    audit,
+    ssoRoleMapping: env.OIDC_ROLE_MAPPING_JSON,
+  })
   mountServiceAccountRoutes(api, { store: serviceAccounts, audit })
   mountAuditRoutes(api, { pool: pools.ro })
 }
