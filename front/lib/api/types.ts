@@ -13,25 +13,33 @@ export const CapacityTracking = z.object({
   intervalSeconds: z.number().int(),
   nextRunAt: z.string().nullable(),
   lastAttemptAt: z.string().nullable(),
-  lastSuccessAt: z.string().nullable(),
-  lastStatus: z.enum(['waiting', 'queued', 'success', 'partial', 'error', 'paused']).nullable(),
+  lastStatus: z.enum(['waiting', 'queued', 'error', 'paused']),
   lastError: z.string().nullable(),
   consecutiveFailures: z.number().int().nonnegative(),
 })
-export const CapacityHistory = z.object({
-  connectionId: z.string(),
+export const CapacityBucketHistory = z.object({
   bucket: z.string(),
-  days: z.number().int(),
-  capacityBytes: z.number().positive().nullable(),
-  tracking: CapacityTracking,
+  lastSuccessAt: z.string().nullable(),
+  lastStatus: z.enum(['waiting', 'queued', 'success', 'partial', 'error', 'paused']).nullable(),
+  lastError: z.string().nullable(),
   points: z.array(z.object({
     totalBytes: z.number().nonnegative(),
     objectCount: z.number().int().nonnegative(),
     collectedAt: z.string(),
   })),
 })
-export type CapacityHistory = z.infer<typeof CapacityHistory>
-export const CapacityTrackingResponse = z.object({ tracking: CapacityTracking })
+export const CapacityOverview = z.object({
+  connectionId: z.string(),
+  days: z.number().int(),
+  capacityBytes: z.number().positive().nullable(),
+  tracking: CapacityTracking,
+  buckets: z.array(CapacityBucketHistory),
+})
+export type CapacityOverview = z.infer<typeof CapacityOverview>
+export type CapacityBucketHistory = z.infer<typeof CapacityBucketHistory>
+export const CapacityScanResponse = z.object({
+  jobs: z.array(z.object({ bucket: z.string(), jobId: z.number().int() })),
+})
 
 export const StorageFile = z.object({
   key: z.string(),
@@ -295,6 +303,11 @@ export const Connection = z.object({
   scanEnabled: z.boolean(),
   /** 一覧キャッシュの保持秒数。既定 86400 (24 時間)。 */
   listCacheTtlSec: z.number(),
+  /** connection配下の全bucketへ適用する容量計測設定。 */
+  capacityTracking: z.object({
+    enabled: z.boolean(),
+    intervalSeconds: z.number().int(),
+  }).optional(),
   /** 転送見積もりに使うプロファイル。 */
   pricing: ConnectionPricing,
   createdAt: z.string(),
@@ -334,6 +347,7 @@ export interface ConnectionUpdateInput {
   visibility?: { mode?: 'public' | 'whitelist'; allowedUserIds?: string[] }
   scanEnabled?: boolean
   listCacheTtlSec?: number
+  capacityTracking?: { enabled: boolean; intervalSeconds: number }
   /** 見積もり設定の差分。**null = 既定に戻す** (設定行を消す)、
    *  未指定 = 触らない。プロバイダの既定が「エンドポイントから推定」なので
    *  この区別が要る。 */

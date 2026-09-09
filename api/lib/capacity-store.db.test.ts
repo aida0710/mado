@@ -20,6 +20,7 @@ beforeAll(async () => {
 beforeEach(async () => {
   await pools.rw.query('DELETE FROM storage_capacity_snapshots WHERE connection_id = $1', [CONNECTION_ID])
   await pools.rw.query('DELETE FROM storage_capacity_targets WHERE connection_id = $1', [CONNECTION_ID])
+  await pools.rw.query('DELETE FROM storage_capacity_settings WHERE connection_id = $1', [CONNECTION_ID])
   await pools.rw.query("DELETE FROM jobs WHERE kind = 'capacity.test'")
 })
 afterAll(async () => {
@@ -28,22 +29,32 @@ afterAll(async () => {
 })
 
 describe('createCapacityStore', () => {
-  it('未設定では追跡OFF・履歴なしを返す', async () => {
-    expect(await store.history(CONNECTION_ID, 'data', 30)).toEqual({
+  it('未設定ではconnection追跡OFF・全bucketの履歴なしを返す', async () => {
+    expect(await store.overview(CONNECTION_ID, ['archive', 'data'], 30)).toEqual({
       tracking: {
         enabled: false, intervalSeconds: 86400, nextRunAt: null,
-        lastAttemptAt: null, lastSuccessAt: null, lastStatus: null, lastError: null,
-        consecutiveFailures: 0,
+        lastAttemptAt: null, lastStatus: 'paused', lastError: null, consecutiveFailures: 0,
       },
-      points: [],
+      buckets: [
+        { bucket: 'archive', lastSuccessAt: null, lastStatus: null, lastError: null, points: [] },
+        { bucket: 'data', lastSuccessAt: null, lastStatus: null, lastError: null, points: [] },
+      ],
     })
   })
 
-  it('同じ追跡設定の再保存を変更なしとして返す', async () => {
-    expect((await store.setTracking(CONNECTION_ID, 'data', true, 86400, null)).changed).toBe(true)
-    expect((await store.setTracking(CONNECTION_ID, 'data', true, 86400, null)).changed).toBe(false)
-    expect((await store.setTracking(CONNECTION_ID, 'data', true, 43200, null)).changed).toBe(true)
-    expect((await store.setTracking(CONNECTION_ID, 'data', false, 43200, null)).tracking.lastStatus).toBe('paused')
+  it('全bucketをconnection設定へ同期する', async () => {
+    await pools.rw.query(
+      `INSERT INTO storage_capacity_settings
+         (connection_id, enabled, interval_seconds, next_run_at, last_status)
+       VALUES ($1, true, 43200, now(), 'waiting')`, [CONNECTION_ID])
+    await store.syncBuckets(CONNECTION_ID, ['data', 'archive'])
+    const rows = await pools.ro.query<{ bucket: string; enabled: boolean; interval_seconds: number }>(
+      `SELECT bucket, enabled, interval_seconds FROM storage_capacity_targets
+        WHERE connection_id = $1 ORDER BY bucket`, [CONNECTION_ID])
+    expect(rows.rows).toEqual([
+      { bucket: 'archive', enabled: true, interval_seconds: 43200 },
+      { bucket: 'data', enabled: true, interval_seconds: 43200 },
+    ])
   })
 
   it('完全走査をjob単位で一度だけ保存する', async () => {
@@ -53,14 +64,17 @@ describe('createCapacityStore', () => {
     )
     await store.recordSuccess(job.rows[0].id, CONNECTION_ID, 'data', { totalBytes: 1234, objectCount: 7 })
     await store.recordSuccess(job.rows[0].id, CONNECTION_ID, 'data', { totalBytes: 9999, objectCount: 9 })
-    const result = await store.history(CONNECTION_ID, 'data', 30)
-    expect(result.points).toHaveLength(1)
-    expect(result.points[0]).toMatchObject({ totalBytes: 1234, objectCount: 7 })
+    const result = await store.overview(CONNECTION_ID, ['data'], 30)
+    expect(result.buckets[0].points).toHaveLength(1)
+    expect(result.buckets[0].points[0]).toMatchObject({ totalBytes: 1234, objectCount: 7 })
   })
 
-  it('期限を迎えた追跡対象を一度だけ予約する', async () => {
-    await store.setTracking(CONNECTION_ID, 'data', true, 86400, null)
-    expect(await store.reserveDue(20)).toEqual([{ connectionId: CONNECTION_ID, bucket: 'data' }])
-    expect(await store.reserveDue(20)).toEqual([])
+  it('期限を迎えたconnectionを一度だけ予約する', async () => {
+    await pools.rw.query(
+      `INSERT INTO storage_capacity_settings
+         (connection_id, enabled, interval_seconds, next_run_at, last_status)
+       VALUES ($1, true, 86400, now(), 'waiting')`, [CONNECTION_ID])
+    expect(await store.reserveDueConnections(20)).toEqual([CONNECTION_ID])
+    expect(await store.reserveDueConnections(20)).toEqual([])
   })
 })

@@ -103,4 +103,35 @@ describe('ConnectionForm の権限トグル', () => {
       },
     }))
   })
+
+  it('容量の周期をconnection設定として保存する', async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined)
+    render(<ConnectionForm mode={{ kind: 'edit', current: conn, onSubmit }} onClose={() => {}} />)
+
+    const interval = screen.getByRole('combobox', { name: '容量の計測周期' })
+    expect(interval).toBeDisabled()
+    await userEvent.click(screen.getByRole('checkbox', { name: '全バケットの容量を定期計測する' }))
+    await userEvent.selectOptions(interval, '43200')
+    await userEvent.click(screen.getByRole('button', { name: '保存' }))
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledWith({
+      capacityTracking: { enabled: true, intervalSeconds: 43200 },
+    }))
+  })
+
+  it('走査を無効にすると容量の定期計測も無効にする', async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined)
+    const tracked: Connection = {
+      ...conn, capacityTracking: { enabled: true, intervalSeconds: 86400 },
+    }
+    render(<ConnectionForm mode={{ kind: 'edit', current: tracked, onSubmit }} onClose={() => {}} />)
+
+    await userEvent.click(screen.getByRole('checkbox', { name: '配下の走査を許可する' }))
+    expect(screen.getByRole('checkbox', { name: '全バケットの容量を定期計測する' })).not.toBeChecked()
+    await userEvent.click(screen.getByRole('button', { name: '保存' }))
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledWith({
+      scanEnabled: false,
+      capacityTracking: { enabled: false, intervalSeconds: 86400 },
+    }))
+  })
 })

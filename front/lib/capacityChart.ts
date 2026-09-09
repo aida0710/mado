@@ -1,6 +1,6 @@
-import type { CapacityHistory } from './api/types'
+import type { CapacityBucketHistory } from './api/types'
 
-type Point = CapacityHistory['points'][number]
+type Point = CapacityBucketHistory['points'][number]
 export type CapacityChartPoint = {
   collectedAt: number
   totalBytes: number | null

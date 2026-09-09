@@ -19,6 +19,7 @@ import {
   effectiveRates,
   settingsToProfile,
 } from '../lib/pricing.js'
+import { CAPACITY_INTERVALS } from '../lib/capacity-store.js'
 
 // ルート単位のRBACは internal.ts で適用する。接続一覧はさらにここでユーザー別に
 // 絞り込み、非許可の接続は存在自体を返さない。
@@ -86,6 +87,12 @@ const VisibilityCreate = z.object({
 const VisibilityPatch = z.object({
   mode: VisibilityMode.optional(),
   allowedUserIds: AllowedUserIds.optional(),
+}).strict()
+
+const CapacityTrackingPatch = z.object({
+  enabled: z.boolean(),
+  intervalSeconds: z.number().int()
+    .refine(value => CAPACITY_INTERVALS.includes(value as typeof CAPACITY_INTERVALS[number])),
 }).strict()
 
 /** connection_settings への upsert。値は TEXT なので 'true' / 'false' で持つ。
@@ -167,6 +174,48 @@ async function replaceAllowedUsers(
     `INSERT INTO connection_user_allowlist (connection_id, user_id, added_by)
        SELECT $1, user_id, $3::uuid FROM UNNEST($2::uuid[]) AS selected(user_id)`,
     [connectionId, userIds, addedBy],
+  )
+}
+
+async function upsertCapacitySettings(
+  q: { query: (sql: string, values: unknown[]) => Promise<unknown> },
+  connectionId: string,
+  value: { enabled: boolean; intervalSeconds: number },
+  updatedBy: string | null,
+): Promise<void> {
+  await q.query(
+    `INSERT INTO storage_capacity_settings
+       (connection_id, enabled, interval_seconds, next_run_at, last_status, updated_by)
+     VALUES ($1, $2, $3, CASE WHEN $2 THEN now() ELSE NULL END,
+             CASE WHEN $2 THEN 'waiting' ELSE 'paused' END, $4)
+     ON CONFLICT (connection_id) DO UPDATE SET
+       enabled = EXCLUDED.enabled,
+       interval_seconds = EXCLUDED.interval_seconds,
+       next_run_at = CASE
+         WHEN NOT EXCLUDED.enabled THEN NULL
+         WHEN NOT storage_capacity_settings.enabled
+           OR storage_capacity_settings.interval_seconds <> EXCLUDED.interval_seconds THEN now()
+         ELSE storage_capacity_settings.next_run_at END,
+       last_status = CASE
+         WHEN NOT EXCLUDED.enabled THEN 'paused'
+         WHEN NOT storage_capacity_settings.enabled THEN 'waiting'
+         ELSE storage_capacity_settings.last_status END,
+       last_error = CASE
+         WHEN NOT EXCLUDED.enabled OR NOT storage_capacity_settings.enabled THEN NULL
+         ELSE storage_capacity_settings.last_error END,
+       consecutive_failures = CASE
+         WHEN NOT EXCLUDED.enabled OR NOT storage_capacity_settings.enabled THEN 0
+         ELSE storage_capacity_settings.consecutive_failures END,
+       updated_at = now(), updated_by = EXCLUDED.updated_by`,
+    [connectionId, value.enabled, value.intervalSeconds, updatedBy],
+  )
+  await q.query(
+    `UPDATE storage_capacity_targets
+        SET enabled = $2, interval_seconds = $3,
+            last_status = CASE WHEN $2 THEN last_status ELSE 'paused' END,
+            updated_at = now()
+      WHERE connection_id = $1`,
+    [connectionId, value.enabled, value.intervalSeconds],
   )
 }
 
@@ -259,6 +308,7 @@ const UpdateBody = z.object({
   // 走査の可否と一覧キャッシュ TTL も connection_settings 側 (capabilities と同じ)。
   scanEnabled: z.boolean().optional(),
   listCacheTtlSec: z.number().int().positive().optional(),
+  capacityTracking: CapacityTrackingPatch.optional(),
   pricing: PricingPatch.optional(),
   visibility: VisibilityPatch.optional(),
 })
@@ -286,6 +336,7 @@ interface ConnectionRow {
   created_at: Date
   updated_at: Date
   settings: Record<string, string>
+  capacity_tracking: { enabled: boolean; intervalSeconds: number }
   allowed_users: AllowedUserRow[]
 }
 
@@ -299,6 +350,13 @@ const SELECT_CONN =
           c.visibility_mode,
           c.created_at, c.updated_at,
           ${CONNECTION_SETTINGS_SUBQUERY},
+          COALESCE((
+            SELECT jsonb_build_object(
+              'enabled', capacity.enabled,
+              'intervalSeconds', capacity.interval_seconds
+            ) FROM storage_capacity_settings capacity
+             WHERE capacity.connection_id = c.id
+          ), '{"enabled":false,"intervalSeconds":86400}'::jsonb) AS capacity_tracking,
           COALESCE((
             SELECT jsonb_agg(jsonb_build_object(
               'id', allowed_user.id,
@@ -336,6 +394,7 @@ function toMasked(row: ConnectionRow, includeAllowedUsers = true) {
     capabilities: settingsToCapabilities(row.settings),
     scanEnabled: settingsToScanEnabled(row.settings),
     listCacheTtlSec: settingsToListCacheTtlSec(row.settings),
+    capacityTracking: row.capacity_tracking,
     pricing: {
       provider: profile.provider,
       /** false = エンドポイントからの推定。UI で「自動判定」と出すため。 */
@@ -551,7 +610,8 @@ export function mountConnectionsRoutes(app: Hono, deps: ConnectionsDeps): void {
     const allowedUserIds = u.visibility?.allowedUserIds
 
     if (sets.length === 0 && capKeys.length === 0 && extraSettings.length === 0
-        && pricing.deletes.length === 0 && allowedUserIds === undefined) {
+        && pricing.deletes.length === 0 && allowedUserIds === undefined
+        && u.capacityTracking === undefined) {
       // 更新するフィールドがない — 現在の行をそのまま返す。
       const r = await deps.pools.ro.query<ConnectionRow>(
         `${SELECT_CONN} WHERE c.id = $1`, [id],
@@ -586,6 +646,12 @@ export function mountConnectionsRoutes(app: Hono, deps: ConnectionsDeps): void {
         }
       }
       const currentCaps = settingsToCapabilities(current.settings)
+      const effectiveScanEnabled = u.scanEnabled ?? settingsToScanEnabled(current.settings)
+      const effectiveCapacityEnabled = u.capacityTracking?.enabled ?? current.capacity_tracking.enabled
+      if (effectiveCapacityEnabled && !effectiveScanEnabled) {
+        await client.query('ROLLBACK')
+        return c.json({ error: '容量の定期計測には配下の走査を許可する必要があります' }, 400)
+      }
       const currentAllowedUserIds = current.allowed_users.map(user => user.id).sort()
       const allowedUsersChanged = allowedUserIds !== undefined
         && (allowedUserIds.length !== currentAllowedUserIds.length
@@ -608,7 +674,10 @@ export function mountConnectionsRoutes(app: Hono, deps: ConnectionsDeps): void {
       const capsChanged = capKeys.some(key => caps[key] !== currentCaps[key])
       const settingsChanged = extraSettings.some(([key, value]) => current.settings[key] !== value)
         || pricing.deletes.some(key => current.settings[key] !== undefined)
-      if (!rowChanged && !capsChanged && !settingsChanged && !allowedUsersChanged) {
+      const capacityChanged = u.capacityTracking !== undefined
+        && (u.capacityTracking.enabled !== current.capacity_tracking.enabled
+          || u.capacityTracking.intervalSeconds !== current.capacity_tracking.intervalSeconds)
+      if (!rowChanged && !capsChanged && !settingsChanged && !allowedUsersChanged && !capacityChanged) {
         await client.query('COMMIT')
         markAuditNoChange(c)
         return c.json(toMasked(current))
@@ -628,6 +697,11 @@ export function mountConnectionsRoutes(app: Hono, deps: ConnectionsDeps): void {
       await upsertCapabilities(client, id, caps)
       await upsertSettings(client, id, extraSettings)
       await deleteSettings(client, id, pricing.deletes)
+      if (capacityChanged) {
+        await upsertCapacitySettings(
+          client, id, u.capacityTracking!, getSessionPrincipal(c)?.user.id ?? null,
+        )
+      }
       if (allowedUsersChanged) {
         await replaceAllowedUsers(
           client, id, allowedUserIds!, getSessionPrincipal(c)?.user.id ?? null,
@@ -636,6 +710,9 @@ export function mountConnectionsRoutes(app: Hono, deps: ConnectionsDeps): void {
         if (sets.length === 0) {
           await client.query('UPDATE storage_connections SET updated_at = now() WHERE id = $1', [id])
         }
+      }
+      if (capacityChanged && sets.length === 0 && !allowedUsersChanged) {
+        await client.query('UPDATE storage_connections SET updated_at = now() WHERE id = $1', [id])
       }
 
       const r = await client.query<ConnectionRow>(`${SELECT_CONN} WHERE c.id = $1`, [id])

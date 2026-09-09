@@ -47,6 +47,7 @@ import { mountLineageCurationRoutes } from './routes/lineage-curation.js'
 import { requestLogger } from './lib/request-logger.js'
 import { createCapacityStore } from './lib/capacity-store.js'
 import { mountStorageCapacityRoutes } from './routes/storage-capacity.js'
+import { listStorageBucketNames } from './lib/storage-buckets.js'
 
 // LAN ダッシュボード: 1 つのストリーム teardown 起因の未捕捉例外で全ユーザーの
 // リクエストを巻き添えにしない。root cause は都度直す前提の最後の砦 (ログは大声で)。
@@ -161,7 +162,7 @@ if (authEnabled) {
   api.on(['PUT', 'DELETE'], '/storage/:connId/tags', requirePermission('content:write'))
   api.on('PUT', '/settings/:key', requirePermission('settings:manage'))
   api.on('POST', '/storage/:connId/scan', requirePermission('jobs:operate'))
-  api.on('PUT', '/storage/:connId/capacity/tracking', requirePermission('connections:manage'))
+  api.on('POST', '/storage/:connId/capacity/scan', requirePermission('connections:manage'))
   api.on('POST', '/pricing/refresh', requirePermission('jobs:operate'))
   api.on('POST', '/jobs/:id/cancel', requirePermission('jobs:operate'))
   api.use('/lineage/*', requirePermission('lineage:read'))
@@ -230,8 +231,10 @@ mountJobRoutes(api, {
 mountStorageScanRoutes(api, { store: jobStore, getConnectionConfig: storageFactory.getConnectionConfig })
 mountStorageCapacityRoutes(api, {
   store: capacityStore,
+  jobs: jobStore,
   pools,
   getConnectionConfig: storageFactory.getConnectionConfig,
+  listBuckets: connectionId => listStorageBucketNames(storageFactory.getStorage, connectionId),
 })
 // 見積もりは S3 を叩かないので cap() のガードには載せない (上のコメント参照)。
 mountStorageEstimateRoutes(api, { pools, store: jobStore, pricing: pricingStore })

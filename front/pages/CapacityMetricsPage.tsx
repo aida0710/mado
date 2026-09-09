@@ -1,17 +1,14 @@
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { api } from '../lib/api/client'
-import type { CapacityHistory } from '../lib/api/types'
+import type { CapacityBucketHistory, CapacityOverview } from '../lib/api/types'
 import { useAuth } from '../lib/auth-context'
+import { useConnection } from '../lib/connectionContext'
 import { ConnectionSwitcher } from '../components/ConnectionSwitcher'
 import { ViewBreadcrumb } from '../components/ViewBreadcrumb'
 
 const BucketCapacityChart = lazy(() => import('../components/storage/BucketCapacityChart'))
 const DAYS = [7, 30, 90, 400] as const
-const INTERVALS = [
-  [21600, '6時間'], [43200, '12時間'], [86400, '24時間'],
-  [259200, '3日'], [604800, '7日'],
-] as const
 
 const formatBytes = (bytes: number): string => {
   if (bytes === 0) return '0 B'
@@ -20,121 +17,74 @@ const formatBytes = (bytes: number): string => {
   return `${(bytes / 1024 ** unit).toLocaleString('ja-JP', { maximumFractionDigits: 2 })} ${units[unit]}`
 }
 
-const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
-
 export default function CapacityMetricsPage({ connId }: { connId: string }) {
   const [params, setParams] = useSearchParams()
-  const selectedBucket = params.get('bucket') ?? ''
   const parsedDays = Number(params.get('days'))
   const days = DAYS.includes(parsedDays as typeof DAYS[number]) ? parsedDays : 90
-  const [buckets, setBuckets] = useState<string[]>([])
-  const [history, setHistory] = useState<CapacityHistory | null>(null)
-  const [loadedKey, setLoadedKey] = useState('')
-  const [error, setError] = useState<string | null>(null)
-  const [saving, setSaving] = useState(false)
+  const [overview, setOverview] = useState<CapacityOverview | null>(null)
+  const [loading, setLoading] = useState(true)
   const [scanning, setScanning] = useState(false)
-  const requestRef = useRef(0)
+  const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
   const auth = useAuth()
-  const requestKey = `${connId}\n${selectedBucket}\n${days}`
-  const loading = selectedBucket !== '' && loadedKey !== requestKey
+  const connection = useConnection()
   const canManage = !auth.enabled || (auth.user?.permissions.includes('connections:manage') ?? false)
-  const canOperate = !auth.enabled || (auth.user?.permissions.includes('jobs:operate') ?? false)
 
-  useEffect(() => {
-    let alive = true
-    api.buckets(connId).then(result => {
-      if (!alive) return
-      const names = result.buckets.map(bucket => bucket.name)
-      setBuckets(names)
-      if (!selectedBucket && names[0]) {
-        setParams(previous => {
-          const next = new URLSearchParams(previous)
-          next.set('view', 'capacity')
-          next.set('bucket', names[0])
-          return next
-        }, { replace: true })
-      }
-    }).catch(e => alive && setError((e as Error).message))
-    return () => { alive = false }
-  }, [connId, selectedBucket, setParams])
-
-  const refreshHistory = useCallback(async () => {
-    if (!selectedBucket) return
-    const request = ++requestRef.current
+  const refresh = useCallback(async () => {
+    setLoading(true)
     try {
-      const next = await api.capacityHistory(connId, selectedBucket, days)
-      if (request !== requestRef.current) return
-      setHistory(next)
+      setOverview(await api.capacityOverview(connId, days))
       setError(null)
-    } catch (e) {
-      if (request === requestRef.current) setError((e as Error).message)
+    } catch (cause) {
+      setError((cause as Error).message)
     } finally {
-      if (request === requestRef.current) setLoadedKey(`${connId}\n${selectedBucket}\n${days}`)
+      setLoading(false)
     }
-  }, [connId, selectedBucket, days])
+  }, [connId, days])
 
   useEffect(() => {
-    if (!selectedBucket) return
-    const request = ++requestRef.current
-    api.capacityHistory(connId, selectedBucket, days)
-      .then(next => {
-        if (request !== requestRef.current) return
-        setHistory(next)
+    let active = true
+    api.capacityOverview(connId, days)
+      .then(result => {
+        if (!active) return
+        setOverview(result)
         setError(null)
       })
-      .catch(error => {
-        if (request === requestRef.current) setError((error as Error).message)
-      })
-      .finally(() => {
-        if (request === requestRef.current) setLoadedKey(requestKey)
-      })
-  }, [connId, selectedBucket, days, requestKey])
+      .catch(cause => { if (active) setError((cause as Error).message) })
+      .finally(() => { if (active) setLoading(false) })
+    return () => { active = false }
+  }, [connId, days])
 
-  const updateParam = (key: string, value: string) => setParams(previous => {
-    const next = new URLSearchParams(previous)
-    next.set('view', 'capacity')
-    next.set(key, value)
-    return next
-  })
-
-  const updateTracking = async (enabled: boolean, intervalSeconds: number) => {
-    if (!selectedBucket) return
-    setSaving(true)
-    try {
-      const result = await api.setCapacityTracking(connId, selectedBucket, enabled, intervalSeconds)
-      setHistory(current => current ? { ...current, tracking: result.tracking } : current)
-      setError(null)
-    } catch (e) { setError((e as Error).message) }
-    finally { setSaving(false) }
+  const updateDays = (value: number) => {
+    setLoading(true)
+    setParams(previous => {
+      const next = new URLSearchParams(previous)
+      next.set('view', 'capacity')
+      next.set('days', String(value))
+      next.delete('bucket')
+      return next
+    })
   }
 
-  const scanNow = async () => {
-    if (!selectedBucket) return
+  const scanAll = async () => {
     setScanning(true)
+    setNotice(null)
     try {
-      const { jobId } = await api.startScan(connId, selectedBucket, '')
-      for (;;) {
-        const job = await api.getJob(jobId)
-        if (job.status === 'done') {
-          const result = job.result as { partial?: boolean } | null
-          if (result?.partial) throw new Error('走査が途中で終了したため、容量履歴には保存されませんでした')
-          break
-        }
-        if (job.status === 'error' || job.status === 'canceled') throw new Error(job.error ?? '走査が完了しませんでした')
-        await wait(1000)
-      }
-      await refreshHistory()
-    } catch (e) { setError((e as Error).message) }
-    finally { setScanning(false) }
+      const result = await api.startCapacityScan(connId)
+      setNotice(`${result.jobs.length.toLocaleString('ja-JP')}バケットの計測を開始しました。完了すると順次反映されます。`)
+      setError(null)
+    } catch (cause) {
+      setError((cause as Error).message)
+    } finally {
+      setScanning(false)
+    }
   }
 
-  const latest = history?.points.at(-1)
-  const previous = history?.points.at(-2)
-  const delta = latest && previous ? latest.totalBytes - previous.totalBytes : null
-  const deltaRate = delta != null && previous && previous.totalBytes > 0
-    ? delta / previous.totalBytes * 100 : null
-  const usage = latest && history?.capacityBytes
-    ? latest.totalBytes / history.capacityBytes * 100 : null
+  const measured = overview?.buckets.flatMap(bucket => bucket.points.at(-1) ?? []) ?? []
+  const totalBytes = measured.reduce((sum, point) => sum + point.totalBytes, 0)
+  const totalObjects = measured.reduce((sum, point) => sum + point.objectCount, 0)
+  const measuredCount = measured.length
+  const bucketCount = overview?.buckets.length ?? 0
 
   return (
     <section>
@@ -142,69 +92,111 @@ export default function CapacityMetricsPage({ connId }: { connId: string }) {
         <ViewBreadcrumb connId={connId} label="容量メトリクス" href={`/storage/${encodeURIComponent(connId)}/?view=capacity`} />
         <ConnectionSwitcher />
       </div>
-      <header className="mt-7 mb-6">
+      <header className="mt-7 mb-5">
         <p className="text-[10.5px] font-semibold uppercase tracking-[0.22em] text-ink-7">Bucket capacity</p>
-        <h2 className="mt-1 text-[27px] font-semibold tracking-[-0.025em]">バケット容量メトリクス</h2>
-        <p className="mt-2 max-w-[760px] text-[13px] text-ink-7">完全に走査できたバケット全体の容量だけを履歴化します。追跡を有効にするまで定期走査は始まりません。</p>
-      </header>
-
-      <div className="mb-5 grid gap-4 md:grid-cols-[minmax(220px,1fr)_auto]">
-        <label className="text-[12px] font-semibold text-ink-8">バケット
-          <select className="mt-1 block w-full border border-rule-strong bg-paper px-3 py-2 text-[13px]" value={selectedBucket} onChange={e => updateParam('bucket', e.target.value)}>
-            {buckets.map(bucket => <option key={bucket} value={bucket}>{bucket}</option>)}
-          </select>
-        </label>
-        <div className="flex items-end gap-2">
-          {DAYS.map(value => <button key={value} type="button" className="ghost" aria-pressed={days === value} onClick={() => updateParam('days', String(value))}>{value === 400 ? '全期間' : `${value}日`}</button>)}
-        </div>
-      </div>
-
-      {error && <p className="error">{error}</p>}
-      {loading && <p className="text-[13px] text-ink-7">読み込み中…</p>}
-      {!loading && history && (
-        <>
-          <div className="grid gap-px border border-rule bg-rule sm:grid-cols-2 lg:grid-cols-4">
-            <Metric label="現在の容量" value={latest ? formatBytes(latest.totalBytes) : '—'} />
-            <Metric label="前回から" value={delta == null ? '—' : `${delta >= 0 ? '+' : '−'}${formatBytes(Math.abs(delta))}${deltaRate == null ? '' : ` (${deltaRate >= 0 ? '+' : ''}${deltaRate.toFixed(1)}%)`}`} />
-            <Metric label="オブジェクト数" value={latest ? latest.objectCount.toLocaleString('ja-JP') : '—'} />
-            <Metric label={usage == null ? '最終取得' : '容量上限に対して'} value={usage == null ? (latest ? new Date(latest.collectedAt).toLocaleString('ja-JP') : '—') : `${usage.toFixed(1)}%`} />
+        <div className="mt-1 flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 className="text-[27px] font-semibold tracking-[-0.025em]">バケット容量メトリクス</h2>
+            <p className="mt-1 text-[13px] text-ink-7">このコネクションにある全バケットの完全走査結果をまとめて表示します。</p>
           </div>
-
-          <div className="mt-7 border-t border-rule pt-5">
-            {history.points.length >= 2 ? (
-              <Suspense fallback={<p className="text-[13px] text-ink-7">グラフを読み込み中…</p>}>
-                <BucketCapacityChart
-                  points={history.points}
-                  intervalSeconds={history.tracking.intervalSeconds}
-                  capacityBytes={history.capacityBytes}
-                />
-              </Suspense>
-            ) : (
-              <div className="py-16 text-center">
-                <p className="font-semibold">履歴はまだありません</p>
-                <p className="mt-1 text-[13px] text-ink-7">2回以上の完全走査が完了すると推移を表示します。</p>
-              </div>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" className="ghost" disabled={loading} onClick={() => void refresh()}>表示を更新</button>
+            {canManage && (
+              <button type="button" className="ghost" disabled={scanning || !connection.scanEnabled} onClick={() => void scanAll()}>
+                {scanning ? '開始中…' : '今すぐ全バケットを計測'}
+              </button>
             )}
           </div>
+        </div>
+      </header>
 
-          <div className="mt-7 flex flex-wrap items-end gap-3 border-t border-rule pt-5">
-            <label className="text-[12px] font-semibold text-ink-8">計測間隔
-              <select className="mt-1 block border border-rule-strong bg-paper px-3 py-2" disabled={!canManage || saving} value={history.tracking.intervalSeconds} onChange={e => void updateTracking(history.tracking.enabled, Number(e.target.value))}>
-                {INTERVALS.map(([seconds, label]) => <option key={seconds} value={seconds}>{label}</option>)}
-              </select>
-            </label>
-            {canManage && <button type="button" className="ghost" disabled={saving} onClick={() => void updateTracking(!history.tracking.enabled, history.tracking.intervalSeconds)}>{history.tracking.enabled ? '定期計測を停止' : '定期計測を有効化'}</button>}
-            {canOperate && <button type="button" className="ghost" disabled={scanning} onClick={() => void scanNow()}>{scanning ? '走査中…' : '今すぐ計測'}</button>}
-            <span className="text-[12px] text-ink-7">{history.tracking.enabled ? `追跡中${history.tracking.nextRunAt ? ` · 次回 ${new Date(history.tracking.nextRunAt).toLocaleString('ja-JP')}` : ''}` : '定期計測は停止中'}</span>
-          </div>
-          {history.tracking.lastError && <p className="mt-3 text-[12px] text-danger">前回: {history.tracking.lastError}</p>}
-          <p className="mt-6"><Link className="text-link hover:text-link-hover" to={`/storage/${encodeURIComponent(connId)}/${encodeURIComponent(selectedBucket)}/`}>バケットを開く →</Link></p>
-        </>
+      {overview && (
+        <div className="mb-5 grid gap-px border border-rule bg-rule sm:grid-cols-3">
+          <Metric label="全バケットの容量" value={measuredCount ? formatBytes(totalBytes) : '—'} />
+          <Metric label="全バケットのオブジェクト数" value={measuredCount ? totalObjects.toLocaleString('ja-JP') : '—'} />
+          <Metric label="集計範囲" value={`${measuredCount.toLocaleString('ja-JP')} / ${bucketCount.toLocaleString('ja-JP')} バケット`} />
+        </div>
+      )}
+
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3 border-y border-rule py-3">
+        <div className="flex gap-2">
+          {DAYS.map(value => (
+            <button key={value} type="button" className="ghost" aria-pressed={days === value} onClick={() => updateDays(value)}>
+              {value === 400 ? '全期間' : `${value}日`}
+            </button>
+          ))}
+        </div>
+        {overview && (
+          <p className="text-[12px] text-ink-7">
+            {overview.tracking.enabled
+              ? `${Math.round(overview.tracking.intervalSeconds / 3600)}時間ごとに全バケットを計測`
+              : '定期計測は停止中'}
+            {canManage && <> · <Link className="text-link hover:text-link-hover" to={`/settings/connections/${encodeURIComponent(connId)}`}>コネクション設定</Link></>}
+          </p>
+        )}
+      </div>
+
+      {notice && <p className="mb-4 border border-rule bg-ink-1 px-3 py-2 text-[12px]">{notice}</p>}
+      {error && <p className="error">{error}</p>}
+      {loading && !overview && <p className="text-[13px] text-ink-7">読み込み中…</p>}
+      {!loading && overview?.buckets.length === 0 && <p className="empty-state">バケットが見つかりません。</p>}
+
+      {overview && (
+        <div className="space-y-4" aria-busy={loading}>
+          {overview.buckets.map(bucket => (
+            <BucketMetrics
+              key={bucket.bucket}
+              connId={connId}
+              history={bucket}
+              intervalSeconds={overview.tracking.intervalSeconds}
+            />
+          ))}
+        </div>
       )}
     </section>
   )
 }
 
+function BucketMetrics({ connId, history, intervalSeconds }: {
+  connId: string
+  history: CapacityBucketHistory
+  intervalSeconds: number
+}) {
+  const latest = history.points.at(-1)
+  const previous = history.points.at(-2)
+  const delta = latest && previous ? latest.totalBytes - previous.totalBytes : null
+  const deltaRate = delta != null && previous && previous.totalBytes > 0
+    ? delta / previous.totalBytes * 100 : null
+  return (
+    <article className="border border-rule-strong bg-paper px-4 py-3">
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <h3 className="min-w-0 truncate font-mono text-[14px] font-semibold" title={history.bucket}>{history.bucket}</h3>
+        <Link className="shrink-0 text-[11px] text-link hover:text-link-hover" to={`/storage/${encodeURIComponent(connId)}/${encodeURIComponent(history.bucket)}/`}>開く →</Link>
+      </div>
+      <div className="grid gap-px bg-rule sm:grid-cols-4">
+        <CompactMetric label="現在の容量" value={latest ? formatBytes(latest.totalBytes) : '—'} />
+        <CompactMetric label="前回から" value={delta == null ? '—' : `${delta >= 0 ? '+' : '−'}${formatBytes(Math.abs(delta))}${deltaRate == null ? '' : ` (${deltaRate >= 0 ? '+' : ''}${deltaRate.toFixed(1)}%)`}`} />
+        <CompactMetric label="オブジェクト数" value={latest ? latest.objectCount.toLocaleString('ja-JP') : '—'} />
+        <CompactMetric label="最終取得" value={latest ? new Date(latest.collectedAt).toLocaleString('ja-JP') : '—'} />
+      </div>
+      {history.lastError && <p className="mt-2 text-[11px] text-danger">{history.lastError}</p>}
+      <div className="mt-2 border-t border-rule pt-1">
+        {history.points.length >= 2 ? (
+          <Suspense fallback={<div className="h-[120px] pt-4 text-[12px] text-ink-7">グラフを読み込み中…</div>}>
+            <BucketCapacityChart points={history.points} intervalSeconds={intervalSeconds} capacityBytes={null} label={history.bucket} />
+          </Suspense>
+        ) : (
+          <div className="flex h-14 items-center justify-center text-[12px] text-ink-7">2回計測するとグラフを表示します</div>
+        )}
+      </div>
+    </article>
+  )
+}
+
 function Metric({ label, value }: { label: string; value: string }) {
-  return <div className="bg-paper px-5 py-4"><p className="text-[10.5px] uppercase tracking-[0.16em] text-ink-7">{label}</p><p className="mt-1 font-mono text-[19px] font-semibold tabular-nums">{value}</p></div>
+  return <div className="bg-paper px-4 py-3"><p className="text-[10px] uppercase tracking-[0.14em] text-ink-7">{label}</p><p className="mt-0.5 font-mono text-[17px] font-semibold tabular-nums">{value}</p></div>
+}
+
+function CompactMetric({ label, value }: { label: string; value: string }) {
+  return <div className="bg-paper px-3 py-2"><p className="text-[9.5px] uppercase tracking-[0.12em] text-ink-7">{label}</p><p className="mt-0.5 truncate font-mono text-[13px] font-semibold tabular-nums" title={value}>{value}</p></div>
 }

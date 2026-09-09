@@ -4,13 +4,12 @@ import type { ScanResult } from './scan.js'
 export const CAPACITY_INTERVALS = [21600, 43200, 86400, 259200, 604800] as const
 export type CapacityStatus = 'waiting' | 'queued' | 'success' | 'partial' | 'error' | 'paused'
 
-export interface CapacityTarget {
+export interface CapacitySettings {
   enabled: boolean
   intervalSeconds: number
   nextRunAt: string | null
   lastAttemptAt: string | null
-  lastSuccessAt: string | null
-  lastStatus: CapacityStatus | null
+  lastStatus: 'waiting' | 'queued' | 'error' | 'paused'
   lastError: string | null
   consecutiveFailures: number
 }
@@ -21,17 +20,30 @@ export interface CapacityPoint {
   collectedAt: string
 }
 
-interface TargetRow {
-  connection_id: string
+export interface CapacityBucketHistory {
   bucket: string
+  lastSuccessAt: string | null
+  lastStatus: CapacityStatus | null
+  lastError: string | null
+  points: CapacityPoint[]
+}
+
+interface SettingsRow {
+  connection_id: string
   enabled: boolean
   interval_seconds: number
   next_run_at: Date | null
   last_attempt_at: Date | null
+  last_status: 'waiting' | 'queued' | 'error' | 'paused'
+  last_error: string | null
+  consecutive_failures: number
+}
+
+interface TargetRow {
+  bucket: string
   last_success_at: Date | null
   last_status: CapacityStatus | null
   last_error: string | null
-  consecutive_failures: number
 }
 
 const safeNumber = (value: string | number): number => {
@@ -51,135 +63,148 @@ function publicError(error: unknown): string {
   return '容量の取得に失敗しました'
 }
 
-export interface CapacityStore {
-  history(connectionId: string, bucket: string, days: number): Promise<{ tracking: CapacityTarget; points: CapacityPoint[] }>
-  setTracking(connectionId: string, bucket: string, enabled: boolean, intervalSeconds: number, userId: string | null): Promise<{ changed: boolean; tracking: CapacityTarget }>
-  reserveDue(limit: number): Promise<Array<{ connectionId: string; bucket: string }>>
-  attachJob(connectionId: string, bucket: string, jobId: number): Promise<void>
-  markPaused(connectionId: string, bucket: string): Promise<void>
-  recordSuccess(jobId: number, connectionId: string, bucket: string, result: Pick<ScanResult, 'totalBytes' | 'objectCount'>): Promise<void>
-  recordPartial(connectionId: string, bucket: string): Promise<void>
-  recordError(connectionId: string, bucket: string, error: unknown): Promise<void>
-  prune(keepDays: number): Promise<number>
-}
-
-function target(row?: TargetRow): CapacityTarget {
+function settings(row?: SettingsRow): CapacitySettings {
   if (!row) return {
     enabled: false, intervalSeconds: 86400, nextRunAt: null,
-    lastAttemptAt: null, lastSuccessAt: null, lastStatus: null, lastError: null,
-    consecutiveFailures: 0,
+    lastAttemptAt: null, lastStatus: 'paused', lastError: null, consecutiveFailures: 0,
   }
   return {
     enabled: row.enabled,
     intervalSeconds: row.interval_seconds,
     nextRunAt: iso(row.next_run_at),
     lastAttemptAt: iso(row.last_attempt_at),
-    lastSuccessAt: iso(row.last_success_at),
     lastStatus: row.last_status,
     lastError: row.last_error,
     consecutiveFailures: row.consecutive_failures,
   }
 }
 
+export interface CapacityStore {
+  overview(connectionId: string, buckets: string[], days: number): Promise<{
+    tracking: CapacitySettings
+    buckets: CapacityBucketHistory[]
+  }>
+  reserveDueConnections(limit: number): Promise<string[]>
+  syncBuckets(connectionId: string, buckets: string[]): Promise<void>
+  attachJob(connectionId: string, bucket: string, jobId: number): Promise<void>
+  markConnectionScheduled(connectionId: string): Promise<void>
+  markConnectionPaused(connectionId: string): Promise<void>
+  recordConnectionError(connectionId: string, error: unknown): Promise<void>
+  recordSuccess(jobId: number, connectionId: string, bucket: string, result: Pick<ScanResult, 'totalBytes' | 'objectCount'>): Promise<void>
+  recordPartial(connectionId: string, bucket: string): Promise<void>
+  recordError(connectionId: string, bucket: string, error: unknown): Promise<void>
+  prune(keepDays: number): Promise<number>
+}
+
 export function createCapacityStore(pools: Pools): CapacityStore {
   return {
-    async history(connectionId, bucket, days) {
-      const [t, p] = await Promise.all([
+    async overview(connectionId, bucketNames, days) {
+      const buckets = [...new Set(bucketNames)]
+      const [settingResult, targetResult, pointResult] = await Promise.all([
+        pools.ro.query<SettingsRow>(
+          `SELECT connection_id, enabled, interval_seconds, next_run_at, last_attempt_at,
+                  last_status, last_error, consecutive_failures
+             FROM storage_capacity_settings WHERE connection_id = $1`, [connectionId]),
         pools.ro.query<TargetRow>(
-          `SELECT connection_id, bucket, enabled, interval_seconds, next_run_at,
-                  last_attempt_at, last_success_at, last_status, last_error, consecutive_failures
-             FROM storage_capacity_targets WHERE connection_id = $1 AND bucket = $2`,
-          [connectionId, bucket],
-        ),
-        pools.ro.query<{ total_bytes: string; object_count: string; collected_at: Date }>(
-          `SELECT total_bytes, object_count, collected_at
+          `SELECT bucket, last_success_at, last_status, last_error
+             FROM storage_capacity_targets
+            WHERE connection_id = $1 AND bucket = ANY($2::text[])`, [connectionId, buckets]),
+        pools.ro.query<{ bucket: string; total_bytes: string; object_count: string; collected_at: Date }>(
+          `SELECT bucket, total_bytes, object_count, collected_at
              FROM storage_capacity_snapshots
-            WHERE connection_id = $1 AND bucket = $2
+            WHERE connection_id = $1 AND bucket = ANY($2::text[])
               AND collected_at >= now() - ($3::text || ' days')::interval
-            ORDER BY collected_at`,
-          [connectionId, bucket, days],
-        ),
+            ORDER BY bucket, collected_at`, [connectionId, buckets, days]),
       ])
-      return {
-        tracking: target(t.rows[0]),
-        points: p.rows.map(row => ({
-          totalBytes: safeNumber(row.total_bytes),
-          objectCount: safeNumber(row.object_count),
+      const targets = new Map(targetResult.rows.map(row => [row.bucket, row]))
+      const points = new Map<string, CapacityPoint[]>()
+      for (const row of pointResult.rows) {
+        const list = points.get(row.bucket) ?? []
+        list.push({
+          totalBytes: safeNumber(row.total_bytes), objectCount: safeNumber(row.object_count),
           collectedAt: row.collected_at.toISOString(),
-        })),
+        })
+        points.set(row.bucket, list)
+      }
+      return {
+        tracking: settings(settingResult.rows[0]),
+        buckets: buckets.map(bucket => {
+          const status = targets.get(bucket)
+          return {
+            bucket, lastSuccessAt: iso(status?.last_success_at ?? null),
+            lastStatus: status?.last_status ?? null, lastError: status?.last_error ?? null,
+            points: points.get(bucket) ?? [],
+          }
+        }),
       }
     },
 
-    async setTracking(connectionId, bucket, enabled, intervalSeconds, userId) {
-      const r = await pools.rw.query<TargetRow & { changed: boolean }>(
-        `WITH upserted AS (
-         INSERT INTO storage_capacity_targets
-           (connection_id, bucket, enabled, interval_seconds, next_run_at, last_status, updated_by)
-         VALUES ($1, $2, $3, $4, now(), CASE WHEN $3 THEN 'waiting' ELSE 'paused' END, $5)
+    async reserveDueConnections(limit) {
+      const result = await pools.rw.query<{ connection_id: string }>(
+        `WITH due AS (
+           SELECT connection_id FROM storage_capacity_settings
+            WHERE enabled AND next_run_at <= now()
+            ORDER BY next_run_at FOR UPDATE SKIP LOCKED LIMIT $1
+         )
+         UPDATE storage_capacity_settings s
+            SET next_run_at = now() + interval '15 minutes', last_attempt_at = now(),
+                last_status = 'queued', last_error = NULL
+           FROM due WHERE s.connection_id = due.connection_id
+         RETURNING s.connection_id`, [limit])
+      return result.rows.map(row => row.connection_id)
+    },
+
+    async syncBuckets(connectionId, buckets) {
+      if (buckets.length === 0) return
+      await pools.rw.query(
+        `INSERT INTO storage_capacity_targets
+           (connection_id, bucket, enabled, interval_seconds, next_run_at, last_status)
+         SELECT $1, bucket, COALESCE(s.enabled, false), COALESCE(s.interval_seconds, 86400),
+                COALESCE(s.next_run_at, now()),
+                CASE WHEN COALESCE(s.enabled, false) THEN 'waiting' ELSE 'paused' END
+           FROM unnest($2::text[]) AS bucket
+           LEFT JOIN storage_capacity_settings s ON s.connection_id = $1
          ON CONFLICT (connection_id, bucket) DO UPDATE SET
-           enabled = EXCLUDED.enabled,
-           interval_seconds = EXCLUDED.interval_seconds,
-           next_run_at = CASE
-             WHEN EXCLUDED.enabled AND (NOT storage_capacity_targets.enabled
-               OR storage_capacity_targets.interval_seconds <> EXCLUDED.interval_seconds) THEN now()
-             ELSE storage_capacity_targets.next_run_at END,
+           enabled = EXCLUDED.enabled, interval_seconds = EXCLUDED.interval_seconds,
+           next_run_at = EXCLUDED.next_run_at,
            last_status = CASE
              WHEN NOT EXCLUDED.enabled THEN 'paused'
              WHEN NOT storage_capacity_targets.enabled THEN 'waiting'
              ELSE storage_capacity_targets.last_status END,
-           last_error = CASE
-             WHEN NOT EXCLUDED.enabled OR NOT storage_capacity_targets.enabled THEN NULL
-             ELSE storage_capacity_targets.last_error END,
-           updated_at = now(), updated_by = EXCLUDED.updated_by
-         WHERE storage_capacity_targets.enabled IS DISTINCT FROM EXCLUDED.enabled
-            OR storage_capacity_targets.interval_seconds IS DISTINCT FROM EXCLUDED.interval_seconds
-         RETURNING connection_id, bucket, enabled, interval_seconds, next_run_at,
-                   last_attempt_at, last_success_at, last_status, last_error, consecutive_failures
-         )
-         SELECT upserted.*, true AS changed FROM upserted
-         UNION ALL
-         SELECT connection_id, bucket, enabled, interval_seconds, next_run_at,
-                last_attempt_at, last_success_at, last_status, last_error, consecutive_failures,
-                false AS changed
-           FROM storage_capacity_targets
-          WHERE connection_id = $1 AND bucket = $2
-            AND NOT EXISTS (SELECT 1 FROM upserted)`,
-        [connectionId, bucket, enabled, intervalSeconds, userId],
-      )
-      const row = r.rows[0]!
-      return { changed: row.changed, tracking: target(row) }
-    },
-
-    async reserveDue(limit) {
-      const r = await pools.rw.query<{ connection_id: string; bucket: string }>(
-        `WITH due AS (
-           SELECT connection_id, bucket FROM storage_capacity_targets
-            WHERE enabled AND next_run_at <= now()
-            ORDER BY next_run_at FOR UPDATE SKIP LOCKED LIMIT $1
-         )
-         UPDATE storage_capacity_targets t
-            SET next_run_at = now() + interval '15 minutes',
-                last_attempt_at = now(), last_status = 'queued', last_error = NULL
-           FROM due
-          WHERE t.connection_id = due.connection_id AND t.bucket = due.bucket
-         RETURNING t.connection_id, t.bucket`,
-        [limit],
-      )
-      return r.rows.map(row => ({ connectionId: row.connection_id, bucket: row.bucket }))
+           updated_at = now()`, [connectionId, [...new Set(buckets)]])
     },
 
     async attachJob(connectionId, bucket, jobId) {
       await pools.rw.query(
-        `UPDATE storage_capacity_targets SET last_job_id = $3
+        `UPDATE storage_capacity_targets
+            SET last_job_id = $3, last_status = 'queued', updated_at = now()
           WHERE connection_id = $1 AND bucket = $2`, [connectionId, bucket, jobId])
     },
 
-    async markPaused(connectionId, bucket) {
+    async markConnectionScheduled(connectionId) {
       await pools.rw.query(
-        `UPDATE storage_capacity_targets
+        `UPDATE storage_capacity_settings
+            SET next_run_at = now() + make_interval(secs => interval_seconds),
+                last_status = 'waiting', consecutive_failures = 0, last_error = NULL
+          WHERE connection_id = $1`, [connectionId])
+    },
+
+    async markConnectionPaused(connectionId) {
+      await pools.rw.query(
+        `UPDATE storage_capacity_settings
             SET last_status = 'paused', last_error = NULL,
                 next_run_at = now() + make_interval(secs => interval_seconds)
-          WHERE connection_id = $1 AND bucket = $2`, [connectionId, bucket])
+          WHERE connection_id = $1`, [connectionId])
+    },
+
+    async recordConnectionError(connectionId, error) {
+      await pools.rw.query(
+        `UPDATE storage_capacity_settings
+            SET last_status = 'error', last_error = $2,
+                consecutive_failures = consecutive_failures + 1,
+                next_run_at = now() + make_interval(secs => LEAST(21600,
+                  900 * power(2, LEAST(consecutive_failures, 6))::integer))
+          WHERE connection_id = $1`, [connectionId, publicError(error)])
     },
 
     async recordSuccess(jobId, connectionId, bucket, result) {
@@ -189,15 +214,18 @@ export function createCapacityStore(pools: Pools): CapacityStore {
         await client.query(
           `INSERT INTO storage_capacity_snapshots
              (connection_id, bucket, total_bytes, object_count, job_id)
-           VALUES ($1, $2, $3, $4, $5) ON CONFLICT (job_id) WHERE job_id IS NOT NULL DO NOTHING`,
-          [connectionId, bucket, result.totalBytes, result.objectCount, jobId],
-        )
+           VALUES ($1, $2, $3, $4, $5)
+           ON CONFLICT (job_id) WHERE job_id IS NOT NULL DO NOTHING`,
+          [connectionId, bucket, result.totalBytes, result.objectCount, jobId])
         await client.query(
-          `UPDATE storage_capacity_targets
-              SET last_success_at = now(), last_status = 'success', last_error = NULL,
-                  consecutive_failures = 0,
-                  next_run_at = now() + make_interval(secs => interval_seconds)
-            WHERE connection_id = $1 AND bucket = $2`, [connectionId, bucket])
+          `INSERT INTO storage_capacity_targets
+             (connection_id, bucket, enabled, interval_seconds, next_run_at, last_job_id,
+              last_success_at, last_status, consecutive_failures)
+           VALUES ($1, $2, false, 86400, now(), $3, now(), 'success', 0)
+           ON CONFLICT (connection_id, bucket) DO UPDATE SET
+             last_job_id = EXCLUDED.last_job_id, last_success_at = now(),
+             last_status = 'success', last_error = NULL, consecutive_failures = 0,
+             updated_at = now()`, [connectionId, bucket, jobId])
         await client.query('COMMIT')
       } catch (error) {
         await client.query('ROLLBACK')
@@ -207,28 +235,31 @@ export function createCapacityStore(pools: Pools): CapacityStore {
 
     async recordPartial(connectionId, bucket) {
       await pools.rw.query(
-        `UPDATE storage_capacity_targets
-            SET last_status = 'partial', last_error = '走査が途中で終了しました',
-                consecutive_failures = consecutive_failures + 1,
-                next_run_at = now() + interval '1 hour'
-          WHERE connection_id = $1 AND bucket = $2`, [connectionId, bucket])
+        `INSERT INTO storage_capacity_targets
+           (connection_id, bucket, enabled, interval_seconds, next_run_at, last_status, last_error, consecutive_failures)
+         VALUES ($1, $2, false, 86400, now(), 'partial', '走査が途中で終了しました', 1)
+         ON CONFLICT (connection_id, bucket) DO UPDATE SET
+           last_status = 'partial', last_error = '走査が途中で終了しました',
+           consecutive_failures = storage_capacity_targets.consecutive_failures + 1,
+           updated_at = now()`, [connectionId, bucket])
     },
 
     async recordError(connectionId, bucket, error) {
       await pools.rw.query(
-        `UPDATE storage_capacity_targets
-            SET last_status = 'error', last_error = $3,
-                consecutive_failures = consecutive_failures + 1,
-                next_run_at = now() + make_interval(secs => LEAST(21600,
-                  900 * power(2, LEAST(consecutive_failures, 6))::integer))
-          WHERE connection_id = $1 AND bucket = $2`, [connectionId, bucket, publicError(error)])
+        `INSERT INTO storage_capacity_targets
+           (connection_id, bucket, enabled, interval_seconds, next_run_at, last_status, last_error, consecutive_failures)
+         VALUES ($1, $2, false, 86400, now(), 'error', $3, 1)
+         ON CONFLICT (connection_id, bucket) DO UPDATE SET
+           last_status = 'error', last_error = EXCLUDED.last_error,
+           consecutive_failures = storage_capacity_targets.consecutive_failures + 1,
+           updated_at = now()`, [connectionId, bucket, publicError(error)])
     },
 
     async prune(keepDays) {
-      const r = await pools.rw.query(
+      const result = await pools.rw.query(
         `DELETE FROM storage_capacity_snapshots
           WHERE collected_at < now() - ($1::text || ' days')::interval`, [keepDays])
-      return r.rowCount ?? 0
+      return result.rowCount ?? 0
     },
   }
 }

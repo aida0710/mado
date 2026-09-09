@@ -2,10 +2,10 @@ import {
   CartesianGrid, Line, LineChart, ReferenceLine, ResponsiveContainer,
   Tooltip, XAxis, YAxis,
 } from 'recharts'
-import type { CapacityHistory } from '../../lib/api/types'
+import type { CapacityBucketHistory } from '../../lib/api/types'
 import { capacityChartData, type CapacityChartPoint } from '../../lib/capacityChart'
 
-type Point = CapacityHistory['points'][number]
+type Point = CapacityBucketHistory['points'][number]
 
 const formatBytes = (bytes: number): string => {
   if (bytes === 0) return '0 B'
@@ -30,18 +30,19 @@ function CapacityTooltip({ active, payload, label }: {
   )
 }
 
-export default function BucketCapacityChart({ points, intervalSeconds, capacityBytes }: {
+export default function BucketCapacityChart({ points, intervalSeconds, capacityBytes, label }: {
   points: Point[]
   intervalSeconds: number
   capacityBytes: number | null
+  label?: string
 }) {
   const data = capacityChartData(points, intervalSeconds)
   const latest = points.at(-1)?.totalBytes
   return (
     <div>
-      <div className="h-[320px] w-full" role="img" aria-label="バケット容量の推移グラフ">
+      <div className="h-[120px] w-full" role="img" aria-label={`${label ?? 'バケット'}の容量推移グラフ`}>
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={data} margin={{ top: 12, right: 16, bottom: 8, left: 10 }} accessibilityLayer>
+          <LineChart data={data} margin={{ top: 8, right: 12, bottom: 2, left: 2 }} accessibilityLayer>
             <CartesianGrid stroke="var(--rule)" vertical={false} />
             <XAxis
               dataKey="collectedAt"
@@ -52,7 +53,7 @@ export default function BucketCapacityChart({ points, intervalSeconds, capacityB
             />
             <YAxis
               tickFormatter={value => formatBytes(Number(value))}
-              width={78} tick={{ fontSize: 11, fill: 'var(--ink-7)' }}
+              width={70} tick={{ fontSize: 10, fill: 'var(--ink-7)' }}
               axisLine={false} tickLine={false}
             />
             <Tooltip content={<CapacityTooltip />} />
@@ -61,7 +62,7 @@ export default function BucketCapacityChart({ points, intervalSeconds, capacityB
               : latest !== undefined && <ReferenceLine y={latest} stroke="var(--ink-3)" strokeDasharray="3 4" />}
             <Line
               type="linear" dataKey="totalBytes" name="容量" connectNulls={false} isAnimationActive={false}
-              stroke="var(--ink-12)" strokeWidth={2} dot={{ r: 2.5 }} activeDot={{ r: 4 }}
+              stroke="var(--ink-12)" strokeWidth={1.75} dot={false} activeDot={{ r: 3.5 }}
             />
           </LineChart>
         </ResponsiveContainer>

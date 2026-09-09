@@ -33,8 +33,8 @@ import {
   DatasetCatalogResponse,
   StorageLineageResolution,
   ManualLineageMutationResult,
-  CapacityHistory,
-  CapacityTrackingResponse,
+  CapacityOverview,
+  CapacityScanResponse,
 } from './types'
 import type {
   ConnectionCreateInput, ConnectionUpdateInput, TagCreateInput, TagUpdateInput, TargetKind,
@@ -221,16 +221,15 @@ export const api = {
     bucketsCache.invalidate(k('buckets', connId))
   },
 
-  capacityHistory: (connId: string, bucket: string, days: number) =>
+  capacityOverview: (connId: string, days: number) =>
     getJson(buildUrl(`${API_BASE}/storage/${encodeURIComponent(connId)}/capacity`, {
-      bucket, days: String(days),
-    }), CapacityHistory),
+      days: String(days),
+    }), CapacityOverview),
 
-  setCapacityTracking: (connId: string, bucket: string, enabled: boolean, intervalSeconds: number) =>
+  startCapacityScan: (connId: string) =>
     mutateJson(
-      buildUrl(`${API_BASE}/storage/${encodeURIComponent(connId)}/capacity/tracking`, { bucket }),
-      { method: 'PUT', body: { enabled, intervalSeconds } },
-      CapacityTrackingResponse,
+      `${API_BASE}/storage/${encodeURIComponent(connId)}/capacity/scan`,
+      { method: 'POST' }, CapacityScanResponse,
     ),
 
   list: (

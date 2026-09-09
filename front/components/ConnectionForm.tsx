@@ -18,6 +18,10 @@ import type {
 
 /** 容量の入力単位。fmtSize が 1024 系なので、表示と揃えて TiB で扱う。 */
 const TIB = 1024 ** 4
+const CAPACITY_INTERVALS = [
+  [21600, '6時間'], [43200, '12時間'], [86400, '24時間'],
+  [259200, '3日'], [604800, '7日'],
+] as const
 
 type Mode =
   | { kind: 'create'; onSubmit: (input: ConnectionCreateInput) => Promise<void> }
@@ -44,6 +48,9 @@ interface FormState {
   scanEnabled: boolean
   /** 一覧キャッシュの保持秒数。 */
   listCacheTtlSec: number
+  /** connection配下の全bucketに適用する容量計測設定。 */
+  capacityTrackingEnabled: boolean
+  capacityTrackingIntervalSeconds: number
   // ── 転送見積もり (spec: 2026-08-22-transfer-estimate-design.md) ──
   // 単価の手動上書き (cost.*) は API にはあるが、ここには出していない。
   // カタログに載っているリージョンなら触る必要が無いため。
@@ -76,6 +83,9 @@ type Action =
 function reducer(state: FormState, action: Action): FormState {
   switch (action.type) {
     case 'setField':
+      if (action.field === 'scanEnabled' && action.value === false) {
+        return { ...state, scanEnabled: false, capacityTrackingEnabled: false }
+      }
       return { ...state, [action.field]: action.value }
     case 'toggleCapability': {
       const capabilities = { ...state.capabilities, [action.cap]: action.value }
@@ -115,6 +125,8 @@ function initialState(current: Connection | null): FormState {
     allowedUserIds: current?.visibility.allowedUsers.map(user => user.id).sort() ?? [],
     scanEnabled: current?.scanEnabled ?? true,
     listCacheTtlSec: current?.listCacheTtlSec ?? 86400,
+    capacityTrackingEnabled: current?.capacityTracking?.enabled ?? false,
+    capacityTrackingIntervalSeconds: current?.capacityTracking?.intervalSeconds ?? 86400,
     pricingProvider: current?.pricing.providerExplicit ? current.pricing.provider : '',
     pricingStorageClass: current?.pricing.storageClass ?? 'STANDARD',
     pricingReadMbps: current?.pricing.readMbps ?? 300,
@@ -143,6 +155,7 @@ export function ConnectionForm({ mode, onClose, presentation = 'modal' }: Props)
     visibilityMode, allowedUserIds,
     scanEnabled,
     listCacheTtlSec,
+    capacityTrackingEnabled, capacityTrackingIntervalSeconds,
     pricingProvider, pricingStorageClass, pricingReadMbps, pricingWriteMbps,
     pricingCapacityTb, pricingInstability, pricingStoragePerGbMonth,
   } = state
@@ -214,6 +227,14 @@ export function ConnectionForm({ mode, onClose, presentation = 'modal' }: Props)
         }
         if (scanEnabled !== cur.scanEnabled) input.scanEnabled = scanEnabled
         if (listCacheTtlSec !== cur.listCacheTtlSec) input.listCacheTtlSec = listCacheTtlSec
+        const currentCapacityTracking = cur.capacityTracking ?? { enabled: false, intervalSeconds: 86400 }
+        if (capacityTrackingEnabled !== currentCapacityTracking.enabled
+            || capacityTrackingIntervalSeconds !== currentCapacityTracking.intervalSeconds) {
+          input.capacityTracking = {
+            enabled: capacityTrackingEnabled,
+            intervalSeconds: capacityTrackingIntervalSeconds,
+          }
+        }
 
         // 見積もり設定も差分。**null は「既定に戻す」** (API 側で行を消す) で、
         // 未指定の「触らない」とは別物なので、自動判定に戻したいときは
@@ -489,6 +510,39 @@ export function ConnectionForm({ mode, onClose, presentation = 'modal' }: Props)
               </small>
             </div>
           </label>
+          {isEdit && (
+            <div className="mt-3 border-t border-rule pt-3">
+              <label className="modal-choice">
+                <input
+                  type="checkbox"
+                  aria-label="全バケットの容量を定期計測する"
+                  checked={capacityTrackingEnabled}
+                  disabled={!scanEnabled}
+                  onChange={e => dispatch({ type: 'setField', field: 'capacityTrackingEnabled', value: e.target.checked })}
+                />
+                <div>
+                  <strong>全バケットの容量を定期計測する</strong>
+                  <small>このコネクションにある全バケットの容量とオブジェクト数を記録します。</small>
+                </div>
+              </label>
+              <label className="modal-choice">
+                <select
+                  aria-label="容量の計測周期"
+                  value={capacityTrackingIntervalSeconds}
+                  disabled={!scanEnabled || !capacityTrackingEnabled}
+                  onChange={e => dispatch({
+                    type: 'setField', field: 'capacityTrackingIntervalSeconds', value: Number(e.target.value),
+                  })}
+                >
+                  {CAPACITY_INTERVALS.map(([seconds, label]) => <option key={seconds} value={seconds}>{label}</option>)}
+                </select>
+                <div>
+                  <strong>容量の計測周期</strong>
+                  <small>既定は24時間。すべてのバケットへ同じ周期を適用します。</small>
+                </div>
+              </label>
+            </div>
+          )}
           <label className="modal-choice">
             <input
               type="number"

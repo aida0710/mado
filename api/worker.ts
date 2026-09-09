@@ -19,6 +19,7 @@ import { PRICING_REFRESH_KIND } from './routes/pricing.js'
 import { requestLogger } from './lib/request-logger.js'
 import { createCapacityStore } from './lib/capacity-store.js'
 import { createCapacityScheduler } from './lib/capacity-scheduler.js'
+import { listStorageBucketNames } from './lib/storage-buckets.js'
 
 // LAN ダッシュボード: 1 つのストリーム teardown 起因の未捕捉例外で全ユーザーの
 // リクエストを巻き添えにしない。root cause は都度直す前提の最後の砦 (ログは大声で)。
@@ -123,12 +124,13 @@ const pruneTimer = setInterval(() => {
 pruneTimer.unref()
 void jobStore.pruneFinished(7).catch(() => {})
 
-// 追跡を明示的に有効化したバケットだけを定期走査する。storage.scan と同じ
-// dedup key を使うため、手動走査と重なっても S3 全走査は1本に合流する。
+// 追跡を明示的に有効化したconnectionの全bucketを定期走査する。storage.scanと同じ
+// dedup keyを使うため、手動走査と重なってもS3全走査は1本に合流する。
 const capacityScheduler = createCapacityScheduler({
   capacity: capacityStore,
   jobs: jobStore,
   getConnectionConfig: storageFactory.getConnectionConfig,
+  listBuckets: connectionId => listStorageBucketNames(storageFactory.getStorage, connectionId),
 })
 const capacityTimer = setInterval(() => {
   capacityScheduler.runOnce().catch(e => console.error('capacity scheduler error', e))

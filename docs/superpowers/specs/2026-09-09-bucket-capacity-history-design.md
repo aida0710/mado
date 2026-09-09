@@ -1,5 +1,10 @@
 # バケット容量履歴と推移グラフ
 
+> **2026-09-10 改訂:** 追跡対象・周期・手動実行をbucket単位からconnection単位へ変更した。
+> 容量画面は全bucketを同時表示し、各bucketの指標・小型graphとconnection全体の合計を出す。
+> 周期設定はconnection編集画面へ置き、設定変更と全bucket強制実行はどちらも
+> `connections:manage`を必須とする。本書内でこれと矛盾する旧bucket単位の記述は本改訂で置き換える。
+
 ## 背景
 
 Mado は Storage 画面から S3 / S3 互換ストレージを横断して閲覧でき、既存の
@@ -53,7 +58,7 @@ Mado が保存した最新値を Prometheus 形式で公開し、Grafana から�
 
 ## 用語
 
-- **追跡対象**: 定期走査を明示的に有効化した `(connection_id, bucket)`
+- **追跡対象**: 定期走査を明示的に有効化した `connection_id`。配下の全bucketを対象とする
 - **snapshot**: 完全な bucket root 走査が完了した時点の `total_bytes` と `object_count`
 - **手動走査**: User が「配下を集計」または「今すぐ更新」を押して開始した走査
 - **定期走査**: worker の scheduler が開始した走査
@@ -133,11 +138,12 @@ collector が増えても snapshot schema と表示 API は変えない。
 既存 `media-worker` に 60 秒周期の scheduler loop を追加する。外部 cron と新しい container は
 追加しない。
 
-1. `enabled = true AND next_run_at <= now()` の追跡対象を古い順に最大 20 件読む
+1. `enabled = true AND next_run_at <= now()`のconnection設定を古い順に最大5件読む
 2. connection の `scan_enabled` を確認する。false なら投入せず `paused` とする
-3. `storage.scan` を bucket root の dedup key で `enqueueWithResult` する
-4. target に `last_job_id`、`last_attempt_at` を保存する
-5. 同じ job がすでに実行中ならその id を採用する
+3. `ListBuckets`で現行bucketを取得し、新しいbucketも対象へ同期する
+4. 全bucketの`storage.scan`をrootのdedup keyで`enqueueWithResult`する
+5. 各targetに`last_job_id`を保存し、connectionの次回時刻を進める
+6. 同じjobがすでに実行中ならそのidを採用する
 
 定期 job は既存の単一 worker queue へ入るので、S3 request が bucket 数だけ並列に発生しない。
 将来 worker を水平 scale する場合は、容量走査専用の concurrency limit を追加するまで
@@ -145,11 +151,13 @@ collector が増えても snapshot schema と表示 API は変えない。
 
 ### 次回実行と失敗時 backoff
 
-- 成功: `next_run_at = completed_at + interval`
-- partial: snapshot を保存せず、`next_run_at = now() + 1 hour`
-- error: `consecutive_failures` を増やし、`15 min × 2^(n-1)`、最大 6 時間で再試行
-- 3 回以上連続失敗しても自動で無効化しない。画面に状態を表示し、最大 6 時間 backoff を続ける
-- 成功時に `consecutive_failures = 0` と `last_error = NULL` へ戻す
+- 一括投入成功: connectionの`next_run_at = now() + interval`
+- `ListBuckets`や一括投入自体のerror: connectionの`consecutive_failures`を増やし、
+  `15 min × 2^(n-1)`、最大6時間で再試行
+- 個別bucketのpartial / error: snapshotを保存せずtargetへ状態を残す。connection全体の
+  次回実行時には、ほかのbucketと合わせて再投入する
+- 3回以上連続失敗しても自動で無効化しない。最大6時間backoffを続ける
+- 一括投入成功時にconnectionの`consecutive_failures = 0`と`last_error = NULL`へ戻す
 
 endpoint の一時障害で 24 時間待つことを避けつつ、恒久的な認証失敗で連打しない。
 error message は secret、access key、署名済み URL、object key を保存せず、正規化した分類と
@@ -160,6 +168,21 @@ error message は secret、access key、署名済み URL、object key を保存�
 次の migration 番号は実装時点の最新番号に合わせる。
 
 ```sql
+CREATE TABLE storage_capacity_settings (
+  connection_id        TEXT PRIMARY KEY
+      REFERENCES storage_connections(id) ON DELETE CASCADE,
+  enabled              BOOLEAN NOT NULL DEFAULT FALSE,
+  interval_seconds     INTEGER NOT NULL DEFAULT 86400
+      CHECK (interval_seconds BETWEEN 21600 AND 604800),
+  next_run_at          TIMESTAMPTZ,
+  last_attempt_at      TIMESTAMPTZ,
+  last_status          TEXT NOT NULL DEFAULT 'paused',
+  last_error           TEXT,
+  consecutive_failures INTEGER NOT NULL DEFAULT 0,
+  updated_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_by           UUID REFERENCES auth_users(id) ON DELETE SET NULL
+);
+
 CREATE TABLE storage_capacity_targets (
   connection_id       TEXT        NOT NULL
       REFERENCES storage_connections(id) ON DELETE CASCADE,
@@ -180,8 +203,8 @@ CREATE TABLE storage_capacity_targets (
   PRIMARY KEY (connection_id, bucket)
 );
 
-CREATE INDEX storage_capacity_targets_due
-  ON storage_capacity_targets(next_run_at)
+CREATE INDEX storage_capacity_settings_due
+  ON storage_capacity_settings(next_run_at)
   WHERE enabled = TRUE;
 
 CREATE TABLE storage_capacity_snapshots (
@@ -211,7 +234,7 @@ collector / 表現形式を再検討する。現在確認済みの約 903 TB は
 - snapshot は更新しない。再取得は新しい行を追加する
 - `job_id` の unique index により、worker 再開や完了処理の再実行で同じ点を二重保存しない
 - job の保持期限後は `job_id = NULL` になるが、容量履歴は残る
-- connection 削除時は credential と同じ単位で target / snapshot も cascade 削除する
+- connection 削除時は credential と同じ単位でsettings / target / snapshotもcascade削除する
 - bucket が Storage 側から消えても履歴は残し、追跡状態を error とする
 
 ### 保持期間
@@ -231,13 +254,13 @@ DELETE FROM storage_capacity_snapshots
 ### 履歴取得
 
 ```http
-GET /api/internal/storage/:connId/capacity?bucket=dataset&days=90
+GET /api/internal/storage/:connId/capacity?days=90
 ```
 
 - `days`: `7 | 30 | 90 | 400`、既定 90
-- 時系列は `collectedAt` 昇順
-- 最大 1,600 点。範囲内にそれ以上ある場合は bucket 単位で 1 日 1 点へ server-side 集約する
-- snapshot がなくても 200 で target 状態を返す
+- S3の現行bucket一覧と全bucketの時系列を1応答で返す
+- 各時系列は`collectedAt`昇順
+- snapshotがないbucketも`points: []`として返す
 
 ```json
 {
@@ -246,18 +269,15 @@ GET /api/internal/storage/:connId/capacity?bucket=dataset&days=90
     "intervalSeconds": 86400,
     "nextRunAt": "2026-09-10T00:00:00Z",
     "lastAttemptAt": "2026-09-09T00:00:00Z",
-    "lastSuccessAt": "2026-09-09T00:04:03Z",
-    "lastStatus": "success",
+    "lastStatus": "queued",
     "lastError": null,
     "consecutiveFailures": 0
   },
   "capacityBytes": 1099511627776000,
-  "points": [
-    {
-      "collectedAt": "2026-09-08T00:04:01Z",
-      "totalBytes": 992137445572608,
-      "objectCount": 547259
-    }
+  "buckets": [
+    {"bucket": "dataset", "lastStatus": "success", "lastError": null, "points": [
+      {"collectedAt": "2026-09-08T00:04:01Z", "totalBytes": 992137445572608, "objectCount": 547259}
+    ]}
   ]
 }
 ```
@@ -266,29 +286,26 @@ GET /api/internal/storage/:connId/capacity?bucket=dataset&days=90
 
 ### 追跡設定
 
-```http
-PUT /api/internal/storage/:connId/capacity/tracking?bucket=dataset
-Content-Type: application/json
+connection編集APIの一部として保存する。
 
-{"enabled": true, "intervalSeconds": 86400}
+```json
+{"capacityTracking": {"enabled": true, "intervalSeconds": 86400}}
 ```
 
 - body は strict schema
 - 同値更新は DB を変更せず、監査 intent も破棄する
 - 無効化しても既存 snapshot は削除しない
 - 再有効化時は `next_run_at = now()`
-- `scan_enabled = false` の connection では有効化を 409 で拒否する
+- `scan_enabled = false` の connection では有効化を400で拒否する
 
 ### 手動更新
 
-新しい endpoint は作らず、既存を使う。
-
 ```http
-POST /api/internal/storage/:connId/scan?bucket=dataset&prefix=
+POST /api/internal/storage/:connId/capacity/scan
 ```
 
-完了後、同じ job handler が snapshot を保存する。既存の `GET /jobs/:id` による進捗表示と
-cancel もそのまま使う。
+現在存在する全bucketを列挙し、既存`storage.scan` jobへ一括投入する。個別bucketを選んで
+容量メトリクスを更新する操作は提供しない。dedupに合流しただけなら監査intentを破棄する。
 
 ## 認証と認可
 
@@ -307,8 +324,8 @@ cancel もそのまま使う。
 ### 操作
 
 - 定期追跡の有効化、無効化、間隔変更: `connections:manage`
-- 手動更新、cancel: 既存どおり `jobs:operate`
-- scheduler: User principal を持たない system 処理。ただし有効化済み target だけを処理する
+- 全bucketの強制計測: `connections:manage`
+- scheduler: User principalを持たないsystem処理。ただし有効化済みconnectionだけを処理する
 
 SSO group と Mado role の同期方式は変更しない。
 
@@ -318,9 +335,8 @@ SSO group と Mado role の同期方式は変更しない。
 
 記録するもの:
 
-- 追跡の有効化 / 無効化
-- interval の実変更
-- User が新しい手動走査を開始した場合の既存 `storage.scan.start`
+- connection更新として行われた追跡の有効化／無効化、intervalの実変更
+- Userが新しい全bucket走査を開始した場合の`storage.capacity.scan.start`
 - 実行中 job の cancel が成立した場合
 
 記録しないもの:
@@ -337,37 +353,36 @@ SSO group と Mado role の同期方式は変更しない。
 
 ### 配置
 
-connection単位の専用画面 `?view=capacity` に「バケット容量メトリクス」を表示し、画面内の
-selectでbucketを切り替える。connectionトップとbucket root (`prefix === ''`) のREADME直下へ
-この画面のリンクを置く。prefix内ではリンクを表示しない。bucket一覧への現在値の埋め込みは
-第2弾とする。
+connection単位の専用画面`?view=capacity`に「バケット容量メトリクス」を表示し、現行の
+全bucketを縦に並べる。connectionトップとbucket root (`prefix === ''`) のREADME直下へ
+この画面のリンクを置く。prefix内ではリンクを表示しない。
 
-画面の上段:
+画面上段のconnection合計:
 
+- 計測済みbucketの現在容量合計
+- 計測済みbucketのobject数合計
+- `計測済みbucket数 / 全bucket数`。未計測があれば合計が部分値だと明示する
+
+各bucketのcompact card:
+
+- bucket名
 - 現在容量
 - 前回 snapshot との差分と増減率
 - object 数
 - 最終取得日時
-- connection に容量上限があれば使用率
-
-card の下段:
-
-- 期間: 7日 / 30日 / 90日 / 400日
-- 容量の折れ線
-- object 数の折れ線は切替式。二重 Y 軸にはしない
+- 高さ150pxの容量折れ線
 - 取得点を hover / keyboard focus すると日時と正確な値を表示
 - interval の 2.5 倍以上空いた区間は線を切り、未取得期間を補間しない
-- `partial` や error はデータ点にせず、card 上部に状態として表示
+- `partial`やerrorはデータ点にせず、card内の状態として表示
 
-データがない場合は空の chart を描かず、「履歴はまだありません」と最終状態を表示する。
+期間の7日／30日／90日／400日は全cardへ一括適用する。データが2点未満なら空chartを描かない。
 
 ### 操作
 
-- `jobs:operate` を持つ User: 「今すぐ更新」
-- `connections:manage` を持つ User: 追跡 toggle と周期 select
-- 権限がない User: 設定値と graph だけを表示
-- `scan_enabled = false`: 更新操作を隠し、「この接続では走査が無効です」と表示
-- queued / running: 既存 job UI と同じ進捗を表示し、完了後に履歴を再取得
+- `connections:manage`を持つUser: 「今すぐ全バケットを計測」とconnection編集画面の追跡toggle／周期select
+- 権限がないUser: 設定値、合計、各bucketの指標とgraphだけを表示
+- `scan_enabled = false`: 強制計測をdisabledにする
+- 周期設定は容量画面に置かず、connectionの他の動作設定と同じ編集画面に置く
 
 ### graph 実装
 
@@ -415,7 +430,7 @@ zoom、複数 bucket 比較、annotation 等が必要になった時点で Recha
 ## 性能と費用
 
 1 bucket、1 日 1 回、547,259 objects の場合、`MaxKeys=1000` で約 548 LIST request / day。
-全 bucket を自動登録せず明示 opt-in にすることで、導入直後の request 増加を 0 にする。
+connection単位の定期計測を初期状態で無効にすることで、導入直後のrequest増加を0にする。
 
 次を application log / 将来の Prometheus metric に出す。
 
@@ -447,13 +462,13 @@ mado_storage_capacity_collection_failures{connection_id="...",bucket="dataset"} 
 
 ## migration と rollout
 
-1. migration で target / snapshot table を追加する
+1. migration でconnection設定tableを追加し、既存のtarget / snapshot tableと接続する
 2. API、worker、front を build する
 3. migration を適用する
 4. API、worker、front を更新する
 5. tracking 0 件、定期 job 0 件であることを確認する
-6. 小さい bucket 1 件で追跡を有効化し、初回 snapshot と graph を検証する
-7. request 数と所要時間を確認してから大きい bucket を個別に有効化する
+6. 小規模なconnectionで追跡を有効化し、全bucketの初回snapshotとgraphを検証する
+7. request数と所要時間を確認してから大規模なconnectionで有効化する
 
 新規 table だけの additive migration であり、既存 Storage 閲覧と走査 APIを止めずに適用できる。
 rollback 時は UI / scheduler を旧 image へ戻す。追加 table は直ちに削除せず、再 deploy に備えて残す。
@@ -475,9 +490,9 @@ rollback 時は UI / scheduler を旧 image へ戻す。追加 table は直ち�
 
 ### scheduler / worker
 
-- due target だけを投入する
+- due connection の全bucketだけを投入する
 - 同一 bucket の実行中 job へ合流する
-- 成功時に interval 後、partial / error 時に backoff される
+- 一括投入成功時にinterval後、bucket一覧取得や一括投入のerror時にbackoffされる
 - scheduler 再起動後も `next_run_at` から取り戻す
 - 複数 scheduler loop が動いても active job が二重にならない
 - secret を error / log に残さない
@@ -499,7 +514,7 @@ rollback 時は UI / scheduler を旧 image へ戻す。追加 table は直ち�
 1. deploy 直後に tracking / job が自動作成されない
 2. 小さい bucket を 24 時間周期で有効化すると root 走査が 1 件投入される
 3. 完了後、容量と object 数の snapshot が 1 点追加される
-4. 「今すぐ更新」で既存 job UI に進捗が出て、完了後に 2 点目が追加される
+4. 「今すぐ全バケットを計測」で既存 job UI に進捗が出て、完了後に 2 点目が追加される
 5. prefix の手動走査では容量履歴が増えない
 6. partial 走査では graph に誤った点が追加されない
 7. allowlist 外 Userには API / UI のどちらからも対象 connection が見えない
