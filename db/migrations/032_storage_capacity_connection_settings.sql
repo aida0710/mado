@@ -17,16 +17,23 @@ CREATE TABLE IF NOT EXISTS storage_capacity_settings (
   updated_by           UUID        REFERENCES auth_users(id) ON DELETE SET NULL
 );
 
-INSERT INTO storage_capacity_settings
-  (connection_id, enabled, interval_seconds, next_run_at, last_status)
-SELECT connection_id,
-       false,
-       min(interval_seconds),
-       NULL,
-       'paused'
-  FROM storage_capacity_targets
- GROUP BY connection_id
-ON CONFLICT (connection_id) DO NOTHING;
+WITH migrated AS (
+  INSERT INTO storage_capacity_settings
+    (connection_id, enabled, interval_seconds, next_run_at, last_status)
+  SELECT connection_id,
+         false,
+         min(interval_seconds),
+         NULL,
+         'paused'
+    FROM storage_capacity_targets
+   GROUP BY connection_id
+  ON CONFLICT (connection_id) DO NOTHING
+  RETURNING connection_id
+)
+UPDATE storage_capacity_targets target
+   SET enabled = false, last_status = 'paused', updated_at = now()
+  FROM migrated
+ WHERE target.connection_id = migrated.connection_id;
 
 CREATE INDEX IF NOT EXISTS storage_capacity_settings_due_idx
   ON storage_capacity_settings (next_run_at)
