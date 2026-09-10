@@ -10,7 +10,7 @@ const storageMock = mockClient(S3Client)
 const storage = new S3Client({})
 const config = {
   listObjectsVersion: 'v2', capabilities: {}, scanEnabled: true,
-  capacityMetricsEnabled: true, listCacheTtlSec: 86400,
+  scanPageSize: 1000, capacityMetricsEnabled: true, listCacheTtlSec: 86400,
 } as unknown as ConnectionConfig
 const deps = {
   getStorage: async (): Promise<S3Client> => storage,
@@ -47,6 +47,16 @@ describe('createScanHandler', () => {
     const input = storageMock.calls()[0].args[0].input as { Delimiter?: string; MaxKeys?: number }
     expect(input.Delimiter).toBeUndefined()
     expect(input.MaxKeys).toBe(1000)
+  })
+
+  it('connectionで指定したページサイズをV2走査へ適用する', async () => {
+    storageMock.on(ListObjectsV2Command).resolves({ Contents: [], IsTruncated: false })
+    const handler = createScanHandler({
+      ...deps,
+      getConnectionConfig: async () => ({ ...config, scanPageSize: 100 }),
+    })
+    await handler(ctx({ connId: 'c1', bucket: 'b', prefix: '' }))
+    expect(storageMock.calls()[0].args[0].input).toMatchObject({ MaxKeys: 100 })
   })
 
   // 数十万キー数えた後に 1 ページ失敗して全部捨てるのは損。

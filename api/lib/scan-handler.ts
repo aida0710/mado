@@ -20,8 +20,6 @@ const Payload = z.object({
   prefix: z.string(),
 })
 
-const PAGE_SIZE = 1000
-
 export interface ScanHandlerDeps {
   getStorage: GetStorage
   getConnectionConfig: (connId: string) => Promise<ConnectionConfig>
@@ -36,6 +34,7 @@ export function createScanHandler(deps: ScanHandlerDeps): JobHandler {
       const storage = await deps.getStorage(connId)
       const config = await deps.getConnectionConfig(connId)
       const useV1 = config.listObjectsVersion === 'v1'
+      const pageSize = config.scanPageSize
 
       const acc = createScanAccumulator(prefix)
       let cursor: string | undefined
@@ -49,7 +48,7 @@ export function createScanHandler(deps: ScanHandlerDeps): JobHandler {
         try {
           if (useV1) {
             const out = await storage.send(new ListObjectsCommand({
-              Bucket: bucket, Prefix: prefix, Marker: cursor, MaxKeys: PAGE_SIZE,
+              Bucket: bucket, Prefix: prefix, Marker: cursor, MaxKeys: pageSize,
             }))
             contents = out.Contents ?? []
             // V1 は Delimiter 無しだと NextMarker を返さないことがあるので、
@@ -59,7 +58,7 @@ export function createScanHandler(deps: ScanHandlerDeps): JobHandler {
               : undefined
           } else {
             const out = await storage.send(new ListObjectsV2Command({
-              Bucket: bucket, Prefix: prefix, ContinuationToken: cursor, MaxKeys: PAGE_SIZE,
+              Bucket: bucket, Prefix: prefix, ContinuationToken: cursor, MaxKeys: pageSize,
             }))
             contents = out.Contents ?? []
             next = out.IsTruncated ? out.NextContinuationToken : undefined

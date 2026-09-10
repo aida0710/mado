@@ -64,6 +64,8 @@ export interface ConnectionConfig {
   /** 配下の走査 (storage.scan ジョブ) を許可するか。既定 true。
    *  巨大バケットを抱える接続で、重い走査を投入させないためのガード。 */
   scanEnabled: boolean
+  /** storage.scan が1回のListObjectsで要求する件数。既定1000。 */
+  scanPageSize: ScanPageSize
   /** バケット容量メトリクス用の全体走査を許可するか。既定 true。 */
   capacityMetricsEnabled: boolean
   /** 一覧キャッシュ (storage_response_cache) の保持秒数。既定 86400 (24 時間)。
@@ -113,6 +115,18 @@ interface DbRow {
 /** 走査を許可するか。'false' だけを無効とみなす (capabilities と同じ約束)。 */
 export function settingsToScanEnabled(settings: Record<string, string>): boolean {
   return settings['scan_enabled'] !== 'false'
+}
+
+export const SCAN_PAGE_SIZES = [100, 250, 500, 1000] as const
+export type ScanPageSize = typeof SCAN_PAGE_SIZES[number]
+export const DEFAULT_SCAN_PAGE_SIZE: ScanPageSize = 1000
+
+/** 走査1ページの件数。未知値は安全に既定へ戻す。 */
+export function settingsToScanPageSize(settings: Record<string, string>): ScanPageSize {
+  const value = Number(settings['scan_page_size'])
+  return SCAN_PAGE_SIZES.includes(value as ScanPageSize)
+    ? value as ScanPageSize
+    : DEFAULT_SCAN_PAGE_SIZE
 }
 
 /** 容量メトリクスの集計を許可するか。未設定は後方互換のため有効。 */
@@ -201,6 +215,7 @@ export function createStorageFactory(deps: StorageFactoryDeps): StorageFactory {
         listObjectsVersion: row.list_objects_version,
         capabilities: settingsToCapabilities(row.settings),
         scanEnabled: settingsToScanEnabled(row.settings),
+        scanPageSize: settingsToScanPageSize(row.settings),
         capacityMetricsEnabled: settingsToCapacityMetricsEnabled(row.settings),
         listCacheTtlSec: settingsToListCacheTtlSec(row.settings),
       },

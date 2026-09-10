@@ -80,6 +80,7 @@ interface MaskedConnection {
   }
   capabilities: Record<string, boolean>
   capacityMetricsEnabled: boolean
+  scanPageSize: number
   capacityTracking: { enabled: boolean; intervalSeconds: number }
   createdAt: string
   updatedAt: string
@@ -200,6 +201,7 @@ describe('POST /connections', () => {
     expect(created.listObjectsVersion).toBe('v2')
     expect(created.visibility).toEqual({ mode: 'public', allowedUsers: [] })
     expect(created.capacityMetricsEnabled).toBe(true)
+    expect(created.scanPageSize).toBe(1000)
     expect(created.capacityTracking).toEqual({ enabled: false, intervalSeconds: 86400 })
     expect(typeof created.createdAt).toBe('string')
     expect(typeof created.updatedAt).toBe('string')
@@ -486,6 +488,22 @@ describe('PUT /connections/:id', () => {
     const invalid = await app.request(`/connections/${created.id}`, {
       method: 'PUT', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ capacityTracking: { enabled: true, intervalSeconds: 86400 } }),
+    })
+    expect(invalid.status).toBe(400)
+  })
+
+  it('走査ページサイズを保存し、許可していない値を拒否する', async () => {
+    const created = await createOne()
+    const updated = await app.request(`/connections/${created.id}`, {
+      method: 'PUT', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ scanPageSize: 100 }),
+    })
+    expect(updated.status).toBe(200)
+    expect((await updated.json() as MaskedConnection).scanPageSize).toBe(100)
+
+    const invalid = await app.request(`/connections/${created.id}`, {
+      method: 'PUT', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ scanPageSize: 123 }),
     })
     expect(invalid.status).toBe(400)
   })

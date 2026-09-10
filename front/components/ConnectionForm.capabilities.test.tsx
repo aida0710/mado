@@ -119,6 +119,18 @@ describe('ConnectionForm の権限トグル', () => {
     }))
   })
 
+  it('走査ページサイズをconnection設定として保存する', async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined)
+    render(<ConnectionForm mode={{ kind: 'edit', current: conn, onSubmit }} onClose={() => {}} />)
+
+    const pageSize = screen.getByRole('combobox', { name: '走査のページサイズ' })
+    expect(pageSize).toHaveValue('1000')
+    await userEvent.selectOptions(pageSize, '100')
+    await userEvent.click(screen.getByRole('button', { name: '保存' }))
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledWith({ scanPageSize: 100 }))
+  })
+
   it('メトリクス集計を無効にすると定期計測と周期をグレーアウトする', async () => {
     const onSubmit = vi.fn().mockResolvedValue(undefined)
     const tracked: Connection = {

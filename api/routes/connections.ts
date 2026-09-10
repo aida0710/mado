@@ -11,6 +11,7 @@ import {
   capabilitySettingKey,
   settingsToCapabilities,
   settingsToScanEnabled,
+  settingsToScanPageSize,
   settingsToCapacityMetricsEnabled,
   settingsToListCacheTtlSec,
   type Capabilities,
@@ -308,6 +309,7 @@ const UpdateBody = z.object({
   capabilities: CapabilitiesPatch.optional(),
   // 走査の可否と一覧キャッシュ TTL も connection_settings 側 (capabilities と同じ)。
   scanEnabled: z.boolean().optional(),
+  scanPageSize: z.union([z.literal(100), z.literal(250), z.literal(500), z.literal(1000)]).optional(),
   capacityMetricsEnabled: z.boolean().optional(),
   listCacheTtlSec: z.number().int().positive().optional(),
   capacityTracking: CapacityTrackingPatch.optional(),
@@ -395,6 +397,7 @@ function toMasked(row: ConnectionRow, includeAllowedUsers = true) {
     },
     capabilities: settingsToCapabilities(row.settings),
     scanEnabled: settingsToScanEnabled(row.settings),
+    scanPageSize: settingsToScanPageSize(row.settings),
     capacityMetricsEnabled: settingsToCapacityMetricsEnabled(row.settings),
     listCacheTtlSec: settingsToListCacheTtlSec(row.settings),
     capacityTracking: row.capacity_tracking,
@@ -599,6 +602,9 @@ export function mountConnectionsRoutes(app: Hono, deps: ConnectionsDeps): void {
     const extraSettings: Array<readonly [string, string]> = []
     if (u.scanEnabled !== undefined) {
       extraSettings.push(['scan_enabled', u.scanEnabled ? 'true' : 'false'])
+    }
+    if (u.scanPageSize !== undefined) {
+      extraSettings.push(['scan_page_size', String(u.scanPageSize)])
     }
     if (u.capacityMetricsEnabled !== undefined) {
       extraSettings.push(['capacity_metrics_enabled', u.capacityMetricsEnabled ? 'true' : 'false'])

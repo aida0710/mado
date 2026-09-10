@@ -96,8 +96,29 @@ describe('接続ごとの走査可否とキャッシュ TTL', () => {
     try {
       const cfg = await f.getConnectionConfig('conn000010')
       expect(cfg.scanEnabled).toBe(true)
+      expect(cfg.scanPageSize).toBe(1000)
       expect(cfg.capacityMetricsEnabled).toBe(true)
       expect(cfg.listCacheTtlSec).toBe(86400)
+    } finally {
+      await f.close()
+    }
+  })
+
+  it('scan_page_sizeを許可値から読み、未知値は1000件へ戻す', async () => {
+    await insertConnection('conn000015')
+    await pools.rw.query(
+      `INSERT INTO connection_settings (connection_id, key, value) VALUES ($1, 'scan_page_size', '100')`,
+      ['conn000015'],
+    )
+    await insertConnection('conn000016')
+    await pools.rw.query(
+      `INSERT INTO connection_settings (connection_id, key, value) VALUES ($1, 'scan_page_size', '123')`,
+      ['conn000016'],
+    )
+    const f = createStorageFactory({ pools, crypto })
+    try {
+      expect((await f.getConnectionConfig('conn000015')).scanPageSize).toBe(100)
+      expect((await f.getConnectionConfig('conn000016')).scanPageSize).toBe(1000)
     } finally {
       await f.close()
     }

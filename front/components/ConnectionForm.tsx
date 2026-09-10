@@ -46,6 +46,7 @@ interface FormState {
   allowedUserIds: string[]
   /** 配下の走査を許可するか。 */
   scanEnabled: boolean
+  scanPageSize: 100 | 250 | 500 | 1000
   capacityMetricsEnabled: boolean
   /** 一覧キャッシュの保持秒数。 */
   listCacheTtlSec: number
@@ -128,6 +129,7 @@ function initialState(current: Connection | null): FormState {
     visibilityMode: current?.visibility.mode ?? 'public',
     allowedUserIds: current?.visibility.allowedUsers.map(user => user.id).sort() ?? [],
     scanEnabled: current?.scanEnabled ?? true,
+    scanPageSize: current?.scanPageSize ?? 1000,
     capacityMetricsEnabled: current?.capacityMetricsEnabled ?? true,
     listCacheTtlSec: current?.listCacheTtlSec ?? 86400,
     capacityTrackingEnabled: current?.capacityTracking?.enabled ?? false,
@@ -159,6 +161,7 @@ export function ConnectionForm({ mode, onClose, presentation = 'modal' }: Props)
     forcePathStyle, listObjectsVersion, capabilities, showSecret, saving, error,
     visibilityMode, allowedUserIds,
     scanEnabled,
+    scanPageSize,
     capacityMetricsEnabled,
     listCacheTtlSec,
     capacityTrackingEnabled, capacityTrackingIntervalSeconds,
@@ -232,6 +235,7 @@ export function ConnectionForm({ mode, onClose, presentation = 'modal' }: Props)
           input.visibility = { mode: visibilityMode, allowedUserIds }
         }
         if (scanEnabled !== cur.scanEnabled) input.scanEnabled = scanEnabled
+        if (scanPageSize !== (cur.scanPageSize ?? 1000)) input.scanPageSize = scanPageSize
         if (capacityMetricsEnabled !== (cur.capacityMetricsEnabled ?? true)) {
           input.capacityMetricsEnabled = capacityMetricsEnabled
         }
@@ -519,6 +523,27 @@ export function ConnectionForm({ mode, onClose, presentation = 'modal' }: Props)
               </small>
             </div>
           </label>
+          {isEdit && (
+            <label className={`modal-choice ${!scanEnabled ? 'opacity-50' : ''}`}>
+              <select
+                aria-label="走査のページサイズ"
+                value={scanPageSize}
+                disabled={!scanEnabled}
+                onChange={e => dispatch({
+                  type: 'setField', field: 'scanPageSize', value: Number(e.target.value) as FormState['scanPageSize'],
+                })}
+              >
+                <option value={100}>100件</option>
+                <option value={250}>250件</option>
+                <option value={500}>500件</option>
+                <option value={1000}>1,000件</option>
+              </select>
+              <div>
+                <strong>走査のページサイズ</strong>
+                <small>1回のS3一覧取得件数。既定は1,000件。応答が遅い接続では小さくします。</small>
+              </div>
+            </label>
+          )}
           {isEdit && (
             <label className="modal-choice">
               <input
