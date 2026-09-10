@@ -1,7 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { api } from '../lib/api/client'
-import type { CapacityBucketHistory, CapacityOverview } from '../lib/api/types'
+import type { CapacityBucketHistory, CapacityOverview, CapacityScanJob } from '../lib/api/types'
 import { useAuth } from '../lib/auth-context'
 import { useConnection } from '../lib/connectionContext'
 import { ConnectionSwitcher } from '../components/ConnectionSwitcher'
@@ -26,6 +26,7 @@ export default function CapacityMetricsPage({ connId }: { connId: string }) {
   const [scanning, setScanning] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  const [clock, setClock] = useState(() => Date.now())
   const auth = useAuth()
   const connection = useConnection()
   const canManage = !auth.enabled || (auth.user?.permissions.includes('connections:manage') ?? false)
@@ -55,6 +56,32 @@ export default function CapacityMetricsPage({ connId }: { connId: string }) {
     return () => { active = false }
   }, [connId, days])
 
+  const scanJobs = overview?.scan.jobs ?? []
+  const scanActive = scanJobs.length > 0
+
+  useEffect(() => {
+    if (!scanActive) return
+    let active = true
+    let refreshing = false
+    const timer = window.setInterval(() => {
+      setClock(Date.now())
+      if (refreshing) return
+      refreshing = true
+      api.capacityOverview(connId, days)
+        .then(result => {
+          if (!active) return
+          setOverview(result)
+          setError(null)
+        })
+        .catch(cause => { if (active) setError((cause as Error).message) })
+        .finally(() => { refreshing = false })
+    }, 2000)
+    return () => {
+      active = false
+      window.clearInterval(timer)
+    }
+  }, [connId, days, scanActive])
+
   const updateDays = (value: number) => {
     setLoading(true)
     setParams(previous => {
@@ -72,6 +99,8 @@ export default function CapacityMetricsPage({ connId }: { connId: string }) {
     try {
       const result = await api.startCapacityScan(connId)
       setNotice(`${result.jobs.length.toLocaleString('ja-JP')}バケットの計測を開始しました。完了すると順次反映されます。`)
+      setOverview(await api.capacityOverview(connId, days))
+      setClock(Date.now())
       setError(null)
     } catch (cause) {
       setError((cause as Error).message)
@@ -85,6 +114,7 @@ export default function CapacityMetricsPage({ connId }: { connId: string }) {
   const totalObjects = measured.reduce((sum, point) => sum + point.objectCount, 0)
   const measuredCount = measured.length
   const bucketCount = overview?.buckets.length ?? 0
+  const activeByBucket = new Map(scanJobs.map(job => [job.bucket, job]))
 
   return (
     <section>
@@ -102,13 +132,15 @@ export default function CapacityMetricsPage({ connId }: { connId: string }) {
           <div className="flex flex-wrap gap-2">
             <button type="button" className="ghost" disabled={loading} onClick={() => void refresh()}>表示を更新</button>
             {canManage && (
-              <button type="button" className="ghost" disabled={scanning || !connection.scanEnabled || connection.capacityMetricsEnabled === false} onClick={() => void scanAll()}>
-                {scanning ? '開始中…' : '今すぐ全バケットを計測'}
+              <button type="button" className="ghost" disabled={scanning || scanActive || !connection.scanEnabled || connection.capacityMetricsEnabled === false} onClick={() => void scanAll()}>
+                {scanning ? '開始中…' : scanActive ? '計測中…' : '今すぐ全バケットを計測'}
               </button>
             )}
           </div>
         </div>
       </header>
+
+      {scanActive && <ScanActivity jobs={scanJobs} now={clock} />}
 
       {overview && (
         <div className="mb-5 grid gap-px border border-rule bg-rule sm:grid-cols-3">
@@ -149,6 +181,7 @@ export default function CapacityMetricsPage({ connId }: { connId: string }) {
               connId={connId}
               history={bucket}
               intervalSeconds={overview.tracking.intervalSeconds}
+              scanJob={activeByBucket.get(bucket.bucket)}
             />
           ))}
         </div>
@@ -157,10 +190,40 @@ export default function CapacityMetricsPage({ connId }: { connId: string }) {
   )
 }
 
-function BucketMetrics({ connId, history, intervalSeconds }: {
+function elapsedMinute(startedAt: string, now: number): string {
+  const elapsed = Math.max(0, now - new Date(startedAt).getTime())
+  return `${Math.floor(elapsed / 60_000) + 1}分目`
+}
+
+function ScanActivity({ jobs, now }: { jobs: CapacityScanJob[]; now: number }) {
+  const running = jobs.find(job => job.status === 'running')
+  const queuedCount = jobs.filter(job => job.status === 'queued').length
+  if (!running) {
+    return (
+      <div className="mb-5 border border-rule-strong bg-ink-1 px-4 py-3" role="status" aria-live="polite">
+        <p className="text-[13px] font-semibold">計測の開始を待っています…</p>
+        <p className="mt-0.5 text-[12px] text-ink-7">{queuedCount.toLocaleString('ja-JP')}バケットが待機中です。</p>
+      </div>
+    )
+  }
+  return (
+    <div className="mb-5 border border-rule-strong bg-ink-1 px-4 py-3" role="status" aria-live="polite">
+      <div className="flex items-center gap-2">
+        <span className="h-2 w-2 animate-pulse rounded-full bg-link" aria-hidden="true" />
+        <p className="min-w-0 truncate text-[13px] font-semibold" title={running.bucket}>{running.bucket} を走査中…</p>
+      </div>
+      <p className="mt-1 font-mono text-[12px] tabular-nums text-ink-7">
+        現在 {elapsedMinute(running.startedAt ?? running.createdAt, now)} · {running.objectCount.toLocaleString('ja-JP')} オブジェクト目 · 残り {queuedCount.toLocaleString('ja-JP')} バケット
+      </p>
+    </div>
+  )
+}
+
+function BucketMetrics({ connId, history, intervalSeconds, scanJob }: {
   connId: string
   history: CapacityBucketHistory
   intervalSeconds: number
+  scanJob?: CapacityScanJob
 }) {
   const latest = history.points.at(-1)
   const previous = history.points.at(-2)
@@ -171,7 +234,14 @@ function BucketMetrics({ connId, history, intervalSeconds }: {
     <article className="border border-rule-strong bg-paper px-4 py-3">
       <div className="mb-2 flex items-center justify-between gap-3">
         <h3 className="min-w-0 truncate font-mono text-[14px] font-semibold" title={history.bucket}>{history.bucket}</h3>
-        <Link className="shrink-0 text-[11px] text-link hover:text-link-hover" to={`/storage/${encodeURIComponent(connId)}/${encodeURIComponent(history.bucket)}/`}>開く →</Link>
+        <div className="flex shrink-0 items-center gap-3">
+          {scanJob && (
+            <span className="text-[11px] font-medium text-link">
+              {scanJob.status === 'running' ? `走査中 · ${scanJob.objectCount.toLocaleString('ja-JP')}件` : '計測待ち'}
+            </span>
+          )}
+          <Link className="text-[11px] text-link hover:text-link-hover" to={`/storage/${encodeURIComponent(connId)}/${encodeURIComponent(history.bucket)}/`}>開く →</Link>
+        </div>
       </div>
       <div className="grid gap-px bg-rule sm:grid-cols-4">
         <CompactMetric label="現在の容量" value={latest ? formatBytes(latest.totalBytes) : '—'} />
@@ -179,7 +249,7 @@ function BucketMetrics({ connId, history, intervalSeconds }: {
         <CompactMetric label="オブジェクト数" value={latest ? latest.objectCount.toLocaleString('ja-JP') : '—'} />
         <CompactMetric label="最終取得" value={latest ? new Date(latest.collectedAt).toLocaleString('ja-JP') : '—'} />
       </div>
-      {history.lastError && <p className="mt-2 text-[11px] text-danger">{history.lastError}</p>}
+      {history.lastError && !scanJob && <p className="mt-2 text-[11px] text-danger">{history.lastError}</p>}
       <div className="mt-2 border-t border-rule pt-1">
         {history.points.length >= 2 ? (
           <Suspense fallback={<div className="h-[120px] pt-4 text-[12px] text-ink-7">グラフを読み込み中…</div>}>

@@ -22,6 +22,7 @@ beforeEach(async () => {
   await pools.rw.query('DELETE FROM storage_capacity_targets WHERE connection_id = $1', [CONNECTION_ID])
   await pools.rw.query('DELETE FROM storage_capacity_settings WHERE connection_id = $1', [CONNECTION_ID])
   await pools.rw.query("DELETE FROM jobs WHERE kind = 'capacity.test'")
+  await pools.rw.query("DELETE FROM jobs WHERE kind = 'storage.scan' AND payload->>'connId' = $1", [CONNECTION_ID])
 })
 afterAll(async () => {
   await pools.rw.query('DELETE FROM storage_connections WHERE id = $1', [CONNECTION_ID])
@@ -35,6 +36,7 @@ describe('createCapacityStore', () => {
         enabled: false, intervalSeconds: 86400, nextRunAt: null,
         lastAttemptAt: null, lastStatus: 'paused', lastError: null, consecutiveFailures: 0,
       },
+      scan: { jobs: [] },
       buckets: [
         { bucket: 'archive', lastSuccessAt: null, lastStatus: null, lastError: null, points: [] },
         { bucket: 'data', lastSuccessAt: null, lastStatus: null, lastError: null, points: [] },
@@ -76,5 +78,31 @@ describe('createCapacityStore', () => {
        VALUES ($1, true, 86400, now(), 'waiting')`, [CONNECTION_ID])
     expect(await store.reserveDueConnections(20)).toEqual([CONNECTION_ID])
     expect(await store.reserveDueConnections(20)).toEqual([])
+  })
+
+  it('進行中の走査と進捗を返し、再投入時に古いerrorを消す', async () => {
+    await pools.rw.query(
+      `INSERT INTO storage_capacity_targets
+         (connection_id, bucket, enabled, interval_seconds, next_run_at, last_status, last_error)
+       VALUES ($1, 'archive', true, 86400, now(), 'partial', 'old error')`, [CONNECTION_ID])
+    const job = await pools.rw.query<{ id: number }>(
+      `INSERT INTO jobs
+         (kind, dedup_key, payload, status, progress, started_at, heartbeat_at)
+       VALUES ('storage.scan', 'capacity-active', $1, 'running', $2, now(), now())
+       RETURNING id`,
+      [JSON.stringify({ connId: CONNECTION_ID, bucket: 'archive', prefix: '' }),
+        JSON.stringify({ kind: 'count', done: 1234, label: '件を走査' })],
+    )
+
+    await store.attachJob(CONNECTION_ID, 'archive', job.rows[0].id)
+    const activity = await store.scanActivity(CONNECTION_ID)
+    expect(activity.jobs).toHaveLength(1)
+    expect(activity.jobs[0]).toMatchObject({
+      jobId: job.rows[0].id, bucket: 'archive', status: 'running', objectCount: 1234,
+    })
+    const target = await pools.ro.query<{ last_status: string; last_error: string | null }>(
+      `SELECT last_status, last_error FROM storage_capacity_targets
+        WHERE connection_id = $1 AND bucket = 'archive'`, [CONNECTION_ID])
+    expect(target.rows[0]).toEqual({ last_status: 'queued', last_error: null })
   })
 })

@@ -28,6 +28,19 @@ export interface CapacityBucketHistory {
   points: CapacityPoint[]
 }
 
+export interface CapacityScanJob {
+  jobId: number
+  bucket: string
+  status: 'queued' | 'running'
+  objectCount: number
+  createdAt: string
+  startedAt: string | null
+}
+
+export interface CapacityScanActivity {
+  jobs: CapacityScanJob[]
+}
+
 interface SettingsRow {
   connection_id: string
   enabled: boolean
@@ -44,6 +57,15 @@ interface TargetRow {
   last_success_at: Date | null
   last_status: CapacityStatus | null
   last_error: string | null
+}
+
+interface ScanJobRow {
+  id: number
+  bucket: string
+  status: 'queued' | 'running'
+  progress: { kind?: unknown; done?: unknown } | null
+  created_at: Date
+  started_at: Date | null
 }
 
 const safeNumber = (value: string | number): number => {
@@ -83,7 +105,9 @@ export interface CapacityStore {
   overview(connectionId: string, buckets: string[], days: number): Promise<{
     tracking: CapacitySettings
     buckets: CapacityBucketHistory[]
+    scan: CapacityScanActivity
   }>
+  scanActivity(connectionId: string): Promise<CapacityScanActivity>
   reserveDueConnections(limit: number): Promise<string[]>
   syncBuckets(connectionId: string, buckets: string[]): Promise<void>
   attachJob(connectionId: string, bucket: string, jobId: number): Promise<void>
@@ -96,11 +120,43 @@ export interface CapacityStore {
   prune(keepDays: number): Promise<number>
 }
 
+function scanObjectCount(progress: ScanJobRow['progress']): number {
+  const done = progress?.kind === 'count' ? Number(progress.done) : 0
+  return Number.isSafeInteger(done) && done >= 0 ? done : 0
+}
+
+function toScanActivity(rows: ScanJobRow[]): CapacityScanActivity {
+  return {
+    jobs: rows.map(row => ({
+      jobId: row.id,
+      bucket: row.bucket,
+      status: row.status,
+      objectCount: scanObjectCount(row.progress),
+      createdAt: row.created_at.toISOString(),
+      startedAt: iso(row.started_at),
+    })),
+  }
+}
+
+async function loadScanActivity(pools: Pools, connectionId: string): Promise<CapacityScanActivity> {
+  const result = await pools.ro.query<ScanJobRow>(
+    `SELECT id, payload->>'bucket' AS bucket, status, progress, created_at, started_at
+       FROM jobs
+      WHERE kind = 'storage.scan'
+        AND payload->>'connId' = $1
+        AND COALESCE(payload->>'prefix', '') = ''
+        AND status IN ('queued', 'running')
+      ORDER BY CASE status WHEN 'running' THEN 0 ELSE 1 END, created_at, id`,
+    [connectionId],
+  )
+  return toScanActivity(result.rows)
+}
+
 export function createCapacityStore(pools: Pools): CapacityStore {
   return {
     async overview(connectionId, bucketNames, days) {
       const buckets = [...new Set(bucketNames)]
-      const [settingResult, targetResult, pointResult] = await Promise.all([
+      const [settingResult, targetResult, pointResult, scan] = await Promise.all([
         pools.ro.query<SettingsRow>(
           `SELECT connection_id, enabled, interval_seconds, next_run_at, last_attempt_at,
                   last_status, last_error, consecutive_failures
@@ -115,6 +171,7 @@ export function createCapacityStore(pools: Pools): CapacityStore {
             WHERE connection_id = $1 AND bucket = ANY($2::text[])
               AND collected_at >= now() - ($3::text || ' days')::interval
             ORDER BY bucket, collected_at`, [connectionId, buckets, days]),
+        loadScanActivity(pools, connectionId),
       ])
       const targets = new Map(targetResult.rows.map(row => [row.bucket, row]))
       const points = new Map<string, CapacityPoint[]>()
@@ -128,6 +185,7 @@ export function createCapacityStore(pools: Pools): CapacityStore {
       }
       return {
         tracking: settings(settingResult.rows[0]),
+        scan,
         buckets: buckets.map(bucket => {
           const status = targets.get(bucket)
           return {
@@ -137,6 +195,10 @@ export function createCapacityStore(pools: Pools): CapacityStore {
           }
         }),
       }
+    },
+
+    async scanActivity(connectionId) {
+      return loadScanActivity(pools, connectionId)
     },
 
     async reserveDueConnections(limit) {
@@ -177,7 +239,7 @@ export function createCapacityStore(pools: Pools): CapacityStore {
     async attachJob(connectionId, bucket, jobId) {
       await pools.rw.query(
         `UPDATE storage_capacity_targets
-            SET last_job_id = $3, last_status = 'queued', updated_at = now()
+            SET last_job_id = $3, last_status = 'queued', last_error = NULL, updated_at = now()
           WHERE connection_id = $1 AND bucket = $2`, [connectionId, bucket, jobId])
     },
 

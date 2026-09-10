@@ -28,15 +28,25 @@ export const CapacityBucketHistory = z.object({
     collectedAt: z.string(),
   })),
 })
+export const CapacityScanJob = z.object({
+  jobId: z.number().int(),
+  bucket: z.string(),
+  status: z.enum(['queued', 'running']),
+  objectCount: z.number().int().nonnegative(),
+  createdAt: z.string(),
+  startedAt: z.string().nullable(),
+})
 export const CapacityOverview = z.object({
   connectionId: z.string(),
   days: z.number().int(),
   capacityBytes: z.number().positive().nullable(),
   tracking: CapacityTracking,
+  scan: z.object({ jobs: z.array(CapacityScanJob) }),
   buckets: z.array(CapacityBucketHistory),
 })
 export type CapacityOverview = z.infer<typeof CapacityOverview>
 export type CapacityBucketHistory = z.infer<typeof CapacityBucketHistory>
+export type CapacityScanJob = z.infer<typeof CapacityScanJob>
 export const CapacityScanResponse = z.object({
   jobs: z.array(z.object({ bucket: z.string(), jobId: z.number().int() })),
 })

@@ -45,6 +45,11 @@ export function mountStorageCapacityRoutes(app: Hono, deps: StorageCapacityDeps)
       return c.json({ error: 'この接続ではバケットのメトリクス集計が無効になっています' }, 403)
     }
 
+    const active = await deps.store.scanActivity(connectionId)
+    if (active.jobs.length > 0) {
+      return c.json({ error: 'この接続のバケット計測はすでに進行中です' }, 409)
+    }
+
     const buckets = await deps.listBuckets(connectionId)
     const jobs = await enqueueCapacityScans({ capacity: deps.store, jobs: deps.jobs }, connectionId, buckets)
     if (jobs.every(job => !job.created)) markAuditNoChange(c)
