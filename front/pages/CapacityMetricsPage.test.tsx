@@ -42,6 +42,10 @@ function mount(permissions: string[] | null = null, scanJobs: CapacityScanJob[] 
         bucket: 'dataset', lastSuccessAt: '2026-09-10T00:00:00Z', lastStatus: 'success', lastError: null,
         points: [point(2500, 20, '2026-09-10T00:00:00Z')],
       },
+      {
+        bucket: 'unmeasured', lastSuccessAt: null, lastStatus: 'waiting', lastError: null,
+        points: [],
+      },
     ],
   })
   const content = (
@@ -73,8 +77,9 @@ describe('CapacityMetricsPage', () => {
     expect(screen.getByRole('heading', { name: 'dataset' })).toBeInTheDocument()
     expect(screen.getByText('3.91 KiB')).toBeInTheDocument()
     expect(screen.getByText('32')).toBeInTheDocument()
-    expect(screen.getByText('2 / 2 バケット')).toBeInTheDocument()
+    expect(screen.getByText('2 / 3 バケット')).toBeInTheDocument()
     expect(screen.queryByRole('combobox', { name: 'バケット' })).not.toBeInTheDocument()
+    expect(screen.getAllByRole('heading', { level: 3 }).map(element => element.textContent)).toEqual(['dataset', 'archive', 'unmeasured'])
   })
 
   it('connection編集権限がある場合だけ全bucket強制計測を表示する', async () => {

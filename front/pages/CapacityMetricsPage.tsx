@@ -115,6 +115,7 @@ export default function CapacityMetricsPage({ connId }: { connId: string }) {
   const measuredCount = measured.length
   const bucketCount = overview?.buckets.length ?? 0
   const activeByBucket = new Map(scanJobs.map(job => [job.bucket, job]))
+  const sortedBuckets = overview ? [...overview.buckets].sort(compareBucketCapacity) : []
 
   return (
     <section>
@@ -175,7 +176,7 @@ export default function CapacityMetricsPage({ connId }: { connId: string }) {
 
       {overview && (
         <div className="space-y-4" aria-busy={loading}>
-          {overview.buckets.map(bucket => (
+          {sortedBuckets.map(bucket => (
             <BucketMetrics
               key={bucket.bucket}
               connId={connId}
@@ -188,6 +189,15 @@ export default function CapacityMetricsPage({ connId }: { connId: string }) {
       )}
     </section>
   )
+}
+
+function compareBucketCapacity(a: CapacityBucketHistory, b: CapacityBucketHistory): number {
+  const aBytes = a.points.at(-1)?.totalBytes ?? null
+  const bBytes = b.points.at(-1)?.totalBytes ?? null
+  if (aBytes === null && bBytes !== null) return 1
+  if (aBytes !== null && bBytes === null) return -1
+  if (aBytes !== null && bBytes !== null && aBytes !== bBytes) return aBytes < bBytes ? 1 : -1
+  return a.bucket.localeCompare(b.bucket)
 }
 
 function elapsedMinute(startedAt: string, now: number): string {
