@@ -31,23 +31,28 @@ interface PersistedEntry<V> {
   expiresAt: number
 }
 
-export interface TTLCacheOptions {
+export interface TTLCacheOptions<V = unknown> {
   /**
    * 指定すると localStorage に値を書き出す。namespace 兼識別子で、
    * 実際の storage key は `${persistKey}:${cacheKey}` になる。
    * (未指定なら従来通り in-memory のみ — テストや短 TTL 用)
    */
   persistKey?: string
+  /** Value supplied by the server may have an earlier authoritative expiry.
+   *  The local cache never lives beyond either this timestamp or ttlMs. */
+  expiresAt?: (value: V) => number | null
 }
 
 export class TTLCache<V> {
   private readonly store = new Map<string, Entry<V>>()
   private readonly ttlMs: number
   private readonly persistKey: string | null
+  private readonly valueExpiresAt: ((value: V) => number | null) | null
 
-  constructor(ttlMs: number, opts: TTLCacheOptions = {}) {
+  constructor(ttlMs: number, opts: TTLCacheOptions<V> = {}) {
     this.ttlMs = ttlMs
     this.persistKey = opts.persistKey ?? null
+    this.valueExpiresAt = opts.expiresAt ?? null
   }
 
   /**
@@ -127,9 +132,21 @@ export class TTLCache<V> {
 
   /** 確定した値でエントリを差し替え、永続層にも書き出す。 */
   private commit(key: string, value: V): void {
-    const expiresAt = Date.now() + this.ttlMs
+    const localExpiresAt = Date.now() + this.ttlMs
+    const authoritativeExpiresAt = this.valueExpiresAt?.(value) ?? null
+    const expiresAt = authoritativeExpiresAt != null && Number.isFinite(authoritativeExpiresAt)
+      ? Math.min(localExpiresAt, authoritativeExpiresAt)
+      : localExpiresAt
     this.store.set(key, { value, expiresAt })
     this.writePersisted(key, value, expiresAt)
+  }
+
+  /** 現在保持している値を、期限切れを含めて返す。表示中のstale値がいつ
+   *  upstreamから取得されたかを値自身のmetadataから読む用途。 */
+  peek(key: string): V | null {
+    const cur = this.store.get(key)
+    if (cur?.value !== undefined) return cur.value
+    return this.readPersisted(key)?.value ?? null
   }
 
   /** 該当キーの「値が確定したタイムスタンプ」(epoch ms)。値が無いか

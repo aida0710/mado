@@ -67,7 +67,13 @@ const API_BASE = '/api/internal'
 const CACHE_TTL_MS      = 5 * 60 * 1000
 const LONG_CACHE_TTL_MS = 6 * 60 * 60 * 1000
 
-const listCache            = new TTLCache<z.infer<typeof StorageList>>(LONG_CACHE_TTL_MS,    { persistKey: 'mado.cache.list' })
+const listCache            = new TTLCache<z.infer<typeof StorageList>>(LONG_CACHE_TTL_MS, {
+  // v2: old persisted values have no authoritative server fetchedAt metadata.
+  persistKey: 'mado.cache.list.v2',
+  // A browser cache received near the end of the server TTL must not extend the
+  // response another six hours. Revalidate no later than the server expiry.
+  expiresAt: value => Date.parse(value.cache.expiresAt),
+})
 const readmeCache          = new TTLCache<z.infer<typeof Readme>>(LONG_CACHE_TTL_MS,         { persistKey: 'mado.cache.readme' })
 const tarCache             = new TTLCache<z.infer<typeof TarPreview>>(CACHE_TTL_MS)
 const bucketsCache         = new TTLCache<z.infer<typeof ListBuckets>>(LONG_CACHE_TTL_MS,    { persistKey: 'mado.cache.buckets' })
@@ -781,8 +787,8 @@ export const api = {
       opts: { recursive?: boolean } = {},
     ): Date | null => {
       const cacheKey = k('list', connId, bucket, prefix, opts.recursive ? 'r' : '', cursor.continuation, cursor.startAfter)
-      const at = listCache.getFetchedAt(cacheKey)
-      return at != null ? new Date(at) : null
+      const value = listCache.peek(cacheKey)
+      return value ? new Date(value.cache.fetchedAt) : null
     },
     readme: (connId: string, bucket: string, prefix: string): Date | null => {
       const at = readmeCache.getFetchedAt(k('readme', connId, bucket, prefix))

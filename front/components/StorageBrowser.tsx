@@ -72,8 +72,8 @@ const initial: State = {
   revalidating: false,
 }
 
-// 注: page は reset 時にもクリアしない。前ページの dirs/files は応答到着まで
-// 残ることで、ページ切替中も画面が空にならず dim 状態として表示される。
+// prefix/cursorを切り替えたらpageも消す。旧pageを残すと、新しいscopeのcache時刻と
+// 古いディレクトリ内容が同時に表示され、親の状態を引き継いだように見えるため。
 function reducer(s: State, a: Action): State {
   switch (a.type) {
     case 'setQ':
@@ -83,11 +83,11 @@ function reducer(s: State, a: Action): State {
     case 'setRecursive':
       return { ...s, recursive: a.r }
     case 'identityReset':
-      return { ...s, history: [{}], pageIdx: 0, loading: true, error: null, revalidating: false }
+      return { ...s, page: null, history: [{}], pageIdx: 0, loading: true, error: null, revalidating: false }
     case 'startGoto':
-      return { ...s, pageIdx: a.idx, loading: true, error: null, revalidating: false }
+      return { ...s, page: null, pageIdx: a.idx, loading: true, error: null, revalidating: false }
     case 'startNext':
-      return { ...s, history: [...s.history, a.cursor], pageIdx: s.pageIdx + 1, loading: true, error: null, revalidating: false }
+      return { ...s, page: null, history: [...s.history, a.cursor], pageIdx: s.pageIdx + 1, loading: true, error: null, revalidating: false }
     case 'loadOk':
       // stale の可能性があるので revalidating はここでは触らない
       return { ...s, page: a.page, loading: false }

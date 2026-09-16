@@ -65,6 +65,13 @@ export const StorageList = z.object({
   files: z.array(StorageFile),
   nextContinuation: z.string().nullable(),
   nextStartAfter: z.string().nullable(),
+  // ブラウザがAPI応答を受け取った時刻ではなく、一覧を実際にS3から取得した時刻。
+  // 二層cacheでも古いserver cacheを「たった今」と誤表示しないために保持する。
+  cache: z.object({
+    fetchedAt: z.string(),
+    expiresAt: z.string(),
+    hit: z.boolean(),
+  }),
 })
 
 export const ReadmeAbsent = z.object({ exists: z.literal(false) })

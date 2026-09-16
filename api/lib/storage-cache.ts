@@ -23,6 +23,20 @@ export interface CacheScope {
   startAfter?: string
 }
 
+/** DB cache entry together with the time it was actually fetched from S3.
+ *  The payload alone is insufficient for the UI: receiving a 20-hour-old server
+ *  cache entry now must not be presented as data fetched "just now". */
+export interface CachedResponse {
+  payload: unknown
+  fetchedAt: string
+  expiresAt: string
+}
+
+export interface CacheWriteMeta {
+  fetchedAt: string
+  expiresAt: string
+}
+
 /** サーバー側 TTL。クライアント側の 6 時間とは役割が違う —
  *  クライアントは「即座に描画する」ため、こちらは「35 秒を全体で 1 回に減らす」ため。 */
 export const LIST_CACHE_TTL_MS = 24 * 60 * 60 * 1000
@@ -51,9 +65,9 @@ export interface Queryable {
 }
 
 export interface ResponseCache {
-  get(scope: CacheScope): Promise<unknown | null>
+  get(scope: CacheScope): Promise<CachedResponse | null>
   /** ttlMs を渡すと既定を上書きする (バケットごとの list_cache_ttl_sec 用)。 */
-  set(scope: CacheScope, payload: unknown, ttlMs?: number): Promise<void>
+  set(scope: CacheScope, payload: unknown, ttlMs?: number): Promise<CacheWriteMeta | null>
   invalidateScope(connId: string, bucket: string, prefix: string): Promise<void>
   invalidateConnection(connId: string): Promise<void>
 }
@@ -70,12 +84,20 @@ export function createResponseCache(db: Queryable, ttlMs: number = LIST_CACHE_TT
     async get(scope) {
       try {
         const r = await db.query(
-          `SELECT payload FROM storage_response_cache
+          `SELECT payload, fetched_at, expires_at FROM storage_response_cache
             WHERE cache_key = $1 AND expires_at > now()`,
           [cacheKey(scope)],
         )
-        const row = r.rows[0] as { payload: unknown } | undefined
-        return row ? row.payload : null
+        const row = r.rows[0] as {
+          payload: unknown
+          fetched_at: Date | string
+          expires_at: Date | string
+        } | undefined
+        return row ? {
+          payload: row.payload,
+          fetchedAt: new Date(row.fetched_at).toISOString(),
+          expiresAt: new Date(row.expires_at).toISOString(),
+        } : null
       } catch (e) {
         swallow('get', e)
         return null
@@ -86,14 +108,15 @@ export function createResponseCache(db: Queryable, ttlMs: number = LIST_CACHE_TT
       try {
         // 期限切れ行は次回の取得時にこの UPSERT で上書きされるので、
         // 読み出し時の掃除も定期ジョブも要らない。
-        await db.query(
+        const r = await db.query(
           `INSERT INTO storage_response_cache
              (cache_key, conn_id, bucket, prefix, payload, expires_at)
            VALUES ($1, $2, $3, $4, $5, now() + ($6::bigint || ' milliseconds')::interval)
            ON CONFLICT (cache_key) DO UPDATE SET
              payload    = EXCLUDED.payload,
              fetched_at = now(),
-             expires_at = EXCLUDED.expires_at`,
+             expires_at = EXCLUDED.expires_at
+           RETURNING fetched_at, expires_at`,
           [
             cacheKey(scope),
             scope.connId,
@@ -103,8 +126,17 @@ export function createResponseCache(db: Queryable, ttlMs: number = LIST_CACHE_TT
             overrideTtlMs ?? ttlMs,
           ],
         )
+        const row = r.rows[0] as {
+          fetched_at: Date | string
+          expires_at: Date | string
+        } | undefined
+        return row ? {
+          fetchedAt: new Date(row.fetched_at).toISOString(),
+          expiresAt: new Date(row.expires_at).toISOString(),
+        } : null
       } catch (e) {
         swallow('set', e)
+        return null
       }
     },
 

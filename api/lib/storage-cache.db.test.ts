@@ -16,7 +16,10 @@ describe('storage_response_cache (実 DB)', () => {
   it('set した payload を get で取り戻せる', async () => {
     const cache = createResponseCache(pools.rw)
     await cache.set(SCOPE, { directories: ['p/x/'], files: [] })
-    expect(await cache.get(SCOPE)).toEqual({ directories: ['p/x/'], files: [] })
+    const hit = await cache.get(SCOPE)
+    expect(hit?.payload).toEqual({ directories: ['p/x/'], files: [] })
+    expect(hit?.fetchedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/)
+    expect(hit?.expiresAt).toMatch(/^\d{4}-\d{2}-\d{2}T/)
   })
 
   it('TTL 切れの行は get で返らない', async () => {
@@ -33,7 +36,7 @@ describe('storage_response_cache (実 DB)', () => {
     await cache.invalidateScope('c1', 'b', 'p/')
     expect(await cache.get({ ...SCOPE, continuation: 'tok1' })).toBeNull()
     expect(await cache.get({ ...SCOPE, continuation: 'tok2' })).toBeNull()
-    expect(await cache.get({ ...SCOPE, prefix: 'other/' })).toEqual({ page: 9 })
+    expect((await cache.get({ ...SCOPE, prefix: 'other/' }))?.payload).toEqual({ page: 9 })
   })
 
   it('invalidateConnection は接続の全行を消す', async () => {
@@ -42,6 +45,6 @@ describe('storage_response_cache (実 DB)', () => {
     await cache.set({ ...SCOPE, connId: 'c2' }, { page: 2 })
     await cache.invalidateConnection('c1')
     expect(await cache.get(SCOPE)).toBeNull()
-    expect(await cache.get({ ...SCOPE, connId: 'c2' })).toEqual({ page: 2 })
+    expect((await cache.get({ ...SCOPE, connId: 'c2' }))?.payload).toEqual({ page: 2 })
   })
 })

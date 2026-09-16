@@ -274,6 +274,31 @@ describe('TTLCache', () => {
     })
   })
 
+  describe('upstreamの期限とmetadata', () => {
+    it('固定TTLより早いupstream期限で再取得する', async () => {
+      const t0 = new Date('2026-09-16T00:00:00.000Z').getTime()
+      vi.setSystemTime(t0)
+      const cache = new TTLCache<{ value: number; expiresAt: number }>(60_000, {
+        expiresAt: value => value.expiresAt,
+      })
+      const loader = vi.fn()
+        .mockResolvedValueOnce({ value: 1, expiresAt: t0 + 1_000 })
+        .mockResolvedValueOnce({ value: 2, expiresAt: t0 + 61_000 })
+
+      expect((await cache.get('k', loader)).value).toBe(1)
+      vi.advanceTimersByTime(1_001)
+      expect((await cache.get('k', loader)).value).toBe(2)
+      expect(loader).toHaveBeenCalledTimes(2)
+    })
+
+    it('peekは期限切れでも表示中の値metadataを返す', async () => {
+      const cache = new TTLCache<{ fetchedAt: string }>(1_000)
+      await cache.get('k', async () => ({ fetchedAt: '2026-09-15T00:00:00.000Z' }))
+      vi.advanceTimersByTime(1_500)
+      expect(cache.peek('k')).toEqual({ fetchedAt: '2026-09-15T00:00:00.000Z' })
+    })
+  })
+
   describe('getFetchedAt', () => {
     it('未登録のキーは null', () => {
       const cache = new TTLCache<number>(60_000)

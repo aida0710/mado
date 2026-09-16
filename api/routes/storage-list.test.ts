@@ -32,7 +32,7 @@ const getConnectionConfig = async (): Promise<ConnectionConfig> => ({
 function passthroughCache(): ResponseCache {
   return {
     get: async () => null,
-    set: async () => {},
+    set: async () => null,
     invalidateScope: async () => {},
     invalidateConnection: async () => {},
   }
@@ -57,6 +57,7 @@ interface ListResponse {
   files: { key: string; size: number; lastModified: string | null }[]
   nextContinuation: string | null
   nextStartAfter: string | null
+  cache: { fetchedAt: string; expiresAt: string; hit: boolean }
 }
 
 beforeEach(() => {
@@ -126,11 +127,25 @@ describe('GET /storage/:connId/list — directory prefix (末尾スラッシュ)
 describe('サーバー側キャッシュ', () => {
   it('hit したら S3 を呼ばずにキャッシュの中身を返す', async () => {
     const cached = { directories: ['cached/'], files: [], nextContinuation: null, nextStartAfter: null }
-    cache = { ...passthroughCache(), get: async () => cached }
+    cache = {
+      ...passthroughCache(),
+      get: async () => ({
+        payload: cached,
+        fetchedAt: '2026-09-15T01:00:00.000Z',
+        expiresAt: '2026-09-16T01:00:00.000Z',
+      }),
+    }
 
     const res = await app.request(`/storage/${TEST_CONN_ID}/list?bucket=b1`)
     expect(res.status).toBe(200)
-    expect(await res.json()).toEqual(cached)
+    expect(await res.json()).toEqual({
+      ...cached,
+      cache: {
+        fetchedAt: '2026-09-15T01:00:00.000Z',
+        expiresAt: '2026-09-16T01:00:00.000Z',
+        hit: true,
+      },
+    })
     expect(storageMock.calls()).toHaveLength(0)
   })
 
@@ -139,13 +154,28 @@ describe('サーバー側キャッシュ', () => {
       CommonPrefixes: [{ Prefix: 'b1/dir/' }], Contents: [], IsTruncated: false,
     })
     const sets: unknown[] = []
-    cache = { ...passthroughCache(), set: async (_s, p) => { sets.push(p) } }
+    cache = {
+      ...passthroughCache(),
+      set: async (_s, p) => {
+        sets.push(p)
+        return {
+          fetchedAt: '2026-09-15T02:00:00.000Z',
+          expiresAt: '2026-09-16T02:00:00.000Z',
+        }
+      },
+    }
 
     const res = await app.request(`/storage/${TEST_CONN_ID}/list?bucket=b1`)
     expect(res.status).toBe(200)
     expect(storageMock.calls()).toHaveLength(1)
     expect(sets).toHaveLength(1)
     expect((sets[0] as { directories: string[] }).directories).toEqual(['b1/dir/'])
+    const body = await res.json() as ListResponse
+    expect(body.cache).toEqual({
+      fetchedAt: '2026-09-15T02:00:00.000Z',
+      expiresAt: '2026-09-16T02:00:00.000Z',
+      hit: false,
+    })
   })
 
   it('refresh=1 なら hit があっても無視して S3 を呼ぶ', async () => {
@@ -157,7 +187,11 @@ describe('サーバー側キャッシュ', () => {
       ...passthroughCache(),
       get: async () => {
         getCalled = true
-        return { directories: ['stale/'], files: [], nextContinuation: null, nextStartAfter: null }
+        return {
+          payload: { directories: ['stale/'], files: [], nextContinuation: null, nextStartAfter: null },
+          fetchedAt: '2026-09-15T01:00:00.000Z',
+          expiresAt: '2026-09-16T01:00:00.000Z',
+        }
       },
     }
 
@@ -170,7 +204,14 @@ describe('サーバー側キャッシュ', () => {
 
   it('/buckets も同じくキャッシュを引く', async () => {
     const cached = { buckets: [{ name: 'from-cache', creationDate: null }] }
-    cache = { ...passthroughCache(), get: async () => cached }
+    cache = {
+      ...passthroughCache(),
+      get: async () => ({
+        payload: cached,
+        fetchedAt: '2026-09-15T01:00:00.000Z',
+        expiresAt: '2026-09-16T01:00:00.000Z',
+      }),
+    }
 
     const res = await app.request(`/storage/${TEST_CONN_ID}/buckets`)
     expect(await res.json()).toEqual(cached)

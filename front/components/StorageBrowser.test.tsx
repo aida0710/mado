@@ -92,8 +92,8 @@ describe('StorageBrowser - directory row', () => {
     // 進捗バー要素 + ARIA progressbar role が出る
     expect(screen.getByRole('progressbar', { name: '読み込み中' })).toBeInTheDocument()
 
-    // 古い内容も dim 状態で残っている (link はまだ存在する)
-    expect(screen.queryByRole('link', { name: /jp\// })).toBeInTheDocument()
+    // 新しいprefixのcache時刻と旧ディレクトリ内容を混在させない。
+    expect(screen.queryByRole('link', { name: /jp\// })).toBeNull()
 
     // 解決すれば消える
     resolveSecond({ directories: [], files: [], nextContinuation: null, nextStartAfter: null })
@@ -400,10 +400,8 @@ describe('force と refresh の分離', () => {
   })
 })
 
-describe('更新中の操作', () => {
-  // ↻ はサーバーキャッシュを貫通するので dataset では 35 秒かかる。その間
-  // 前の一覧は画面に残っているのに触れない、という状態を避ける。
-  it('読み込み中でも一覧のクリックを塞がない', async () => {
+describe('更新中の表示', () => {
+  it('手動更新中は古い一覧を消して異なる鮮度表示との混在を防ぐ', async () => {
     const listMock = api.list as ReturnType<typeof vi.fn>
     listMock.mockResolvedValueOnce({
       directories: ['voice/jp/'], files: [], nextContinuation: null, nextStartAfter: null,
@@ -418,8 +416,7 @@ describe('更新中の操作', () => {
     await user.click(screen.getByRole('button', { name: '再読み込み' }))
     await waitFor(() => expect(listMock).toHaveBeenCalledTimes(2))
 
-    // 読み込み中でも一覧は操作可能なままであること
-    const link = screen.getByRole('link', { name: /jp\// })
-    expect(link.closest('[aria-busy]')).not.toHaveClass('pointer-events-none')
+    expect(screen.queryByRole('link', { name: /jp\// })).toBeNull()
+    expect(screen.getByRole('progressbar', { name: '読み込み中' })).toBeInTheDocument()
   })
 })

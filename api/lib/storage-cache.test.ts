@@ -51,9 +51,17 @@ const SCOPE = { kind: 'list' as const, connId: 'c1', bucket: 'b', prefix: 'p/' }
 
 describe('createResponseCache', () => {
   it('hit したら payload を返す', async () => {
-    const { db, calls } = fakeDb([{ payload: { directories: ['p/x/'], files: [] } }])
+    const { db, calls } = fakeDb([{
+      payload: { directories: ['p/x/'], files: [] },
+      fetched_at: '2026-09-15T00:00:00.000Z',
+      expires_at: '2026-09-16T00:00:00.000Z',
+    }])
     const cache = createResponseCache(db)
-    expect(await cache.get(SCOPE)).toEqual({ directories: ['p/x/'], files: [] })
+    expect(await cache.get(SCOPE)).toEqual({
+      payload: { directories: ['p/x/'], files: [] },
+      fetchedAt: '2026-09-15T00:00:00.000Z',
+      expiresAt: '2026-09-16T00:00:00.000Z',
+    })
     expect(calls[0].text).toContain('expires_at > now()')
     expect(calls[0].values[0]).toBe(cacheKey(SCOPE))
   })
@@ -64,11 +72,19 @@ describe('createResponseCache', () => {
   })
 
   it('set は conn_id / bucket / prefix も一緒に書き、TTL 後の期限を入れる', async () => {
-    const { db, calls } = fakeDb()
-    await createResponseCache(db, 1000).set(SCOPE, { ok: true })
+    const { db, calls } = fakeDb([{
+      fetched_at: '2026-09-15T02:00:00.000Z',
+      expires_at: '2026-09-15T02:00:01.000Z',
+    }])
+    const meta = await createResponseCache(db, 1000).set(SCOPE, { ok: true })
     expect(calls[0].text).toContain('ON CONFLICT (cache_key) DO UPDATE')
+    expect(calls[0].text).toContain('RETURNING fetched_at, expires_at')
     expect(calls[0].values.slice(0, 4)).toEqual([cacheKey(SCOPE), 'c1', 'b', 'p/'])
     expect(calls[0].values[5]).toBe(1000)
+    expect(meta).toEqual({
+      fetchedAt: '2026-09-15T02:00:00.000Z',
+      expiresAt: '2026-09-15T02:00:01.000Z',
+    })
   })
 
   it('invalidateScope は conn_id + bucket + prefix で消す', async () => {
@@ -94,7 +110,7 @@ describe('createResponseCache', () => {
   it('DB が例外を投げても set / invalidate は throw しない', async () => {
     const db: Queryable = { query: async () => { throw new Error('db down') } }
     const cache = createResponseCache(db)
-    await expect(cache.set(SCOPE, { ok: true })).resolves.toBeUndefined()
+    await expect(cache.set(SCOPE, { ok: true })).resolves.toBeNull()
     await expect(cache.invalidateScope('c1', 'b', 'p/')).resolves.toBeUndefined()
     await expect(cache.invalidateConnection('c1')).resolves.toBeUndefined()
   })

@@ -19,6 +19,21 @@ export interface StorageListDeps {
   cache: ResponseCache
 }
 
+interface ListBody {
+  directories: string[]
+  files: Array<{ key: string; size: number; lastModified: string | null }>
+  nextContinuation: string | null
+  nextStartAfter: string | null
+}
+
+function withCacheMeta(
+  body: ListBody,
+  meta: { fetchedAt: string; expiresAt: string },
+  hit: boolean,
+) {
+  return { ...body, cache: { ...meta, hit } }
+}
+
 /** ディレクトリを開いたとき (prefix が `/` 終わり) に S3 互換実装が返す
  *  「そのディレクトリ自身」を表す 0 バイトの placeholder オブジェクト
  *  (Key === prefix) を一覧から隠すための判定。
@@ -45,7 +60,7 @@ export function mountStorageListRoutes(app: Hono, deps: StorageListDeps): void {
     const refresh = c.req.query('refresh') === '1'
     if (!refresh) {
       const hit = await deps.cache.get(scope)
-      if (hit) return c.json(hit)
+      if (hit) return c.json(hit.payload)
     }
 
     const out = await storage.send(new ListBucketsCommand({}))
@@ -89,7 +104,13 @@ export function mountStorageListRoutes(app: Hono, deps: StorageListDeps): void {
     const refresh = c.req.query('refresh') === '1'
     if (!refresh) {
       const hit = await deps.cache.get(scope)
-      if (hit) return c.json(hit)
+      if (hit) {
+        return c.json(withCacheMeta(
+          hit.payload as ListBody,
+          { fetchedAt: hit.fetchedAt, expiresAt: hit.expiresAt },
+          true,
+        ))
+      }
     }
 
     const config = await deps.getConnectionConfig(connId)
@@ -133,8 +154,12 @@ export function mountStorageListRoutes(app: Hono, deps: StorageListDeps): void {
         nextContinuation: null,
         nextStartAfter: explicitNext ?? fallbackKey,
       }
-      await deps.cache.set(scope, body, config.listCacheTtlSec * 1000)
-      return c.json(body)
+      const now = new Date()
+      const meta = await deps.cache.set(scope, body, config.listCacheTtlSec * 1000) ?? {
+        fetchedAt: now.toISOString(),
+        expiresAt: new Date(now.getTime() + config.listCacheTtlSec * 1000).toISOString(),
+      }
+      return c.json(withCacheMeta(body, meta, false))
     }
 
     // V2 経路 (既定): 既存挙動を保持。
@@ -176,7 +201,11 @@ export function mountStorageListRoutes(app: Hono, deps: StorageListDeps): void {
       nextContinuation: realToken,
       nextStartAfter: fallbackKey,
     }
-    await deps.cache.set(scope, body, config.listCacheTtlSec * 1000)
-    return c.json(body)
+    const now = new Date()
+    const meta = await deps.cache.set(scope, body, config.listCacheTtlSec * 1000) ?? {
+      fetchedAt: now.toISOString(),
+      expiresAt: new Date(now.getTime() + config.listCacheTtlSec * 1000).toISOString(),
+    }
+    return c.json(withCacheMeta(body, meta, false))
   })
 }

@@ -11,6 +11,7 @@ describe('StorageBrowser タグ', () => {
     vi.spyOn(api, 'list').mockResolvedValue({
       directories: [], files: [{ key: 'a.txt', size: 1, lastModified: null }],
       nextContinuation: null, nextStartAfter: null,
+      cache: { fetchedAt: '2026-09-16T00:00:00.000Z', expiresAt: '2026-09-17T00:00:00.000Z', hit: false },
     })
     vi.spyOn(api, 'tags').mockResolvedValue([{ id: 't1', name: '重要', color: '#ff0000' }])
     vi.spyOn(api, 'tagAssignments').mockImplementation(async (_c, _b, kind): Promise<Record<string, string[]>> =>
@@ -39,6 +40,7 @@ describe('StorageBrowser タグ', () => {
         { key: 'b.txt', size: 1, lastModified: null },
       ],
       nextContinuation: null, nextStartAfter: null,
+      cache: { fetchedAt: '2026-09-16T00:00:00.000Z', expiresAt: '2026-09-17T00:00:00.000Z', hit: false },
     })
     vi.spyOn(api, 'tags').mockResolvedValue([{ id: 't1', name: '重要', color: '#ff0000' }])
     vi.spyOn(api, 'tagAssignments').mockImplementation(async (_c, _b, kind): Promise<Record<string, string[]>> =>
