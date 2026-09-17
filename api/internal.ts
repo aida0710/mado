@@ -62,6 +62,8 @@ const authEnabled = env.AUTH_MODE !== 'disabled'
 const authStore = createAuthStore(pools.rw)
 const audit = createAuditWriter(pools.rw)
 const serviceAccounts = createServiceAccountStore(pools.rw)
+// 期限切れ session と OIDC attempt の掃除。attempt の有効期限は分単位なので 1 時間おきで十分。
+const AUTH_CLEANUP_INTERVAL_MS = 60 * 60 * 1000
 const authCleanupTimer = authEnabled ? setInterval(() => {
   void Promise.all([
     authStore.deleteExpiredSessions(),
@@ -71,7 +73,7 @@ const authCleanupTimer = authEnabled ? setInterval(() => {
            OR used_at < now() - interval '1 hour'`,
     ),
   ]).catch(error => console.error('failed to clean expired auth records', error))
-}, 60 * 60 * 1000) : null
+}, AUTH_CLEANUP_INTERVAL_MS) : null
 authCleanupTimer?.unref()
 
 // 応答キャッシュは書き込みを伴うので rw プールを使う。書き込み先は

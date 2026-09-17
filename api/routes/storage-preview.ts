@@ -29,6 +29,10 @@ export interface StoragePreviewDeps {
   env: PreviewEnv
 }
 
+// tar / tar.gz の一覧で読み進める上限。xz は解凍が重いので env で別に絞る。
+// 1 GiB あれば典型的な WebDataset shard の header 走査は終わる。
+const TAR_LIST_BYTE_LIMIT = 1024 * 1024 * 1024
+
 const IMAGE_MIME: Record<string, string> = {
   jpg: 'image/jpeg',
   jpeg: 'image/jpeg',
@@ -255,7 +259,7 @@ export function mountStoragePreviewRoutes(app: Hono, deps: StoragePreviewDeps): 
 
     const byteLimit = kind === 'xz'
       ? deps.env.PREVIEW_TARXZ_BYTE_LIMIT
-      : 1024 * 1024 * 1024 // tar/tar.gz の上限 1 GiB
+      : TAR_LIST_BYTE_LIMIT
 
     // NDJSON をストリーミングする。各行は以下のいずれか:
     //   {"mode":"range"|"stream"}              — 最初の行、戦略を示す

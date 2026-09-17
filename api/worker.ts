@@ -86,43 +86,58 @@ const server = serve({ fetch: app.fetch, port: env.MEDIA_WORKER_PORT }, info => 
   console.log(`media-worker listening on http://localhost:${info.port}`)
 })
 
+const HOUR_MS = 60 * 60 * 1000
+const DAY_MS = 24 * HOUR_MS
+
+// media cache の掃除は 1 時間おき。cache の TTL は日単位なので、これより細かくしても意味がない。
+const MEDIA_CLEANUP_INTERVAL_MS = HOUR_MS
+// queued が無いときの待ち。短いほど投入から着手までが速いが、DB を空回りで叩く回数が増える。
+const JOB_IDLE_WAIT_MS = 2_000
+// DB 未到達などでループが失敗したときの待ち。起動直後の DB 未起動でも worker を殺さず
+// 待つ方針なので、連続失敗で log を埋めない程度に空ける。
+const JOB_ERROR_WAIT_MS = 5_000
+// heartbeat が止まった running job を拾い直す間隔と、stale とみなす経過秒。
+const STALE_JOB_CHECK_INTERVAL_MS = 60_000
+const STALE_JOB_AFTER_SEC = 120
+// 同じ job を何度も拾い直さない上限。poison job (毎回 crash する) を止めるため。
+const STALE_JOB_MAX_ATTEMPTS = 3
+// 終了済み job と容量 snapshot の保持期間。最新の done は結果ストアを兼ねるので残る。
+const FINISHED_JOB_KEEP_DAYS = 7
+const CAPACITY_SNAPSHOT_KEEP_DAYS = 400
+
 const cleanupTimer = setInterval(() => {
   service.cleanup().catch(e => console.error('cleanup error', e))
-}, 60 * 60 * 1000)
+}, MEDIA_CLEANUP_INTERVAL_MS)
 cleanupTimer.unref()
 
 // ── ジョブループ ──
-// queued が無ければ 2 秒待つだけなので DB への負荷は無視できる。
-// 起動直後に DB が未到達でも worker を殺さない (旧実装の方針を踏襲)。
 let jobLoopStopping = false
 async function jobLoop(): Promise<void> {
   for (;;) {
     if (jobLoopStopping) return
     try {
       const ran = await jobRunner.runOnce()
-      if (!ran) await new Promise(r => setTimeout(r, 2000))
+      if (!ran) await new Promise(r => setTimeout(r, JOB_IDLE_WAIT_MS))
     } catch (e) {
       console.error('job loop error', e)
-      await new Promise(r => setTimeout(r, 5000))
+      await new Promise(r => setTimeout(r, JOB_ERROR_WAIT_MS))
     }
   }
 }
 void jobLoop()
 
-// worker が落ちたまま running で残ったジョブを拾い直す。
-// attempts >= 3 のものは error に落として無限再投入を防ぐ。
 const staleTimer = setInterval(() => {
-  jobStore.requeueStale(120, 3).catch(e => console.error('requeueStale error', e))
-}, 60_000)
+  jobStore.requeueStale(STALE_JOB_AFTER_SEC, STALE_JOB_MAX_ATTEMPTS)
+    .catch(e => console.error('requeueStale error', e))
+}, STALE_JOB_CHECK_INTERVAL_MS)
 staleTimer.unref()
 
-// 完了ジョブの掃除。最新の done は結果ストアを兼ねるので残る。
 const pruneTimer = setInterval(() => {
-  Promise.all([jobStore.pruneFinished(7), capacityStore.prune(400)])
+  Promise.all([jobStore.pruneFinished(FINISHED_JOB_KEEP_DAYS), capacityStore.prune(CAPACITY_SNAPSHOT_KEEP_DAYS)])
     .catch(e => console.error('daily prune error', e))
-}, 24 * 60 * 60 * 1000)
+}, DAY_MS)
 pruneTimer.unref()
-void jobStore.pruneFinished(7).catch(() => {})
+void jobStore.pruneFinished(FINISHED_JOB_KEEP_DAYS).catch(() => {})
 
 // 追跡を明示的に有効化したconnectionの全bucketを定期走査する。storage.scanと同じ
 // dedup keyを使うため、手動走査と重なってもS3全走査は1本に合流する。

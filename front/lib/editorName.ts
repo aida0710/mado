@@ -3,10 +3,8 @@
 // この端末だけの設定で、サーバーには保存しない。mado は認証を持たないので
 // 「誰が書いたか」は自己申告であり、端末ごとに 1 つ持てば足りる。
 //
-// キーは既存の 'dashboard.lastEditor' を据え置く。以前は保存のたびに
-// 上書きされる「最後に使った名前」だったが、Settings から明示的に設定する
-// 「自分の署名名」に役割を変えた。すでに入っている値をそのまま引き継ぐため
-// キー名は変えない。
+// キー名 'dashboard.lastEditor' は役割 (Settings で明示的に設定する署名名) と
+// 合っていないが、変えると各端末の localStorage に入っている値が消えるので据え置く。
 export const EDITOR_NAME_KEY = 'dashboard.lastEditor'
 
 export function getEditorName(): string {

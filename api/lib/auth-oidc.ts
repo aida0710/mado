@@ -4,6 +4,10 @@ import { createRemoteJWKSet, jwtVerify } from 'jose'
 import type { CryptoModule } from '../crypto.js'
 import { sha256 } from './auth-crypto.js'
 
+// back-channel logout token の jti を覚えておく期間。同じ token の再送 (replay) を弾くためで、
+// OIDC の logout token は短命なので 1 日で十分。
+const LOGOUT_TOKEN_JTI_KEEP_MS = 24 * 60 * 60 * 1000
+
 export interface OidcProviderConfig {
   id: string
   label: string
@@ -237,7 +241,7 @@ export function createOidcProvider(
         subject,
         sid,
         jti: claims.jti,
-        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+        expiresAt: new Date(Date.now() + LOGOUT_TOKEN_JTI_KEEP_MS),
       }
     },
 
