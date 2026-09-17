@@ -15,7 +15,7 @@ export type CacheKind = 'list' | 'buckets'
 
 export interface CacheScope {
   kind: CacheKind
-  connId: string
+  connectionId: string
   bucket?: string
   prefix?: string
   recursive?: boolean
@@ -47,7 +47,7 @@ export function cacheKey(s: CacheScope): string {
   return createHash('sha256')
     .update(JSON.stringify([
       s.kind,
-      s.connId,
+      s.connectionId,
       s.bucket ?? '',
       s.prefix ?? '',
       s.recursive ? 'r' : '',
@@ -68,8 +68,8 @@ export interface ResponseCache {
   get(scope: CacheScope): Promise<CachedResponse | null>
   /** ttlMs を渡すと既定を上書きする (バケットごとの list_cache_ttl_sec 用)。 */
   set(scope: CacheScope, payload: unknown, ttlMs?: number): Promise<CacheWriteMeta | null>
-  invalidateScope(connId: string, bucket: string, prefix: string): Promise<void>
-  invalidateConnection(connId: string): Promise<void>
+  invalidateScope(connectionId: string, bucket: string, prefix: string): Promise<void>
+  invalidateConnection(connectionId: string): Promise<void>
 }
 
 // キャッシュ層で例外を握りつぶす理由: 呼び出し側 (ルート) に try/catch を
@@ -110,7 +110,7 @@ export function createResponseCache(db: Queryable, ttlMs: number = LIST_CACHE_TT
         // 読み出し時の掃除も定期ジョブも要らない。
         const r = await db.query(
           `INSERT INTO storage_response_cache
-             (cache_key, conn_id, bucket, prefix, payload, expires_at)
+             (cache_key, connection_id, bucket, prefix, payload, expires_at)
            VALUES ($1, $2, $3, $4, $5, now() + ($6::bigint || ' milliseconds')::interval)
            ON CONFLICT (cache_key) DO UPDATE SET
              payload    = EXCLUDED.payload,
@@ -119,7 +119,7 @@ export function createResponseCache(db: Queryable, ttlMs: number = LIST_CACHE_TT
            RETURNING fetched_at, expires_at`,
           [
             cacheKey(scope),
-            scope.connId,
+            scope.connectionId,
             scope.bucket ?? '',
             scope.prefix ?? '',
             JSON.stringify(payload),
@@ -140,21 +140,21 @@ export function createResponseCache(db: Queryable, ttlMs: number = LIST_CACHE_TT
       }
     },
 
-    async invalidateScope(connId, bucket, prefix) {
+    async invalidateScope(connectionId, bucket, prefix) {
       try {
         await db.query(
           `DELETE FROM storage_response_cache
-            WHERE conn_id = $1 AND bucket = $2 AND prefix = $3`,
-          [connId, bucket, prefix],
+            WHERE connection_id = $1 AND bucket = $2 AND prefix = $3`,
+          [connectionId, bucket, prefix],
         )
       } catch (e) {
         swallow('invalidateScope', e)
       }
     },
 
-    async invalidateConnection(connId) {
+    async invalidateConnection(connectionId) {
       try {
-        await db.query('DELETE FROM storage_response_cache WHERE conn_id = $1', [connId])
+        await db.query('DELETE FROM storage_response_cache WHERE connection_id = $1', [connectionId])
       } catch (e) {
         swallow('invalidateConnection', e)
       }

@@ -22,7 +22,7 @@ beforeEach(async () => {
   await pools.rw.query('DELETE FROM storage_capacity_targets WHERE connection_id = $1', [CONNECTION_ID])
   await pools.rw.query('DELETE FROM storage_capacity_settings WHERE connection_id = $1', [CONNECTION_ID])
   await pools.rw.query("DELETE FROM jobs WHERE kind = 'capacity.test'")
-  await pools.rw.query("DELETE FROM jobs WHERE kind = 'storage.scan' AND payload->>'connId' = $1", [CONNECTION_ID])
+  await pools.rw.query("DELETE FROM jobs WHERE kind = 'storage.scan' AND payload->>'connectionId' = $1", [CONNECTION_ID])
 })
 afterAll(async () => {
   await pools.rw.query('DELETE FROM storage_connections WHERE id = $1', [CONNECTION_ID])
@@ -90,7 +90,7 @@ describe('createCapacityStore', () => {
          (kind, dedup_key, payload, status, progress, started_at, heartbeat_at)
        VALUES ('storage.scan', 'capacity-active', $1, 'running', $2, now(), now())
        RETURNING id`,
-      [JSON.stringify({ connId: CONNECTION_ID, bucket: 'archive', prefix: '' }),
+      [JSON.stringify({ connectionId: CONNECTION_ID, bucket: 'archive', prefix: '' }),
         JSON.stringify({ kind: 'count', done: 1234, label: '件を走査' })],
     )
 

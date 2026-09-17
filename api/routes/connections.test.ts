@@ -181,8 +181,8 @@ describe('GET /connections', () => {
       setSessionPrincipal(c, principal(OTHER_USER_ID))
       await next()
     })
-    guarded.use('/storage/:connId/*', requireConnectionAccess(pools.ro))
-    guarded.get('/storage/:connId/buckets', c => c.json({ ok: true }))
+    guarded.use('/storage/:connectionId/*', requireConnectionAccess(pools.ro))
+    guarded.get('/storage/:connectionId/buckets', c => c.json({ ok: true }))
 
     expect((await guarded.request(`/storage/${privateConn.id}/buckets`)).status).toBe(404)
   })

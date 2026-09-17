@@ -17,16 +17,16 @@ const linkClass =
 const sepClass = 'text-ink-5 px-[3px] font-serif select-none'
 
 export function ViewBreadcrumb({
-  connId, label, href,
+  connectionId, label, href,
 }: {
-  connId: string
+  connectionId: string
   /** 現在地の表示名 (例: タグ検索) */
   label: string
   /** 現在地の URL。⧉ でコピーする Web URL の元にする */
   href: string
 }) {
   const connection = useConnection()
-  const indexHref = `/storage/${encodeURIComponent(connId)}/`
+  const indexHref = `/storage/${encodeURIComponent(connectionId)}/`
 
   const copyItems = useMemo<MenuItem[]>(() => [
     { kind: 'copy', label: 'Web URL をコピー', value: absoluteUrl(href) },

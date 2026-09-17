@@ -28,7 +28,7 @@ function renderLanding() {
     <MemoryRouter initialEntries={['/storage']}>
       <Routes>
         <Route path="/storage" element={<StorageLanding />} />
-        <Route path="/storage/:connId/*" element={<output data-testid="dest" />} />
+        <Route path="/storage/:connectionId/*" element={<output data-testid="dest" />} />
       </Routes>
     </MemoryRouter>,
   )

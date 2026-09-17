@@ -101,7 +101,7 @@ afterAll(() => closePools(pools))
 describe('analyzeOne', () => {
   it('解析して media_cache に保存し、2 回目はキャッシュから返す', async () => {
     const svc = makeService({ 'a.wav': Buffer.from('fake') })
-    const req = { connId: 'c1', bucket: 'b', key: 'a.wav', etag: 'stub-etag' }
+    const req = { connectionId: 'c1', bucket: 'b', key: 'a.wav', etag: 'stub-etag' }
     const r1 = await svc.analyzeOne(req)
     expect(r1.durationSec).toBe(2.5)
     expect(r1.hasSpectrogram).toBe(true)
@@ -123,7 +123,7 @@ describe('analyzeOne', () => {
     const tarBuf = readFileSync(new URL('./test-fixtures/sample.tar', import.meta.url))
     const svc = makeService({ 'archive.tar': tarBuf })
     const req = {
-      connId: 'c1', bucket: 'b', key: 'archive.tar', entryPath: 'd/a.txt', etag: 'stub-etag',
+      connectionId: 'c1', bucket: 'b', key: 'archive.tar', entryPath: 'd/a.txt', etag: 'stub-etag',
     }
     const r = await svc.analyzeOne(req)
     // d/a.txt (sample.tar 内) は 6 バイト

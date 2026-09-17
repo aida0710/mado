@@ -27,7 +27,7 @@ export async function enqueueCapacityScans(
     const job = await deps.jobs.enqueueWithResult(
       SCAN_KIND,
       scanDedupKey(connectionId, bucket, ''),
-      { connId: connectionId, bucket, prefix: '' },
+      { connectionId, bucket, prefix: '' },
     )
     await deps.capacity.attachJob(connectionId, bucket, job.id)
     queued.push({ bucket, jobId: job.id, created: job.created })

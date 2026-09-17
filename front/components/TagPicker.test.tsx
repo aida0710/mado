@@ -16,7 +16,7 @@ describe('TagPicker', () => {
     render(
       <MemoryRouter>
         <TagPicker
-          connId="c1" bucket="bkt" kind="file" path="a.txt" label="a.txt"
+          connectionId="c1" bucket="bkt" kind="file" path="a.txt" label="a.txt"
           allTags={TAGS} assignedTagIds={['t1']}
           onChange={() => {}} onClose={() => {}}
         />
@@ -32,7 +32,7 @@ describe('TagPicker', () => {
     render(
       <MemoryRouter>
         <TagPicker
-          connId="c1" bucket="bkt" kind="file" path="a.txt" label="a.txt"
+          connectionId="c1" bucket="bkt" kind="file" path="a.txt" label="a.txt"
           allTags={TAGS} assignedTagIds={[]}
           onChange={onChange} onClose={() => {}}
         />
@@ -51,7 +51,7 @@ describe('TagPicker', () => {
     render(
       <MemoryRouter>
         <TagPicker
-          connId="c1" bucket="bkt" kind="file" path="a.txt" label="a.txt"
+          connectionId="c1" bucket="bkt" kind="file" path="a.txt" label="a.txt"
           allTags={TAGS} assignedTagIds={['t1']}
           onChange={onChange} onClose={() => {}}
         />
@@ -69,7 +69,7 @@ describe('TagPicker', () => {
     render(
       <MemoryRouter>
         <TagPicker
-          connId="c1" bucket="bkt" kind="file" path="a.txt" label="a.txt"
+          connectionId="c1" bucket="bkt" kind="file" path="a.txt" label="a.txt"
           allTags={TAGS} assignedTagIds={[]}
           onChange={() => {}} onClose={() => {}}
         />
@@ -90,7 +90,7 @@ describe('TagPicker', () => {
     render(
       <MemoryRouter>
         <TagPicker
-          connId="c1" bucket="bkt" kind="file" path="a.txt" label="a.txt"
+          connectionId="c1" bucket="bkt" kind="file" path="a.txt" label="a.txt"
           allTags={TAGS} assignedTagIds={['t1']}
           onChange={() => {}} onClose={() => {}}
         />
@@ -119,7 +119,7 @@ describe('TagPicker', () => {
     render(
       <MemoryRouter>
         <TagPicker
-          connId="c1" bucket="bkt" kind="file" path="a.txt" label="a.txt"
+          connectionId="c1" bucket="bkt" kind="file" path="a.txt" label="a.txt"
           allTags={[]} assignedTagIds={[]}
           onChange={() => {}} onClose={() => {}}
         />
@@ -133,7 +133,7 @@ describe('TagPicker', () => {
     render(
       <MemoryRouter>
         <TagPicker
-          connId="c1" bucket="bkt" kind="file" path="a.txt" label="a.txt"
+          connectionId="c1" bucket="bkt" kind="file" path="a.txt" label="a.txt"
           allTags={TAGS} assignedTagIds={[]}
           onChange={() => {}} onClose={onClose}
         />

@@ -2,16 +2,16 @@ import { api } from '../lib/api/client'
 import { useMediaSrc } from '../lib/useMediaSrc'
 
 interface Props {
-  connId: string
+  connectionId: string
   bucket: string
   k: string
   // tar内エントリのとき: k = tarのキー、entryPath = tar内パス
   entryPath?: string
 }
 
-export function PreviewVideo({ connId, bucket, k, entryPath }: Props) {
-  const directUrl = entryPath ? null : api.videoUrl(connId, bucket, k)
-  const archiveEntryUrl = entryPath ? api.tarEntryUrl(connId, bucket, k, entryPath) : null
+export function PreviewVideo({ connectionId, bucket, k, entryPath }: Props) {
+  const directUrl = entryPath ? null : api.videoUrl(connectionId, bucket, k)
+  const archiveEntryUrl = entryPath ? api.tarEntryUrl(connectionId, bucket, k, entryPath) : null
   const { src, loading, error } = useMediaSrc(directUrl, archiveEntryUrl)
   const label = entryPath ?? k
 

@@ -10,7 +10,7 @@ const pools = createPools({ rw: RW, ro: RO })
 beforeEach(() => pools.rw.query('TRUNCATE storage_response_cache'))
 afterAll(() => closePools(pools))
 
-const SCOPE = { kind: 'list' as const, connId: 'c1', bucket: 'b', prefix: 'p/' }
+const SCOPE = { kind: 'list' as const, connectionId: 'c1', bucket: 'b', prefix: 'p/' }
 
 describe('storage_response_cache (実 DB)', () => {
   it('set した payload を get で取り戻せる', async () => {
@@ -42,9 +42,9 @@ describe('storage_response_cache (実 DB)', () => {
   it('invalidateConnection は接続の全行を消す', async () => {
     const cache = createResponseCache(pools.rw)
     await cache.set(SCOPE, { page: 1 })
-    await cache.set({ ...SCOPE, connId: 'c2' }, { page: 2 })
+    await cache.set({ ...SCOPE, connectionId: 'c2' }, { page: 2 })
     await cache.invalidateConnection('c1')
     expect(await cache.get(SCOPE)).toBeNull()
-    expect((await cache.get({ ...SCOPE, connId: 'c2' }))?.payload).toEqual({ page: 2 })
+    expect((await cache.get({ ...SCOPE, connectionId: 'c2' }))?.payload).toEqual({ page: 2 })
   })
 })

@@ -27,7 +27,7 @@ beforeEach(() => {
 function AddTrackButton() {
   const deck = usePlayerDeck()
   return (
-    <button onClick={() => deck.addTrack({ label: 'ch1', connId: 'c', bucket: 'b', key: 'ch1.wav' })}>
+    <button onClick={() => deck.addTrack({ label: 'ch1', connectionId: 'c', bucket: 'b', key: 'ch1.wav' })}>
       addTrack
     </button>
   )
@@ -38,7 +38,7 @@ function AddTrackButton() {
 function AddPinButton({ k = 'x.bin' }: { k?: string }) {
   const { addPin } = usePinnedPreviews()
   return (
-    <button onClick={() => addPin({ connId: 'c', bucket: 'b', key: k })}>
+    <button onClick={() => addPin({ connectionId: 'c', bucket: 'b', key: k })}>
       addPin:{k}
     </button>
   )

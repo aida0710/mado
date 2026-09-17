@@ -10,24 +10,24 @@ import { useCapabilities } from '../lib/useCapabilities'
 type Analyze = z.infer<typeof MediaAnalyze>
 
 interface Props {
-  connId: string
+  connectionId: string
   bucket: string
   k: string
   // tar 内エントリのとき: k = tar のキー、entryPath = tar 内パス
   entryPath?: string
 }
 
-export function PreviewAudio({ connId, bucket, k, entryPath }: Props) {
+export function PreviewAudio({ connectionId, bucket, k, entryPath }: Props) {
   const audioRef = useRef<HTMLAudioElement>(null)
   const [analyze, setAnalyze] = useState<Analyze | null>(null)
   const [analyzing, setAnalyzing] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [progress, setProgress] = useState(0)
-  const caps = useCapabilities(connId)
+  const caps = useCapabilities(connectionId)
 
   // tar 内エントリは blob 化して取得する (シークバーが現在位置に巻き戻る不具合の
   // 対策)。詳細は useAudioSrc のコメントを参照。
-  const { src, loading: srcLoading, error: srcError } = useAudioSrc(connId, bucket, k, entryPath)
+  const { src, loading: srcLoading, error: srcError } = useAudioSrc(connectionId, bucket, k, entryPath)
 
   // 解析はサーバー側キャッシュがあるので毎マウントで呼んでよい。ファイル切替時の
   // state リセットは呼び出し側 (key で再マウント) に任せ、ここでは同期 setState
@@ -40,14 +40,14 @@ export function PreviewAudio({ connId, bucket, k, entryPath }: Props) {
   useEffect(() => {
     if (!caps.audioInfo) return
     const ctl = new AbortController()
-    api.mediaAnalyze(connId, bucket, k, { entryPath, signal: ctl.signal })
+    api.mediaAnalyze(connectionId, bucket, k, { entryPath, signal: ctl.signal })
       .then(r => setAnalyze(r))
       .catch((e: unknown) => {
         if (!ctl.signal.aborted) setError((e as Error).message)
       })
       .finally(() => setAnalyzing(false))
     return () => ctl.abort()
-  }, [connId, bucket, k, entryPath, caps.audioInfo])
+  }, [connectionId, bucket, k, entryPath, caps.audioInfo])
 
   // 再生ヘッド追従 (rAF)。timeupdate はイベント間隔が粗く波形上でカクつく。
   useEffect(() => {
@@ -81,7 +81,7 @@ export function PreviewAudio({ connId, bucket, k, entryPath }: Props) {
       {analyze?.hasSpectrogram && caps.audioSpectrogram && (
         <img
           className="w-full"
-          src={api.spectrogramUrl(connId, analyze.cacheKey)}
+          src={api.spectrogramUrl(connectionId, analyze.cacheKey)}
           alt="スペクトログラム"
         />
       )}

@@ -5,7 +5,7 @@ import type { Tag, TargetKind } from '../lib/api/types'
 import { TagBadge } from './TagBadge'
 
 interface Props {
-  connId: string
+  connectionId: string
   bucket: string
   kind: TargetKind
   path: string
@@ -20,7 +20,7 @@ interface Props {
 // 新規タグの作成はここではできない (Settings の TagsSettings のみ) —
 // 一覧作業中に語彙が無秩序に増えるのを防ぐため。
 export function TagPicker({
-  connId, bucket, kind, path, label, allTags, assignedTagIds, onChange, onClose,
+  connectionId, bucket, kind, path, label, allTags, assignedTagIds, onChange, onClose,
 }: Props) {
   const [assigned, setAssigned] = useState<Set<string>>(new Set(assignedTagIds))
   const [busyId, setBusyId] = useState<string | null>(null)
@@ -42,8 +42,8 @@ export function TagPicker({
       return next
     })
     try {
-      if (wasAssigned) await api.unassignTag(connId, bucket, kind, path, tag.id)
-      else await api.assignTag(connId, bucket, kind, path, tag.id)
+      if (wasAssigned) await api.unassignTag(connectionId, bucket, kind, path, tag.id)
+      else await api.assignTag(connectionId, bucket, kind, path, tag.id)
       onChange(settled)
     } catch (e) {
       // 失敗時はチェック状態を戻す (楽観更新のロールバック)。

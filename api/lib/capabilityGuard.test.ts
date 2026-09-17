@@ -9,20 +9,20 @@ const ALL_ON: Capabilities = {
 }
 
 function appWith(caps: Partial<Capabilities>, opts: { missing?: boolean } = {}) {
-  const getConnectionConfig = (connId: string): Promise<ConnectionConfig> => {
-    if (opts.missing) return Promise.reject(new ConnectionNotFoundError(connId))
+  const getConnectionConfig = (connectionId: string): Promise<ConnectionConfig> => {
+    if (opts.missing) return Promise.reject(new ConnectionNotFoundError(connectionId))
     return Promise.resolve({
       listObjectsVersion: 'v2',
       capabilities: { ...ALL_ON, ...caps },
     })
   }
   const app = new Hono()
-  app.use('/storage/:connId/preview/raw', requireCapability('download', getConnectionConfig))
-  app.on('GET', '/storage/:connId/readme', requireCapability('readmeRead', getConnectionConfig))
-  app.on('PUT', '/storage/:connId/readme', requireCapability('readmeWrite', getConnectionConfig))
-  app.get('/storage/:connId/preview/raw', c => c.text('bytes'))
-  app.get('/storage/:connId/readme', c => c.json({ exists: false }))
-  app.put('/storage/:connId/readme', c => c.json({ ok: true }))
+  app.use('/storage/:connectionId/preview/raw', requireCapability('download', getConnectionConfig))
+  app.on('GET', '/storage/:connectionId/readme', requireCapability('readmeRead', getConnectionConfig))
+  app.on('PUT', '/storage/:connectionId/readme', requireCapability('readmeWrite', getConnectionConfig))
+  app.get('/storage/:connectionId/preview/raw', c => c.text('bytes'))
+  app.get('/storage/:connectionId/readme', c => c.json({ exists: false }))
+  app.put('/storage/:connectionId/readme', c => c.json({ ok: true }))
   return app
 }
 

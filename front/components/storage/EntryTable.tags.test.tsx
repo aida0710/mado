@@ -13,7 +13,7 @@ describe('EntryTable タグ', () => {
         <EntryTable
           dirs={[]}
           files={[{ key: 'notes.txt', size: 10, lastModified: null }]}
-          prefix="" connId="c" bucket="b"
+          prefix="" connectionId="c" bucket="b"
           allTags={ALL_TAGS}
           tagsByPath={{ 'notes.txt': ['t1'] }}
         />
@@ -28,7 +28,7 @@ describe('EntryTable タグ', () => {
         <EntryTable
           dirs={['sub/']}
           files={[]}
-          prefix="" connId="c" bucket="b"
+          prefix="" connectionId="c" bucket="b"
           allTags={ALL_TAGS}
           tagsByPath={{ 'sub/': ['t1'] }}
         />
@@ -45,7 +45,7 @@ describe('EntryTable タグ', () => {
         <EntryTable
           dirs={[]}
           files={[{ key: 'notes.txt', size: 10, lastModified: null }]}
-          prefix="" connId="c" bucket="b"
+          prefix="" connectionId="c" bucket="b"
           allTags={ALL_TAGS}
           tagsByPath={{}}
           onTagsChange={onTagsChange}

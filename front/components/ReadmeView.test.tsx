@@ -40,7 +40,7 @@ afterEach(() => {
 function renderView() {
   return render(
     <MemoryRouter>
-      <ReadmeView connId="c" bucket="b" prefix="p/" />
+      <ReadmeView connectionId="c" bucket="b" prefix="p/" />
     </MemoryRouter>,
   )
 }

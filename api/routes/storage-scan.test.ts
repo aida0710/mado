@@ -28,19 +28,19 @@ mountStorageScanRoutes(app, {
 
 beforeEach(() => { enqueued = []; scanEnabled = true; created = true })
 
-describe('POST /storage/:connId/scan', () => {
+describe('POST /storage/:connectionId/scan', () => {
   it('ジョブを投入して id を返す', async () => {
     const res = await app.request('/storage/c1/scan?bucket=b1&prefix=p/', { method: 'POST' })
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ jobId: 7 })
     expect(enqueued).toEqual([[SCAN_KIND, scanDedupKey('c1', 'b1', 'p/'), {
-      connId: 'c1', bucket: 'b1', prefix: 'p/',
+      connectionId: 'c1', bucket: 'b1', prefix: 'p/',
     }]])
   })
 
   it('prefix 省略はバケット root として扱う', async () => {
     await app.request('/storage/c1/scan?bucket=b1', { method: 'POST' })
-    expect(enqueued[0][2]).toEqual({ connId: 'c1', bucket: 'b1', prefix: '' })
+    expect(enqueued[0][2]).toEqual({ connectionId: 'c1', bucket: 'b1', prefix: '' })
   })
 
   it('実行中の同一ジョブには既存idで合流する', async () => {

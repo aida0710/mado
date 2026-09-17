@@ -2,7 +2,7 @@
 //
 // `s3://bucket/prefix/` を貼り付けてバケット階層を 1 段ずつ潜らずに深い場所へ移動する。
 // パスが不完全 (末尾が `/` でない) なら前方一致した結果を出す = `s3cmd ls s3://bucket/par`
-// と同じ挙動。これは内部的に api.list(connId, bucket, prefix) を叩くだけで成立する
+// と同じ挙動。これは内部的に api.list(connectionId, bucket, prefix) を叩くだけで成立する
 // (S3 が delimiter 付き ListObjects で prefix 前方一致を返すため)。
 // フルキー (完全なオブジェクトキー) を貼った場合も、それを prefix とした前方一致で
 // そのファイル 1 件がヒットする (= 単一ファイル検索)。
@@ -18,7 +18,7 @@ import { StorageList } from '../lib/api/types'
 import { encPath, fileLinkToDirRedirect, parseS3Path } from '../lib/route'
 
 interface Props {
-  connId: string
+  connectionId: string
 }
 
 type ListData = z.infer<typeof StorageList>
@@ -59,19 +59,19 @@ const inputClass =
 const rowLinkClass =
   'block overflow-hidden text-ellipsis whitespace-nowrap text-[12.5px] text-ink-12 no-underline hover:underline underline-offset-[3px]'
 
-export function S3PathPanel({ connId }: Props) {
+export function S3PathPanel({ connectionId }: Props) {
   const [state, dispatch] = useReducer(reducer, initial)
   const { raw, loading, error, result } = state
   const navigate = useNavigate()
   const debounceRef = useRef<number | null>(null)
   const sessionRef = useRef(0)
 
-  // connId 切替時に状態をリセット (別接続に同じ入力を引き継がない)。
+  // connectionId 切替時に状態をリセット (別接続に同じ入力を引き継がない)。
   useEffect(() => {
     if (debounceRef.current != null) window.clearTimeout(debounceRef.current)
     sessionRef.current++
     dispatch({ type: 'resetForConn' })
-  }, [connId])
+  }, [connectionId])
 
   useEffect(() => () => {
     if (debounceRef.current != null) window.clearTimeout(debounceRef.current)
@@ -84,7 +84,7 @@ export function S3PathPanel({ connId }: Props) {
   const canOpenDirectly =
     parsed != null && (parsed.prefix === '' || parsed.prefix.endsWith('/'))
   const openHref = parsed
-    ? `/storage/${encodeURIComponent(connId)}/${encodeURIComponent(parsed.bucket)}/${encPath(parsed.prefix)}`
+    ? `/storage/${encodeURIComponent(connectionId)}/${encodeURIComponent(parsed.bucket)}/${encPath(parsed.prefix)}`
     : null
 
   const onChange = (next: string) => {
@@ -95,7 +95,7 @@ export function S3PathPanel({ connId }: Props) {
     dispatch({ type: 'startSearch' })
     const sid = ++sessionRef.current
     debounceRef.current = window.setTimeout(() => {
-      api.list(connId, p.bucket, p.prefix, {}, { recursive: false })
+      api.list(connectionId, p.bucket, p.prefix, {}, { recursive: false })
         .then(data => {
           if (sessionRef.current !== sid) return
           dispatch({ type: 'searchOk', bucket: p.bucket, prefix: p.prefix, data })
@@ -167,7 +167,7 @@ export function S3PathPanel({ connId }: Props) {
               style={{ borderBottom: '1px solid var(--rule)' }}
             >
               <Link
-                to={`/storage/${encodeURIComponent(connId)}/${encodeURIComponent(result.bucket)}/${encPath(d)}`}
+                to={`/storage/${encodeURIComponent(connectionId)}/${encodeURIComponent(result.bucket)}/${encPath(d)}`}
                 className={rowLinkClass}
                 style={{ fontFamily: 'var(--font-mono)', letterSpacing: '0.005em' }}
               >
@@ -182,7 +182,7 @@ export function S3PathPanel({ connId }: Props) {
               style={{ borderBottom: '1px solid var(--rule)' }}
             >
               <Link
-                to={fileLinkToDirRedirect(connId, result.bucket, f.key)}
+                to={fileLinkToDirRedirect(connectionId, result.bucket, f.key)}
                 className={rowLinkClass}
                 style={{ fontFamily: 'var(--font-mono)', letterSpacing: '0.005em' }}
               >

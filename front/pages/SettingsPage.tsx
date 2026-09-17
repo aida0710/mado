@@ -73,7 +73,7 @@ export default function SettingsPage() {
             <Route path="account" element={<SignatureSettings />} />
             <Route path="connections" element={<ConnectionsPage />} />
             <Route path="connections/new" element={<ConnectionEditorPage />} />
-            <Route path="connections/:connId" element={<ConnectionEditorPage />} />
+            <Route path="connections/:connectionId" element={<ConnectionEditorPage />} />
             <Route path="features" element={<FeaturesPage />} />
             <Route path="access/*" element={
               <Suspense fallback={<p className="text-[13px] text-ink-7">読み込み中…</p>}>

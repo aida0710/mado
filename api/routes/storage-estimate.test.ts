@@ -26,7 +26,7 @@ mountStorageEstimateRoutes(app, { pools, store, pricing, now: () => today })
 const GIB = 1024 ** 3
 
 interface Candidate {
-  connId: string
+  connectionId: string
   name: string
   provider: string
   storageClass: string | null
@@ -38,7 +38,7 @@ interface Candidate {
 }
 
 interface EstimateBody {
-  source: { connId: string; name: string; provider: string }
+  source: { connectionId: string; name: string; provider: string }
   scan: { objectCount: number; totalBytes: number; scannedAt: string | null }
   catalog: { asOf: string; stale: boolean; source: 'bundled' | 'fetched'; fetchedAt: string | null }
   candidates: Candidate[]
@@ -68,11 +68,11 @@ async function addConnection(
 
 /** 完了済みの走査ジョブを 1 本置く。 */
 async function addScan(
-  connId: string, bucket: string, prefix: string,
+  connectionId: string, bucket: string, prefix: string,
   result: { objectCount: number; totalBytes: number },
 ): Promise<void> {
-  const id = await store.enqueue(SCAN_KIND, scanDedupKey(connId, bucket, prefix), {
-    connId, bucket, prefix,
+  const id = await store.enqueue(SCAN_KIND, scanDedupKey(connectionId, bucket, prefix), {
+    connectionId, bucket, prefix,
   })
   await store.claim()
   await store.finish(id, { ...result, children: [], extensions: [], partial: false })
@@ -95,8 +95,8 @@ async function refreshJobs(): Promise<Array<{ status: string }>> {
   return r.rows
 }
 
-function get(connId: string, query = 'bucket=b&prefix=d/'): Promise<Response> {
-  return app.request(`/storage/${connId}/estimate?${query}`)
+function get(connectionId: string, query = 'bucket=b&prefix=d/'): Promise<Response> {
+  return app.request(`/storage/${connectionId}/estimate?${query}`)
 }
 
 beforeEach(async () => {
@@ -108,7 +108,7 @@ beforeEach(async () => {
 })
 afterAll(() => closePools(pools))
 
-describe('GET /storage/:connId/estimate', () => {
+describe('GET /storage/:connectionId/estimate', () => {
   it('bucket が無ければ 400', async () => {
     await addConnection('c1'.padEnd(10, '0'), 'src', 'https://minio.lan:9000')
     const res = await get('c1'.padEnd(10, '0'), 'prefix=d/')
@@ -169,7 +169,7 @@ describe('GET /storage/:connId/estimate', () => {
     const res = await userApp.request(`/storage/${src}/estimate?bucket=b&prefix=d/`)
     expect(res.status).toBe(200)
     const body = await res.json() as EstimateBody
-    expect(body.candidates.map(candidate => candidate.connId)).toEqual([src])
+    expect(body.candidates.map(candidate => candidate.connectionId)).toEqual([src])
   })
 
   it('移動元自身も候補に残り、同一接続の印が立つ', async () => {
@@ -178,7 +178,7 @@ describe('GET /storage/:connId/estimate', () => {
     await addScan(src, 'b', 'd/', { objectCount: 10, totalBytes: 10 * GIB })
 
     const body = await (await get(src)).json() as EstimateBody
-    const self = body.candidates.find(c => c.connId === src)
+    const self = body.candidates.find(c => c.connectionId === src)
     expect(self?.sameConnection).toBe(true)
   })
 
@@ -200,7 +200,7 @@ describe('GET /storage/:connId/estimate', () => {
     await addScan(src, 'b', 'd/', { objectCount: 100_000, totalBytes: 10 * 1024 * GIB })
 
     const body = await (await get(src)).json() as EstimateBody
-    const c = body.candidates.find(x => x.connId === aws)!
+    const c = body.candidates.find(x => x.connectionId === aws)!
     expect(c.provider).toBe('aws')
     expect(c.storageClass).toBe('STANDARD')
     expect(c.upfront.egress).toBe(0)
@@ -218,7 +218,7 @@ describe('GET /storage/:connId/estimate', () => {
     await addScan(aws, 'b', 'd/', { objectCount: 1000, totalBytes: 1024 * GIB })
 
     const body = await (await get(aws)).json() as EstimateBody
-    const c = body.candidates.find(x => x.connId === lan)!
+    const c = body.candidates.find(x => x.connectionId === lan)!
     // 1TiB - 無料枠 100GB = 924GB が第 1 段 ($0.114)。
     expect(c.upfront.egress).toBeCloseTo(924 * 0.114, 0)
     expect(c.monthlyUsd).toBe(0)
@@ -234,7 +234,7 @@ describe('GET /storage/:connId/estimate', () => {
     await addScan(src, 'b', 'd/', { objectCount: 1000, totalBytes: 1024 * GIB })
 
     const body = await (await get(src)).json() as EstimateBody
-    const c = body.candidates.find(x => x.connId === gda)!
+    const c = body.candidates.find(x => x.connectionId === gda)!
     expect(c.storageClass).toBe('DEEP_ARCHIVE')
     expect(c.warnings.map(w => w.kind)).toContain('minDuration')
     expect(c.warnings.map(w => w.kind)).toContain('archiveRetrievalTime')
@@ -258,8 +258,8 @@ describe('GET /storage/:connId/estimate', () => {
     await addScan(src, 'b', 'd/', { objectCount: 100, totalBytes: 700_000_000_000 })
 
     const body = await (await get(src)).json() as EstimateBody
-    const s = body.candidates.find(x => x.connId === slow)!
-    const f = body.candidates.find(x => x.connId === fast)!
+    const s = body.candidates.find(x => x.connectionId === slow)!
+    const f = body.candidates.find(x => x.connectionId === fast)!
     expect(s.durationSec.optimistic).toBeCloseTo(7000, 0)
     expect(f.durationSec.optimistic).toBeCloseTo(1000, 0)
   })

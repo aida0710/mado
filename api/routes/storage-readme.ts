@@ -9,7 +9,7 @@ import type { Pools } from '../db.js'
 import { getSessionPrincipal } from '../lib/rbac.js'
 import { markAuditNoChange } from '../lib/audit-activity.js'
 import type { ResponseCache } from '../lib/storage-cache.js'
-import { resolveStorageOrFail, type GetStorage } from './_connId.js'
+import { resolveStorageOrFail, type GetStorage } from './_connectionId.js'
 
 // 認証有効時の編集者はsession userのアカウント署名を正本にする。
 // editor request値は認証無効の開発・test環境との互換用。
@@ -55,11 +55,11 @@ async function streamToString(stream: NodeJS.ReadableStream): Promise<string> {
 }
 
 export function mountStorageReadmeRoutes(app: Hono, deps: StorageReadmeDeps): void {
-  app.get('/storage/:connId/readme', async c => {
+  app.get('/storage/:connectionId/readme', async c => {
     const r = await resolveStorageOrFail(c, deps.getStorage)
     if (r instanceof Response) return r
     const storage = r
-    const connId = c.req.param('connId')
+    const connectionId = c.req.param('connectionId')
     const bucket = c.req.query('bucket')
     if (!bucket) return c.json({ error: 'bucket is required' }, 400)
     const prefix = c.req.query('prefix') ?? ''
@@ -75,7 +75,7 @@ export function mountStorageReadmeRoutes(app: Hono, deps: StorageReadmeDeps): vo
       `SELECT last_editor, last_edited_at, size_bytes
          FROM storage_readme_meta
          WHERE connection_id=$1 AND bucket=$2 AND prefix=$3`,
-      [connId, bucket, prefix]
+      [connectionId, bucket, prefix]
     )
     const s3Promise = storage
       .send(new GetObjectCommand({ Bucket: bucket, Key }))
@@ -98,11 +98,11 @@ export function mountStorageReadmeRoutes(app: Hono, deps: StorageReadmeDeps): vo
     })
   })
 
-  app.put('/storage/:connId/readme', async c => {
+  app.put('/storage/:connectionId/readme', async c => {
     const r = await resolveStorageOrFail(c, deps.getStorage)
     if (r instanceof Response) return r
     const storage = r
-    const connId = c.req.param('connId')
+    const connectionId = c.req.param('connectionId')
     const parsed = PutBody.safeParse(await c.req.json().catch(() => null))
     if (!parsed.success) {
       return c.json({ error: parsed.error.message }, 400)
@@ -114,7 +114,7 @@ export function mountStorageReadmeRoutes(app: Hono, deps: StorageReadmeDeps): vo
     const actorUserId = principal?.user.id ?? null
     const Key = prefix + 'README.md'
     const buf = Buffer.from(body, 'utf-8')
-    return withReadmeWriteLock(`${connId}\0${bucket}\0${Key}`, async () => {
+    return withReadmeWriteLock(`${connectionId}\0${bucket}\0${Key}`, async () => {
       // S3 I/O中はDB connectionを保持しない。同じobjectへのMado内のPUTだけを
       // 直列化し、本文が同じならS3・履歴・監査をいずれも増やさない。
       try {
@@ -141,7 +141,7 @@ export function mountStorageReadmeRoutes(app: Hono, deps: StorageReadmeDeps): vo
       }
 
       // README.md が一覧に現れる / 消えるので、S3 PUT直後にcacheを捨てる。
-      await deps.cache.invalidateScope(connId, bucket, prefix)
+      await deps.cache.invalidateScope(connectionId, bucket, prefix)
 
       // S3 I/O後にだけDB connectionを借り、historyとmetaを一緒に更新する。
       const client = await deps.pools.rw.connect()
@@ -151,7 +151,7 @@ export function mountStorageReadmeRoutes(app: Hono, deps: StorageReadmeDeps): vo
           `INSERT INTO storage_readme_history
              (connection_id, bucket, prefix, body, size_bytes, editor, actor_user_id)
            VALUES($1,$2,$3,$4,$5,$6,$7)`,
-          [connId, bucket, prefix, body, buf.byteLength, editor, actorUserId]
+          [connectionId, bucket, prefix, body, buf.byteLength, editor, actorUserId]
         )
         await client.query(
           `INSERT INTO storage_readme_meta
@@ -162,14 +162,14 @@ export function mountStorageReadmeRoutes(app: Hono, deps: StorageReadmeDeps): vo
                  last_editor_user_id = EXCLUDED.last_editor_user_id,
                  last_edited_at = EXCLUDED.last_edited_at,
                  size_bytes     = EXCLUDED.size_bytes`,
-          [connId, bucket, prefix, editor, actorUserId, buf.byteLength]
+          [connectionId, bucket, prefix, editor, actorUserId, buf.byteLength]
         )
         await client.query('COMMIT')
       } catch (e) {
         await client.query('ROLLBACK').catch(() => {})
         console.error(JSON.stringify({
           ev: 'storage.readme.meta_failed',
-          connId, bucket, prefix, editor,
+          connectionId, bucket, prefix, editor,
           errorName: e instanceof Error ? e.name : 'unknown',
         }))
         return c.json({ ok: true, meta_stale: true, size_bytes: buf.byteLength })
@@ -181,10 +181,10 @@ export function mountStorageReadmeRoutes(app: Hono, deps: StorageReadmeDeps): vo
   })
 
   // 編集履歴 (path 単位)。
-  // GET /storage/:connId/readme/history?bucket=&prefix=&limit=
-  // ?prefix は GET /storage/:connId/readme と同じセマンティクスで '' (= バケット直下) も許容。
-  app.get('/storage/:connId/readme/history', async c => {
-    const connId = c.req.param('connId')
+  // GET /storage/:connectionId/readme/history?bucket=&prefix=&limit=
+  // ?prefix は GET /storage/:connectionId/readme と同じセマンティクスで '' (= バケット直下) も許容。
+  app.get('/storage/:connectionId/readme/history', async c => {
+    const connectionId = c.req.param('connectionId')
     const bucket = c.req.query('bucket')
     if (!bucket) return c.json({ error: 'bucket is required' }, 400)
     const prefix = c.req.query('prefix') ?? ''
@@ -198,7 +198,7 @@ export function mountStorageReadmeRoutes(app: Hono, deps: StorageReadmeDeps): vo
          WHERE connection_id=$1 AND bucket=$2 AND prefix=$3
          ORDER BY edited_at DESC, id DESC
          LIMIT $4`,
-      [connId, bucket, prefix, limit]
+      [connectionId, bucket, prefix, limit]
     )
     return c.json({
       versions: r.rows.map(row => ({
@@ -211,9 +211,9 @@ export function mountStorageReadmeRoutes(app: Hono, deps: StorageReadmeDeps): vo
   })
 
   // 特定版の本文を返す。
-  // GET /storage/:connId/readme/history/:id
-  app.get('/storage/:connId/readme/history/:id', async c => {
-    const connId = c.req.param('connId')
+  // GET /storage/:connectionId/readme/history/:id
+  app.get('/storage/:connectionId/readme/history/:id', async c => {
+    const connectionId = c.req.param('connectionId')
     const id = c.req.param('id')
     if (!/^\d+$/.test(id)) return c.json({ error: 'id must be integer' }, 400)
     const r = await deps.pools.ro.query<{
@@ -223,7 +223,7 @@ export function mountStorageReadmeRoutes(app: Hono, deps: StorageReadmeDeps): vo
       `SELECT bucket, prefix, body, editor, edited_at, size_bytes
          FROM storage_readme_history
          WHERE id=$1 AND connection_id=$2`,
-      [id, connId]
+      [id, connectionId]
     )
     if (!r.rows[0]) return c.json({ error: 'not found' }, 404)
     const row = r.rows[0]
@@ -239,11 +239,11 @@ export function mountStorageReadmeRoutes(app: Hono, deps: StorageReadmeDeps): vo
   })
 
   // 接続内の README 全本文に対するカジュアル全文検索 (現在版のみ対象)。
-  // GET /storage/:connId/readmes/search?q=...&limit=50
+  // GET /storage/:connectionId/readmes/search?q=...&limit=50
   // pg_trgm の gin_trgm_ops index で LIKE '%q%' が高速。日本語も bigram で
   // 動く (完璧ではないが lab 規模では実用的)。
-  app.get('/storage/:connId/readmes/search', async c => {
-    const connId = c.req.param('connId')
+  app.get('/storage/:connectionId/readmes/search', async c => {
+    const connectionId = c.req.param('connectionId')
     const q = (c.req.query('q') ?? '').trim()
     if (q.length < 2) return c.json({ error: 'q must be at least 2 chars' }, 400)
     const limitRaw = parseInt(c.req.query('limit') ?? '50', 10)
@@ -268,7 +268,7 @@ export function mountStorageReadmeRoutes(app: Hono, deps: StorageReadmeDeps): vo
        WHERE body ILIKE '%' || $2 || '%'
        ORDER BY edited_at DESC
        LIMIT $3`,
-      [connId, q, limit]
+      [connectionId, q, limit]
     )
     return c.json({
       hits: r.rows.map(row => ({

@@ -48,7 +48,7 @@ function mountWithOneBucket() {
   return render(
     <MemoryRouter>
       <ConnectionContext.Provider value={conn}>
-        <StorageIndex connId="c1" />
+        <StorageIndex connectionId="c1" />
       </ConnectionContext.Provider>
     </MemoryRouter>,
   )

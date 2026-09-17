@@ -22,11 +22,11 @@ describe('capacity scheduler', () => {
     expect(await scheduler.runOnce()).toBe(1)
     expect(enqueueWithResult).toHaveBeenNthCalledWith(
       1, 'storage.scan', scanDedupKey('c1', 'archive', ''),
-      { connId: 'c1', bucket: 'archive', prefix: '' },
+      { connectionId: 'c1', bucket: 'archive', prefix: '' },
     )
     expect(enqueueWithResult).toHaveBeenNthCalledWith(
       2, 'storage.scan', scanDedupKey('c1', 'data', ''),
-      { connId: 'c1', bucket: 'data', prefix: '' },
+      { connectionId: 'c1', bucket: 'data', prefix: '' },
     )
     expect(attachJob).toHaveBeenCalledTimes(2)
     expect(markConnectionScheduled).toHaveBeenCalledWith('c1')

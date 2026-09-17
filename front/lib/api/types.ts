@@ -404,7 +404,7 @@ export const Note = z.union([NoteAbsent, NotePresent])
 
 export const PutNoteOk = z.object({ ok: z.literal(true) })
 
-// 音声解析 (波形 / スペクトログラム)。GET /storage/:connId/media/analyze
+// 音声解析 (波形 / スペクトログラム)。GET /storage/:connectionId/media/analyze
 // meta: ffprobe/ffmpeg の副産物 (コーデック・音量など)。旧 API 互換のため全体が null
 // になり得る (各フィールドも個別に null 許容)。front/lib/audioInfo.ts で表示用に整形する。
 export const MediaAnalyze = z.object({
@@ -507,7 +507,7 @@ export const EstimateWarning = z.object({
 export type EstimateWarning = z.infer<typeof EstimateWarning>
 
 export const TransferCandidate = z.object({
-  connId: z.string(),
+  connectionId: z.string(),
   name: z.string(),
   provider: Provider,
   storageClass: StorageClassKey.nullable(),
@@ -532,7 +532,7 @@ export type TransferCandidate = z.infer<typeof TransferCandidate>
 
 export const TransferEstimate = z.object({
   source: z.object({
-    connId: z.string(),
+    connectionId: z.string(),
     name: z.string(),
     provider: Provider,
     storageClass: StorageClassKey.nullable(),

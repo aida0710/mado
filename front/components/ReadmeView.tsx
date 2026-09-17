@@ -19,13 +19,13 @@ const ReadmeHistoryModal = lazy(() =>
 type ReadmeData = z.infer<typeof Readme>
 
 interface Props {
-  connId: string
+  connectionId: string
   bucket: string
   prefix: string
 }
 
-export function ReadmeView({ connId, bucket, prefix }: Props) {
-  const caps = useCapabilities(connId)
+export function ReadmeView({ connectionId, bucket, prefix }: Props) {
+  const caps = useCapabilities(connectionId)
   const [data, setData] = useState<ReadmeData | null>(null)
   // 期限切れキャッシュを表示したまま裏で再取得中か (stale-while-revalidate)。
   const [revalidating, setRevalidating] = useState(false)
@@ -50,7 +50,7 @@ export function ReadmeView({ connId, bucket, prefix }: Props) {
     if (!caps.readmeRead) return
     const sid = ++sessionRef.current
     const current = (): boolean => sessionRef.current === sid
-    api.readme(connId, bucket, prefix, {
+    api.readme(connectionId, bucket, prefix, {
       // 期限切れキャッシュが返ってきたときだけ呼ばれる。stale をそのまま出しつつ、
       // 到着した最新で差し替える (失敗したら stale のまま「更新中」だけ消す)。
       onRevalidate: fresh => {
@@ -63,12 +63,12 @@ export function ReadmeView({ connId, bucket, prefix }: Props) {
     })
       .then(r => { if (current()) setData(r) })
       .catch(() => { if (current()) setData({ exists: false }) })
-  }, [connId, bucket, prefix, caps.readmeRead])
+  }, [connectionId, bucket, prefix, caps.readmeRead])
 
   const forceRefresh = useCallback(() => {
-    api.invalidateReadme(connId, bucket, prefix)
+    api.invalidateReadme(connectionId, bucket, prefix)
     refresh()
-  }, [connId, bucket, prefix, refresh])
+  }, [connectionId, bucket, prefix, refresh])
 
   useEffect(() => { refresh() }, [refresh])
 
@@ -94,7 +94,7 @@ export function ReadmeView({ connId, bucket, prefix }: Props) {
 
   // 編集ページへの URL — bucket は単一セグメントなので encodeURIComponent で十分。
   // prefix は `/` を含み得るので encPath で path segment ごとに encode。
-  const editHref = `/storage/${encodeURIComponent(connId)}/edit-readme/${encodeURIComponent(bucket)}/${encPath(prefix)}`
+  const editHref = `/storage/${encodeURIComponent(connectionId)}/edit-readme/${encodeURIComponent(bucket)}/${encPath(prefix)}`
 
   return (
     <section
@@ -120,7 +120,7 @@ export function ReadmeView({ connId, bucket, prefix }: Props) {
             履歴
           </button>
           <CacheBanner
-            fetchedAt={api.lastFetched.readme(connId, bucket, prefix)}
+            fetchedAt={api.lastFetched.readme(connectionId, bucket, prefix)}
             revalidating={revalidating}
             onRefresh={forceRefresh}
             compact
@@ -166,7 +166,7 @@ export function ReadmeView({ connId, bucket, prefix }: Props) {
       {historyOpen && (
         <Suspense fallback={null}>
           <ReadmeHistoryModal
-            connId={connId}
+            connectionId={connectionId}
             bucket={bucket}
             prefix={prefix}
             currentBody={data.exists ? data.body : null}

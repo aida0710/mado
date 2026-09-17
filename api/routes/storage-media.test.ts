@@ -46,7 +46,7 @@ beforeEach(async () => {
 })
 afterAll(() => closePools(pools))
 
-const REF = { connId: 'c1', bucket: 'b', key: 'a.wav', etag: 'etag1' }
+const REF = { connectionId: 'c1', bucket: 'b', key: 'a.wav', etag: 'etag1' }
 
 const META = {
   codec: 'pcm_s16le',

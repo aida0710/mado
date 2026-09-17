@@ -13,16 +13,16 @@ const Days = z.coerce.number().int().refine(value => [7, 30, 90, 400].includes(v
 export interface StorageCapacityDeps {
   store: CapacityStore
   jobs: Pick<JobStore, 'enqueueWithResult'>
-  getConnectionConfig: (connId: string) => Promise<ConnectionConfig>
-  listBuckets: (connId: string) => Promise<string[]>
+  getConnectionConfig: (connectionId: string) => Promise<ConnectionConfig>
+  listBuckets: (connectionId: string) => Promise<string[]>
   pools?: Pools
 }
 
 export function mountStorageCapacityRoutes(app: Hono, deps: StorageCapacityDeps): void {
-  app.get('/storage/:connId/capacity', async c => {
+  app.get('/storage/:connectionId/capacity', async c => {
     const parsedDays = Days.safeParse(c.req.query('days') ?? '90')
     if (!parsedDays.success) return c.json({ error: 'days must be one of 7, 30, 90, 400' }, 400)
-    const connectionId = c.req.param('connId')
+    const connectionId = c.req.param('connectionId')
     const buckets = await deps.listBuckets(connectionId)
     const data = await deps.store.overview(connectionId, buckets, parsedDays.data)
     let capacityBytes: number | null = null
@@ -37,8 +37,8 @@ export function mountStorageCapacityRoutes(app: Hono, deps: StorageCapacityDeps)
     return c.json({ connectionId, days: parsedDays.data, capacityBytes, ...data })
   })
 
-  app.post('/storage/:connId/capacity/scan', async c => {
-    const connectionId = c.req.param('connId')
+  app.post('/storage/:connectionId/capacity/scan', async c => {
+    const connectionId = c.req.param('connectionId')
     const config = await deps.getConnectionConfig(connectionId)
     if (!config.scanEnabled) return c.json({ error: 'この接続では走査が無効になっています' }, 403)
     if (!config.capacityMetricsEnabled) {

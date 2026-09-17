@@ -143,7 +143,7 @@ async function loadScanActivity(pools: Pools, connectionId: string): Promise<Cap
     `SELECT id, payload->>'bucket' AS bucket, status, progress, created_at, started_at
        FROM jobs
       WHERE kind = 'storage.scan'
-        AND payload->>'connId' = $1
+        AND payload->>'connectionId' = $1
         AND COALESCE(payload->>'prefix', '') = ''
         AND status IN ('queued', 'running')
       ORDER BY CASE status WHEN 'running' THEN 0 ELSE 1 END, created_at, id`,

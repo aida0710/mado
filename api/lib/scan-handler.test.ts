@@ -33,7 +33,7 @@ describe('createScanHandler', () => {
       .resolvesOnce({ Contents: [{ Key: 'd/b.tar', Size: 200 }], IsTruncated: false })
 
     const handler = createScanHandler(deps)
-    const r = await handler(ctx({ connId: 'c1', bucket: 'b', prefix: 'd/' })) as ScanResult
+    const r = await handler(ctx({ connectionId: 'c1', bucket: 'b', prefix: 'd/' })) as ScanResult
     expect(r.objectCount).toBe(2)
     expect(r.totalBytes).toBe(300)
     expect(r.partial).toBe(false)
@@ -43,7 +43,7 @@ describe('createScanHandler', () => {
   it('Delimiter を送らない (フラット列挙)', async () => {
     storageMock.on(ListObjectsV2Command).resolves({ Contents: [], IsTruncated: false })
     const handler = createScanHandler(deps)
-    await handler(ctx({ connId: 'c1', bucket: 'b', prefix: '' }))
+    await handler(ctx({ connectionId: 'c1', bucket: 'b', prefix: '' }))
     const input = storageMock.calls()[0].args[0].input as { Delimiter?: string; MaxKeys?: number }
     expect(input.Delimiter).toBeUndefined()
     expect(input.MaxKeys).toBe(1000)
@@ -55,7 +55,7 @@ describe('createScanHandler', () => {
       ...deps,
       getConnectionConfig: async () => ({ ...config, scanPageSize: 100 }),
     })
-    await handler(ctx({ connId: 'c1', bucket: 'b', prefix: '' }))
+    await handler(ctx({ connectionId: 'c1', bucket: 'b', prefix: '' }))
     expect(storageMock.calls()[0].args[0].input).toMatchObject({ MaxKeys: 100 })
   })
 
@@ -69,7 +69,7 @@ describe('createScanHandler', () => {
       .rejectsOnce(new Error('boom'))
 
     const handler = createScanHandler(deps)
-    const r = await handler(ctx({ connId: 'c1', bucket: 'b', prefix: 'd/' })) as ScanResult
+    const r = await handler(ctx({ connectionId: 'c1', bucket: 'b', prefix: 'd/' })) as ScanResult
     expect(r.objectCount).toBe(1)
     expect(r.partial).toBe(true)
   })
@@ -81,14 +81,14 @@ describe('createScanHandler', () => {
       return { Contents: [{ Key: 'd/a.tar', Size: 1 }], IsTruncated: true, NextContinuationToken: 'tok' }
     })
     const handler = createScanHandler(deps)
-    const r = await handler(ctx({ connId: 'c1', bucket: 'b', prefix: 'd/' }, ac.signal)) as ScanResult
+    const r = await handler(ctx({ connectionId: 'c1', bucket: 'b', prefix: 'd/' }, ac.signal)) as ScanResult
     expect(storageMock.calls()).toHaveLength(1)
     expect(r.objectCount).toBe(1)
   })
 
   it('payload が不正なら throw する', async () => {
     const handler = createScanHandler(deps)
-    await expect(handler(ctx({ connId: 'c1' }))).rejects.toThrow()
+    await expect(handler(ctx({ connectionId: 'c1' }))).rejects.toThrow()
   })
 
   it('バケットrootの完全走査だけを容量履歴へ保存する', async () => {
@@ -100,12 +100,12 @@ describe('createScanHandler', () => {
       ...deps,
       capacity: { recordSuccess, recordPartial: vi.fn(), recordError: vi.fn() },
     })
-    await handler({ ...ctx({ connId: 'c1', bucket: 'b', prefix: '' }), jobId: 81 })
+    await handler({ ...ctx({ connectionId: 'c1', bucket: 'b', prefix: '' }), jobId: 81 })
     expect(recordSuccess).toHaveBeenCalledWith(81, 'c1', 'b', expect.objectContaining({
       totalBytes: 123, objectCount: 1,
     }))
 
-    await handler({ ...ctx({ connId: 'c1', bucket: 'b', prefix: 'dir/' }), jobId: 82 })
+    await handler({ ...ctx({ connectionId: 'c1', bucket: 'b', prefix: 'dir/' }), jobId: 82 })
     expect(recordSuccess).toHaveBeenCalledTimes(1)
   })
 
@@ -117,7 +117,7 @@ describe('createScanHandler', () => {
       ...deps,
       capacity: { recordSuccess, recordPartial, recordError: vi.fn() },
     })
-    await handler(ctx({ connId: 'c1', bucket: 'b', prefix: '' }))
+    await handler(ctx({ connectionId: 'c1', bucket: 'b', prefix: '' }))
     expect(recordSuccess).not.toHaveBeenCalled()
     expect(recordPartial).toHaveBeenCalledWith('c1', 'b')
   })

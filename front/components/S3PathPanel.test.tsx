@@ -18,7 +18,7 @@ afterEach(() => {
 function renderPanel() {
   return render(
     <MemoryRouter>
-      <S3PathPanel connId="c1" />
+      <S3PathPanel connectionId="c1" />
     </MemoryRouter>,
   )
 }

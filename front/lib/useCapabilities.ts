@@ -33,9 +33,9 @@ export function invalidateCapabilitiesCache(): void {
   connectionsPromise = null
 }
 
-export function useCapabilities(connId?: string): Capabilities {
+export function useCapabilities(connectionId?: string): Capabilities {
   const ctx = use(ConnectionContext)
-  const fromContext = ctx && (connId === undefined || ctx.id === connId)
+  const fromContext = ctx && (connectionId === undefined || ctx.id === connectionId)
     ? ctx.capabilities
     : null
 
@@ -45,17 +45,17 @@ export function useCapabilities(connId?: string): Capabilities {
   )
 
   useEffect(() => {
-    if (fromContext || connId === undefined) return
+    if (fromContext || connectionId === undefined) return
     let cancelled = false
     loadConnections()
       .then(list => {
-        const found = list.find(c => c.id === connId)
+        const found = list.find(c => c.id === connectionId)
         if (!cancelled && found) dispatch(found.capabilities)
       })
       // 失敗時は全許可のまま。API 側が 403 で止めるので実害はない。
       .catch(() => { /* noop */ })
     return () => { cancelled = true }
-  }, [connId, fromContext])
+  }, [connectionId, fromContext])
 
   return fromContext ?? fetched ?? ALL_CAPABILITIES_ON
 }

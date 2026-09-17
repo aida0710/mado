@@ -127,8 +127,8 @@ export function mountStorageTagsRoutes(app: Hono, deps: StorageTagsDeps): void {
     return c.json({ ok: true })
   })
 
-  app.get('/storage/:connId/tags', async c => {
-    const connId = c.req.param('connId')
+  app.get('/storage/:connectionId/tags', async c => {
+    const connectionId = c.req.param('connectionId')
     const bucket = c.req.query('bucket')
     if (!bucket) return c.json({ error: 'bucket is required' }, 400)
     const kindRaw = c.req.query('kind')
@@ -142,7 +142,7 @@ export function mountStorageTagsRoutes(app: Hono, deps: StorageTagsDeps): void {
       `SELECT target_path, tag_id FROM storage_tag_assignments
          WHERE connection_id = $1 AND bucket = $2 AND target_kind = $3
            AND target_path = ANY($4::text[])`,
-      [connId, bucket, kind, paths.map(p => normalizePath(kind, p))],
+      [connectionId, bucket, kind, paths.map(p => normalizePath(kind, p))],
     )
     const out: Record<string, string[]> = {}
     for (const row of r.rows) {
@@ -151,8 +151,8 @@ export function mountStorageTagsRoutes(app: Hono, deps: StorageTagsDeps): void {
     return c.json(out)
   })
 
-  app.put('/storage/:connId/tags', async c => {
-    const connId = c.req.param('connId')
+  app.put('/storage/:connectionId/tags', async c => {
+    const connectionId = c.req.param('connectionId')
     const parsed = AssignmentBody.safeParse(await c.req.json().catch(() => null))
     if (!parsed.success) return c.json({ error: parsed.error.message }, 400)
     const { bucket, kind, path, tagId } = parsed.data
@@ -160,14 +160,14 @@ export function mountStorageTagsRoutes(app: Hono, deps: StorageTagsDeps): void {
       `INSERT INTO storage_tag_assignments (tag_id, connection_id, bucket, target_kind, target_path)
        VALUES ($1, $2, $3, $4, $5)
        ON CONFLICT (connection_id, bucket, target_kind, target_path, tag_id) DO NOTHING`,
-      [tagId, connId, bucket, kind, normalizePath(kind, path)],
+      [tagId, connectionId, bucket, kind, normalizePath(kind, path)],
     )
     if ((result.rowCount ?? 0) === 0) markAuditNoChange(c)
     return c.json({ ok: true })
   })
 
-  app.delete('/storage/:connId/tags', async c => {
-    const connId = c.req.param('connId')
+  app.delete('/storage/:connectionId/tags', async c => {
+    const connectionId = c.req.param('connectionId')
     const parsed = AssignmentBody.safeParse(await c.req.json().catch(() => null))
     if (!parsed.success) return c.json({ error: parsed.error.message }, 400)
     const { bucket, kind, path, tagId } = parsed.data
@@ -175,14 +175,14 @@ export function mountStorageTagsRoutes(app: Hono, deps: StorageTagsDeps): void {
       `DELETE FROM storage_tag_assignments
          WHERE tag_id = $1 AND connection_id = $2 AND bucket = $3
            AND target_kind = $4 AND target_path = $5`,
-      [tagId, connId, bucket, kind, normalizePath(kind, path)],
+      [tagId, connectionId, bucket, kind, normalizePath(kind, path)],
     )
     if ((result.rowCount ?? 0) === 0) markAuditNoChange(c)
     return c.json({ ok: true })
   })
 
-  app.get('/storage/:connId/tags/search', async c => {
-    const connId = c.req.param('connId')
+  app.get('/storage/:connectionId/tags/search', async c => {
+    const connectionId = c.req.param('connectionId')
     const tagIds = c.req.queries('tagId') ?? []
     if (tagIds.length === 0) return c.json([])
 
@@ -193,7 +193,7 @@ export function mountStorageTagsRoutes(app: Hono, deps: StorageTagsDeps): void {
          FROM storage_tag_assignments
          WHERE connection_id = $1 AND tag_id = ANY($2::text[])
          ORDER BY bucket, target_path, target_kind`,
-      [connId, tagIds],
+      [connectionId, tagIds],
     )
     return c.json(r.rows.map(row => ({
       tagId: row.tag_id,

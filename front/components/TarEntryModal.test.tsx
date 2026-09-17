@@ -32,7 +32,7 @@ afterEach(() => {
 function renderEntry(name: string) {
   render(
     <TarEntryModal
-      connId="c"
+      connectionId="c"
       bucket="b"
       archiveKey="a.tar"
       entry={{ name, size: 7, type: '' }}
@@ -87,7 +87,7 @@ describe('TarEntryModal - URL コピー', () => {
     // 本文プレビューは関係ないので、fetch を伴わない unknown 種別 (.bin) で開く。
     render(
       <TarEntryModal
-        connId="c" bucket="b" archiveKey="rec/a.tar"
+        connectionId="c" bucket="b" archiveKey="rec/a.tar"
         entry={{ name: 'audio/u1.bin', size: 7, type: '' }}
         onClose={() => {}}
       />,
@@ -124,7 +124,7 @@ describe('TarEntryModal - head モード', () => {
 describe('TarEntryModal - size なしのエントリ', () => {
   it('name だけでも開ける (permalink で来たエントリはサイズを引けない)', () => {
     render(
-      <TarEntryModal connId="c" bucket="b" archiveKey="a.tar" entry={{ name: 'ghost.bin' }} onClose={() => {}} />,
+      <TarEntryModal connectionId="c" bucket="b" archiveKey="a.tar" entry={{ name: 'ghost.bin' }} onClose={() => {}} />,
     )
     expect(screen.getByRole('dialog')).toBeInTheDocument()
     expect(screen.getByText('ghost.bin')).toBeInTheDocument()
@@ -134,7 +134,7 @@ describe('TarEntryModal - size なしのエントリ', () => {
 
   it('size があれば従来どおり表示する', () => {
     render(
-      <TarEntryModal connId="c" bucket="b" archiveKey="a.tar" entry={{ name: 'x.bin', size: 7, type: '' }} onClose={() => {}} />,
+      <TarEntryModal connectionId="c" bucket="b" archiveKey="a.tar" entry={{ name: 'x.bin', size: 7, type: '' }} onClose={() => {}} />,
     )
     expect(screen.getByText('7 B')).toBeInTheDocument()
   })
@@ -149,7 +149,7 @@ describe('TarEntryModal - 📌 ピン留め', () => {
   it('opened tar エントリの 📌 を押すとピンに積まれる (key = archiveKey, entryPath = entry.name)', () => {
     render(
       <PinnedPreviewsProvider>
-        <TarEntryModal connId="c" bucket="b" archiveKey="a.tar" entry={{ name: 'file.bin', size: 7, type: '' }} onClose={() => {}} />
+        <TarEntryModal connectionId="c" bucket="b" archiveKey="a.tar" entry={{ name: 'file.bin', size: 7, type: '' }} onClose={() => {}} />
         <PinsSpy />
       </PinnedPreviewsProvider>,
     )

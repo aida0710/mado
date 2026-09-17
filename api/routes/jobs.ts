@@ -7,13 +7,13 @@ import { markAuditNoChange } from '../lib/audit-activity.js'
 
 export interface JobRoutesDeps {
   store: JobStore
-  /** 認証有効時だけ渡す。job payload の connId も接続ACLで隠す。 */
+  /** 認証有効時だけ渡す。job payload の connectionId も接続ACLで隠す。 */
   canAccessConnection?: (c: Context, connectionId: string) => Promise<boolean>
 }
 
 function connectionIdOf(job: { payload?: unknown }): string | null {
   if (!job.payload || typeof job.payload !== 'object') return null
-  const connectionId = (job.payload as Record<string, unknown>).connId
+  const connectionId = (job.payload as Record<string, unknown>).connectionId
   return typeof connectionId === 'string' ? connectionId : null
 }
 

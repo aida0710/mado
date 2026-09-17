@@ -14,7 +14,7 @@ import { TagFilterBar } from './storage/TagFilterBar'
 import { useTagsEnabled } from '../lib/useFeatureEnabled'
 
 interface Props {
-  connId: string
+  connectionId: string
   bucket: string
   prefix: string
   onSelectFile?: (key: string) => void
@@ -103,7 +103,7 @@ function reducer(s: State, a: Action): State {
   }
 }
 
-export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) {
+export function StorageBrowser({ connectionId, bucket, prefix, onSelectFile }: Props) {
   const tagsEnabled = useTagsEnabled()
   const [state, dispatch] = useReducer(reducer, initial)
   const { q, submittedQ, recursive, page, history, pageIdx, loading, error, revalidating } = state
@@ -122,7 +122,7 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
   //  cache key 衝突で前ページのデータが返ってしまう問題への防衛)。
   const load = useCallback((cursor: Cursor, opts: { force?: boolean; refresh?: boolean } = {}) => {
     const sid = ++sessionRef.current
-    api.list(connId, bucket, effectivePrefix, cursor, {
+    api.list(connectionId, bucket, effectivePrefix, cursor, {
       recursive,
       force: opts.force,
       refresh: opts.refresh,
@@ -150,7 +150,7 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
         if (sessionRef.current !== sid) return
         dispatch({ type: 'loadErr', error: e.message })
       })
-  }, [connId, bucket, effectivePrefix, recursive])
+  }, [connectionId, bucket, effectivePrefix, recursive])
 
   // 接続/バケット/prefix/検索クエリ/再帰フラグのいずれかが変わったら 1 ページ目から fetch。
   // (load の deps が変わると ref 再生成 → ここが再 trigger される。)
@@ -218,7 +218,7 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
   // 最大 24 時間 古いデータから逃げられない。ページ送りの force とは別物で、
   // あちらを貫通させると dataset では 1 ページ送るのに 35 秒かかる。
   const forceRefresh = (): void => {
-    api.invalidateList(connId, bucket, prefix)
+    api.invalidateList(connectionId, bucket, prefix)
     dispatch({ type: 'identityReset' })
     load({}, { refresh: true })
   }
@@ -244,14 +244,14 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
   useEffect(() => {
     if (!tagsEnabled) return
     api.tags().then(setAllTags).catch(() => {})
-  }, [connId, tagsEnabled])
+  }, [connectionId, tagsEnabled])
 
   useEffect(() => {
     if (!tagsEnabled) return
     let cancelled = false
     Promise.all([
-      api.tagAssignments(connId, bucket, 'prefix', dirs),
-      api.tagAssignments(connId, bucket, 'file', files.map(f => f.key)),
+      api.tagAssignments(connectionId, bucket, 'prefix', dirs),
+      api.tagAssignments(connectionId, bucket, 'file', files.map(f => f.key)),
     ]).then(([d, f]) => {
       if (cancelled) return
       setDirTags(d)
@@ -260,14 +260,14 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
     return () => { cancelled = true }
     // 割り当て API は表示キー集合が変わったときだけ引き直す。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [connId, bucket, tagsEnabled, dirs.join(' '), files.map(f => f.key).join(' ')])
+  }, [connectionId, bucket, tagsEnabled, dirs.join(' '), files.map(f => f.key).join(' ')])
 
   // 開いているディレクトリの最新の走査結果を引く。prefix が変われば引き直す。
   useEffect(() => {
     let cancelled = false
     // 未走査なら null を入れて前ディレクトリの数字を消す。同期 setState を
     // 避けて then の中だけで反映する (cascading render を作らない)。
-    api.latestScan(connId, bucket, effectivePrefix)
+    api.latestScan(connectionId, bucket, effectivePrefix)
       .then(job => {
         if (cancelled) return
         const active = job?.status === 'queued' || job?.status === 'running'
@@ -281,7 +281,7 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
         setScanResult(null)
       })
     return () => { cancelled = true }
-  }, [connId, bucket, effectivePrefix])
+  }, [connectionId, bucket, effectivePrefix])
 
   const handleTagsChange = useCallback((path: string, tagIds: string[]) => {
     setDirTags(prev => (path in prev || dirs.includes(path)) ? { ...prev, [path]: tagIds } : prev)
@@ -380,7 +380,7 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
         {/* 「いつのデータか」はテーブルヘッダの真上に置く。ページャの隅では
             視線が届かず、古いキャッシュを最新だと思って見てしまうため。 */}
         <CacheBanner
-          fetchedAt={api.lastFetched.list(connId, bucket, effectivePrefix, history[pageIdx] ?? {}, { recursive })}
+          fetchedAt={api.lastFetched.list(connectionId, bucket, effectivePrefix, history[pageIdx] ?? {}, { recursive })}
           revalidating={revalidating}
           onRefresh={forceRefresh}
           trailing={
@@ -393,7 +393,7 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
         />
         {scanOpen && (
           <ScanModal
-            connId={connId}
+            connectionId={connectionId}
             bucket={bucket}
             prefix={effectivePrefix}
             onClose={() => setScanOpen(false)}
@@ -404,7 +404,7 @@ export function StorageBrowser({ connId, bucket, prefix, onSelectFile }: Props) 
           dirs={visibleDirs}
           files={visibleFiles}
           prefix={prefix}
-          connId={connId}
+          connectionId={connectionId}
           bucket={bucket}
           onSelectFile={onSelectFile}
           allTags={allTags}

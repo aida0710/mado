@@ -4,8 +4,8 @@ import { copyToClipboard } from '../lib/clipboard'
 import { useSniffedText } from '../lib/useSniffedText'
 import { UnsupportedPreview } from './UnsupportedPreview'
 
-export function PreviewText({ connId, bucket, k }: { connId: string; bucket: string; k: string }) {
-  const sniffed = useSniffedText(api.textPreviewUrl(connId, bucket, k))
+export function PreviewText({ connectionId, bucket, k }: { connectionId: string; bucket: string; k: string }) {
+  const sniffed = useSniffedText(api.textPreviewUrl(connectionId, bucket, k))
   const [copyMsg, setCopyMsg] = useState<string | null>(null)
 
   if (sniffed.status === 'error') return <p className="error">{sniffed.message}</p>

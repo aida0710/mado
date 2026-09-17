@@ -17,7 +17,7 @@ import { fmtCacheAge, fmtSize } from '../../lib/format'
 import { EstimatePanel } from './EstimatePanel'
 
 interface Props {
-  connId: string
+  connectionId: string
   bucket: string
   prefix: string
   onClose: () => void
@@ -53,7 +53,7 @@ function Breakdown({ title, rows }: {
   )
 }
 
-export function ScanModal({ connId, bucket, prefix, onClose, onResult }: Props) {
+export function ScanModal({ connectionId, bucket, prefix, onClose, onResult }: Props) {
   const [result, setResult] = useState<ScanResult | null>(null)
   const [scannedAt, setScannedAt] = useState<string | null>(null)
   const [jobId, setJobId] = useState<number | null>(null)
@@ -72,7 +72,7 @@ export function ScanModal({ connId, bucket, prefix, onClose, onResult }: Props) 
   // 「走査中なのに『まだ走査していません』と出る」状態になる)。
   useEffect(() => {
     let cancelled = false
-    api.latestScan(connId, bucket, prefix)
+    api.latestScan(connectionId, bucket, prefix)
       .then(job => {
         if (cancelled || !job) return
         if (job.status === 'queued' || job.status === 'running') {
@@ -88,7 +88,7 @@ export function ScanModal({ connId, bucket, prefix, onClose, onResult }: Props) 
       .catch(() => {})
       .finally(() => { if (!cancelled) setLoaded(true) })
     return () => { cancelled = true }
-  }, [connId, bucket, prefix])
+  }, [connectionId, bucket, prefix])
 
   // 実行中だけポーリングする。終端状態で止める。
   useEffect(() => {
@@ -121,10 +121,10 @@ export function ScanModal({ connId, bucket, prefix, onClose, onResult }: Props) 
     setCanceled(false)
     setScanned(0)
     setRunning(true)
-    api.startScan(connId, bucket, prefix)
+    api.startScan(connectionId, bucket, prefix)
       .then(r => setJobId(r.jobId))
       .catch((e: Error) => { setError(e.message); setRunning(false) })
-  }, [connId, bucket, prefix])
+  }, [connectionId, bucket, prefix])
 
   const cancel = useCallback(() => {
     if (jobId !== null) api.cancelJob(jobId).catch(() => {})
@@ -176,7 +176,7 @@ export function ScanModal({ connId, bucket, prefix, onClose, onResult }: Props) 
             {/* タブを切り替えるたびにマウントし直す = 取り直す。走査を終えた
                 直後に開いても古い結果が出ない。DB を読むだけなので軽い。 */}
             <EstimatePanel
-              connId={connId}
+              connectionId={connectionId}
               bucket={bucket}
               prefix={prefix}
               onNeedScan={() => setTab('breakdown')}

@@ -27,7 +27,7 @@ function renderDrawer(caps: Partial<Capabilities>, k = 'a/b.txt') {
   }
   return render(
     <ConnectionContext.Provider value={conn}>
-      <PreviewDrawer connId="c1" bucket="bkt" k={k} onClose={() => {}} />
+      <PreviewDrawer connectionId="c1" bucket="bkt" k={k} onClose={() => {}} />
     </ConnectionContext.Provider>,
   )
 }
@@ -77,7 +77,7 @@ describe('PreviewDrawer の権限による出し分け', () => {
     // 実際の遮断は API 側 (403) が担うので、UI は楽観的でよい。
     vi.spyOn(await import('../lib/api/client').then(m => m.api), 'listConnections')
       .mockResolvedValue([])
-    render(<PreviewDrawer connId="c1" bucket="bkt" k="a/b.txt" onClose={() => {}} />)
+    render(<PreviewDrawer connectionId="c1" bucket="bkt" k="a/b.txt" onClose={() => {}} />)
     await waitFor(() =>
       expect(screen.getByLabelText('b.txt をダウンロード')).toBeInTheDocument())
   })

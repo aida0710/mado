@@ -36,7 +36,7 @@ afterEach(() => {
 function renderBrowser(prefix = 'voice/') {
   return render(
     <MemoryRouter>
-      <StorageBrowser connId="c1" bucket="b1" prefix={prefix} />
+      <StorageBrowser connectionId="c1" bucket="b1" prefix={prefix} />
     </MemoryRouter>,
   )
 }
@@ -74,7 +74,7 @@ describe('StorageBrowser - directory row', () => {
 
     const { rerender } = render(
       <MemoryRouter>
-        <StorageBrowser connId="c1" bucket="b1" prefix="voice/" />
+        <StorageBrowser connectionId="c1" bucket="b1" prefix="voice/" />
       </MemoryRouter>,
     )
     await screen.findByRole('link', { name: /jp\// })
@@ -82,7 +82,7 @@ describe('StorageBrowser - directory row', () => {
     // prefix を変えると useEffect が走り 2 回目の load が始まる
     rerender(
       <MemoryRouter>
-        <StorageBrowser connId="c1" bucket="b1" prefix="other/" />
+        <StorageBrowser connectionId="c1" bucket="b1" prefix="other/" />
       </MemoryRouter>,
     )
 

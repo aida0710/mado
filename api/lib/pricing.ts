@@ -73,7 +73,7 @@ export const PRICING_SETTING_KEYS = {
 
 /** 見積もりに使う接続の姿。DB の行と connection_settings から組み立てる。 */
 export interface ConnectionProfile {
-  connId: string
+  connectionId: string
   name: string
   provider: Provider
   /** aws のときカタログのリージョンキー。カタログに無ければ null。 */
@@ -162,7 +162,7 @@ export function settingsToProfile(
     : null
 
   return {
-    connId: conn.id,
+    connectionId: conn.id,
     name: conn.name,
     provider,
     region,

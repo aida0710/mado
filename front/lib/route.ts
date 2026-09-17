@@ -54,12 +54,12 @@ export function parseS3Path(input: string): S3PathParts | null {
 //
 // fileKey は params['*'] から来た値で、React Router によって URL decode 済み前提。
 export function fileLinkToDirRedirect(
-  connId: string,
+  connectionId: string,
   bucket: string,
   fileKey: string,
 ): string {
   return (
-    `/storage/${encodeURIComponent(connId)}` +
+    `/storage/${encodeURIComponent(connectionId)}` +
     `/${encodeURIComponent(bucket)}` +
     `/${encPath(parentPrefixOf(fileKey))}` +
     `?preview=${encodeURIComponent(fileKey)}`
@@ -86,13 +86,13 @@ function parentPrefixOf(key: string): string {
 // origin は付けない (fileLinkToDirRedirect と同様、window 非依存に保つ)。
 // 共有用の絶対 URL が要るなら呼び出し側で absoluteUrl() に通す。
 export function tarEntryWebUrl(
-  connId: string,
+  connectionId: string,
   bucket: string,
   tarKey: string,
   entryPath: string,
 ): string {
   return (
-    `/storage/${encodeURIComponent(connId)}` +
+    `/storage/${encodeURIComponent(connectionId)}` +
     `/${encodeURIComponent(bucket)}` +
     `/${encPath(parentPrefixOf(tarKey))}` +
     `?preview=${encodeURIComponent(tarKey)}` +

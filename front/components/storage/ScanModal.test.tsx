@@ -31,14 +31,14 @@ describe('ScanModal', () => {
     mock(api.latestScan).mockResolvedValue({
       id: 1, status: 'done', result: RESULT, finishedAt: '2026-08-18T07:00:00.000Z',
     })
-    const { container } = render(<ScanModal connId="c1" bucket="b1" prefix="p/" onClose={() => {}} />)
+    const { container } = render(<ScanModal connectionId="c1" bucket="b1" prefix="p/" onClose={() => {}} />)
     await screen.findByText('オブジェクト')
     expect(container.querySelector('.scan-figures')?.textContent).toContain('1,234')
   })
 
   it('未走査なら実行を促す', async () => {
     mock(api.latestScan).mockResolvedValue(null)
-    render(<ScanModal connId="c1" bucket="b1" prefix="p/" onClose={() => {}} />)
+    render(<ScanModal connectionId="c1" bucket="b1" prefix="p/" onClose={() => {}} />)
     expect(await screen.findByText(/まだ走査していません/)).toBeInTheDocument()
   })
 
@@ -50,7 +50,7 @@ describe('ScanModal', () => {
       .mockResolvedValue({ id: 9, status: 'done', result: RESULT, finishedAt: null })
 
     const user = userEvent.setup()
-    render(<ScanModal connId="c1" bucket="b1" prefix="p/" onClose={() => {}} />)
+    render(<ScanModal connectionId="c1" bucket="b1" prefix="p/" onClose={() => {}} />)
     await user.click(await screen.findByRole('button', { name: '走査する' }))
 
     expect(await screen.findByText(/500/)).toBeInTheDocument()
@@ -68,7 +68,7 @@ describe('ScanModal', () => {
     })
 
     const user = userEvent.setup()
-    render(<ScanModal connId="c1" bucket="b1" prefix="p/" onClose={() => {}} />)
+    render(<ScanModal connectionId="c1" bucket="b1" prefix="p/" onClose={() => {}} />)
     await user.click(await screen.findByRole('button', { name: '走査する' }))
     await user.click(await screen.findByRole('button', { name: '中止' }))
     expect(api.cancelJob).toHaveBeenCalledWith(9)
@@ -78,7 +78,7 @@ describe('ScanModal', () => {
     mock(api.latestScan).mockResolvedValue({
       id: 1, status: 'done', result: { ...RESULT, partial: true }, finishedAt: null,
     })
-    render(<ScanModal connId="c1" bucket="b1" prefix="p/" onClose={() => {}} />)
+    render(<ScanModal connectionId="c1" bucket="b1" prefix="p/" onClose={() => {}} />)
     expect(await screen.findByText(/集計は途中まで/)).toBeInTheDocument()
   })
 })
@@ -88,7 +88,7 @@ describe('刷新後の表示', () => {
     mock(api.latestScan).mockResolvedValue({
       id: 1, status: 'done', result: RESULT, finishedAt: '2026-08-18T07:00:00.000Z',
     })
-    render(<ScanModal connId="c1" bucket="b1" prefix="p/" onClose={() => {}} />)
+    render(<ScanModal connectionId="c1" bucket="b1" prefix="p/" onClose={() => {}} />)
     expect(await screen.findByText('.tar')).toBeInTheDocument()
   })
 
@@ -96,7 +96,7 @@ describe('刷新後の表示', () => {
     mock(api.latestScan).mockResolvedValue({
       id: 1, status: 'done', result: RESULT, finishedAt: null,
     })
-    render(<ScanModal connId="c1" bucket="b1" prefix="p/" onClose={() => {}} />)
+    render(<ScanModal connectionId="c1" bucket="b1" prefix="p/" onClose={() => {}} />)
     expect(await screen.findByText('オブジェクト')).toBeInTheDocument()
     expect(screen.getByText('合計サイズ')).toBeInTheDocument()
   })
@@ -109,7 +109,7 @@ describe('刷新後の表示', () => {
       id: 9, status: 'running', progress: { kind: 'count', done: 112000 },
     })
     const user = userEvent.setup()
-    const { container } = render(<ScanModal connId="c1" bucket="b1" prefix="p/" onClose={() => {}} />)
+    const { container } = render(<ScanModal connectionId="c1" bucket="b1" prefix="p/" onClose={() => {}} />)
     await user.click(await screen.findByRole('button', { name: '走査する' }))
     expect(await screen.findByText('走査済み')).toBeInTheDocument()
     expect(container.querySelector('.scan-figures')).not.toBeNull()
@@ -126,7 +126,7 @@ describe('リロード後の再接続', () => {
     mock(api.getJob).mockResolvedValue({
       id: 42, status: 'running', progress: { kind: 'count', done: 92000 }, result: null,
     })
-    render(<ScanModal connId="c1" bucket="b1" prefix="p/" onClose={() => {}} />)
+    render(<ScanModal connectionId="c1" bucket="b1" prefix="p/" onClose={() => {}} />)
     expect(await screen.findByText('走査済み')).toBeInTheDocument()
     expect(await screen.findByRole('button', { name: '中止' })).toBeInTheDocument()
     // 走査する ボタンは出ない (二重投入の入口を作らない)
@@ -138,7 +138,7 @@ describe('リロード後の再接続', () => {
       id: 42, status: 'queued', progress: null, result: null,
     })
     mock(api.getJob).mockResolvedValue({ id: 42, status: 'queued', progress: null, result: null })
-    render(<ScanModal connId="c1" bucket="b1" prefix="p/" onClose={() => {}} />)
+    render(<ScanModal connectionId="c1" bucket="b1" prefix="p/" onClose={() => {}} />)
     expect(await screen.findByText('走査済み')).toBeInTheDocument()
   })
 })
@@ -148,7 +148,7 @@ describe('ScanModal — 移送の見積もりタブ', () => {
     mock(api.latestScan).mockResolvedValue({
       id: 1, status: 'done', result: RESULT, finishedAt: null,
     })
-    render(<ScanModal connId="c1" bucket="b1" prefix="p/" onClose={() => {}} />)
+    render(<ScanModal connectionId="c1" bucket="b1" prefix="p/" onClose={() => {}} />)
     await screen.findByText('オブジェクト')
     expect(api.estimate).not.toHaveBeenCalled()
   })
@@ -160,7 +160,7 @@ describe('ScanModal — 移送の見積もりタブ', () => {
     mock(api.estimate).mockResolvedValue(null)
 
     const user = userEvent.setup()
-    render(<ScanModal connId="c1" bucket="b1" prefix="p/" onClose={() => {}} />)
+    render(<ScanModal connectionId="c1" bucket="b1" prefix="p/" onClose={() => {}} />)
     await user.click(await screen.findByRole('tab', { name: '移送の見積もり' }))
 
     await waitFor(() => expect(api.estimate).toHaveBeenCalledWith('c1', 'b1', 'p/'))
@@ -173,7 +173,7 @@ describe('ScanModal — 移送の見積もりタブ', () => {
     mock(api.estimate).mockResolvedValue(null)
 
     const user = userEvent.setup()
-    render(<ScanModal connId="c1" bucket="b1" prefix="p/" onClose={() => {}} />)
+    render(<ScanModal connectionId="c1" bucket="b1" prefix="p/" onClose={() => {}} />)
     await user.click(await screen.findByRole('tab', { name: '移送の見積もり' }))
     // 未走査なので EstimatePanel が誘導を出す。
     await user.click(await screen.findByRole('button', { name: '走査する' }))

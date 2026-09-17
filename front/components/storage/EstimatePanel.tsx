@@ -16,7 +16,7 @@ import { PROVIDER_LABELS, type TransferCandidate, type TransferEstimate } from '
 import { fmtCacheAge, fmtDurationRange, fmtSize, fmtUsd } from '../../lib/format'
 
 interface Props {
-  connId: string
+  connectionId: string
   bucket: string
   prefix: string
   /** 未走査だったときに内訳タブ (走査ボタンのある側) へ戻す。 */
@@ -126,7 +126,7 @@ function CandidateRow({ c, expanded, onToggle }: {
   )
 }
 
-export function EstimatePanel({ connId, bucket, prefix, onNeedScan }: Props) {
+export function EstimatePanel({ connectionId, bucket, prefix, onNeedScan }: Props) {
   const [state, setState] = useState<State>({ kind: 'loading' })
   const [openId, setOpenId] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
@@ -143,7 +143,7 @@ export function EstimatePanel({ connId, bucket, prefix, onNeedScan }: Props) {
     // setState は cascading render になる (react-hooks/set-state-in-effect)。
     // 初期値が loading であり、このパネルはタブを開くたびにマウントし直される
     // ので、props が変わって前の結果が残ることは無い。
-    api.estimate(connId, bucket, prefix)
+    api.estimate(connectionId, bucket, prefix)
       .then(r => {
         if (cancelled) return
         setState(r ? { kind: 'data', data: r } : { kind: 'unscanned' })
@@ -152,7 +152,7 @@ export function EstimatePanel({ connId, bucket, prefix, onNeedScan }: Props) {
         if (!cancelled) setState({ kind: 'error', message: e.message })
       })
     return () => { cancelled = true }
-  }, [connId, bucket, prefix, reloadKey])
+  }, [connectionId, bucket, prefix, reloadKey])
 
   // 単価の取得はジョブで走る (外部 HTTP がハングしてもこの画面を巻き込まない)。
   // 完了を待ってから見積もりを取り直す — 新しい単価で数字が変わるのを見せたいため。
@@ -242,10 +242,10 @@ export function EstimatePanel({ connId, bucket, prefix, onNeedScan }: Props) {
         </div>
         {rows.map(c => (
           <CandidateRow
-            key={c.connId}
+            key={c.connectionId}
             c={c}
-            expanded={openId === c.connId}
-            onToggle={() => toggle(c.connId)}
+            expanded={openId === c.connectionId}
+            onToggle={() => toggle(c.connectionId)}
           />
         ))}
       </div>

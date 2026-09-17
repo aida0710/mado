@@ -104,7 +104,7 @@ const CapacityTrackingPatch = z.object({
 /** connection_settings への素の key/value 書き込み (権限以外の接続別設定)。 */
 async function upsertSettings(
   q: { query: (sql: string, values: unknown[]) => Promise<unknown> },
-  connId: string,
+  connectionId: string,
   entries: ReadonlyArray<readonly [string, string]>,
 ): Promise<void> {
   if (entries.length === 0) return
@@ -113,7 +113,7 @@ async function upsertSettings(
        SELECT $1, k, v FROM UNNEST($2::text[], $3::text[]) AS t(k, v)
      ON CONFLICT (connection_id, key)
      DO UPDATE SET value = EXCLUDED.value, updated_at = now()`,
-    [connId, entries.map(e => e[0]), entries.map(e => e[1])],
+    [connectionId, entries.map(e => e[0]), entries.map(e => e[1])],
   )
 }
 
@@ -122,19 +122,19 @@ async function upsertSettings(
  *  「プロバイダから推定」なので、明示値の有無が意味を持つ。 */
 async function deleteSettings(
   q: { query: (sql: string, values: unknown[]) => Promise<unknown> },
-  connId: string,
+  connectionId: string,
   keys: readonly string[],
 ): Promise<void> {
   if (keys.length === 0) return
   await q.query(
     `DELETE FROM connection_settings WHERE connection_id = $1 AND key = ANY($2::text[])`,
-    [connId, keys],
+    [connectionId, keys],
   )
 }
 
 async function upsertCapabilities(
   q: { query: (sql: string, values: unknown[]) => Promise<unknown> },
-  connId: string,
+  connectionId: string,
   caps: Partial<Capabilities>,
 ): Promise<void> {
   const entries = (Object.keys(caps) as Array<keyof Capabilities>)
@@ -147,7 +147,7 @@ async function upsertCapabilities(
        SELECT $1, k, v FROM UNNEST($2::text[], $3::text[]) AS t(k, v)
      ON CONFLICT (connection_id, key)
        DO UPDATE SET value = EXCLUDED.value, updated_at = now()`,
-    [connId, entries.map(e => e[0]), entries.map(e => e[1])],
+    [connectionId, entries.map(e => e[0]), entries.map(e => e[1])],
   )
 }
 

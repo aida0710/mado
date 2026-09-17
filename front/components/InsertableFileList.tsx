@@ -22,7 +22,7 @@ export interface InsertableEntry {
 }
 
 interface Props {
-  connId: string
+  connectionId: string
   bucket: string
   /** 初期 prefix。内部 state でサブディレクトリへ潜れる。 */
   prefix: string
@@ -32,41 +32,41 @@ interface Props {
 type ListData = z.infer<typeof StorageList>
 
 interface ListResult {
-  connId: string
+  connectionId: string
   bucket: string
   prefix: string
   data: ListData | null
   error: string | null
 }
 
-export function InsertableFileList({ connId, bucket, prefix: initialPrefix, onInsert }: Props) {
+export function InsertableFileList({ connectionId, bucket, prefix: initialPrefix, onInsert }: Props) {
   const [prefix, setPrefix] = useState(initialPrefix)
   // 応答を取得対象と一緒に保持する。prefix 切替時に effect 内で state を同期リセット
   // しなくても、旧ディレクトリの結果を新しい現在地へ一瞬表示せずに済む。
   const [result, setResult] = useState<ListResult>({
-    connId: '',
+    connectionId: '',
     bucket: '',
     prefix: '',
     data: null,
     error: null,
   })
-  const isCurrent = result.connId === connId && result.bucket === bucket && result.prefix === prefix
+  const isCurrent = result.connectionId === connectionId && result.bucket === bucket && result.prefix === prefix
   const data = isCurrent ? result.data : null
   const error = isCurrent ? result.error : null
 
   useEffect(() => {
     let cancelled = false
-    api.list(connId, bucket, prefix, {}, { recursive: false })
+    api.list(connectionId, bucket, prefix, {}, { recursive: false })
       .then(data => {
-        if (!cancelled) setResult({ connId, bucket, prefix, data, error: null })
+        if (!cancelled) setResult({ connectionId, bucket, prefix, data, error: null })
       })
       .catch(e => {
         if (!cancelled) {
-          setResult({ connId, bucket, prefix, data: null, error: (e as Error).message })
+          setResult({ connectionId, bucket, prefix, data: null, error: (e as Error).message })
         }
       })
     return () => { cancelled = true }
-  }, [connId, bucket, prefix])
+  }, [connectionId, bucket, prefix])
 
   // パン屑: bucket → セグメントへ。最後のセグメントは現在地なのでボタンにしない。
   // prefix = 'docs/sub/' なら crumbs = ['docs', 'sub']

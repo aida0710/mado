@@ -27,7 +27,7 @@ function renderCrumb() {
   return render(
     <MemoryRouter>
       <ConnectionContext.Provider value={conn}>
-        <ViewBreadcrumb connId="c1" label="タグ検索" href="/storage/c1/?view=tags" />
+        <ViewBreadcrumb connectionId="c1" label="タグ検索" href="/storage/c1/?view=tags" />
       </ConnectionContext.Provider>
     </MemoryRouter>,
   )

@@ -19,7 +19,7 @@ const MANUAL_FACTS = {
 
 function candidate(over: Partial<TransferCandidate> = {}): TransferCandidate {
   return {
-    connId: 'dst', name: 'jamstec-s3', provider: 'onprem',
+    connectionId: 'dst', name: 'jamstec-s3', provider: 'onprem',
     storageClass: null, storageClassLabel: null, sameConnection: false,
     durationSec: { optimistic: 3600 * 18, pessimistic: 3600 * 27 },
     upfront: { egress: 0, retrieval: 0, getRequests: 0, putRequests: 0, total: 0 },
@@ -32,7 +32,7 @@ function candidate(over: Partial<TransferCandidate> = {}): TransferCandidate {
 function estimate(candidates: TransferCandidate[], over: Partial<TransferEstimate> = {}): TransferEstimate {
   return {
     source: {
-      connId: 'src', name: 'mdx-s3', provider: 'onprem',
+      connectionId: 'src', name: 'mdx-s3', provider: 'onprem',
       storageClass: null, storageClassLabel: null,
     },
     scan: {
@@ -57,7 +57,7 @@ function renderPanel(onNeedScan = vi.fn()) {
   return {
     onNeedScan,
     ...render(
-      <EstimatePanel connId="src" bucket="b" prefix="d/" onNeedScan={onNeedScan} />,
+      <EstimatePanel connectionId="src" bucket="b" prefix="d/" onNeedScan={onNeedScan} />,
     ),
   }
 }
@@ -73,7 +73,7 @@ describe('EstimatePanel', () => {
     vi.mocked(api.estimate).mockResolvedValue(estimate([
       candidate(),
       candidate({
-        connId: 'aws', name: 'aws-s3', provider: 'aws',
+        connectionId: 'aws', name: 'aws-s3', provider: 'aws',
         storageClass: 'STANDARD', storageClassLabel: 'Standard',
         durationSec: { optimistic: 3600 * 13, pessimistic: 3600 * 20 },
         upfront: { egress: 0, retrieval: 0, getRequests: 0, putRequests: 4.53, total: 4.53 },
@@ -101,8 +101,8 @@ describe('EstimatePanel', () => {
 
   it('現在地は先頭に出て印が付く', async () => {
     vi.mocked(api.estimate).mockResolvedValue(estimate([
-      candidate({ connId: 'cheap', name: 'cheap', monthlyUsd: 0 }),
-      candidate({ connId: 'src', name: 'mdx-s3', sameConnection: true, monthlyUsd: 99 }),
+      candidate({ connectionId: 'cheap', name: 'cheap', monthlyUsd: 0 }),
+      candidate({ connectionId: 'src', name: 'mdx-s3', sameConnection: true, monthlyUsd: 99 }),
     ]))
     renderPanel()
 
@@ -115,9 +115,9 @@ describe('EstimatePanel', () => {
 
   it('残りは月額の安い順に並ぶ', async () => {
     vi.mocked(api.estimate).mockResolvedValue(estimate([
-      candidate({ connId: 'a', name: 'expensive', monthlyUsd: 1000 }),
-      candidate({ connId: 'b', name: 'cheap', monthlyUsd: 10 }),
-      candidate({ connId: 'c', name: 'middle', monthlyUsd: 100 }),
+      candidate({ connectionId: 'a', name: 'expensive', monthlyUsd: 1000 }),
+      candidate({ connectionId: 'b', name: 'cheap', monthlyUsd: 10 }),
+      candidate({ connectionId: 'c', name: 'middle', monthlyUsd: 100 }),
     ]))
     renderPanel()
 

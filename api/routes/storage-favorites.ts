@@ -11,38 +11,38 @@ export interface StorageFavoritesDeps {
 }
 
 export function mountStorageFavoritesRoutes(app: Hono, deps: StorageFavoritesDeps): void {
-  app.get('/storage/:connId/favorites', async c => {
-    const connId = c.req.param('connId')
+  app.get('/storage/:connectionId/favorites', async c => {
+    const connectionId = c.req.param('connectionId')
     const r = await deps.pools.ro.query(
       `SELECT bucket FROM storage_favorite_buckets
          WHERE connection_id = $1
          ORDER BY bucket`,
-      [connId],
+      [connectionId],
     )
     return c.json(r.rows.map(row => row.bucket as string))
   })
 
-  app.put('/storage/:connId/favorites/:bucket', async c => {
-    const connId = c.req.param('connId')
+  app.put('/storage/:connectionId/favorites/:bucket', async c => {
+    const connectionId = c.req.param('connectionId')
     const bucket = c.req.param('bucket')
     if (!bucket) return c.json({ error: 'bucket required' }, 400)
     const result = await deps.pools.rw.query(
       `INSERT INTO storage_favorite_buckets(connection_id, bucket) VALUES ($1, $2)
          ON CONFLICT (connection_id, bucket) DO NOTHING`,
-      [connId, bucket],
+      [connectionId, bucket],
     )
     if ((result.rowCount ?? 0) === 0) markAuditNoChange(c)
     return c.json({ ok: true })
   })
 
-  app.delete('/storage/:connId/favorites/:bucket', async c => {
-    const connId = c.req.param('connId')
+  app.delete('/storage/:connectionId/favorites/:bucket', async c => {
+    const connectionId = c.req.param('connectionId')
     const bucket = c.req.param('bucket')
     if (!bucket) return c.json({ error: 'bucket required' }, 400)
     const result = await deps.pools.rw.query(
       `DELETE FROM storage_favorite_buckets
          WHERE connection_id = $1 AND bucket = $2`,
-      [connId, bucket],
+      [connectionId, bucket],
     )
     if ((result.rowCount ?? 0) === 0) markAuditNoChange(c)
     return c.json({ ok: true })

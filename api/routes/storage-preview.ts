@@ -10,7 +10,7 @@ import {
   type ArchiveKind,
 } from '../lib/tar-stream.js'
 import { listTarHeadersByRange, makeStorageRangeReader } from '../lib/tar-range.js'
-import { resolveStorageOrFail, type GetStorage } from './_connId.js'
+import { resolveStorageOrFail, type GetStorage } from './_connectionId.js'
 
 export interface PreviewEnv {
   PREVIEW_TEXT_LIMIT: number
@@ -82,7 +82,7 @@ const TEXT_EXT = new Set([
   'csv', 'tsv', 'log',
 ])
 
-// tar エントリ名の MIME タイプ (/storage/:connId/preview/tar-entry で使用)。
+// tar エントリ名の MIME タイプ (/storage/:connectionId/preview/tar-entry で使用)。
 function entryContentType(name: string): string {
   const e = ext(name)
   if (IMAGE_MIME[e]) return IMAGE_MIME[e]
@@ -129,7 +129,7 @@ function storageError(c: Context, e: unknown): Response {
 }
 
 export function mountStoragePreviewRoutes(app: Hono, deps: StoragePreviewDeps): void {
-  app.get('/storage/:connId/preview/text', async c => {
+  app.get('/storage/:connectionId/preview/text', async c => {
     const r0 = await resolveStorageOrFail(c, deps.getStorage)
     if (r0 instanceof Response) return r0
     const storage = r0
@@ -164,7 +164,7 @@ export function mountStoragePreviewRoutes(app: Hono, deps: StoragePreviewDeps): 
   // 範囲リクエストはここで扱わず、ストリームを 1 度に流す)。Content-Type は
   // application/octet-stream に固定し、Content-Disposition: attachment で
   // ブラウザにファイル保存ダイアログを促す。
-  app.get('/storage/:connId/preview/raw', async c => {
+  app.get('/storage/:connectionId/preview/raw', async c => {
     const r0 = await resolveStorageOrFail(c, deps.getStorage)
     if (r0 instanceof Response) return r0
     const storage = r0
@@ -201,7 +201,7 @@ export function mountStoragePreviewRoutes(app: Hono, deps: StoragePreviewDeps): 
     )
   })
 
-  app.get('/storage/:connId/preview/image', async c => {
+  app.get('/storage/:connectionId/preview/image', async c => {
     const r0 = await resolveStorageOrFail(c, deps.getStorage)
     if (r0 instanceof Response) return r0
     const storage = r0
@@ -230,7 +230,7 @@ export function mountStoragePreviewRoutes(app: Hono, deps: StoragePreviewDeps): 
     )
   })
 
-  app.get('/storage/:connId/preview/audio', async c => {
+  app.get('/storage/:connectionId/preview/audio', async c => {
     const r0 = await resolveStorageOrFail(c, deps.getStorage)
     if (r0 instanceof Response) return r0
     const storage = r0
@@ -268,7 +268,7 @@ export function mountStoragePreviewRoutes(app: Hono, deps: StoragePreviewDeps): 
     )
   })
 
-  app.get('/storage/:connId/preview/video', async c => {
+  app.get('/storage/:connectionId/preview/video', async c => {
     const r0 = await resolveStorageOrFail(c, deps.getStorage)
     if (r0 instanceof Response) return r0
     const storage = r0
@@ -306,7 +306,7 @@ export function mountStoragePreviewRoutes(app: Hono, deps: StoragePreviewDeps): 
     )
   })
 
-  app.get('/storage/:connId/preview/tar', async c => {
+  app.get('/storage/:connectionId/preview/tar', async c => {
     const r0 = await resolveStorageOrFail(c, deps.getStorage)
     if (r0 instanceof Response) return r0
     const storage = r0
@@ -484,7 +484,7 @@ export function mountStoragePreviewRoutes(app: Hono, deps: StoragePreviewDeps): 
   // tar アーカイブから単一のエントリを取り出してその本体を返す。
   // フロントエンドはこれを使って tar 全体をダウンロードせずに WebDataset シャード内の
   // `.wav` を再生したり `.json` を表示したりする。
-  app.get('/storage/:connId/preview/tar-entry', async c => {
+  app.get('/storage/:connectionId/preview/tar-entry', async c => {
     const r0 = await resolveStorageOrFail(c, deps.getStorage)
     if (r0 instanceof Response) return r0
     const storage = r0

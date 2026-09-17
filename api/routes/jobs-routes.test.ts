@@ -3,14 +3,14 @@ import { describe, expect, it, vi } from 'vitest'
 import type { JobStore } from '../lib/jobs.js'
 import { mountJobRoutes } from './jobs.js'
 
-function job(id: number, connId = 'restricted1') {
+function job(id: number, connectionId = 'restricted1') {
   return {
     id,
     kind: 'storage.scan',
     dedupKey: 'key',
     status: 'queued' as const,
     attempts: 0,
-    payload: { connId },
+    payload: { connectionId },
     progress: null,
     result: null,
     error: null,

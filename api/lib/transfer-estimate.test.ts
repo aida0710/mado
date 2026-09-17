@@ -8,7 +8,7 @@ const MIB = 1024 * 1024
 
 function prof(over: Partial<ConnectionProfile> = {}): ConnectionProfile {
   return {
-    connId: 'src', name: 'src', provider: 'onprem', region: null, storageClass: null,
+    connectionId: 'src', name: 'src', provider: 'onprem', region: null, storageClass: null,
     readMbps: 100, writeMbps: 100, parallelism: 16, requestOverheadMs: 20,
     // 既定は 0 にして「楽観 = 悲観」にしておく。上振れを見るテストだけ上げる。
     instability: 0,
@@ -94,7 +94,7 @@ describe('estimateTransfer / 所要時間', () => {
       // 100 GB を 100 個 (平均 1GB)
       scan: { objectCount: 100, totalBytes: 100_000_000_000 },
       src: { profile: prof({ readMbps: 500 }), rates: rates() },
-      dst: { profile: prof({ connId: 'dst', writeMbps: 1000 }), rates: rates() },
+      dst: { profile: prof({ connectionId: 'dst', writeMbps: 1000 }), rates: rates() },
     })
     // min(500, 1000) MB/s = 5e8 B/s → 200 秒。
     // リクエスト側は 100 * 0.02 / 16 = 0.125 秒でしかない。
@@ -106,7 +106,7 @@ describe('estimateTransfer / 所要時間', () => {
       // 1GB を 100 万個 (平均 1KB)
       scan: { objectCount: 1_000_000, totalBytes: 1_000_000_000 },
       src: { profile: prof({ readMbps: 500 }), rates: rates() },
-      dst: { profile: prof({ connId: 'dst', writeMbps: 1000 }), rates: rates() },
+      dst: { profile: prof({ connectionId: 'dst', writeMbps: 1000 }), rates: rates() },
     })
     // 帯域なら 2 秒で終わるが、実際は 1e6 * 0.02 / 16 = 1250 秒。
     expect(r.durationSec.optimistic).toBeCloseTo(1250)
@@ -116,7 +116,7 @@ describe('estimateTransfer / 所要時間', () => {
     const fast = estimateTransfer({
       scan: { objectCount: 1, totalBytes: 1_000_000_000 },
       src: { profile: prof({ readMbps: 1000 }), rates: rates() },
-      dst: { profile: prof({ connId: 'dst', writeMbps: 100 }), rates: rates() },
+      dst: { profile: prof({ connectionId: 'dst', writeMbps: 100 }), rates: rates() },
     })
     expect(fast.durationSec.optimistic).toBeCloseTo(10)
   })
@@ -125,7 +125,7 @@ describe('estimateTransfer / 所要時間', () => {
     const r = estimateTransfer({
       scan: { objectCount: 1, totalBytes: 1_000_000_000 },
       src: { profile: prof({ readMbps: 100, instability: 0.5 }), rates: rates() },
-      dst: { profile: prof({ connId: 'dst', writeMbps: 100, instability: 0.1 }), rates: rates() },
+      dst: { profile: prof({ connectionId: 'dst', writeMbps: 100, instability: 0.1 }), rates: rates() },
     })
     // 両端の大きい方を採る。
     expect(r.durationSec.optimistic).toBeCloseTo(10)
@@ -135,8 +135,8 @@ describe('estimateTransfer / 所要時間', () => {
   it('同一接続内のクラス変更ではデータが回線を通らない', () => {
     const r = estimateTransfer({
       scan: { objectCount: 1000, totalBytes: 1_000_000_000_000 },
-      src: { profile: prof({ connId: 'same', readMbps: 10 }), rates: rates() },
-      dst: { profile: prof({ connId: 'same', writeMbps: 10 }), rates: rates() },
+      src: { profile: prof({ connectionId: 'same', readMbps: 10 }), rates: rates() },
+      dst: { profile: prof({ connectionId: 'same', writeMbps: 10 }), rates: rates() },
     })
     expect(r.sameConnection).toBe(true)
     // 帯域なら 10 万秒。実際はリクエストぶんだけ (1000 * 0.02 / 16)。
@@ -158,7 +158,7 @@ describe('estimateTransfer / 初期費用', () => {
     const r = estimateTransfer({
       scan: { objectCount: 10, totalBytes: 100 * GIB },
       src: { profile: prof(), rates: rates() },
-      dst: { profile: prof({ connId: 'dst' }), rates: rates() },
+      dst: { profile: prof({ connectionId: 'dst' }), rates: rates() },
     })
     expect(r.upfront.egress).toBe(0)
   })
@@ -167,7 +167,7 @@ describe('estimateTransfer / 初期費用', () => {
     const r = estimateTransfer({
       scan: { objectCount: 10, totalBytes: 1000 * GIB },
       src: { profile: prof({ provider: 'aws' }), rates: awsEgress },
-      dst: { profile: prof({ connId: 'dst' }), rates: rates() },
+      dst: { profile: prof({ connectionId: 'dst' }), rates: rates() },
     })
     // 無料枠 100GB を引いた 900GB が第 1 段。
     expect(r.upfront.egress).toBeCloseTo(900 * 0.114)
@@ -177,7 +177,7 @@ describe('estimateTransfer / 初期費用', () => {
     const r = estimateTransfer({
       scan: { objectCount: 1, totalBytes: 100 * GIB },
       src: { profile: prof({ provider: 'aws' }), rates: awsEgress },
-      dst: { profile: prof({ connId: 'dst' }), rates: rates() },
+      dst: { profile: prof({ connectionId: 'dst' }), rates: rates() },
     })
     expect(r.upfront.egress).toBe(0)
   })
@@ -186,7 +186,7 @@ describe('estimateTransfer / 初期費用', () => {
     const r = estimateTransfer({
       scan: { objectCount: 137_757, totalBytes: 40 * 1024 * GIB },
       src: { profile: prof({ provider: 'aws' }), rates: awsEgress },
-      dst: { profile: prof({ connId: 'dst' }), rates: rates() },
+      dst: { profile: prof({ connectionId: 'dst' }), rates: rates() },
     })
     // 40960 - 100 = 40860GB。10240 まで 0.114、残り 30620 が 0.089。
     expect(r.upfront.egress).toBeCloseTo(10240 * 0.114 + 30620 * 0.089, 0)
@@ -197,8 +197,8 @@ describe('estimateTransfer / 初期費用', () => {
   it('同一接続内のクラス変更では egress が発生しない', () => {
     const r = estimateTransfer({
       scan: { objectCount: 10, totalBytes: 1000 * GIB },
-      src: { profile: prof({ connId: 'same', provider: 'aws' }), rates: awsEgress },
-      dst: { profile: prof({ connId: 'same', provider: 'aws' }), rates: rates() },
+      src: { profile: prof({ connectionId: 'same', provider: 'aws' }), rates: awsEgress },
+      dst: { profile: prof({ connectionId: 'same', provider: 'aws' }), rates: rates() },
     })
     expect(r.upfront.egress).toBe(0)
   })
@@ -207,7 +207,7 @@ describe('estimateTransfer / 初期費用', () => {
     const r = estimateTransfer({
       scan: { objectCount: 10, totalBytes: 1000 * GIB },
       src: { profile: prof({ provider: 'aws' }), rates: rates({ retrievalPerGb: 0.022 }) },
-      dst: { profile: prof({ connId: 'dst' }), rates: rates() },
+      dst: { profile: prof({ connectionId: 'dst' }), rates: rates() },
     })
     expect(r.upfront.retrieval).toBeCloseTo(1000 * 0.022)
   })
@@ -217,7 +217,7 @@ describe('estimateTransfer / 初期費用', () => {
       // 平均 300MiB → 7 リクエスト/オブジェクト
       scan: { objectCount: 1000, totalBytes: 1000 * 300 * MIB },
       src: { profile: prof(), rates: rates() },
-      dst: { profile: prof({ connId: 'dst' }), rates: rates({ putPer1000: 0.065 }) },
+      dst: { profile: prof({ connectionId: 'dst' }), rates: rates({ putPer1000: 0.065 }) },
     })
     expect(r.putRequestCount).toBe(7000)
     expect(r.upfront.putRequests).toBeCloseTo(7000 * 0.065 / 1000)
@@ -230,7 +230,7 @@ describe('estimateTransfer / 初期費用', () => {
         profile: prof({ provider: 'aws' }),
         rates: rates({ ...awsEgress, retrievalPerGb: 0.01, getPer1000: 0.001 }),
       },
-      dst: { profile: prof({ connId: 'dst' }), rates: rates({ putPer1000: 0.0047 }) },
+      dst: { profile: prof({ connectionId: 'dst' }), rates: rates({ putPer1000: 0.0047 }) },
     })
     const { egress, retrieval, getRequests, putRequests, total } = r.upfront
     expect(total).toBeCloseTo(egress + retrieval + getRequests + putRequests)
@@ -244,7 +244,7 @@ describe('estimateTransfer / 月額', () => {
       scan: { objectCount: 100, totalBytes: 1000 * GIB },
       src: { profile: prof(), rates: rates() },
       dst: {
-        profile: prof({ connId: 'dst' }),
+        profile: prof({ connectionId: 'dst' }),
         rates: rates({ storageTiers: [{ upToGb: null, usd: 0.025 }] }),
       },
     })
@@ -257,7 +257,7 @@ describe('estimateTransfer / 月額', () => {
       scan: { objectCount: 1000, totalBytes: 1000 * 1024 },
       src: { profile: prof(), rates: rates() },
       dst: {
-        profile: prof({ connId: 'dst' }),
+        profile: prof({ connectionId: 'dst' }),
         rates: rates({
           minBillableBytes: 128 * 1024,
           storageTiers: [{ upToGb: null, usd: 0.0138 }],
@@ -273,7 +273,7 @@ describe('estimateTransfer / 月額', () => {
       scan: { objectCount: 1000, totalBytes: 1000 * MIB },
       src: { profile: prof(), rates: rates() },
       dst: {
-        profile: prof({ connId: 'dst' }),
+        profile: prof({ connectionId: 'dst' }),
         rates: rates({ minBillableBytes: 128 * 1024, storageTiers: [{ upToGb: null, usd: 1 }] }),
       },
     })
@@ -285,7 +285,7 @@ describe('estimateTransfer / 月額', () => {
       scan: { objectCount: 1_000_000, totalBytes: 1_000_000 * MIB },
       src: { profile: prof(), rates: rates() },
       dst: {
-        profile: prof({ connId: 'dst' }),
+        profile: prof({ connectionId: 'dst' }),
         rates: rates({ monitoringPerObjectMonth: 0.0000025, storageTiers: [] }),
       },
     })
@@ -297,7 +297,7 @@ describe('estimateTransfer / 月額', () => {
       scan: { objectCount: 1_000_000, totalBytes: 1_000_000 * 1024 },
       src: { profile: prof(), rates: rates() },
       dst: {
-        profile: prof({ connId: 'dst' }),
+        profile: prof({ connectionId: 'dst' }),
         rates: rates({ monitoringPerObjectMonth: 0.0000025 }),
       },
     })
@@ -311,7 +311,7 @@ describe('estimateTransfer / 月額', () => {
       scan: { objectCount: 1000, totalBytes: 1000 * GIB },
       src: { profile: prof(), rates: rates() },
       dst: {
-        profile: prof({ connId: 'dst' }),
+        profile: prof({ connectionId: 'dst' }),
         rates: rates({ perObjectOverheadBytes: 40960, storageTiers: [{ upToGb: null, usd: 1 }] }),
       },
     })
@@ -323,7 +323,7 @@ describe('estimateTransfer / 月額', () => {
       scan: { objectCount: 1000, totalBytes: 1000 * 1024 },
       src: { profile: prof(), rates: rates() },
       dst: {
-        profile: prof({ connId: 'dst' }),
+        profile: prof({ connectionId: 'dst' }),
         rates: rates({ minBillableBytes: 128 * 1024, perObjectOverheadBytes: 40960 }),
       },
     })
@@ -334,7 +334,7 @@ describe('estimateTransfer / 月額', () => {
     const r = estimateTransfer({
       scan: { objectCount: 100, totalBytes: 100 * 1024 * GIB },
       src: { profile: prof(), rates: rates() },
-      dst: { profile: prof({ connId: 'dst' }), rates: rates() },
+      dst: { profile: prof({ connectionId: 'dst' }), rates: rates() },
     })
     expect(r.monthlyUsd).toBe(0)
   })
@@ -349,7 +349,7 @@ describe('estimateTransfer / 警告', () => {
     const r = estimateTransfer({
       scan: { objectCount: 10, totalBytes: 10 * GIB },
       src: { profile: prof(), rates: rates() },
-      dst: { profile: prof({ connId: 'dst' }), rates: rates({ minDurationDays: 180 }) },
+      dst: { profile: prof({ connectionId: 'dst' }), rates: rates({ minDurationDays: 180 }) },
     })
     expect(kinds(r)).toContain('minDuration')
     expect(r.warnings.find(w => w.kind === 'minDuration')?.message).toContain('180')
@@ -360,7 +360,7 @@ describe('estimateTransfer / 警告', () => {
       scan: { objectCount: 10, totalBytes: 10 * GIB },
       src: { profile: prof(), rates: rates() },
       dst: {
-        profile: prof({ connId: 'dst', provider: 'aws', storageClass: 'DEEP_ARCHIVE' }),
+        profile: prof({ connectionId: 'dst', provider: 'aws', storageClass: 'DEEP_ARCHIVE' }),
         rates: rates({ retrievalPerGb: 0.022, minDurationDays: 180 }),
       },
     })
@@ -373,7 +373,7 @@ describe('estimateTransfer / 警告', () => {
       scan: { objectCount: 10, totalBytes: 10 * GIB },
       src: { profile: prof(), rates: rates() },
       dst: {
-        profile: prof({ connId: 'dst', provider: 'aws', storageClass: 'GLACIER_IR' }),
+        profile: prof({ connectionId: 'dst', provider: 'aws', storageClass: 'GLACIER_IR' }),
         rates: rates({ retrievalPerGb: 0.03, minDurationDays: 90 }),
       },
     })
@@ -385,7 +385,7 @@ describe('estimateTransfer / 警告', () => {
     const r = estimateTransfer({
       scan: { objectCount: 10, totalBytes: 10 * GIB },
       src: { profile: prof({ provider: 'aws', storageClass: 'GLACIER' }), rates: rates() },
-      dst: { profile: prof({ connId: 'dst' }), rates: rates() },
+      dst: { profile: prof({ connectionId: 'dst' }), rates: rates() },
     })
     expect(kinds(r)).toContain('sourceArchiveRestore')
   })
@@ -394,7 +394,7 @@ describe('estimateTransfer / 警告', () => {
     const r = estimateTransfer({
       scan: { objectCount: 10, totalBytes: 10 * GIB },
       src: { profile: prof(), rates: rates() },
-      dst: { profile: prof({ connId: 'dst', provider: 'wasabi' }), rates: rates() },
+      dst: { profile: prof({ connectionId: 'dst', provider: 'wasabi' }), rates: rates() },
     })
     expect(kinds(r)).toContain('wasabiPolicy')
   })
@@ -403,7 +403,7 @@ describe('estimateTransfer / 警告', () => {
     const r = estimateTransfer({
       scan: { objectCount: 10, totalBytes: 100 * GIB },
       src: { profile: prof(), rates: rates() },
-      dst: { profile: prof({ connId: 'dst', capacityBytes: 50 * GIB }), rates: rates() },
+      dst: { profile: prof({ connectionId: 'dst', capacityBytes: 50 * GIB }), rates: rates() },
     })
     expect(kinds(r)).toContain('capacity')
   })
@@ -412,7 +412,7 @@ describe('estimateTransfer / 警告', () => {
     const r = estimateTransfer({
       scan: { objectCount: 10, totalBytes: 10 * GIB },
       src: { profile: prof(), rates: rates() },
-      dst: { profile: prof({ connId: 'dst', capacityBytes: 50 * GIB }), rates: rates() },
+      dst: { profile: prof({ connectionId: 'dst', capacityBytes: 50 * GIB }), rates: rates() },
     })
     expect(kinds(r)).not.toContain('capacity')
   })
@@ -421,7 +421,7 @@ describe('estimateTransfer / 警告', () => {
     const r = estimateTransfer({
       scan: { objectCount: 1000, totalBytes: 1000 * 1024 },
       src: { profile: prof(), rates: rates() },
-      dst: { profile: prof({ connId: 'dst' }), rates: rates({ minBillableBytes: 128 * 1024 }) },
+      dst: { profile: prof({ connectionId: 'dst' }), rates: rates({ minBillableBytes: 128 * 1024 }) },
     })
     expect(kinds(r)).toContain('smallObjects')
   })
@@ -430,7 +430,7 @@ describe('estimateTransfer / 警告', () => {
     const r = estimateTransfer({
       scan: { objectCount: 10, totalBytes: 10 * GIB },
       src: { profile: prof(), rates: rates() },
-      dst: { profile: prof({ connId: 'dst' }), rates: rates({ storageRateSource: 'proxy' }) },
+      dst: { profile: prof({ connectionId: 'dst' }), rates: rates({ storageRateSource: 'proxy' }) },
     })
     expect(kinds(r)).toContain('proxyRate')
   })
@@ -439,7 +439,7 @@ describe('estimateTransfer / 警告', () => {
     const r = estimateTransfer({
       scan: { objectCount: 10, totalBytes: 10 * GIB },
       src: { profile: prof(), rates: rates() },
-      dst: { profile: prof({ connId: 'dst' }), rates: rates({ storageRateSource: 'manual' }) },
+      dst: { profile: prof({ connectionId: 'dst' }), rates: rates({ storageRateSource: 'manual' }) },
     })
     const w = r.warnings.find(x => x.kind === 'manualRate')
     expect(w?.message).toContain('更新では新しくなりません')
@@ -449,7 +449,7 @@ describe('estimateTransfer / 警告', () => {
     const r = estimateTransfer({
       scan: { objectCount: 10, totalBytes: 10 * GIB },
       src: { profile: prof(), rates: rates() },
-      dst: { profile: prof({ connId: 'dst' }), rates: rates({ storageRateSource: 'override' }) },
+      dst: { profile: prof({ connectionId: 'dst' }), rates: rates({ storageRateSource: 'override' }) },
     })
     expect(kinds(r)).not.toContain('manualRate')
     expect(kinds(r)).not.toContain('proxyRate')
@@ -460,7 +460,7 @@ describe('estimateTransfer / 警告', () => {
       // 100 万件 × 平均 10KB。40KB の加算が本体の 4 倍になる。
       scan: { objectCount: 1_000_000, totalBytes: 1_000_000 * 10 * 1024 },
       src: { profile: prof(), rates: rates() },
-      dst: { profile: prof({ connId: 'dst' }), rates: rates({ perObjectOverheadBytes: 40960 }) },
+      dst: { profile: prof({ connectionId: 'dst' }), rates: rates({ perObjectOverheadBytes: 40960 }) },
     })
     const w = r.warnings.find(x => x.kind === 'objectOverhead')
     expect(w?.message).toContain('1,000,000 件')
@@ -471,7 +471,7 @@ describe('estimateTransfer / 警告', () => {
       // 1000 件 × 平均 1GB。40KB の加算は誤差。
       scan: { objectCount: 1000, totalBytes: 1000 * GIB },
       src: { profile: prof(), rates: rates() },
-      dst: { profile: prof({ connId: 'dst' }), rates: rates({ perObjectOverheadBytes: 40960 }) },
+      dst: { profile: prof({ connectionId: 'dst' }), rates: rates({ perObjectOverheadBytes: 40960 }) },
     })
     expect(kinds(r)).not.toContain('objectOverhead')
   })
@@ -481,7 +481,7 @@ describe('estimateTransfer / 警告', () => {
       scan: { objectCount: 10, totalBytes: 10 * GIB },
       src: { profile: prof(), rates: rates() },
       dst: {
-        profile: prof({ connId: 'dst', provider: 'aws', region: 'eu-west-9' }),
+        profile: prof({ connectionId: 'dst', provider: 'aws', region: 'eu-west-9' }),
         rates: rates({ ratesResolved: false }),
       },
     })
@@ -494,7 +494,7 @@ describe('estimateTransfer / 警告', () => {
     const r = estimateTransfer({
       scan: { objectCount: 10, totalBytes: 10 * GIB },
       src: { profile: prof(), rates: rates() },
-      dst: { profile: prof({ connId: 'dst' }), rates: rates() },
+      dst: { profile: prof({ connectionId: 'dst' }), rates: rates() },
     })
     expect(r.warnings).toEqual([])
   })
@@ -505,7 +505,7 @@ describe('estimateTransfer / 端', () => {
     const r = estimateTransfer({
       scan: { objectCount: 0, totalBytes: 0 },
       src: { profile: prof(), rates: rates() },
-      dst: { profile: prof({ connId: 'dst' }), rates: rates({ minBillableBytes: 128 * 1024 }) },
+      dst: { profile: prof({ connectionId: 'dst' }), rates: rates({ minBillableBytes: 128 * 1024 }) },
     })
     expect(r.avgObjectBytes).toBe(0)
     expect(r.putRequestCount).toBe(0)

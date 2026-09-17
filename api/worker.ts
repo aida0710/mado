@@ -62,8 +62,8 @@ app.get('/healthz', c => c.text('ok'))
 
 app.post('/analyze', async c => {
   const req = (await c.req.json()) as AnalyzeRequest
-  if (!req.connId || !req.bucket || !req.key || !req.etag) {
-    return c.json({ error: 'connId, bucket, key, etag required' }, 400)
+  if (!req.connectionId || !req.bucket || !req.key || !req.etag) {
+    return c.json({ error: 'connectionId, bucket, key, etag required' }, 400)
   }
   try {
     // クライアント (api 経由でブラウザ) が切断したら解析を中断して ffmpeg を kill

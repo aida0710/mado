@@ -1,6 +1,6 @@
 import { ListObjectsCommand, ListObjectsV2Command } from '@aws-sdk/client-s3'
 import { z } from 'zod'
-import type { GetStorage } from '../routes/_connId.js'
+import type { GetStorage } from '../routes/_connectionId.js'
 import type { ConnectionConfig } from '../storage.js'
 import type { JobContext, JobHandler } from './job-runner.js'
 import { createScanAccumulator } from './scan.js'
@@ -15,24 +15,24 @@ import type { CapacityStore } from './capacity-store.js'
 // MaxKeys は 1000。一覧の 100 と違い、ページ数を減らすのが目的。
 
 const Payload = z.object({
-  connId: z.string().min(1),
+  connectionId: z.string().min(1),
   bucket: z.string().min(1),
   prefix: z.string(),
 })
 
 export interface ScanHandlerDeps {
   getStorage: GetStorage
-  getConnectionConfig: (connId: string) => Promise<ConnectionConfig>
+  getConnectionConfig: (connectionId: string) => Promise<ConnectionConfig>
   capacity?: Pick<CapacityStore, 'recordSuccess' | 'recordPartial' | 'recordError'>
 }
 
 export function createScanHandler(deps: ScanHandlerDeps): JobHandler {
   return async (ctx: JobContext) => {
-    const { connId, bucket, prefix } = Payload.parse(ctx.payload)
+    const { connectionId, bucket, prefix } = Payload.parse(ctx.payload)
     const isBucketRoot = prefix === ''
     try {
-      const storage = await deps.getStorage(connId)
-      const config = await deps.getConnectionConfig(connId)
+      const storage = await deps.getStorage(connectionId)
+      const config = await deps.getConnectionConfig(connectionId)
       const useV1 = config.listObjectsVersion === 'v1'
       const pageSize = config.scanPageSize
 
@@ -67,7 +67,7 @@ export function createScanHandler(deps: ScanHandlerDeps): JobHandler {
           // ここまでの集計は返す。数十万キー数えた後に 1 ページの失敗で
           // 全部捨てるのは損なので。
           console.error(JSON.stringify({
-            ev: 'storage.scan.page_failed', connId, bucket, prefix,
+            ev: 'storage.scan.page_failed', connectionId, bucket, prefix,
             scanned: acc.count(), error: (e as Error).message,
           }))
           partial = true
@@ -85,13 +85,13 @@ export function createScanHandler(deps: ScanHandlerDeps): JobHandler {
 
       const result = acc.result(partial)
       if (isBucketRoot && !ctx.signal.aborted && deps.capacity) {
-        if (partial) await deps.capacity.recordPartial(connId, bucket)
-        else await deps.capacity.recordSuccess(ctx.jobId, connId, bucket, result)
+        if (partial) await deps.capacity.recordPartial(connectionId, bucket)
+        else await deps.capacity.recordSuccess(ctx.jobId, connectionId, bucket, result)
       }
       return result
     } catch (error) {
       if (isBucketRoot && !ctx.signal.aborted && deps.capacity) {
-        await deps.capacity.recordError(connId, bucket, error).catch(recordError => {
+        await deps.capacity.recordError(connectionId, bucket, error).catch(recordError => {
           console.error('capacity status update failed', recordError)
         })
       }

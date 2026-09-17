@@ -5,7 +5,7 @@ import { encPath } from '../lib/route'
 import { useCapabilities } from '../lib/useCapabilities'
 
 interface Props {
-  connId: string
+  connectionId: string
 }
 
 interface Hit {
@@ -60,20 +60,20 @@ const SEARCH_DEBOUNCE_MS = 250
 
 // 接続内の README 全文検索パネル。input ≥ 2 文字で debounce してリクエスト。
 // 結果は最新版のみ対象、クリックでその prefix へ遷移する。
-export function ReadmeSearchPanel({ connId }: Props) {
-  const caps = useCapabilities(connId)
+export function ReadmeSearchPanel({ connectionId }: Props) {
+  const caps = useCapabilities(connectionId)
   const [state, dispatch] = useReducer(reducer, initial)
   const { q, hits, loading, error } = state
 
   const debounceRef = useRef<number | null>(null)
   const sessionRef = useRef(0)
 
-  // connId 切替時に検索状態をリセット (異なる接続に同じ q を引き継がない)。
+  // connectionId 切替時に検索状態をリセット (異なる接続に同じ q を引き継がない)。
   useEffect(() => {
     if (debounceRef.current != null) window.clearTimeout(debounceRef.current)
     sessionRef.current++
     dispatch({ type: 'resetWithEmptyQ' })
-  }, [connId])
+  }, [connectionId])
 
   const onChangeQ = (next: string) => {
     dispatch({ type: 'setQ', q: next })
@@ -85,7 +85,7 @@ export function ReadmeSearchPanel({ connId }: Props) {
     dispatch({ type: 'startSearch' })
     const sid = ++sessionRef.current
     debounceRef.current = window.setTimeout(() => {
-      api.readmesSearch(connId, next.trim())
+      api.readmesSearch(connectionId, next.trim())
         .then(r => {
           if (sessionRef.current !== sid) return
           dispatch({ type: 'searchOk', hits: r.hits })
@@ -139,7 +139,7 @@ export function ReadmeSearchPanel({ connId }: Props) {
         >
           {hits.map(h => {
             const to =
-              `/storage/${encodeURIComponent(connId)}` +
+              `/storage/${encodeURIComponent(connectionId)}` +
               `/${encodeURIComponent(h.bucket)}/${encPath(h.prefix)}`
             return (
               <li

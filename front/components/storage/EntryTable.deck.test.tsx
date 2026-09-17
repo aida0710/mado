@@ -17,7 +17,7 @@ function setup(files: Array<{ key: string; size: number }>) {
           dirs={[]}
           files={files.map(f => ({ ...f, lastModified: null }))}
           prefix=""
-          connId="c"
+          connectionId="c"
           bucket="b"
         />
         <DeckSpy />

@@ -51,7 +51,7 @@ function mount(permissions: string[] | null = null, scanJobs: CapacityScanJob[] 
   const content = (
     <MemoryRouter initialEntries={['/?view=capacity']}>
       <ConnectionContext.Provider value={connection}>
-        <CapacityMetricsPage connId="c1" />
+        <CapacityMetricsPage connectionId="c1" />
       </ConnectionContext.Provider>
     </MemoryRouter>
   )
@@ -130,7 +130,7 @@ describe('CapacityMetricsPage', () => {
     render(
       <MemoryRouter initialEntries={['/?view=capacity']}>
         <ConnectionContext.Provider value={restricted}>
-          <CapacityMetricsPage connId="c1" />
+          <CapacityMetricsPage connectionId="c1" />
         </ConnectionContext.Provider>
       </MemoryRouter>,
     )

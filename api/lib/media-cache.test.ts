@@ -16,10 +16,10 @@ afterAll(() => closePools(pools))
 
 describe('media-cache', () => {
   it('mediaCacheKey は etag / entryPath を含み決定的', () => {
-    const a = mediaCacheKey({ connId: 'c', bucket: 'b', key: 'k.wav', etag: 'e1' })
-    const b = mediaCacheKey({ connId: 'c', bucket: 'b', key: 'k.wav', etag: 'e1' })
-    const c = mediaCacheKey({ connId: 'c', bucket: 'b', key: 'k.wav', etag: 'e2' })
-    const d = mediaCacheKey({ connId: 'c', bucket: 'b', key: 'k.tar', entryPath: 'a.wav', etag: 'e1' })
+    const a = mediaCacheKey({ connectionId: 'c', bucket: 'b', key: 'k.wav', etag: 'e1' })
+    const b = mediaCacheKey({ connectionId: 'c', bucket: 'b', key: 'k.wav', etag: 'e1' })
+    const c = mediaCacheKey({ connectionId: 'c', bucket: 'b', key: 'k.wav', etag: 'e2' })
+    const d = mediaCacheKey({ connectionId: 'c', bucket: 'b', key: 'k.tar', entryPath: 'a.wav', etag: 'e1' })
     expect(a).toBe(b)
     expect(a).not.toBe(c)
     expect(a).not.toBe(d)
@@ -27,7 +27,7 @@ describe('media-cache', () => {
   })
 
   it('upsert → get の round trip / spectrogram 有無 / meta', async () => {
-    const key = mediaCacheKey({ connId: 'c', bucket: 'b', key: 'k.wav', etag: 'e' })
+    const key = mediaCacheKey({ connectionId: 'c', bucket: 'b', key: 'k.wav', etag: 'e' })
     expect(await getCachedMedia(pools.ro, key)).toBeNull()
     const meta = {
       codec: 'pcm_s16le',
@@ -71,7 +71,7 @@ describe('media-cache', () => {
   })
 
   it('meta IS NULL の旧行はキャッシュミス扱い (自然にバックフィルされる)', async () => {
-    const key = mediaCacheKey({ connId: 'c', bucket: 'b', key: 'old.wav', etag: 'e' })
+    const key = mediaCacheKey({ connectionId: 'c', bucket: 'b', key: 'old.wav', etag: 'e' })
     // meta カラム追加前の行を模して直接 INSERT (meta なし)
     await pools.rw.query(
       `INSERT INTO media_cache (cache_key, peaks, spectrogram, duration_sec, sample_rate)

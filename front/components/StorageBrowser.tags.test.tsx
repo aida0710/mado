@@ -22,7 +22,7 @@ describe('StorageBrowser タグ', () => {
 
     render(
       <MemoryRouter>
-        <StorageBrowser connId="c1" bucket="bkt" prefix="" />
+        <StorageBrowser connectionId="c1" bucket="bkt" prefix="" />
       </MemoryRouter>,
     )
     // 「重要」は TagFilterBar の候補チップと EntryTable の行バッジの両方に
@@ -51,7 +51,7 @@ describe('StorageBrowser タグ', () => {
 
     render(
       <MemoryRouter>
-        <StorageBrowser connId="c1" bucket="bkt" prefix="" />
+        <StorageBrowser connectionId="c1" bucket="bkt" prefix="" />
       </MemoryRouter>,
     )
     await waitFor(() => expect(screen.getByText('a.txt')).toBeInTheDocument())

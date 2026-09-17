@@ -1,8 +1,8 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react'
 
 export interface PinnedItem {
-  id: string          // connId|bucket|key|entryPath?? '' (重複ピンは無視)
-  connId: string
+  id: string          // connectionId|bucket|key|entryPath?? '' (重複ピンは無視)
+  connectionId: string
   bucket: string
   key: string         // tar 内エントリの場合は tar のキー
   entryPath?: string  // tar 内エントリのパス
@@ -22,7 +22,7 @@ const Ctx = createContext<PinnedPreviewsApi | null>(null)
 export function PinnedPreviewsProvider({ children }: { children: ReactNode }) {
   const [pins, setPins] = useState<PinnedItem[]>([])
   const addPin = useCallback((item: Omit<PinnedItem, 'id'>) => {
-    const id = [item.connId, item.bucket, item.key, item.entryPath ?? ''].join('|')
+    const id = [item.connectionId, item.bucket, item.key, item.entryPath ?? ''].join('|')
     setPins(cur => (cur.some(p => p.id === id) ? cur : [...cur, { ...item, id }]))
   }, [])
   const removePin = useCallback((id: string) => {

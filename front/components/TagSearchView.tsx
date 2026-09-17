@@ -36,19 +36,19 @@ function kindOf(path: string): 'bucket' | 'prefix' | 'file' {
 }
 
 interface Props {
-  connId: string
+  connectionId: string
 }
 
 type Hit = TagSearchResult[number]
 
-function hrefFor(connId: string, hit: Hit): string {
+function hrefFor(connectionId: string, hit: Hit): string {
   if (hit.kind === 'bucket') {
-    return `/storage/${encodeURIComponent(connId)}/${encodeURIComponent(hit.bucket)}/`
+    return `/storage/${encodeURIComponent(connectionId)}/${encodeURIComponent(hit.bucket)}/`
   }
   if (hit.kind === 'prefix') {
-    return `/storage/${encodeURIComponent(connId)}/${encodeURIComponent(hit.bucket)}/${encPath(hit.path)}`
+    return `/storage/${encodeURIComponent(connectionId)}/${encodeURIComponent(hit.bucket)}/${encPath(hit.path)}`
   }
-  return fileLinkToDirRedirect(connId, hit.bucket, hit.path)
+  return fileLinkToDirRedirect(connectionId, hit.bucket, hit.path)
 }
 
 // hits/loading/error は useReducer で持つ。useState のセッターを useEffect 内で
@@ -90,7 +90,7 @@ const KIND_LABEL: Record<Hit['kind'], string> = {
 // もとはバケット一覧の上に畳んだパネルとして置いていたが、README 検索 /
 // S3 パス貼付と並んで一覧の前に積み上がり、ページが混み合っていた。
 // 選んだタグのいずれかが付いた bucket/ディレクトリ/ファイルを列挙する (OR)。
-export function TagSearchView({ connId }: Props) {
+export function TagSearchView({ connectionId }: Props) {
   const [allTags, setAllTags] = useState<Tag[]>([])
   const [selected, setSelected] = useState<Set<string>>(() => new Set())
   const [search, dispatch] = useReducer(searchReducer, initialSearch)
@@ -98,7 +98,7 @@ export function TagSearchView({ connId }: Props) {
 
   useEffect(() => {
     api.tags().then(setAllTags).catch(() => {})
-  }, [connId])
+  }, [connectionId])
 
   useEffect(() => {
     if (selected.size === 0) {
@@ -107,11 +107,11 @@ export function TagSearchView({ connId }: Props) {
     }
     let cancelled = false
     dispatch({ type: 'start' })
-    api.tagSearch(connId, [...selected])
+    api.tagSearch(connectionId, [...selected])
       .then(r => { if (!cancelled) dispatch({ type: 'ok', hits: r }) })
       .catch((e: Error) => { if (!cancelled) dispatch({ type: 'err', error: e.message }) })
     return () => { cancelled = true }
-  }, [connId, selected])
+  }, [connectionId, selected])
 
   // 取り込み先に無いタグが出たときの確認。onImport の途中で聞きたいので、
   // ダイアログの応答を Promise で受け取る形にする。
@@ -126,7 +126,7 @@ export function TagSearchView({ connId }: Props) {
 
   const handleExport = async () => {
     // tagSearch に全タグ ID を渡すと接続内の全割り当てが返る。
-    const hits = allTags.length === 0 ? [] : await api.tagSearch(connId, allTags.map(t => t.id))
+    const hits = allTags.length === 0 ? [] : await api.tagSearch(connectionId, allTags.map(t => t.id))
     const byId = new Map(allTags.map(t => [t.id, t]))
     const usedIds = new Set(hits.map(h => h.tagId))
     const body: TagAssignmentsExport = {
@@ -171,7 +171,7 @@ export function TagSearchView({ connId }: Props) {
     // 既存の割り当てはスキップする。PUT 自体は冪等 (ON CONFLICT DO NOTHING)
     // だが、「何件が新規だったか」を出したいのでこちら側でも見る。
     const known = [...byName.values()]
-    const current = known.length === 0 ? [] : await api.tagSearch(connId, known.map(t => t.id))
+    const current = known.length === 0 ? [] : await api.tagSearch(connectionId, known.map(t => t.id))
     const existing = new Set(current.map(h => `${h.tagId}|${targetUri(h)}`))
 
     // 置き換え = 同期。ファイルに無い割り当てを外す。消えるのは
@@ -190,7 +190,7 @@ export function TagSearchView({ connId }: Props) {
         const k = `${h.tagId}|${targetUri(h)}`
         if (wanted.has(k)) continue
         try {
-          await api.unassignTag(connId, h.bucket, h.kind, h.path, h.tagId)
+          await api.unassignTag(connectionId, h.bucket, h.kind, h.path, h.tagId)
           summary.removed = (summary.removed ?? 0) + 1
           existing.delete(k)
         } catch (e) {
@@ -209,7 +209,7 @@ export function TagSearchView({ connId }: Props) {
       if (!tag) { summary.skipped++; continue }
       if (existing.has(`${tag.id}|s3://${parsed.bucket}/${parsed.prefix}`)) { summary.skipped++; continue }
       try {
-        await api.assignTag(connId, parsed.bucket, kindOf(parsed.prefix), parsed.prefix, tag.id)
+        await api.assignTag(connectionId, parsed.bucket, kindOf(parsed.prefix), parsed.prefix, tag.id)
         summary.added++
       } catch (e) {
         summary.failed.push(`${a.target}: ${(e as Error).message}`)
@@ -312,7 +312,7 @@ export function TagSearchView({ connId }: Props) {
                     className="px-1 py-2.5 transition-colors hover:bg-ink-0"
                     style={{ borderBottom: '1px solid var(--rule)' }}
                   >
-                    <Link to={hrefFor(connId, h)} className="block text-ink-12 no-underline">
+                    <Link to={hrefFor(connectionId, h)} className="block text-ink-12 no-underline">
                       <span className="wrap-anywhere">
                         <span
                           className="text-[12.5px] text-ink-7"

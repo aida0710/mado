@@ -30,7 +30,7 @@ mountStoragePreviewRoutes(app, {
 
 beforeEach(() => storageMock.reset())
 
-describe('GET /storage/:connId/preview/text', () => {
+describe('GET /storage/:connectionId/preview/text', () => {
   it('returns first PREVIEW_TEXT_LIMIT bytes with text/plain', async () => {
     storageMock.on(GetObjectCommand).resolves({
       Body: Readable.from(Buffer.from('hello world!! more content')) as never,
@@ -59,7 +59,7 @@ describe('GET /storage/:connId/preview/text', () => {
   })
 })
 
-describe('GET /storage/:connId/preview/raw', () => {
+describe('GET /storage/:connectionId/preview/raw', () => {
   it('streams bytes as application/octet-stream with attachment Content-Disposition', async () => {
     storageMock.on(GetObjectCommand).resolves({
       Body: Readable.from(Buffer.from('binary-bytes')) as never,
@@ -108,7 +108,7 @@ describe('GET /storage/:connId/preview/raw', () => {
   })
 })
 
-describe('GET /storage/:connId/preview/image', () => {
+describe('GET /storage/:connectionId/preview/image', () => {
   it('proxies image bytes with content-type guessed from key', async () => {
     storageMock.on(GetObjectCommand).resolves({
       Body: Readable.from(Buffer.from([0xff, 0xd8, 0xff])) as never,
@@ -162,7 +162,7 @@ describe('GET /storage/:connId/preview/image', () => {
   })
 })
 
-describe('GET /storage/:connId/preview/audio', () => {
+describe('GET /storage/:connectionId/preview/audio', () => {
   it('forwards Range header to storage and returns 206', async () => {
     storageMock.on(GetObjectCommand, {
       Bucket: 'b', Key: 'a.mp3', Range: 'bytes=0-9',
@@ -231,7 +231,7 @@ describe('GET /storage/:connId/preview/audio', () => {
   })
 })
 
-describe('GET /storage/:connId/preview/video', () => {
+describe('GET /storage/:connectionId/preview/video', () => {
   it('MP4のRange headerをstorageへ渡して206を返す', async () => {
     storageMock.on(GetObjectCommand, {
       Bucket: 'b', Key: 'clip.mp4', Range: 'bytes=100-199',
@@ -299,7 +299,7 @@ function doneOf(lines: NdjsonLine[]): NdjsonDoneLine['done'] | undefined {
   return lines.find((l): l is NdjsonDoneLine => 'done' in l)?.done
 }
 
-describe('GET /storage/:connId/preview/tar', () => {
+describe('GET /storage/:connectionId/preview/tar', () => {
   it('streams entries from a tar.gz as NDJSON ending with done', async () => {
     storageMock.on(GetObjectCommand).resolves({
       Body: createReadStream(fixture('sample.tar.gz')) as never,
@@ -509,7 +509,7 @@ function serveTar(tar: Buffer): void {
 const entryUrl = (entry: string, qs = '') =>
   `/storage/${TEST_CONN_ID}/preview/tar-entry?bucket=b&key=a.tar&entry=${encodeURIComponent(entry)}${qs}`
 
-describe('GET /storage/:connId/preview/tar-entry', () => {
+describe('GET /storage/:connectionId/preview/tar-entry', () => {
   it('bucket / key / entry が欠けたら 400', async () => {
     const res = await entryApp.request(`/storage/${TEST_CONN_ID}/preview/tar-entry?bucket=b&key=a.tar`)
     expect(res.status).toBe(400)

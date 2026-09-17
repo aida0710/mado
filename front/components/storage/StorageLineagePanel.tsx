@@ -4,7 +4,7 @@ import { api } from '../../lib/api/client'
 import type { StorageLineageResolution } from '../../lib/api/types'
 
 interface Props {
-  connId: string
+  connectionId: string
   bucket: string
   path: string
 }
@@ -25,8 +25,8 @@ function locationRelation(matchType: 'exact' | 'prefix'): string {
     : '登録済み保存先の配下'
 }
 
-export function StorageLineagePanel({ connId, bucket, path }: Props) {
-  const requestKey = `${connId}\u0000${bucket}\u0000${path}`
+export function StorageLineagePanel({ connectionId, bucket, path }: Props) {
+  const requestKey = `${connectionId}\u0000${bucket}\u0000${path}`
   const [response, setResponse] = useState<{
     key: string
     resolution: StorageLineageResolution | null
@@ -34,12 +34,12 @@ export function StorageLineagePanel({ connId, bucket, path }: Props) {
 
   useEffect(() => {
     let current = true
-    api.lineageResolveLocation(connId, bucket, path).then(
+    api.lineageResolveLocation(connectionId, bucket, path).then(
       value => { if (current) setResponse({ key: requestKey, resolution: value }) },
       () => { if (current) setResponse({ key: requestKey, resolution: null }) },
     )
     return () => { current = false }
-  }, [connId, bucket, path, requestKey])
+  }, [connectionId, bucket, path, requestKey])
 
   const resolution = response?.key === requestKey ? response.resolution : null
 

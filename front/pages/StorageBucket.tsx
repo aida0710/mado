@@ -9,9 +9,9 @@ import { StorageLineagePanel } from '../components/storage/StorageLineagePanel'
 import { fileLinkToDirRedirect } from '../lib/route'
 import { useDrawerResize } from '../lib/useDrawerResize'
 
-interface Props { connId: string }
+interface Props { connectionId: string }
 
-export default function StorageBucket({ connId }: Props) {
+export default function StorageBucket({ connectionId }: Props) {
   const params = useParams<{ bucket: string; '*': string }>()
   const bucket = decodeURIComponent(params.bucket ?? '')
   const prefix = params['*'] ?? ''
@@ -68,20 +68,20 @@ export default function StorageBucket({ connId }: Props) {
   // ディレクトリ判定は trailing slash 単純判定 — S3 慣習に沿うので確実。
   // (フックは全て上で無条件に呼んでから分岐する — rules-of-hooks 遵守。)
   if (prefix !== '' && !prefix.endsWith('/')) {
-    return <Navigate to={fileLinkToDirRedirect(connId, bucket, prefix)} replace />
+    return <Navigate to={fileLinkToDirRedirect(connectionId, bucket, prefix)} replace />
   }
 
   return (
     <section className="storage-bucket">
       <div className="flex items-center justify-between gap-3">
-        <Breadcrumb connId={connId} bucket={bucket} prefix={prefix} />
+        <Breadcrumb connectionId={connectionId} bucket={bucket} prefix={prefix} />
         <ConnectionSwitcher />
       </div>
       {/* README はリスト幅に依存させない (常に full width)。identity を key にして、
           ディレクトリ遷移時は旧 README の取得・展開状態をまとめて破棄する。 */}
       <ReadmeView
-        key={JSON.stringify([connId, bucket, prefix])}
-        connId={connId}
+        key={JSON.stringify([connectionId, bucket, prefix])}
+        connectionId={connectionId}
         bucket={bucket}
         prefix={prefix}
       />
@@ -89,7 +89,7 @@ export default function StorageBucket({ connId }: Props) {
         <nav className="mt-2 mb-4 text-[12px]">
           <Link
             className="text-link no-underline hover:text-link-hover hover:underline"
-            to={`/storage/${encodeURIComponent(connId)}/?view=capacity&bucket=${encodeURIComponent(bucket)}`}
+            to={`/storage/${encodeURIComponent(connectionId)}/?view=capacity&bucket=${encodeURIComponent(bucket)}`}
           >
             バケットの容量メトリクスを見る →
           </Link>
@@ -97,14 +97,14 @@ export default function StorageBucket({ connId }: Props) {
       )}
       {/* 保存場所から解決したDatasetはREADMEの補足情報として、その直後に置く。
           選択中のファイルがあればそのファイル、なければ現在prefixを解決する。 */}
-      <StorageLineagePanel connId={connId} bucket={bucket} path={selected ?? prefix} />
+      <StorageLineagePanel connectionId={connectionId} bucket={bucket} path={selected ?? prefix} />
       {/* リスト + preview drawer を横並び。drawer 幅は drawer 左端のハンドルで
           リサイズでき、広げるとリストを圧縮せず上に重なる (useDrawerResize)。
           ハンドルは drawer 内に置き、その高さに収める。README には影響しない。 */}
       <div className="storage-list" ref={containerRef}>
-        <StorageBrowser connId={connId} bucket={bucket} prefix={prefix} onSelectFile={setSelected} />
+        <StorageBrowser connectionId={connectionId} bucket={bucket} prefix={prefix} onSelectFile={setSelected} />
         <PreviewDrawer
-          connId={connId}
+          connectionId={connectionId}
           bucket={bucket}
           k={selected}
           entry={selectedEntry}

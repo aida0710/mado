@@ -52,15 +52,15 @@ export interface StorageEstimateDeps {
 export function mountStorageEstimateRoutes(app: Hono, deps: StorageEstimateDeps): void {
   const now = deps.now ?? (() => new Date())
 
-  app.get('/storage/:connId/estimate', async c => {
-    const connId = c.req.param('connId')
+  app.get('/storage/:connectionId/estimate', async c => {
+    const connectionId = c.req.param('connectionId')
     const bucket = c.req.query('bucket')
     if (!bucket) return c.json({ error: 'bucket is required' }, 400)
     const prefix = c.req.query('prefix') ?? ''
 
     // 走査は投げ直さない。重い操作を暗黙に起動しないという走査仕様の方針を
     // 踏襲し、無ければ 409 を返して UI に「先に走査して」と言わせる。
-    const job = await deps.store.latestDone(SCAN_KIND, scanDedupKey(connId, bucket, prefix))
+    const job = await deps.store.latestDone(SCAN_KIND, scanDedupKey(connectionId, bucket, prefix))
     if (!job) {
       return c.json({ error: 'このディレクトリはまだ走査されていません' }, 409)
     }
@@ -72,7 +72,7 @@ export function mountStorageEstimateRoutes(app: Hono, deps: StorageEstimateDeps)
     const visible = await visibleConnectionIds(deps.pools.ro, c)
     const allRows = (await deps.pools.ro.query<ConnRow>(SELECT_CONNS)).rows
     const rows = allRows.filter(row => visible === null || visible.has(row.id))
-    const srcRow = rows.find(r => r.id === connId)
+    const srcRow = rows.find(r => r.id === connectionId)
     if (!srcRow) return c.json({ error: 'connection not found' }, 404)
 
     const snapshot = await deps.pricing.get()
@@ -111,7 +111,7 @@ export function mountStorageEstimateRoutes(app: Hono, deps: StorageEstimateDeps)
 
     return c.json({
       source: {
-        connId: srcProfile.connId,
+        connectionId: srcProfile.connectionId,
         name: srcProfile.name,
         provider: srcProfile.provider,
         storageClass: srcProfile.storageClass,

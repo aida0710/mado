@@ -4,7 +4,7 @@ import {
   ListObjectsV2Command,
 } from '@aws-sdk/client-s3'
 import type { Hono } from 'hono'
-import { resolveStorageOrFail, type GetStorage } from './_connId.js'
+import { resolveStorageOrFail, type GetStorage } from './_connectionId.js'
 import type { ConnectionConfig } from '../storage.js'
 import type { CacheScope, ResponseCache } from '../lib/storage-cache.js'
 
@@ -13,7 +13,7 @@ export interface StorageListDeps {
   /** 接続ごとの API 設定 (list_objects_version 等) を返す。
    *  V1 only の S3 互換サーバ には v1、
    *  それ以外 (AWS/R2/MinIO) は v2 を使う。 */
-  getConnectionConfig: (connId: string) => Promise<ConnectionConfig>
+  getConnectionConfig: (connectionId: string) => Promise<ConnectionConfig>
   /** /list と /buckets の応答キャッシュ。失敗は内部で握りつぶされるので
    *  呼び出し側は try/catch を書かない。 */
   cache: ResponseCache
@@ -47,7 +47,7 @@ function isSelfPlaceholder(key: string, prefix: string): boolean {
 }
 
 export function mountStorageListRoutes(app: Hono, deps: StorageListDeps): void {
-  app.get('/storage/:connId/buckets', async c => {
+  app.get('/storage/:connectionId/buckets', async c => {
     // フェーズごとに所要時間を JSON ログに出して、
     // 「buckets が遅い」ときに getStorage / S3 の ListBuckets / 全体の
     // どこに時間がかかっているか切り分けられるようにする。
@@ -56,7 +56,7 @@ export function mountStorageListRoutes(app: Hono, deps: StorageListDeps): void {
     const t1 = Date.now()
     if (r instanceof Response) return r
     const storage = r
-    const scope: CacheScope = { kind: 'buckets', connId: c.req.param('connId') }
+    const scope: CacheScope = { kind: 'buckets', connectionId: c.req.param('connectionId') }
     const refresh = c.req.query('refresh') === '1'
     if (!refresh) {
       const hit = await deps.cache.get(scope)
@@ -67,7 +67,7 @@ export function mountStorageListRoutes(app: Hono, deps: StorageListDeps): void {
     const t2 = Date.now()
     console.log(JSON.stringify({
       ev: 'storage.buckets.timing',
-      connId: c.req.param('connId'),
+      connectionId: c.req.param('connectionId'),
       getStorage_ms: t1 - t0,
       listBuckets_ms: t2 - t1,
       total_ms: t2 - t0,
@@ -83,8 +83,8 @@ export function mountStorageListRoutes(app: Hono, deps: StorageListDeps): void {
     return c.json(body)
   })
 
-  app.get('/storage/:connId/list', async c => {
-    const connId = c.req.param('connId')
+  app.get('/storage/:connectionId/list', async c => {
+    const connectionId = c.req.param('connectionId')
     const r = await resolveStorageOrFail(c, deps.getStorage)
     if (r instanceof Response) return r
     const storage = r
@@ -99,7 +99,7 @@ export function mountStorageListRoutes(app: Hono, deps: StorageListDeps): void {
     const recursive = c.req.query('recursive') === '1'
 
     const scope: CacheScope = {
-      kind: 'list', connId, bucket, prefix, recursive, continuation, startAfter,
+      kind: 'list', connectionId, bucket, prefix, recursive, continuation, startAfter,
     }
     const refresh = c.req.query('refresh') === '1'
     if (!refresh) {
@@ -113,7 +113,7 @@ export function mountStorageListRoutes(app: Hono, deps: StorageListDeps): void {
       }
     }
 
-    const config = await deps.getConnectionConfig(connId)
+    const config = await deps.getConnectionConfig(connectionId)
     const useV1 = config.listObjectsVersion === 'v1'
 
     // V1 / V2 で送るパラメータも応答の cursor フィールドも違うので、ここで分岐する。

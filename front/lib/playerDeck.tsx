@@ -3,7 +3,7 @@ import { createContext, useCallback, useContext, useMemo, useState, type ReactNo
 export interface DeckTrack {
   id: string
   label: string
-  connId: string
+  connectionId: string
   bucket: string
   key: string
   entryPath?: string
@@ -23,7 +23,7 @@ const Ctx = createContext<PlayerDeckApi | null>(null)
 export function PlayerDeckProvider({ children }: { children: ReactNode }) {
   const [tracks, setTracks] = useState<DeckTrack[]>([])
   const addTrack = useCallback((t: Omit<DeckTrack, 'id'>) => {
-    const id = [t.connId, t.bucket, t.key, t.entryPath ?? ''].join('|')
+    const id = [t.connectionId, t.bucket, t.key, t.entryPath ?? ''].join('|')
     setTracks(cur => (cur.some(x => x.id === id) ? cur : [...cur, { ...t, id }]))
   }, [])
   const removeTrack = useCallback((id: string) => {

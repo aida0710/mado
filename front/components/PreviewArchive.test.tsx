@@ -59,7 +59,7 @@ describe('PreviewArchive - 行の ⋯ アクションメニュー', () => {
   it('音声エントリ (mp3) にはデッキに追加・ピン留め・ダウンロードが揃う', async () => {
     render(
       <PinnedPreviewsProvider>
-        <PreviewArchive connId="c" bucket="b" k="a.tar" />
+        <PreviewArchive connectionId="c" bucket="b" k="a.tar" />
       </PinnedPreviewsProvider>,
     )
     await openMenuFor('track.mp3')
@@ -71,7 +71,7 @@ describe('PreviewArchive - 行の ⋯ アクションメニュー', () => {
   it('json エントリにはピン留め・ダウンロードのみ (デッキに追加は出ない)', async () => {
     render(
       <PinnedPreviewsProvider>
-        <PreviewArchive connId="c" bucket="b" k="a.tar" />
+        <PreviewArchive connectionId="c" bucket="b" k="a.tar" />
       </PinnedPreviewsProvider>,
     )
     await openMenuFor('notes.json')
@@ -83,7 +83,7 @@ describe('PreviewArchive - 行の ⋯ アクションメニュー', () => {
   it('unknown 種別 (bin) にもピン留めが出る (デッキに追加は音声のみ)', async () => {
     render(
       <PinnedPreviewsProvider>
-        <PreviewArchive connId="c" bucket="b" k="a.tar" />
+        <PreviewArchive connectionId="c" bucket="b" k="a.tar" />
       </PinnedPreviewsProvider>,
     )
     await openMenuFor('blob.bin')
@@ -95,7 +95,7 @@ describe('PreviewArchive - 行の ⋯ アクションメニュー', () => {
   it('ピン留めを選ぶとピンに積まれる', async () => {
     render(
       <PinnedPreviewsProvider>
-        <PreviewArchive connId="c" bucket="b" k="a.tar" />
+        <PreviewArchive connectionId="c" bucket="b" k="a.tar" />
         <PinsSpy />
       </PinnedPreviewsProvider>,
     )
@@ -107,7 +107,7 @@ describe('PreviewArchive - 行の ⋯ アクションメニュー', () => {
   it('⋯ トリガーのクリックではエントリのモーダルは開かない', async () => {
     render(
       <PinnedPreviewsProvider>
-        <PreviewArchive connId="c" bucket="b" k="a.tar" />
+        <PreviewArchive connectionId="c" bucket="b" k="a.tar" />
       </PinnedPreviewsProvider>,
     )
     await openMenuFor('notes.json')
@@ -119,7 +119,7 @@ describe('PreviewArchive - 行の ⋯ アクションメニュー', () => {
   it('Web URL / 生データ URL のコピー項目が並ぶ', async () => {
     render(
       <PinnedPreviewsProvider>
-        <PreviewArchive connId="c" bucket="b" k="rec/a.tar" />
+        <PreviewArchive connectionId="c" bucket="b" k="rec/a.tar" />
       </PinnedPreviewsProvider>,
     )
     await openMenuFor('track.mp3')
@@ -141,7 +141,7 @@ describe('PreviewArchive - 行の ⋯ アクションメニュー', () => {
   it('⋯ トリガーに focus して Enter を押しても行のモーダルは開かない', async () => {
     render(
       <PinnedPreviewsProvider>
-        <PreviewArchive connId="c" bucket="b" k="a.tar" />
+        <PreviewArchive connectionId="c" bucket="b" k="a.tar" />
       </PinnedPreviewsProvider>,
     )
     const nameCell = await screen.findByText('notes.json')
@@ -165,7 +165,7 @@ describe('PreviewArchive - URL 駆動のエントリ開閉 (?entry=)', () => {
   }) {
     return render(
       <PinnedPreviewsProvider>
-        <PreviewArchive connId="c" bucket="b" k="a.tar" {...props} />
+        <PreviewArchive connectionId="c" bucket="b" k="a.tar" {...props} />
       </PinnedPreviewsProvider>,
     )
   }

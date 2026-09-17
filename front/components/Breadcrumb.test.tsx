@@ -30,7 +30,7 @@ function renderBreadcrumb(prefix: string) {
   return render(
     <MemoryRouter>
       <ConnectionContext.Provider value={conn}>
-        <Breadcrumb connId="c1" bucket="dataset" prefix={prefix} />
+        <Breadcrumb connectionId="c1" bucket="dataset" prefix={prefix} />
       </ConnectionContext.Provider>
     </MemoryRouter>,
   )

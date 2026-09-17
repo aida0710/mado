@@ -25,7 +25,7 @@ afterEach(() => {
 describe('PreviewText - copy', () => {
   it('copies the loaded text content', async () => {
     vi.mocked(api.readHead).mockResolvedValue(utf8('hello\nworld'))
-    render(<PreviewText connId="c" bucket="b" k="x.txt" />)
+    render(<PreviewText connectionId="c" bucket="b" k="x.txt" />)
     const btn = await screen.findByRole('button', { name: '内容をコピー' })
     await userEvent.click(btn)
     expect(copyToClipboard).toHaveBeenCalledWith('hello\nworld')
@@ -33,7 +33,7 @@ describe('PreviewText - copy', () => {
 
   it('shows no copy button while loading', () => {
     vi.mocked(api.readHead).mockReturnValue(new Promise<Uint8Array>(() => {}))
-    render(<PreviewText connId="c" bucket="b" k="x.txt" />)
+    render(<PreviewText connectionId="c" bucket="b" k="x.txt" />)
     expect(screen.queryByRole('button', { name: '内容をコピー' })).toBeNull()
     expect(screen.getByText('loading…')).toBeInTheDocument()
   })
@@ -42,20 +42,20 @@ describe('PreviewText - copy', () => {
 describe('PreviewText - スニッフ', () => {
   it('拡張子が unknown でも中身がテキストなら開ける', async () => {
     vi.mocked(api.readHead).mockResolvedValue(utf8('#!/bin/sh\necho hi'))
-    render(<PreviewText connId="c" bucket="b" k="run.sh" />)
+    render(<PreviewText connectionId="c" bucket="b" k="run.sh" />)
     expect(await screen.findByText(/echo hi/)).toBeInTheDocument()
   })
 
   it('NUL を含むファイルは「プレビュー非対応」', async () => {
     vi.mocked(api.readHead).mockResolvedValue(new Uint8Array([0x93, 0x4e, 0x00]))
-    render(<PreviewText connId="c" bucket="b" k="a.npy" />)
+    render(<PreviewText connectionId="c" bucket="b" k="a.npy" />)
     expect(await screen.findByText(/プレビュー非対応/)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '内容をコピー' })).toBeNull()
   })
 
   it('取得に失敗したらエラーを出す', async () => {
     vi.mocked(api.readHead).mockRejectedValue(new Error('Not Found'))
-    render(<PreviewText connId="c" bucket="b" k="x.txt" />)
+    render(<PreviewText connectionId="c" bucket="b" k="x.txt" />)
     expect(await screen.findByText('Not Found')).toBeInTheDocument()
   })
 })

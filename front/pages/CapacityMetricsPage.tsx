@@ -17,7 +17,7 @@ const formatBytes = (bytes: number): string => {
   return `${(bytes / 1024 ** unit).toLocaleString('ja-JP', { maximumFractionDigits: 2 })} ${units[unit]}`
 }
 
-export default function CapacityMetricsPage({ connId }: { connId: string }) {
+export default function CapacityMetricsPage({ connectionId }: { connectionId: string }) {
   const [params, setParams] = useSearchParams()
   const parsedDays = Number(params.get('days'))
   const days = DAYS.includes(parsedDays as typeof DAYS[number]) ? parsedDays : 90
@@ -34,18 +34,18 @@ export default function CapacityMetricsPage({ connId }: { connId: string }) {
   const refresh = useCallback(async () => {
     setLoading(true)
     try {
-      setOverview(await api.capacityOverview(connId, days))
+      setOverview(await api.capacityOverview(connectionId, days))
       setError(null)
     } catch (cause) {
       setError((cause as Error).message)
     } finally {
       setLoading(false)
     }
-  }, [connId, days])
+  }, [connectionId, days])
 
   useEffect(() => {
     let active = true
-    api.capacityOverview(connId, days)
+    api.capacityOverview(connectionId, days)
       .then(result => {
         if (!active) return
         setOverview(result)
@@ -54,7 +54,7 @@ export default function CapacityMetricsPage({ connId }: { connId: string }) {
       .catch(cause => { if (active) setError((cause as Error).message) })
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
-  }, [connId, days])
+  }, [connectionId, days])
 
   const scanJobs = overview?.scan.jobs ?? []
   const scanActive = scanJobs.length > 0
@@ -67,7 +67,7 @@ export default function CapacityMetricsPage({ connId }: { connId: string }) {
       setClock(Date.now())
       if (refreshing) return
       refreshing = true
-      api.capacityOverview(connId, days)
+      api.capacityOverview(connectionId, days)
         .then(result => {
           if (!active) return
           setOverview(result)
@@ -80,7 +80,7 @@ export default function CapacityMetricsPage({ connId }: { connId: string }) {
       active = false
       window.clearInterval(timer)
     }
-  }, [connId, days, scanActive])
+  }, [connectionId, days, scanActive])
 
   const updateDays = (value: number) => {
     setLoading(true)
@@ -97,9 +97,9 @@ export default function CapacityMetricsPage({ connId }: { connId: string }) {
     setScanning(true)
     setNotice(null)
     try {
-      const result = await api.startCapacityScan(connId)
+      const result = await api.startCapacityScan(connectionId)
       setNotice(`${result.jobs.length.toLocaleString('ja-JP')}バケットの計測を開始しました。完了すると順次反映されます。`)
-      setOverview(await api.capacityOverview(connId, days))
+      setOverview(await api.capacityOverview(connectionId, days))
       setClock(Date.now())
       setError(null)
     } catch (cause) {
@@ -120,7 +120,7 @@ export default function CapacityMetricsPage({ connId }: { connId: string }) {
   return (
     <section>
       <div className="flex items-center justify-between gap-3">
-        <ViewBreadcrumb connId={connId} label="容量メトリクス" href={`/storage/${encodeURIComponent(connId)}/?view=capacity`} />
+        <ViewBreadcrumb connectionId={connectionId} label="容量メトリクス" href={`/storage/${encodeURIComponent(connectionId)}/?view=capacity`} />
         <ConnectionSwitcher />
       </div>
       <header className="mt-7 mb-5">
@@ -164,7 +164,7 @@ export default function CapacityMetricsPage({ connId }: { connId: string }) {
             {overview.tracking.enabled
               ? `${Math.round(overview.tracking.intervalSeconds / 3600)}時間ごとに全バケットを計測`
               : '定期計測は停止中'}
-            {canManage && <> · <Link className="text-link hover:text-link-hover" to={`/settings/connections/${encodeURIComponent(connId)}`}>コネクション設定</Link></>}
+            {canManage && <> · <Link className="text-link hover:text-link-hover" to={`/settings/connections/${encodeURIComponent(connectionId)}`}>コネクション設定</Link></>}
           </p>
         )}
       </div>
@@ -179,7 +179,7 @@ export default function CapacityMetricsPage({ connId }: { connId: string }) {
           {sortedBuckets.map(bucket => (
             <BucketMetrics
               key={bucket.bucket}
-              connId={connId}
+              connectionId={connectionId}
               history={bucket}
               intervalSeconds={overview.tracking.intervalSeconds}
               scanJob={activeByBucket.get(bucket.bucket)}
@@ -229,8 +229,8 @@ function ScanActivity({ jobs, now }: { jobs: CapacityScanJob[]; now: number }) {
   )
 }
 
-function BucketMetrics({ connId, history, intervalSeconds, scanJob }: {
-  connId: string
+function BucketMetrics({ connectionId, history, intervalSeconds, scanJob }: {
+  connectionId: string
   history: CapacityBucketHistory
   intervalSeconds: number
   scanJob?: CapacityScanJob
@@ -250,7 +250,7 @@ function BucketMetrics({ connId, history, intervalSeconds, scanJob }: {
               {scanJob.status === 'running' ? `走査中 · ${scanJob.objectCount.toLocaleString('ja-JP')}件` : '計測待ち'}
             </span>
           )}
-          <Link className="text-[11px] text-link hover:text-link-hover" to={`/storage/${encodeURIComponent(connId)}/${encodeURIComponent(history.bucket)}/`}>開く →</Link>
+          <Link className="text-[11px] text-link hover:text-link-hover" to={`/storage/${encodeURIComponent(connectionId)}/${encodeURIComponent(history.bucket)}/`}>開く →</Link>
         </div>
       </div>
       <div className="grid gap-px bg-rule sm:grid-cols-4">

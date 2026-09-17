@@ -40,8 +40,8 @@ function PinnedTextBody({ name, url }: { name: string; url: string }) {
   )
 }
 
-function PinnedEntryImage({ connId, bucket, archiveKey, entry }: {
-  connId: string; bucket: string; archiveKey: string; entry: string
+function PinnedEntryImage({ connectionId, bucket, archiveKey, entry }: {
+  connectionId: string; bucket: string; archiveKey: string; entry: string
 }) {
   return (
     <img
@@ -51,24 +51,24 @@ function PinnedEntryImage({ connId, bucket, archiveKey, entry }: {
         border: '1px solid var(--rule)',
         boxShadow: '0 1px 4px rgba(10, 9, 4, 0.06)',
       }}
-      src={api.tarEntryUrl(connId, bucket, archiveKey, entry)}
+      src={api.tarEntryUrl(connectionId, bucket, archiveKey, entry)}
       alt={entry}
     />
   )
 }
 
 function PinnedPreviewBody({ item }: { item: PinnedItem }) {
-  const { connId, bucket, key, entryPath } = item
+  const { connectionId, bucket, key, entryPath } = item
   if (entryPath != null) {
     const kind = classifyEntry(entryPath)
     if (kind === 'audio') {
-      return <PreviewAudio connId={connId} bucket={bucket} k={key} entryPath={entryPath} />
+      return <PreviewAudio connectionId={connectionId} bucket={bucket} k={key} entryPath={entryPath} />
     }
     if (kind === 'image') {
-      return <PinnedEntryImage connId={connId} bucket={bucket} archiveKey={key} entry={entryPath} />
+      return <PinnedEntryImage connectionId={connectionId} bucket={bucket} archiveKey={key} entry={entryPath} />
     }
     if (kind === 'video') {
-      return <PreviewVideo connId={connId} bucket={bucket} k={key} entryPath={entryPath} />
+      return <PreviewVideo connectionId={connectionId} bucket={bucket} k={key} entryPath={entryPath} />
     }
     // 画像・音声・動画以外はすべてテキスト表示に落とし、中身で判定する。
     // head モードで先頭だけ抽出させる。バイナリエントリのために 100MB を
@@ -76,29 +76,29 @@ function PinnedPreviewBody({ item }: { item: PinnedItem }) {
     return (
       <PinnedTextBody
         name={entryPath}
-        url={api.tarEntryUrl(connId, bucket, key, entryPath, { maxBytes: TEXT_HEAD_BYTES })}
+        url={api.tarEntryUrl(connectionId, bucket, key, entryPath, { maxBytes: TEXT_HEAD_BYTES })}
       />
     )
   }
   // 単体ファイルも同じ。画像・音声・アーカイブ以外はテキスト表示に落とし、中身で判定する。
   const kind = classify(key)
-  if (kind === 'image')   return <PreviewImage connId={connId} bucket={bucket} k={key} />
-  if (kind === 'audio')   return <PreviewAudio connId={connId} bucket={bucket} k={key} />
-  if (kind === 'video')   return <PreviewVideo connId={connId} bucket={bucket} k={key} />
-  if (kind === 'archive') return <PreviewArchive connId={connId} bucket={bucket} k={key} />
-  return <PinnedTextBody name={key} url={api.textPreviewUrl(connId, bucket, key)} />
+  if (kind === 'image')   return <PreviewImage connectionId={connectionId} bucket={bucket} k={key} />
+  if (kind === 'audio')   return <PreviewAudio connectionId={connectionId} bucket={bucket} k={key} />
+  if (kind === 'video')   return <PreviewVideo connectionId={connectionId} bucket={bucket} k={key} />
+  if (kind === 'archive') return <PreviewArchive connectionId={connectionId} bucket={bucket} k={key} />
+  return <PinnedTextBody name={key} url={api.textPreviewUrl(connectionId, bucket, key)} />
 }
 
 export function PinnedPreviewCard({ item }: { item: PinnedItem }) {
   const { removePin } = usePinnedPreviews()
-  const { connId, bucket, key, entryPath } = item
-  // ピンカードは <Routes> の外 (BottomDock) に居るので connId を明示して引く。
-  const caps = useCapabilities(connId)
+  const { connectionId, bucket, key, entryPath } = item
+  // ピンカードは <Routes> の外 (BottomDock) に居るので connectionId を明示して引く。
+  const caps = useCapabilities(connectionId)
   const fullPath = fullEntryLabel(key, entryPath)
   const filename = basename(entryPath ?? key)
   const downloadUrl = entryPath != null
-    ? api.tarEntryUrl(connId, bucket, key, entryPath)
-    : api.downloadUrl(connId, bucket, key)
+    ? api.tarEntryUrl(connectionId, bucket, key, entryPath)
+    : api.downloadUrl(connectionId, bucket, key)
 
   return (
     <div

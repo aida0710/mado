@@ -8,12 +8,12 @@ import { CopyMenu, type MenuItem } from './CopyMenu'
 //   /storage/<conn>/b/voice/jp/  → /storage/<conn>/b/voice/
 //   /storage/<conn>/b/voice/     → /storage/<conn>/b/
 //   /storage/<conn>/b/           → /storage/<conn>/        (バケット一覧)
-function parentPath(connId: string, bucket: string, prefix: string): string {
+function parentPath(connectionId: string, bucket: string, prefix: string): string {
   const segs = prefix.split('/').filter(Boolean)
-  if (segs.length === 0) return `/storage/${encodeURIComponent(connId)}/`
+  if (segs.length === 0) return `/storage/${encodeURIComponent(connectionId)}/`
   const trimmed = segs.slice(0, -1)
   const parentPrefix = trimmed.length === 0 ? '' : trimmed.join('/') + '/'
-  return `/storage/${encodeURIComponent(connId)}/${encodeURIComponent(bucket)}/${encPath(parentPrefix)}`
+  return `/storage/${encodeURIComponent(connectionId)}/${encodeURIComponent(bucket)}/${encPath(parentPrefix)}`
 }
 
 // editorial breadcrumb:
@@ -28,8 +28,8 @@ const sepClass =
   'text-ink-5 px-[3px] font-serif select-none'
 
 export function Breadcrumb({
-  connId, bucket, prefix,
-}: { connId: string; bucket: string; prefix: string }) {
+  connectionId, bucket, prefix,
+}: { connectionId: string; bucket: string; prefix: string }) {
   const connection = useConnection()
   const segments = prefix.split('/').filter(Boolean)
 
@@ -38,7 +38,7 @@ export function Breadcrumb({
   // 常に bucket を持つので、最浅でも s3://<bucket>/ (= bucket 直下、prefix='') になり、
   // 接続ルート (バケット一覧) には出ない。深い階層ではそのディレクトリ URL をコピーできる。
   const dirHref =
-    `/storage/${encodeURIComponent(connId)}/${encodeURIComponent(bucket)}/${encPath(prefix)}`
+    `/storage/${encodeURIComponent(connectionId)}/${encodeURIComponent(bucket)}/${encPath(prefix)}`
   const copyItems = useMemo<MenuItem[]>(() => [
     { kind: 'copy', label: 'Web URL をコピー', value: absoluteUrl(dirHref) },
     { kind: 'copy', label: 'S3 URL をコピー',  value: `s3://${bucket}/${prefix}` },
@@ -53,7 +53,7 @@ export function Breadcrumb({
           'hover:bg-ink-1 hover:text-ink-12'
         }
         style={{ border: '1px solid var(--color-rule-strong)' }}
-        to={parentPath(connId, bucket, prefix)}
+        to={parentPath(connectionId, bucket, prefix)}
         aria-label="親階層へ"
         title="親階層へ"
       >
@@ -67,14 +67,14 @@ export function Breadcrumb({
       <Link
         className={`${linkClass} font-sans font-medium`}
         style={{ fontFamily: 'var(--font-sans)' }}
-        to={`/storage/${encodeURIComponent(connId)}/`}
+        to={`/storage/${encodeURIComponent(connectionId)}/`}
       >
         {connection.name}
       </Link>
       <span className={sepClass}>›</span>
       <Link
         className={linkClass}
-        to={`/storage/${encodeURIComponent(connId)}/${encodeURIComponent(bucket)}/`}
+        to={`/storage/${encodeURIComponent(connectionId)}/${encodeURIComponent(bucket)}/`}
       >
         {bucket}
       </Link>
@@ -85,7 +85,7 @@ export function Breadcrumb({
             <span className={sepClass}>›</span>
             <Link
               className={linkClass}
-              to={`/storage/${encodeURIComponent(connId)}/${encodeURIComponent(bucket)}/${encPath(subPrefix)}`}
+              to={`/storage/${encodeURIComponent(connectionId)}/${encodeURIComponent(bucket)}/${encPath(subPrefix)}`}
             >
               {seg}
             </Link>

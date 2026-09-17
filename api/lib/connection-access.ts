@@ -54,8 +54,8 @@ export async function visibleConnectionIds(pool: Pool, c: Context): Promise<Set<
 
 export function requireConnectionAccess(pool: Pool): MiddlewareHandler {
   return async (c, next) => {
-    const connectionId = c.req.param('connId')
-    if (!connectionId) return c.json({ error: 'connId required' }, 400)
+    const connectionId = c.req.param('connectionId')
+    if (!connectionId) return c.json({ error: 'connectionId required' }, 400)
     if (!await canAccessConnection(pool, c, connectionId)) {
       return c.json({ error: 'connection not found' }, 404)
     }

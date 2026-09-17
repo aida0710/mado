@@ -68,7 +68,7 @@ beforeEach(async () => {
 })
 afterAll(() => closePools(pools))
 
-describe('GET /storage/:connId/readme', () => {
+describe('GET /storage/:connectionId/readme', () => {
   it('returns body and meta when README exists', async () => {
     storageMock.on(GetObjectCommand, { Bucket: 'b', Key: 'voice/jp/README.md' })
       .resolves({
@@ -119,7 +119,7 @@ describe('GET /storage/:connId/readme', () => {
   })
 })
 
-describe('PUT /storage/:connId/readme', () => {
+describe('PUT /storage/:connectionId/readme', () => {
   it('uploads body and upserts meta', async () => {
     storageMock.on(PutObjectCommand).resolves({})
     const res = await app.request(`/storage/${TEST_CONN_ID}/readme`, {
@@ -237,7 +237,7 @@ describe('PUT /storage/:connId/readme', () => {
   })
 })
 
-describe('PUT /storage/:connId/readme — 履歴記録', () => {
+describe('PUT /storage/:connectionId/readme — 履歴記録', () => {
   it('PUT 成功時に storage_readme_history へ INSERT される (path 単位で append)', async () => {
     storageMock.on(PutObjectCommand).resolves({})
     // 同じ path で 2 回 PUT
@@ -278,7 +278,7 @@ describe('PUT /storage/:connId/readme — 履歴記録', () => {
   })
 })
 
-describe('GET /storage/:connId/readme/history', () => {
+describe('GET /storage/:connectionId/readme/history', () => {
   beforeEach(async () => {
     // 履歴を 3 件投入 (時系列で降順に取れることを確認)
     for (const [body, editor] of [['v1', 'a'], ['v2', 'b'], ['v3', 'a']] as const) {
@@ -326,7 +326,7 @@ describe('GET /storage/:connId/readme/history', () => {
   })
 })
 
-describe('GET /storage/:connId/readme/history/:id', () => {
+describe('GET /storage/:connectionId/readme/history/:id', () => {
   it('特定版の body と meta を返す', async () => {
     const ins = await pools.rw.query<{ id: string }>(
       `INSERT INTO storage_readme_history(connection_id, bucket, prefix, body, size_bytes, editor)
@@ -352,7 +352,7 @@ describe('GET /storage/:connId/readme/history/:id', () => {
   })
 })
 
-describe('GET /storage/:connId/readmes/search', () => {
+describe('GET /storage/:connectionId/readmes/search', () => {
   beforeEach(async () => {
     // 同じ path で 2 版 (古い版にだけ "古い" あり)、別 path に "find me"
     await pools.rw.query(
@@ -383,7 +383,7 @@ describe('GET /storage/:connId/readmes/search', () => {
 })
 
 describe('connection-not-found behaviour', () => {
-  it('GET returns 404 when connId does not exist via factory', async () => {
+  it('GET returns 404 when connectionId does not exist via factory', async () => {
     // テストのローカルフェイク getStorage をバイパスするため、
     // ConnectionNotFoundError を投げるファクトリを持つ新しいアプリをマウントする。
     const { ConnectionNotFoundError } = await import('../storage.js')
@@ -399,7 +399,7 @@ describe('connection-not-found behaviour', () => {
 })
 
 
-describe('PUT /storage/:connId/readme — 一覧キャッシュの無効化', () => {
+describe('PUT /storage/:connectionId/readme — 一覧キャッシュの無効化', () => {
   it('README を書いたら同 prefix の一覧キャッシュを消す', async () => {
     await seedConnection(pools, TEST_CONN_ID)
     const invalidated: [string, string, string][] = []

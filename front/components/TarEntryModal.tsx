@@ -13,7 +13,7 @@ import { PreviewVideo } from './PreviewVideo'
 import { UnsupportedPreview } from './UnsupportedPreview'
 
 interface Props {
-  connId: string
+  connectionId: string
   bucket: string
   archiveKey: string
   // size / type は任意。共有 URL (?entry=) から直接開いたエントリは、ページングされた
@@ -23,12 +23,12 @@ interface Props {
   onClose: () => void
 }
 
-export function TarEntryModal({ connId, bucket, archiveKey, entry, onClose }: Props) {
+export function TarEntryModal({ connectionId, bucket, archiveKey, entry, onClose }: Props) {
   const kind = classifyEntry(entry.name)
   // <img src> / DL / 生データ URL は本体を全部要る。
-  const url = api.tarEntryUrl(connId, bucket, archiveKey, entry.name)
+  const url = api.tarEntryUrl(connectionId, bucket, archiveKey, entry.name)
   // テキスト判定は先頭だけで足りる。head モードでサーバーに 100MB を解凍させない。
-  const headUrl = api.tarEntryUrl(connId, bucket, archiveKey, entry.name, { maxBytes: TEXT_HEAD_BYTES })
+  const headUrl = api.tarEntryUrl(connectionId, bucket, archiveKey, entry.name, { maxBytes: TEXT_HEAD_BYTES })
   const { addPin } = usePinnedPreviews()
   // 人に送る用 (このエントリを開いた状態で復元される) と、curl / VLC 用の生データ。
   // どちらもクリップボードに載せるので絶対 URL にする (相対のままだと受け取った
@@ -37,7 +37,7 @@ export function TarEntryModal({ connId, bucket, archiveKey, entry, onClose }: Pr
     {
       kind: 'copy',
       label: 'Web URL をコピー',
-      value: absoluteUrl(tarEntryWebUrl(connId, bucket, archiveKey, entry.name)),
+      value: absoluteUrl(tarEntryWebUrl(connectionId, bucket, archiveKey, entry.name)),
     },
     { kind: 'copy', label: '生データ URL をコピー', value: absoluteUrl(url) },
   ]
@@ -90,7 +90,7 @@ export function TarEntryModal({ connId, bucket, archiveKey, entry, onClose }: Pr
           <button
             type="button"
             className="ghost"
-            onClick={() => addPin({ connId, bucket, key: archiveKey, entryPath: entry.name })}
+            onClick={() => addPin({ connectionId, bucket, key: archiveKey, entryPath: entry.name })}
             aria-label="ピン留め"
             title="ピン留め"
           >
@@ -120,8 +120,8 @@ export function TarEntryModal({ connId, bucket, archiveKey, entry, onClose }: Pr
           {kind === 'image' && <ImageBody url={url} alt={entry.name} />}
           {kind === 'audio' && (
             <PreviewAudio
-              key={`${connId}|${bucket}|${archiveKey}|${entry.name}`}
-              connId={connId}
+              key={`${connectionId}|${bucket}|${archiveKey}|${entry.name}`}
+              connectionId={connectionId}
               bucket={bucket}
               k={archiveKey}
               entryPath={entry.name}
@@ -129,8 +129,8 @@ export function TarEntryModal({ connId, bucket, archiveKey, entry, onClose }: Pr
           )}
           {kind === 'video' && (
             <PreviewVideo
-              key={`${connId}|${bucket}|${archiveKey}|${entry.name}`}
-              connId={connId}
+              key={`${connectionId}|${bucket}|${archiveKey}|${entry.name}`}
+              connectionId={connectionId}
               bucket={bucket}
               k={archiveKey}
               entryPath={entry.name}

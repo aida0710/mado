@@ -3,18 +3,18 @@ import { cacheKey, createResponseCache, LIST_CACHE_TTL_MS, type Queryable } from
 
 describe('cacheKey', () => {
   it('同じスコープからは同じキーが出る', () => {
-    const a = cacheKey({ kind: 'list', connId: 'c1', bucket: 'b', prefix: 'p/' })
-    const b = cacheKey({ kind: 'list', connId: 'c1', bucket: 'b', prefix: 'p/' })
+    const a = cacheKey({ kind: 'list', connectionId: 'c1', bucket: 'b', prefix: 'p/' })
+    const b = cacheKey({ kind: 'list', connectionId: 'c1', bucket: 'b', prefix: 'p/' })
     expect(a).toBe(b)
     expect(a).toMatch(/^[0-9a-f]{64}$/)
   })
 
-  it('kind / connId / bucket / prefix / recursive / cursor のどれが違ってもキーが変わる', () => {
-    const base = { kind: 'list' as const, connId: 'c1', bucket: 'b', prefix: 'p/' }
+  it('kind / connectionId / bucket / prefix / recursive / cursor のどれが違ってもキーが変わる', () => {
+    const base = { kind: 'list' as const, connectionId: 'c1', bucket: 'b', prefix: 'p/' }
     const keys = new Set([
       cacheKey(base),
       cacheKey({ ...base, kind: 'buckets' }),
-      cacheKey({ ...base, connId: 'c2' }),
+      cacheKey({ ...base, connectionId: 'c2' }),
       cacheKey({ ...base, bucket: 'b2' }),
       cacheKey({ ...base, prefix: 'q/' }),
       cacheKey({ ...base, recursive: true }),
@@ -25,8 +25,8 @@ describe('cacheKey', () => {
   })
 
   it('省略可能な項目は未指定と空文字を同じ扱いにする', () => {
-    expect(cacheKey({ kind: 'buckets', connId: 'c1' }))
-      .toBe(cacheKey({ kind: 'buckets', connId: 'c1', bucket: '', prefix: '' }))
+    expect(cacheKey({ kind: 'buckets', connectionId: 'c1' }))
+      .toBe(cacheKey({ kind: 'buckets', connectionId: 'c1', bucket: '', prefix: '' }))
   })
 
   it('TTL は 24 時間', () => {
@@ -47,7 +47,7 @@ function fakeDb(rows: unknown[] = []) {
   return { db, calls }
 }
 
-const SCOPE = { kind: 'list' as const, connId: 'c1', bucket: 'b', prefix: 'p/' }
+const SCOPE = { kind: 'list' as const, connectionId: 'c1', bucket: 'b', prefix: 'p/' }
 
 describe('createResponseCache', () => {
   it('hit したら payload を返す', async () => {
@@ -71,7 +71,7 @@ describe('createResponseCache', () => {
     expect(await createResponseCache(db).get(SCOPE)).toBeNull()
   })
 
-  it('set は conn_id / bucket / prefix も一緒に書き、TTL 後の期限を入れる', async () => {
+  it('set は connection_id / bucket / prefix も一緒に書き、TTL 後の期限を入れる', async () => {
     const { db, calls } = fakeDb([{
       fetched_at: '2026-09-15T02:00:00.000Z',
       expires_at: '2026-09-15T02:00:01.000Z',
@@ -87,17 +87,17 @@ describe('createResponseCache', () => {
     })
   })
 
-  it('invalidateScope は conn_id + bucket + prefix で消す', async () => {
+  it('invalidateScope は connection_id + bucket + prefix で消す', async () => {
     const { db, calls } = fakeDb()
     await createResponseCache(db).invalidateScope('c1', 'b', 'p/')
     expect(calls[0].text).toContain('DELETE FROM storage_response_cache')
     expect(calls[0].values).toEqual(['c1', 'b', 'p/'])
   })
 
-  it('invalidateConnection は conn_id の全行を消す', async () => {
+  it('invalidateConnection は connection_id の全行を消す', async () => {
     const { db, calls } = fakeDb()
     await createResponseCache(db).invalidateConnection('c1')
-    expect(calls[0].text).toContain('WHERE conn_id = $1')
+    expect(calls[0].text).toContain('WHERE connection_id = $1')
     expect(calls[0].values).toEqual(['c1'])
   })
 

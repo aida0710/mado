@@ -16,7 +16,7 @@ const tags: Tag[] = [
 function renderView() {
   return render(
     <MemoryRouter>
-      <TagSearchView connId="c1" />
+      <TagSearchView connectionId="c1" />
     </MemoryRouter>,
   )
 }

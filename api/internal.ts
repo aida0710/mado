@@ -155,14 +155,14 @@ if (authEnabled) {
   api.on(['PUT', 'DELETE'], '/connections/:id', requirePermission('connections:manage'))
   api.on('PUT', '/connections/:id/default', requirePermission('connections:manage'))
   api.on('PUT', '/notes/:slug', requirePermission('content:write'))
-  api.on('PUT', '/storage/:connId/readme', requirePermission('content:write'))
+  api.on('PUT', '/storage/:connectionId/readme', requirePermission('content:write'))
   api.on('POST', '/tags', requirePermission('content:write'))
   api.on(['PUT', 'DELETE'], '/tags/:id', requirePermission('content:write'))
-  api.on(['PUT', 'DELETE'], '/storage/:connId/favorites/:bucket', requirePermission('content:write'))
-  api.on(['PUT', 'DELETE'], '/storage/:connId/tags', requirePermission('content:write'))
+  api.on(['PUT', 'DELETE'], '/storage/:connectionId/favorites/:bucket', requirePermission('content:write'))
+  api.on(['PUT', 'DELETE'], '/storage/:connectionId/tags', requirePermission('content:write'))
   api.on('PUT', '/settings/:key', requirePermission('settings:manage'))
-  api.on('POST', '/storage/:connId/scan', requirePermission('jobs:operate'))
-  api.on('POST', '/storage/:connId/capacity/scan', requirePermission('connections:manage'))
+  api.on('POST', '/storage/:connectionId/scan', requirePermission('jobs:operate'))
+  api.on('POST', '/storage/:connectionId/capacity/scan', requirePermission('connections:manage'))
   api.on('POST', '/pricing/refresh', requirePermission('jobs:operate'))
   api.on('POST', '/jobs/:id/cancel', requirePermission('jobs:operate'))
   api.use('/lineage/*', requirePermission('lineage:read'))
@@ -171,7 +171,7 @@ if (authEnabled) {
 // ホワイトリスト接続は、一覧から隠すだけでなく全Storage APIのURL直打ちも遮断する。
 // 非許可Userへは存在を明かさないため403ではなく404を返す。
 if (authEnabled) {
-  api.use('/storage/:connId/*', requireConnectionAccess(pools.ro))
+  api.use('/storage/:connectionId/*', requireConnectionAccess(pools.ro))
   api.use('/lineage/resolve-location', requireConnectionQueryAccess(pools.ro))
 }
 
@@ -179,25 +179,25 @@ if (authEnabled) {
 // 集約する (ルートハンドラ側には権限の知識を持たせない)。
 // Hono は登録順に実行するので、必ずルートの mount より前に登録すること。
 const cap = (k: Capability) => requireCapability(k, storageFactory.getConnectionConfig)
-api.use('/storage/:connId/buckets',           cap('list'))
-api.use('/storage/:connId/list',              cap('list'))
-api.use('/storage/:connId/capacity',          cap('list'))
-api.use('/storage/:connId/capacity/*',        cap('list'))
-api.use('/storage/:connId/preview/text',      cap('preview'))
-api.use('/storage/:connId/preview/image',     cap('preview'))
-api.use('/storage/:connId/preview/audio',     cap('preview'))
-api.use('/storage/:connId/preview/video',     cap('preview'))
-api.use('/storage/:connId/preview/raw',       cap('download'))
-api.use('/storage/:connId/preview/tar',       cap('archive'))
-api.use('/storage/:connId/preview/tar-entry', cap('archive'))
-api.use('/storage/:connId/media/analyze',     cap('audioInfo'))
-api.use('/storage/:connId/media/spectrogram', cap('audioSpectrogram'))
+api.use('/storage/:connectionId/buckets',           cap('list'))
+api.use('/storage/:connectionId/list',              cap('list'))
+api.use('/storage/:connectionId/capacity',          cap('list'))
+api.use('/storage/:connectionId/capacity/*',        cap('list'))
+api.use('/storage/:connectionId/preview/text',      cap('preview'))
+api.use('/storage/:connectionId/preview/image',     cap('preview'))
+api.use('/storage/:connectionId/preview/audio',     cap('preview'))
+api.use('/storage/:connectionId/preview/video',     cap('preview'))
+api.use('/storage/:connectionId/preview/raw',       cap('download'))
+api.use('/storage/:connectionId/preview/tar',       cap('archive'))
+api.use('/storage/:connectionId/preview/tar-entry', cap('archive'))
+api.use('/storage/:connectionId/media/analyze',     cap('audioInfo'))
+api.use('/storage/:connectionId/media/spectrogram', cap('audioSpectrogram'))
 // README は同じパスで GET = 読み込み / PUT = 編集。メソッドごとに権限が違う。
-api.on('GET', '/storage/:connId/readme',      cap('readmeRead'))
-api.on('PUT', '/storage/:connId/readme',      cap('readmeWrite'))
-api.use('/storage/:connId/readme/history',    cap('readmeRead'))
-api.use('/storage/:connId/readme/history/:id', cap('readmeRead'))
-api.use('/storage/:connId/readmes/search',    cap('readmeRead'))
+api.on('GET', '/storage/:connectionId/readme',      cap('readmeRead'))
+api.on('PUT', '/storage/:connectionId/readme',      cap('readmeWrite'))
+api.use('/storage/:connectionId/readme/history',    cap('readmeRead'))
+api.use('/storage/:connectionId/readme/history/:id', cap('readmeRead'))
+api.use('/storage/:connectionId/readmes/search',    cap('readmeRead'))
 
 mountConnectionsRoutes(api, {
   pools,

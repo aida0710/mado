@@ -119,8 +119,8 @@ function reducer(s: State, a: Action): State {
   }
 }
 
-export function PreviewArchive({ connId, bucket, k, initialEntry = null, onEntryChange }: {
-  connId: string
+export function PreviewArchive({ connectionId, bucket, k, initialEntry = null, onEntryChange }: {
+  connectionId: string
   bucket: string
   k: string
   // 開いた状態で復元するエントリ名 (URL の ?entry=)。onEntryChange とセットで使う。
@@ -152,9 +152,9 @@ export function PreviewArchive({ connId, bucket, k, initialEntry = null, onEntry
 
   // 当該アーカイブのキャッシュを丸ごと破棄して同じページを再取得。
   const forceRefresh = (): void => {
-    api.invalidateTarPreview(connId, bucket, k)
+    api.invalidateTarPreview(connectionId, bucket, k)
     dispatch({ type: 'startLoad' })
-    api.tarPreview(connId, bucket, k, { limit: pageSize, offset })
+    api.tarPreview(connectionId, bucket, k, { limit: pageSize, offset })
       .then(r => dispatch({ type: 'loadOk', data: r }))
       .catch((e: Error) => dispatch({ type: 'loadErr', error: e.message }))
   }
@@ -163,7 +163,7 @@ export function PreviewArchive({ connId, bucket, k, initialEntry = null, onEntry
     let cancelled = false
     dispatch({ type: 'startLoad' })
 
-    api.tarPreview(connId, bucket, k, { limit: pageSize, offset }, {
+    api.tarPreview(connectionId, bucket, k, { limit: pageSize, offset }, {
       onMode: (mode: 'range' | 'stream') => {
         if (!cancelled) dispatch({ type: 'setMode', mode })
       },
@@ -177,7 +177,7 @@ export function PreviewArchive({ connId, bucket, k, initialEntry = null, onEntry
       .then(r => { if (!cancelled) dispatch({ type: 'loadOk', data: r }) })
       .catch((e: Error) => { if (!cancelled) dispatch({ type: 'loadErr', error: e.message }) })
     return () => { cancelled = true }
-  }, [connId, bucket, k, offset, pageSize])
+  }, [connectionId, bucket, k, offset, pageSize])
 
   // ローディング中に経過時間カウンターを更新する。
   useEffect(() => {
@@ -212,7 +212,7 @@ export function PreviewArchive({ connId, bucket, k, initialEntry = null, onEntry
         </select>
       </label>
       <CacheBanner
-        fetchedAt={api.lastFetched.tar(connId, bucket, k, { limit: pageSize, offset })}
+        fetchedAt={api.lastFetched.tar(connectionId, bucket, k, { limit: pageSize, offset })}
         revalidating={false}
         onRefresh={forceRefresh}
         compact
@@ -295,19 +295,19 @@ export function PreviewArchive({ connId, bucket, k, initialEntry = null, onEntry
                   label: 'デッキに追加',
                   onSelect: () => deck.addTrack({
                     label: e.name,
-                    connId, bucket, key: k, entryPath: e.name,
+                    connectionId, bucket, key: k, entryPath: e.name,
                   }),
                 }] : []),
                 // 種別で出し分けない (EntryTable と同じ理由)。
                 {
                   kind: 'action' as const,
                   label: 'ピン留め',
-                  onSelect: () => addPin({ connId, bucket, key: k, entryPath: e.name }),
+                  onSelect: () => addPin({ connectionId, bucket, key: k, entryPath: e.name }),
                 },
                 {
                   kind: 'download',
                   label: 'このエントリをダウンロード',
-                  href: api.tarEntryUrl(connId, bucket, k, e.name),
+                  href: api.tarEntryUrl(connectionId, bucket, k, e.name),
                   filename: e.name.split('/').pop() ?? e.name,
                 },
                 // 人に送る用 (このエントリを開いた状態で復元される) と、
@@ -316,12 +316,12 @@ export function PreviewArchive({ connId, bucket, k, initialEntry = null, onEntry
                 {
                   kind: 'copy',
                   label: 'Web URL をコピー',
-                  value: absoluteUrl(tarEntryWebUrl(connId, bucket, k, e.name)),
+                  value: absoluteUrl(tarEntryWebUrl(connectionId, bucket, k, e.name)),
                 },
                 {
                   kind: 'copy',
                   label: '生データ URL をコピー',
-                  value: absoluteUrl(api.tarEntryUrl(connId, bucket, k, e.name)),
+                  value: absoluteUrl(api.tarEntryUrl(connectionId, bucket, k, e.name)),
                 },
               ]
               return (
@@ -392,7 +392,7 @@ export function PreviewArchive({ connId, bucket, k, initialEntry = null, onEntry
       </div>
       {openedEntry && (
         <TarEntryModal
-          connId={connId}
+          connectionId={connectionId}
           bucket={bucket}
           archiveKey={k}
           entry={openedEntry}

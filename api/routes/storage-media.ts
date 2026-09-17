@@ -7,7 +7,7 @@ import {
   getCachedSpectrogram,
   mediaCacheKey,
 } from '../lib/media-cache.js'
-import { resolveStorageOrFail, type GetStorage } from './_connId.js'
+import { resolveStorageOrFail, type GetStorage } from './_connectionId.js'
 
 export interface StorageMediaDeps {
   getStorage: GetStorage
@@ -22,11 +22,11 @@ export function mountStorageMediaRoutes(app: Hono, deps: StorageMediaDeps): void
 
   // 単一ファイルの解析。キャッシュ命中は即返し、未計算は media-worker に
   // 同期 proxy する (キューは通らない)。202 は返さない。
-  app.get('/storage/:connId/media/analyze', async c => {
+  app.get('/storage/:connectionId/media/analyze', async c => {
     const r0 = await resolveStorageOrFail(c, deps.getStorage)
     if (r0 instanceof Response) return r0
     const storage = r0
-    const connId = c.req.param('connId')
+    const connectionId = c.req.param('connectionId')
     const bucket = c.req.query('bucket')
     const key = c.req.query('key')
     const entryPath = c.req.query('entryPath') || undefined
@@ -53,7 +53,7 @@ export function mountStorageMediaRoutes(app: Hono, deps: StorageMediaDeps): void
       throw e
     }
 
-    const ref = { connId, bucket, key, entryPath, etag }
+    const ref = { connectionId, bucket, key, entryPath, etag }
     const cached = await getCachedMedia(deps.pools.ro, mediaCacheKey(ref))
     if (cached) return c.json(cached)
 
@@ -75,7 +75,7 @@ export function mountStorageMediaRoutes(app: Hono, deps: StorageMediaDeps): void
     })
   })
 
-  app.get('/storage/:connId/media/spectrogram', async c => {
+  app.get('/storage/:connectionId/media/spectrogram', async c => {
     const cacheKey = c.req.query('cacheKey')
     if (!cacheKey) return c.json({ error: 'cacheKey required' }, 400)
     const png = await getCachedSpectrogram(deps.pools.ro, cacheKey)

@@ -10,8 +10,8 @@ import { markAuditNoChange } from '../lib/audit-activity.js'
 export const SCAN_KIND = 'storage.scan'
 
 /** 実行中の同一ディレクトリを 1 本に合流させるためのキー。 */
-export function scanDedupKey(connId: string, bucket: string, prefix: string): string {
-  return `${connId}\n${bucket}\n${prefix}`
+export function scanDedupKey(connectionId: string, bucket: string, prefix: string): string {
+  return `${connectionId}\n${bucket}\n${prefix}`
 }
 
 export interface StorageScanDeps {
@@ -19,26 +19,26 @@ export interface StorageScanDeps {
   /** 走査の可否は接続設定 (connection_settings の scan_enabled) で決まる。
    *  getConnectionConfig は S3Client と同じ 1 行にキャッシュされるので、
    *  投入のたびに DB を引かない。 */
-  getConnectionConfig: (connId: string) => Promise<ConnectionConfig>
+  getConnectionConfig: (connectionId: string) => Promise<ConnectionConfig>
 }
 
 export function mountStorageScanRoutes(app: Hono, deps: StorageScanDeps): void {
-  app.post('/storage/:connId/scan', async c => {
-    const connId = c.req.param('connId')
+  app.post('/storage/:connectionId/scan', async c => {
+    const connectionId = c.req.param('connectionId')
     const bucket = c.req.query('bucket')
     if (!bucket) return c.json({ error: 'bucket is required' }, 400)
     const prefix = c.req.query('prefix') ?? ''
 
     // UI がボタンを隠していても共有 URL を直に叩けるので API 側でも止める。
-    const config = await deps.getConnectionConfig(connId)
+    const config = await deps.getConnectionConfig(connectionId)
     if (!config.scanEnabled) {
       return c.json({ error: 'この接続では走査が無効になっています' }, 403)
     }
 
     const result = await deps.store.enqueueWithResult(
       SCAN_KIND,
-      scanDedupKey(connId, bucket, prefix),
-      { connId, bucket, prefix },
+      scanDedupKey(connectionId, bucket, prefix),
+      { connectionId, bucket, prefix },
     )
     if (!result.created) markAuditNoChange(c)
     return c.json({ jobId: result.id })

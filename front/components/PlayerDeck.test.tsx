@@ -16,7 +16,7 @@ function AddButton({ n }: { n: number }) {
   const deck = usePlayerDeck()
   return (
     <button onClick={() => deck.addTrack({
-      label: `ch${n}`, connId: 'c', bucket: 'b', key: `ch${n}.wav`,
+      label: `ch${n}`, connectionId: 'c', bucket: 'b', key: `ch${n}.wav`,
     })}>
       add{n}
     </button>
@@ -27,7 +27,7 @@ function AddTarButton() {
   const deck = usePlayerDeck()
   return (
     <button onClick={() => deck.addTrack({
-      label: 'tar-entry', connId: 'c', bucket: 'b', key: 'shard.tar', entryPath: 'u1.wav',
+      label: 'tar-entry', connectionId: 'c', bucket: 'b', key: 'shard.tar', entryPath: 'u1.wav',
     })}>
       addTar
     </button>
@@ -40,7 +40,7 @@ function TarLabelButton() {
   return (
     <button onClick={() => deck.addTrack({
       label: 'audio/mic_01_far.wav',
-      connId: 'c', bucket: 'b', key: 'rec/session.tar', entryPath: 'audio/mic_01_far.wav',
+      connectionId: 'c', bucket: 'b', key: 'rec/session.tar', entryPath: 'audio/mic_01_far.wav',
     })}>
       addDeepTar
     </button>

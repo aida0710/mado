@@ -76,11 +76,11 @@ export interface ConnectionConfig {
 export interface StorageFactory {
   /** 指定した connectionId のキャッシュ済み S3Client を返す。
    *  接続が存在しない場合は { code: 'NOT_FOUND' } (Error に .code あり) を投げる。 */
-  getStorage(connId: string): Promise<S3Client>
+  getStorage(connectionId: string): Promise<S3Client>
   /** 指定した connectionId の API 設定 (list_objects_version 等) を返す。 */
-  getConnectionConfig(connId: string): Promise<ConnectionConfig>
+  getConnectionConfig(connectionId: string): Promise<ConnectionConfig>
   /** connectionId のキャッシュを破棄する (UPDATE/DELETE 後に呼び出す)。 */
-  invalidate(connId: string): void
+  invalidate(connectionId: string): void
   /** シャットダウン時にすべてのキャッシュ済みクライアントを破棄する。 */
   close(): Promise<void>
 }
@@ -168,8 +168,8 @@ export function createStorageFactory(deps: StorageFactoryDeps): StorageFactory {
   // する値を共有するので、別々にキャッシュすると 2 度引きや invalidate ズレが起きる。
   const cache = new Map<string, CachedEntry>()
 
-  async function load(connId: string): Promise<CachedEntry> {
-    const cached = cache.get(connId)
+  async function load(connectionId: string): Promise<CachedEntry> {
+    const cached = cache.get(connectionId)
     if (cached) return cached
 
     const r = await deps.pools.ro.query<DbRow>(
@@ -177,10 +177,10 @@ export function createStorageFactory(deps: StorageFactoryDeps): StorageFactory {
               c.force_path_style, c.list_objects_version,
               ${CONNECTION_SETTINGS_SUBQUERY}
          FROM storage_connections c WHERE c.id = $1`,
-      [connId],
+      [connectionId],
     )
     const row = r.rows[0]
-    if (!row) throw new ConnectionNotFoundError(connId)
+    if (!row) throw new ConnectionNotFoundError(connectionId)
 
     const client = new S3Client({
       endpoint: row.endpoint,
@@ -220,23 +220,23 @@ export function createStorageFactory(deps: StorageFactoryDeps): StorageFactory {
         listCacheTtlSec: settingsToListCacheTtlSec(row.settings),
       },
     }
-    cache.set(connId, entry)
+    cache.set(connectionId, entry)
     return entry
   }
 
-  async function getStorage(connId: string): Promise<S3Client> {
-    return (await load(connId)).client
+  async function getStorage(connectionId: string): Promise<S3Client> {
+    return (await load(connectionId)).client
   }
 
-  async function getConnectionConfig(connId: string): Promise<ConnectionConfig> {
-    return (await load(connId)).config
+  async function getConnectionConfig(connectionId: string): Promise<ConnectionConfig> {
+    return (await load(connectionId)).config
   }
 
-  function invalidate(connId: string): void {
-    const entry = cache.get(connId)
+  function invalidate(connectionId: string): void {
+    const entry = cache.get(connectionId)
     if (entry) {
       entry.client.destroy()
-      cache.delete(connId)
+      cache.delete(connectionId)
     }
   }
 

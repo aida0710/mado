@@ -63,7 +63,7 @@ export interface UpfrontCost {
 }
 
 export interface TransferEstimate {
-  connId: string
+  connectionId: string
   name: string
   provider: ConnectionProfile['provider']
   storageClass: ConnectionProfile['storageClass']
@@ -254,7 +254,7 @@ export interface EstimateInput {
 export function estimateTransfer(input: EstimateInput): TransferEstimate {
   const { scan, src, dst } = input
   const partSize = input.partSizeBytes ?? DEFAULT_PART_SIZE_BYTES
-  const sameConnection = src.profile.connId === dst.profile.connId
+  const sameConnection = src.profile.connectionId === dst.profile.connectionId
 
   const avgObjectBytes = scan.objectCount > 0 ? scan.totalBytes / scan.objectCount : 0
   const puts = putRequestCount(scan.objectCount, avgObjectBytes, partSize)
@@ -298,7 +298,7 @@ export function estimateTransfer(input: EstimateInput): TransferEstimate {
   const monthlyUsd = tieredCost(billableBytes / GIB, dst.rates.storageTiers) + monitoring
 
   return {
-    connId: dst.profile.connId,
+    connectionId: dst.profile.connectionId,
     name: dst.profile.name,
     provider: dst.profile.provider,
     storageClass: dst.profile.storageClass,

@@ -1,7 +1,7 @@
 import type { Context, MiddlewareHandler, Next } from 'hono'
 import type { Capability, ConnectionConfig } from '../storage.js'
 
-export type GetConnectionConfig = (connId: string) => Promise<ConnectionConfig>
+export type GetConnectionConfig = (connectionId: string) => Promise<ConnectionConfig>
 
 /** 権限ごとの日本語ラベル。403 のメッセージに使う (UI がボタンを隠していても
  *  共有 Web URL を直に開いた人には理由が見えるように)。front 側の
@@ -18,7 +18,7 @@ export const CAPABILITY_LABELS: Record<Capability, string> = {
 }
 
 /**
- * `:connId` の接続で `cap` が有効かを確認する Hono ミドルウェア。
+ * `:connectionId` の接続で `cap` が有効かを確認する Hono ミドルウェア。
  *
  * ルート側のハンドラには一切手を入れず、internal.ts でパスごとに mount する
  * — 「どのエンドポイントがどの権限に属するか」を 1 箇所で読めるようにするため。
@@ -32,12 +32,12 @@ export function requireCapability(
   getConnectionConfig: GetConnectionConfig,
 ): MiddlewareHandler {
   return async (c: Context, next: Next) => {
-    const connId = c.req.param('connId')
-    if (!connId) return c.json({ error: 'connId required' }, 400)
+    const connectionId = c.req.param('connectionId')
+    if (!connectionId) return c.json({ error: 'connectionId required' }, 400)
 
     let config: ConnectionConfig
     try {
-      config = await getConnectionConfig(connId)
+      config = await getConnectionConfig(connectionId)
     } catch (e) {
       if (e instanceof Error && (e as { code?: string }).code === 'NOT_FOUND') {
         return c.json({ error: 'connection not found' }, 404)

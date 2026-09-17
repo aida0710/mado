@@ -41,7 +41,7 @@ afterEach(() => {
 function item(overrides: Partial<PinnedItem> = {}): PinnedItem {
   return {
     id: 'c|b|k.txt|',
-    connId: 'c',
+    connectionId: 'c',
     bucket: 'b',
     key: 'k.txt',
     ...overrides,
@@ -106,7 +106,7 @@ describe('PinnedPreviewCard - kind branching', () => {
 
   it('単体テキストファイルのピンは固定高さの pre で表示される', async () => {
     vi.mocked(api.readHead).mockResolvedValue(utf8('plain body'))
-    render(<PinnedPreviewCard item={{ id: 'i1', connId: 'c', bucket: 'b', key: 'x.txt' }} />)
+    render(<PinnedPreviewCard item={{ id: 'i1', connectionId: 'c', bucket: 'b', key: 'x.txt' }} />)
     const pre = await screen.findByText('plain body')
     expect(pre.tagName).toBe('PRE')
     expect(pre.className).toContain('h-[280px]')
@@ -114,7 +114,7 @@ describe('PinnedPreviewCard - kind branching', () => {
 
   it('tar エントリのテキストも固定高さの pre で表示される', async () => {
     vi.mocked(api.readHead).mockResolvedValue(utf8('hello'))
-    render(<PinnedPreviewCard item={{ id: 'i2', connId: 'c', bucket: 'b', key: 's.tar', entryPath: 'u.txt' }} />)
+    render(<PinnedPreviewCard item={{ id: 'i2', connectionId: 'c', bucket: 'b', key: 's.tar', entryPath: 'u.txt' }} />)
     const pre = await screen.findByText('hello')
     expect(pre.tagName).toBe('PRE')
     expect(pre.className).toContain('h-[280px]')
@@ -123,7 +123,7 @@ describe('PinnedPreviewCard - kind branching', () => {
   it('単体 .json のピンは minify されていてもプリティプリントされる', async () => {
     vi.mocked(api.readHead).mockResolvedValue(utf8('{"a":1,"b":2}'))
     const { container } = render(
-      <PinnedPreviewCard item={{ id: 'j1', connId: 'c', bucket: 'b', key: 'x.json' }} />,
+      <PinnedPreviewCard item={{ id: 'j1', connectionId: 'c', bucket: 'b', key: 'x.json' }} />,
     )
     await screen.findByText(/"a": 1/)
     expect(container.querySelector('pre')?.textContent).toBe('{\n  "a": 1,\n  "b": 2\n}')
@@ -132,7 +132,7 @@ describe('PinnedPreviewCard - kind branching', () => {
   it('tar エントリの .json もプリティプリントされる', async () => {
     vi.mocked(api.readHead).mockResolvedValue(utf8('{"x":true}'))
     const { container } = render(
-      <PinnedPreviewCard item={{ id: 'j2', connId: 'c', bucket: 'b', key: 's.tar', entryPath: 'meta.json' }} />,
+      <PinnedPreviewCard item={{ id: 'j2', connectionId: 'c', bucket: 'b', key: 's.tar', entryPath: 'meta.json' }} />,
     )
     await screen.findByText(/"x": true/)
     expect(container.querySelector('pre')?.textContent).toBe('{\n  "x": true\n}')
@@ -141,7 +141,7 @@ describe('PinnedPreviewCard - kind branching', () => {
   it('不正な JSON の .json はそのまま表示される (整形は try/catch でフォールバック)', async () => {
     vi.mocked(api.readHead).mockResolvedValue(utf8('{oops not json'))
     const { container } = render(
-      <PinnedPreviewCard item={{ id: 'j3', connId: 'c', bucket: 'b', key: 'bad.json' }} />,
+      <PinnedPreviewCard item={{ id: 'j3', connectionId: 'c', bucket: 'b', key: 'bad.json' }} />,
     )
     await screen.findByText('{oops not json')
     expect(container.querySelector('pre')?.textContent).toBe('{oops not json')
@@ -150,7 +150,7 @@ describe('PinnedPreviewCard - kind branching', () => {
   it('.jsonl は1行1値なので整形せずそのまま表示される', async () => {
     vi.mocked(api.readHead).mockResolvedValue(utf8('{"a":1}\n{"b":2}'))
     const { container } = render(
-      <PinnedPreviewCard item={{ id: 'j4', connId: 'c', bucket: 'b', key: 'data.jsonl' }} />,
+      <PinnedPreviewCard item={{ id: 'j4', connectionId: 'c', bucket: 'b', key: 'data.jsonl' }} />,
     )
     await screen.findByText(/"a":1/)
     expect(container.querySelector('pre')?.textContent).toBe('{"a":1}\n{"b":2}')
@@ -192,7 +192,7 @@ describe('PinnedPreviewCard - remove', () => {
       const { pins, addPin, removePin } = usePinnedPreviews()
       return (
         <div>
-          <button onClick={() => addPin({ connId: 'c', bucket: 'b', key: 'a.txt' })}>add</button>
+          <button onClick={() => addPin({ connectionId: 'c', bucket: 'b', key: 'a.txt' })}>add</button>
           {pins.map(p => <PinnedPreviewCard key={p.id} item={p} />)}
           <output data-testid="count">{pins.length}</output>
           {/* removePin を直接検証するためのスパイは使わず、実際に外れることで確認 */}

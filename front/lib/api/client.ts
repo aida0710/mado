@@ -209,13 +209,13 @@ export const api = {
   },
 
   buckets: (
-    connId: string,
+    connectionId: string,
     opts: { refresh?: boolean } & Revalidatable<z.infer<typeof ListBuckets>> = {},
   ) =>
     bucketsCache.get(
-      k('buckets', connId),
+      k('buckets', connectionId),
       () => getJson(
-        buildUrl(`${API_BASE}/storage/${encodeURIComponent(connId)}/buckets`, {
+        buildUrl(`${API_BASE}/storage/${encodeURIComponent(connectionId)}/buckets`, {
           refresh: opts.refresh ? '1' : undefined,
         }),
         ListBuckets,
@@ -223,23 +223,23 @@ export const api = {
       opts.onRevalidate,
     ),
 
-  invalidateBuckets: (connId: string): void => {
-    bucketsCache.invalidate(k('buckets', connId))
+  invalidateBuckets: (connectionId: string): void => {
+    bucketsCache.invalidate(k('buckets', connectionId))
   },
 
-  capacityOverview: (connId: string, days: number) =>
-    getJson(buildUrl(`${API_BASE}/storage/${encodeURIComponent(connId)}/capacity`, {
+  capacityOverview: (connectionId: string, days: number) =>
+    getJson(buildUrl(`${API_BASE}/storage/${encodeURIComponent(connectionId)}/capacity`, {
       days: String(days),
     }), CapacityOverview),
 
-  startCapacityScan: (connId: string) =>
+  startCapacityScan: (connectionId: string) =>
     mutateJson(
-      `${API_BASE}/storage/${encodeURIComponent(connId)}/capacity/scan`,
+      `${API_BASE}/storage/${encodeURIComponent(connectionId)}/capacity/scan`,
       { method: 'POST' }, CapacityScanResponse,
     ),
 
   list: (
-    connId: string,
+    connectionId: string,
     bucket: string,
     prefix: string,
     cursor: { continuation?: string; startAfter?: string } = {},
@@ -248,14 +248,14 @@ export const api = {
   ) => {
     // recursive フラグもキャッシュキーに含める (= 通常 list と再帰 list は別エントリ)。
     // prefix の後ろに置くので invalidateList の prefix-match invalidation はそのまま有効。
-    const cacheKey = k('list', connId, bucket, prefix, opts.recursive ? 'r' : '', cursor.continuation, cursor.startAfter)
+    const cacheKey = k('list', connectionId, bucket, prefix, opts.recursive ? 'r' : '', cursor.continuation, cursor.startAfter)
     // force=true は「forward navigation で同じ cache key に到達して停滞する」現象の防衛。
     // 一部の S3 互換実装は ContinuationToken / 最終キーを進めずに返してくることがあり、
     // そのとき同じ cursor で別ページを取りに行く想定の cache が衝突して前ページが返る。
     if (opts.force) listCache.invalidate(cacheKey)
     return listCache.get(
       cacheKey,
-      () => getJson(buildUrl(`${API_BASE}/storage/${encodeURIComponent(connId)}/list`, {
+      () => getJson(buildUrl(`${API_BASE}/storage/${encodeURIComponent(connectionId)}/list`, {
         bucket,
         prefix,
         continuation: cursor.continuation,
@@ -268,34 +268,34 @@ export const api = {
   },
 
   // 1 prefix のリスト全ページを破棄 (アップロード/削除や手動 refresh 後に呼ぶ)。
-  invalidateList: (connId: string, bucket: string, prefix: string): void => {
-    listCache.invalidatePrefix(k('list', connId, bucket, prefix))
+  invalidateList: (connectionId: string, bucket: string, prefix: string): void => {
+    listCache.invalidatePrefix(k('list', connectionId, bucket, prefix))
   },
 
   readme: (
-    connId: string,
+    connectionId: string,
     bucket: string,
     prefix: string,
     opts: Revalidatable<z.infer<typeof Readme>> = {},
   ) =>
     readmeCache.get(
-      k('readme', connId, bucket, prefix),
-      () => getJson(buildUrl(`${API_BASE}/storage/${encodeURIComponent(connId)}/readme`, { bucket, prefix }), Readme),
+      k('readme', connectionId, bucket, prefix),
+      () => getJson(buildUrl(`${API_BASE}/storage/${encodeURIComponent(connectionId)}/readme`, { bucket, prefix }), Readme),
       opts.onRevalidate,
     ),
 
-  invalidateReadme: (connId: string, bucket: string, prefix: string): void => {
-    readmeCache.invalidate(k('readme', connId, bucket, prefix))
+  invalidateReadme: (connectionId: string, bucket: string, prefix: string): void => {
+    readmeCache.invalidate(k('readme', connectionId, bucket, prefix))
   },
 
   putReadme: async (
-    connId: string,
+    connectionId: string,
     bucket: string,
     prefix: string,
     body: string,
     editor: string,
   ): Promise<z.infer<typeof PutReadmeOk>> => {
-    const res = await fetch(`${API_BASE}/storage/${encodeURIComponent(connId)}/readme`, {
+    const res = await fetch(`${API_BASE}/storage/${encodeURIComponent(connectionId)}/readme`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ bucket, prefix, body, editor }),
@@ -312,13 +312,13 @@ export const api = {
     }
     const json: unknown = await res.json()
     // 編集後は当該 README のキャッシュを破棄。次回 readme() で最新を fetch。
-    readmeCache.invalidate(k('readme', connId, bucket, prefix))
+    readmeCache.invalidate(k('readme', connectionId, bucket, prefix))
     return PutReadmeOk.parse(json)
   },
 
   // 1 アーカイブの全ページを破棄 (手動 refresh などから呼ぶ)。
-  invalidateTarPreview: (connId: string, bucket: string, key: string): void => {
-    tarCache.invalidatePrefix(k('tar', connId, bucket, key))
+  invalidateTarPreview: (connectionId: string, bucket: string, key: string): void => {
+    tarCache.invalidatePrefix(k('tar', connectionId, bucket, key))
   },
 
   // NDJSON をストリーミングする。各行は以下のいずれか:
@@ -330,7 +330,7 @@ export const api = {
   // 種別ごとにコールバックするため、ストリーム中に UI が「X 件 / Y MB / mode」を
   // 表示でき、最終的に組み立てた TarPreview で解決する。
   tarPreview: async (
-    connId: string,
+    connectionId: string,
     bucket: string,
     key: string,
     opts: { limit?: number; offset?: number } = {},
@@ -344,9 +344,9 @@ export const api = {
     // tar.gz / tar.xz は 1 ページめくるたびにアーカイブ全体を再 download/decode
     // しているので効果が大きい。コールバック (onMode/onEntry/onProgress) は
     // キャッシュヒット時には呼ばれない (= 進捗 UI が出ないが、瞬時に終わる)。
-    const cacheKey = k('tar', connId, bucket, key, opts.offset ?? 0, opts.limit ?? 0)
+    const cacheKey = k('tar', connectionId, bucket, key, opts.offset ?? 0, opts.limit ?? 0)
     return tarCache.get(cacheKey, async () => {
-    const url = buildUrl(`${API_BASE}/storage/${encodeURIComponent(connId)}/preview/tar`, {
+    const url = buildUrl(`${API_BASE}/storage/${encodeURIComponent(connectionId)}/preview/tar`, {
       bucket,
       key,
       limit:  opts.limit  != null ? String(opts.limit)  : undefined,
@@ -454,28 +454,28 @@ export const api = {
     return out
   },
 
-  textPreviewUrl: (connId: string, bucket: string, key: string): string =>
-    buildUrl(`${API_BASE}/storage/${encodeURIComponent(connId)}/preview/text`, { bucket, key }),
+  textPreviewUrl: (connectionId: string, bucket: string, key: string): string =>
+    buildUrl(`${API_BASE}/storage/${encodeURIComponent(connectionId)}/preview/text`, { bucket, key }),
 
-  imageUrl: (connId: string, bucket: string, key: string): string =>
-    buildUrl(`${API_BASE}/storage/${encodeURIComponent(connId)}/preview/image`, { bucket, key }),
+  imageUrl: (connectionId: string, bucket: string, key: string): string =>
+    buildUrl(`${API_BASE}/storage/${encodeURIComponent(connectionId)}/preview/image`, { bucket, key }),
 
-  audioUrl: (connId: string, bucket: string, key: string): string =>
-    buildUrl(`${API_BASE}/storage/${encodeURIComponent(connId)}/preview/audio`, { bucket, key }),
+  audioUrl: (connectionId: string, bucket: string, key: string): string =>
+    buildUrl(`${API_BASE}/storage/${encodeURIComponent(connectionId)}/preview/audio`, { bucket, key }),
 
-  videoUrl: (connId: string, bucket: string, key: string): string =>
-    buildUrl(`${API_BASE}/storage/${encodeURIComponent(connId)}/preview/video`, { bucket, key }),
+  videoUrl: (connectionId: string, bucket: string, key: string): string =>
+    buildUrl(`${API_BASE}/storage/${encodeURIComponent(connectionId)}/preview/video`, { bucket, key }),
 
   // 音声解析 (波形ピーク + スペクトログラム有無)。サーバー側でキャッシュされる
   // ため TTLCache には入れない。長尺ファイルはレスポンスまで数十秒かかりうる —
   // 呼び出し側は AbortSignal でアンマウント時に中断すること。
   mediaAnalyze: async (
-    connId: string,
+    connectionId: string,
     bucket: string,
     key: string,
     opts: { entryPath?: string; signal?: AbortSignal } = {},
   ) => {
-    const url = buildUrl(`${API_BASE}/storage/${encodeURIComponent(connId)}/media/analyze`, {
+    const url = buildUrl(`${API_BASE}/storage/${encodeURIComponent(connectionId)}/media/analyze`, {
       bucket, key, entryPath: opts.entryPath,
     })
     const res = await fetch(url, {
@@ -493,32 +493,32 @@ export const api = {
     return MediaAnalyze.parse(await res.json())
   },
 
-  spectrogramUrl: (connId: string, cacheKey: string): string =>
-    buildUrl(`${API_BASE}/storage/${encodeURIComponent(connId)}/media/spectrogram`, { cacheKey }),
+  spectrogramUrl: (connectionId: string, cacheKey: string): string =>
+    buildUrl(`${API_BASE}/storage/${encodeURIComponent(connectionId)}/media/spectrogram`, { cacheKey }),
 
   // 任意のキーをそのままダウンロードする URL。バックエンドが
   // Content-Disposition: attachment を付けるためブラウザはファイル保存を促す。
-  downloadUrl: (connId: string, bucket: string, key: string): string =>
-    buildUrl(`${API_BASE}/storage/${encodeURIComponent(connId)}/preview/raw`, { bucket, key }),
+  downloadUrl: (connectionId: string, bucket: string, key: string): string =>
+    buildUrl(`${API_BASE}/storage/${encodeURIComponent(connectionId)}/preview/raw`, { bucket, key }),
 
   // README 編集履歴の一覧 (新しい順)。
-  readmeHistory: (connId: string, bucket: string, prefix: string, limit?: number) =>
+  readmeHistory: (connectionId: string, bucket: string, prefix: string, limit?: number) =>
     getJson(buildUrl(
-      `${API_BASE}/storage/${encodeURIComponent(connId)}/readme/history`,
+      `${API_BASE}/storage/${encodeURIComponent(connectionId)}/readme/history`,
       { bucket, prefix, limit: limit != null ? String(limit) : undefined },
     ), ReadmeHistoryList),
 
   // 特定版の README 本文。
-  readmeHistoryVersion: (connId: string, id: number) =>
+  readmeHistoryVersion: (connectionId: string, id: number) =>
     getJson(
-      `${API_BASE}/storage/${encodeURIComponent(connId)}/readme/history/${id}`,
+      `${API_BASE}/storage/${encodeURIComponent(connectionId)}/readme/history/${id}`,
       ReadmeHistoryVersion,
     ),
 
   // 接続内の README 全文検索 (現在版のみ対象)。
-  readmesSearch: (connId: string, q: string, limit?: number) =>
+  readmesSearch: (connectionId: string, q: string, limit?: number) =>
     getJson(buildUrl(
-      `${API_BASE}/storage/${encodeURIComponent(connId)}/readmes/search`,
+      `${API_BASE}/storage/${encodeURIComponent(connectionId)}/readmes/search`,
       { q, limit: limit != null ? String(limit) : undefined },
     ), ReadmeSearchResult),
 
@@ -542,39 +542,39 @@ export const api = {
   // 解凍させないために使う。**<img src> / audio・video blob / downloadでは付けないこと**
   // — 本体が途中で切れる。
   tarEntryUrl: (
-    connId: string, bucket: string, key: string, entry: string,
+    connectionId: string, bucket: string, key: string, entry: string,
     opts: { maxBytes?: number } = {},
   ): string =>
-    buildUrl(`${API_BASE}/storage/${encodeURIComponent(connId)}/preview/tar-entry`, {
+    buildUrl(`${API_BASE}/storage/${encodeURIComponent(connectionId)}/preview/tar-entry`, {
       bucket, key, entry,
       maxBytes: opts.maxBytes != null ? String(opts.maxBytes) : undefined,
     }),
 
-  favorites: (connId: string) =>
-    favoritesCache.get(k('favorites', connId), () =>
-      getJson(`${API_BASE}/storage/${encodeURIComponent(connId)}/favorites`, FavoriteBuckets),
+  favorites: (connectionId: string) =>
+    favoritesCache.get(k('favorites', connectionId), () =>
+      getJson(`${API_BASE}/storage/${encodeURIComponent(connectionId)}/favorites`, FavoriteBuckets),
     ),
 
-  invalidateFavorites: (connId: string): void => {
-    favoritesCache.invalidate(k('favorites', connId))
+  invalidateFavorites: (connectionId: string): void => {
+    favoritesCache.invalidate(k('favorites', connectionId))
   },
 
-  addFavorite: async (connId: string, bucket: string): Promise<void> => {
+  addFavorite: async (connectionId: string, bucket: string): Promise<void> => {
     const res = await fetch(
-      `${API_BASE}/storage/${encodeURIComponent(connId)}/favorites/${encodeURIComponent(bucket)}`,
+      `${API_BASE}/storage/${encodeURIComponent(connectionId)}/favorites/${encodeURIComponent(bucket)}`,
       { method: 'PUT' },
     )
     if (!res.ok) throw new Error(res.statusText)
-    favoritesCache.invalidate(k('favorites', connId))
+    favoritesCache.invalidate(k('favorites', connectionId))
   },
 
-  removeFavorite: async (connId: string, bucket: string): Promise<void> => {
+  removeFavorite: async (connectionId: string, bucket: string): Promise<void> => {
     const res = await fetch(
-      `${API_BASE}/storage/${encodeURIComponent(connId)}/favorites/${encodeURIComponent(bucket)}`,
+      `${API_BASE}/storage/${encodeURIComponent(connectionId)}/favorites/${encodeURIComponent(bucket)}`,
       { method: 'DELETE' },
     )
     if (!res.ok) throw new Error(res.statusText)
-    favoritesCache.invalidate(k('favorites', connId))
+    favoritesCache.invalidate(k('favorites', connectionId))
   },
 
   tags: () => tagsCache.get('tags', () => getJson(`${API_BASE}/tags`, TagList)),
@@ -601,52 +601,52 @@ export const api = {
   // 一覧をまとめて hydrate するバッチ取得。paths が空なら fetch しない
   // (呼び出し側が dirs/files 0 件のときに空 URL を叩かないための短絡)。
   tagAssignments: (
-    connId: string, bucket: string, kind: TargetKind, paths: string[],
+    connectionId: string, bucket: string, kind: TargetKind, paths: string[],
   ): Promise<z.infer<typeof TagAssignmentMap>> => {
     if (paths.length === 0) return Promise.resolve({})
-    const cacheKey = k('tagAssignments', connId, bucket, kind, ...paths)
+    const cacheKey = k('tagAssignments', connectionId, bucket, kind, ...paths)
     return tagAssignmentsCache.get(cacheKey, () => {
       const search = new URLSearchParams({ bucket, kind })
       for (const p of paths) search.append('paths', p)
       return getJson(
-        `${API_BASE}/storage/${encodeURIComponent(connId)}/tags?${search.toString()}`,
+        `${API_BASE}/storage/${encodeURIComponent(connectionId)}/tags?${search.toString()}`,
         TagAssignmentMap,
       )
     })
   },
 
-  invalidateTagAssignments: (connId: string, bucket: string, kind: TargetKind): void => {
-    tagAssignmentsCache.invalidatePrefix(k('tagAssignments', connId, bucket, kind))
+  invalidateTagAssignments: (connectionId: string, bucket: string, kind: TargetKind): void => {
+    tagAssignmentsCache.invalidatePrefix(k('tagAssignments', connectionId, bucket, kind))
   },
 
   assignTag: async (
-    connId: string, bucket: string, kind: TargetKind, path: string, tagId: string,
+    connectionId: string, bucket: string, kind: TargetKind, path: string, tagId: string,
   ): Promise<void> => {
     await mutateJson(
-      `${API_BASE}/storage/${encodeURIComponent(connId)}/tags`,
+      `${API_BASE}/storage/${encodeURIComponent(connectionId)}/tags`,
       { method: 'PUT', body: { bucket, kind, path, tagId } },
       null,
     )
-    tagAssignmentsCache.invalidatePrefix(k('tagAssignments', connId, bucket, kind))
+    tagAssignmentsCache.invalidatePrefix(k('tagAssignments', connectionId, bucket, kind))
   },
 
   unassignTag: async (
-    connId: string, bucket: string, kind: TargetKind, path: string, tagId: string,
+    connectionId: string, bucket: string, kind: TargetKind, path: string, tagId: string,
   ): Promise<void> => {
     await mutateJson(
-      `${API_BASE}/storage/${encodeURIComponent(connId)}/tags`,
+      `${API_BASE}/storage/${encodeURIComponent(connectionId)}/tags`,
       { method: 'DELETE', body: { bucket, kind, path, tagId } },
       null,
     )
-    tagAssignmentsCache.invalidatePrefix(k('tagAssignments', connId, bucket, kind))
+    tagAssignmentsCache.invalidatePrefix(k('tagAssignments', connectionId, bucket, kind))
   },
 
   // 同一接続内の全バケットを横断して、選んだタグのいずれかが付いた対象を返す。
-  tagSearch: (connId: string, tagIds: string[]): Promise<z.infer<typeof TagSearchResult>> => {
+  tagSearch: (connectionId: string, tagIds: string[]): Promise<z.infer<typeof TagSearchResult>> => {
     const search = new URLSearchParams()
     for (const id of tagIds) search.append('tagId', id)
     return getJson(
-      `${API_BASE}/storage/${encodeURIComponent(connId)}/tags/search?${search.toString()}`,
+      `${API_BASE}/storage/${encodeURIComponent(connectionId)}/tags/search?${search.toString()}`,
       TagSearchResult,
     )
   },
@@ -729,9 +729,9 @@ export const api = {
   // ── 走査ジョブ (spec: 2026-08-18-directory-scan-design.md) ──
   // 走査は重く状態をサーバーが持つので、TTLCache は通さない。
 
-  startScan: (connId: string, bucket: string, prefix: string) =>
+  startScan: (connectionId: string, bucket: string, prefix: string) =>
     mutateJson(
-      buildUrl(`${API_BASE}/storage/${encodeURIComponent(connId)}/scan`, { bucket, prefix }),
+      buildUrl(`${API_BASE}/storage/${encodeURIComponent(connectionId)}/scan`, { bucket, prefix }),
       { method: 'POST' },
       StartScanOk,
     ),
@@ -739,8 +739,8 @@ export const api = {
   getJob: (id: number) => getJson(`${API_BASE}/jobs/${id}`, Job),
 
   /** 最後に成功した走査結果。無ければ null。 */
-  latestScan: async (connId: string, bucket: string, prefix: string) => {
-    const dedupKey = `${connId}\n${bucket}\n${prefix}`
+  latestScan: async (connectionId: string, bucket: string, prefix: string) => {
+    const dedupKey = `${connectionId}\n${bucket}\n${prefix}`
     const res = await fetch(
       buildUrl(`${API_BASE}/jobs/latest`, { kind: 'storage.scan', dedupKey }),
       { headers: { Accept: 'application/json' } },
@@ -764,9 +764,9 @@ export const api = {
     mutateJson(`${API_BASE}/pricing/refresh`, { method: 'POST' }, StartJobOk),
 
   /** 走査済みディレクトリの移送見積もり。**まだ走査していなければ null**。 */
-  estimate: async (connId: string, bucket: string, prefix: string) => {
+  estimate: async (connectionId: string, bucket: string, prefix: string) => {
     const res = await fetch(
-      buildUrl(`${API_BASE}/storage/${encodeURIComponent(connId)}/estimate`, { bucket, prefix }),
+      buildUrl(`${API_BASE}/storage/${encodeURIComponent(connectionId)}/estimate`, { bucket, prefix }),
       { headers: { Accept: 'application/json' } },
     )
     if (res.status === 409) return null
@@ -780,31 +780,31 @@ export const api = {
   // 各メソッドは対応する fetch メソッドと同じ引数を取って同じ cache key を組み立てる。
   lastFetched: {
     list: (
-      connId: string,
+      connectionId: string,
       bucket: string,
       prefix: string,
       cursor: { continuation?: string; startAfter?: string } = {},
       opts: { recursive?: boolean } = {},
     ): Date | null => {
-      const cacheKey = k('list', connId, bucket, prefix, opts.recursive ? 'r' : '', cursor.continuation, cursor.startAfter)
+      const cacheKey = k('list', connectionId, bucket, prefix, opts.recursive ? 'r' : '', cursor.continuation, cursor.startAfter)
       const value = listCache.peek(cacheKey)
       return value ? new Date(value.cache.fetchedAt) : null
     },
-    readme: (connId: string, bucket: string, prefix: string): Date | null => {
-      const at = readmeCache.getFetchedAt(k('readme', connId, bucket, prefix))
+    readme: (connectionId: string, bucket: string, prefix: string): Date | null => {
+      const at = readmeCache.getFetchedAt(k('readme', connectionId, bucket, prefix))
       return at != null ? new Date(at) : null
     },
     tar: (
-      connId: string,
+      connectionId: string,
       bucket: string,
       key: string,
       opts: { limit?: number; offset?: number } = {},
     ): Date | null => {
-      const at = tarCache.getFetchedAt(k('tar', connId, bucket, key, opts.offset ?? 0, opts.limit ?? 0))
+      const at = tarCache.getFetchedAt(k('tar', connectionId, bucket, key, opts.offset ?? 0, opts.limit ?? 0))
       return at != null ? new Date(at) : null
     },
-    buckets: (connId: string): Date | null => {
-      const at = bucketsCache.getFetchedAt(k('buckets', connId))
+    buckets: (connectionId: string): Date | null => {
+      const at = bucketsCache.getFetchedAt(k('buckets', connectionId))
       return at != null ? new Date(at) : null
     },
   },

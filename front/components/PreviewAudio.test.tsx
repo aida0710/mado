@@ -31,7 +31,7 @@ describe('PreviewAudio', () => {
     vi.mocked(api.mediaAnalyze).mockResolvedValue({
       cacheKey: 'ck', peaks: [[-1, 1]], durationSec: 3, sampleRate: 16000, hasSpectrogram: true, meta: null,
     })
-    render(<PreviewAudio connId="c" bucket="b" k="a.wav" />)
+    render(<PreviewAudio connectionId="c" bucket="b" k="a.wav" />)
     expect(screen.getByText('解析中…')).toBeInTheDocument()
     await waitFor(() => expect(screen.getByRole('slider', { name: '再生位置' })).toBeInTheDocument())
     expect(screen.queryByRole('button', { name: /スペクトログラム/ })).not.toBeInTheDocument()
@@ -42,7 +42,7 @@ describe('PreviewAudio', () => {
     vi.mocked(api.mediaAnalyze).mockResolvedValue({
       cacheKey: 'ck', peaks: [[-1, 1]], durationSec: 3, sampleRate: 16000, hasSpectrogram: false, meta: null,
     })
-    render(<PreviewAudio connId="c" bucket="b" k="a.wav" />)
+    render(<PreviewAudio connectionId="c" bucket="b" k="a.wav" />)
     await waitFor(() => expect(screen.getByRole('slider', { name: '再生位置' })).toBeInTheDocument())
     expect(screen.queryByRole('img', { name: 'スペクトログラム' })).not.toBeInTheDocument()
   })
@@ -55,7 +55,7 @@ describe('PreviewAudio', () => {
         bitRate: 1411000, sizeBytes: 2097152, peakDb: -0.3, rmsDb: -18.2,
       },
     })
-    render(<PreviewAudio connId="c" bucket="b" k="a.flac" />)
+    render(<PreviewAudio connectionId="c" bucket="b" k="a.flac" />)
     await waitFor(() => expect(screen.getByText('FLAC · stereo · 48 kHz · 24 bit')).toBeInTheDocument())
     expect(screen.getByText('1411 kbps · 0:12.345 · 2.0 MB')).toBeInTheDocument()
     expect(screen.getByText('peak -0.3 dBFS · RMS -18.2 dB')).toBeInTheDocument()
@@ -65,14 +65,14 @@ describe('PreviewAudio', () => {
     vi.mocked(api.mediaAnalyze).mockResolvedValue({
       cacheKey: 'ck', peaks: [[-1, 1]], durationSec: 3, sampleRate: 16000, hasSpectrogram: false, meta: null,
     })
-    const { container } = render(<PreviewAudio connId="c" bucket="b" k="a.wav" />)
+    const { container } = render(<PreviewAudio connectionId="c" bucket="b" k="a.wav" />)
     await waitFor(() => expect(screen.getByRole('slider', { name: '再生位置' })).toBeInTheDocument())
     expect(container.querySelector('.font-mono')).toBeNull()
   })
 
   it('解析失敗は小さくエラー表示、再生 UI は残る', async () => {
     vi.mocked(api.mediaAnalyze).mockRejectedValue(new Error('解析できませんでした'))
-    const { container } = render(<PreviewAudio connId="c" bucket="b" k="a.wav" />)
+    const { container } = render(<PreviewAudio connectionId="c" bucket="b" k="a.wav" />)
     await waitFor(() => expect(screen.getByText(/解析できませんでした/)).toBeInTheDocument())
     expect(container.querySelector('audio')).not.toBeNull()
   })
@@ -86,10 +86,10 @@ describe('PreviewAudio', () => {
         cacheKey: 'ck', peaks: [[-1, 1]], durationSec: 3, sampleRate: 16000, hasSpectrogram: false, meta: null,
       })
       .mockImplementationOnce(() => new Promise(() => {}))
-    const { rerender } = render(<PreviewAudio key="a" connId="c" bucket="b" k="a.wav" />)
+    const { rerender } = render(<PreviewAudio key="a" connectionId="c" bucket="b" k="a.wav" />)
     await waitFor(() => expect(screen.getByRole('slider', { name: '再生位置' })).toBeInTheDocument())
 
-    rerender(<PreviewAudio key="b" connId="c" bucket="b" k="b.wav" />)
+    rerender(<PreviewAudio key="b" connectionId="c" bucket="b" k="b.wav" />)
     expect(screen.queryByRole('slider', { name: '再生位置' })).not.toBeInTheDocument()
     expect(screen.getByText('解析中…')).toBeInTheDocument()
     expect(api.mediaAnalyze).toHaveBeenCalledTimes(2)
@@ -104,7 +104,7 @@ describe('PreviewAudio', () => {
     })
     vi.mocked(fetch).mockReturnValue(new Promise(() => {})) // 未解決のまま保持
     const { container } = render(
-      <PreviewAudio connId="c" bucket="b" k="shard.tar" entryPath="u1.wav" />,
+      <PreviewAudio connectionId="c" bucket="b" k="shard.tar" entryPath="u1.wav" />,
     )
     expect(screen.getByText('音声を取得中…')).toBeInTheDocument()
     expect(container.querySelector('audio')).toBeNull()
@@ -119,7 +119,7 @@ describe('PreviewAudio', () => {
       blob: () => Promise.resolve(new Blob(['data'])),
     } as unknown as Response)
     const { container } = render(
-      <PreviewAudio connId="c" bucket="b" k="shard.tar" entryPath="u1.wav" />,
+      <PreviewAudio connectionId="c" bucket="b" k="shard.tar" entryPath="u1.wav" />,
     )
     await waitFor(() => expect(container.querySelector('audio')).not.toBeNull())
     const audio = container.querySelector('audio')!
@@ -139,7 +139,7 @@ describe('PreviewAudio', () => {
       statusText: 'Not Found',
       json: () => Promise.resolve({ error: 'entry not found' }),
     } as unknown as Response)
-    render(<PreviewAudio connId="c" bucket="b" k="shard.tar" entryPath="u1.wav" />)
+    render(<PreviewAudio connectionId="c" bucket="b" k="shard.tar" entryPath="u1.wav" />)
     await waitFor(() => expect(screen.getByText(/音声を取得できません/)).toBeInTheDocument())
     expect(screen.getByText(/entry not found/)).toBeInTheDocument()
   })

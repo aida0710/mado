@@ -13,12 +13,12 @@ afterAll(() => closePools(pools))
 
 describe('enqueue / get', () => {
   it('投入した内容を id で引き戻せる', async () => {
-    const id = await store.enqueue('storage.scan', 'c1\nb\np/', { connId: 'c1' })
+    const id = await store.enqueue('storage.scan', 'c1\nb\np/', { connectionId: 'c1' })
     const job = await store.get(id)
     expect(job).toMatchObject({
       id, kind: 'storage.scan', dedupKey: 'c1\nb\np/', status: 'queued', attempts: 0,
     })
-    expect(job!.payload).toEqual({ connId: 'c1' })
+    expect(job!.payload).toEqual({ connectionId: 'c1' })
   })
 
   it('存在しない id は null', async () => {

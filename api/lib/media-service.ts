@@ -10,7 +10,7 @@ import { Readable as ReadableCtor } from 'node:stream'
 import type { Pools } from '../db.js'
 import type { Env } from '../env.js'
 import type { ConnectionConfig } from '../storage.js'
-import type { GetStorage } from '../routes/_connId.js'
+import type { GetStorage } from '../routes/_connectionId.js'
 import { analyzeAudio, MediaAnalyzeError, type AnalyzeResult } from './media-analyze.js'
 import {
   getCachedMedia,
@@ -29,7 +29,7 @@ export type AnalyzeResponse = CachedMedia
 export interface MediaServiceDeps {
   pools: Pools
   getStorage: GetStorage
-  getConnectionConfig: (connId: string) => Promise<ConnectionConfig>
+  getConnectionConfig: (connectionId: string) => Promise<ConnectionConfig>
   env: Env
 }
 
@@ -108,7 +108,7 @@ export function createMediaService(deps: MediaServiceDeps): MediaService {
   async function analyzeOne(req: AnalyzeRequest, signal?: AbortSignal): Promise<AnalyzeResponse> {
     const release = await sem.acquire()
     try {
-      const storage = await deps.getStorage(req.connId)
+      const storage = await deps.getStorage(req.connectionId)
       if (req.entryPath) {
         // tar 内エントリ: 全ストリームを 1 回流してエントリを Buffer 化 → Buffer から解析
         const kind = detectArchive(req.key)

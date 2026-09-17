@@ -20,7 +20,7 @@ interface BucketRow {
 }
 
 interface Props {
-    connId: string
+    connectionId: string
 }
 
 const EMPTY_FAVORITES = new Set<string>()
@@ -38,25 +38,25 @@ const linkClass =
 const subLinkClass =
     'text-[12px] text-ink-9 no-underline hover:text-ink-12 hover:underline underline-offset-[3px]'
 
-export default function StorageIndex({connId}: Props) {
+export default function StorageIndex({connectionId}: Props) {
     const [searchParams] = useSearchParams()
-    const indexHref = `/storage/${encodeURIComponent(connId)}/`
+    const indexHref = `/storage/${encodeURIComponent(connectionId)}/`
     const [loadedBuckets, setLoadedBuckets] = useState<BucketRow[]>([])
     // 関数形式: そうしないと毎レンダ new Set() が走って即破棄される。
     const [loadedFavorites, setLoadedFavorites] = useState<Set<string>>(() => new Set())
-    const [loadError, setLoadError] = useState<{connId: string; message: string} | null>(null)
-    const [loadedConnId, setLoadedConnId] = useState<string | null>(null)
+    const [loadError, setLoadError] = useState<{connectionId: string; message: string} | null>(null)
+    const [loadedConnectionId, setLoadedConnectionId] = useState<string | null>(null)
     const [refreshingBuckets, setRefreshingBuckets] = useState(false)
     // 期限切れキャッシュを表示したまま裏でバケット一覧を再取得中か。
     const [revalidating, setRevalidating] = useState(false)
     // 遅い応答が接続切替をまたいで届いたときに別接続のバケットを描かないための gate。
     const sessionRef = useRef(0)
-    const buckets = loadedConnId === connId ? loadedBuckets : []
-    const favorites = loadedConnId === connId ? loadedFavorites : EMPTY_FAVORITES
-    const error = loadError?.connId === connId ? loadError.message : null
+    const buckets = loadedConnectionId === connectionId ? loadedBuckets : []
+    const favorites = loadedConnectionId === connectionId ? loadedFavorites : EMPTY_FAVORITES
+    const error = loadError?.connectionId === connectionId ? loadError.message : null
     // 接続切替直後は effect で同期 setState せず、取得済み identity との差から
     // loading を導出する。旧接続の一覧も新しい接続へ一瞬表示されない。
-    const loading = refreshingBuckets || loadedConnId !== connId
+    const loading = refreshingBuckets || loadedConnectionId !== connectionId
 
     // opts.refresh は ↻ からのみ true。通常のロードで貫通させると
     // サーバーキャッシュの意味が無くなる。
@@ -64,7 +64,7 @@ export default function StorageIndex({connId}: Props) {
         const sid = ++sessionRef.current
         const current = (): boolean => sessionRef.current === sid
         Promise.all([
-            api.buckets(connId, {
+            api.buckets(connectionId, {
                 refresh: opts.refresh,
                 // 期限切れキャッシュが返ってきたときだけ呼ばれる。
                 onRevalidate: fresh => {
@@ -75,30 +75,30 @@ export default function StorageIndex({connId}: Props) {
                         .catch(() => { if (current()) setRevalidating(false) })
                 },
             }),
-            api.favorites(connId),
+            api.favorites(connectionId),
         ])
             .then(([bucketsRes, favs]) => {
                 if (!current()) return
                 setLoadedBuckets(bucketsRes.buckets)
                 setLoadedFavorites(new Set(favs))
                 setLoadError(null)
-                setLoadedConnId(connId)
+                setLoadedConnectionId(connectionId)
             })
             .catch((e: Error) => {
                 if (!current()) return
-                setLoadError({connId, message: e.message})
-                setLoadedConnId(connId)
+                setLoadError({connectionId, message: e.message})
+                setLoadedConnectionId(connectionId)
             })
             .finally(() => { if (current()) setRefreshingBuckets(false) })
-    }, [connId])
+    }, [connectionId])
 
     const forceRefresh = useCallback(() => {
         setRefreshingBuckets(true)
         setLoadError(null)
-        api.invalidateBuckets(connId)
-        api.invalidateFavorites(connId)
+        api.invalidateBuckets(connectionId)
+        api.invalidateFavorites(connectionId)
         refresh({ refresh: true })
-    }, [connId, refresh])
+    }, [connectionId, refresh])
 
     useEffect(() => {
         refresh()
@@ -108,24 +108,24 @@ export default function StorageIndex({connId}: Props) {
     const [allTags, setAllTags] = useState<Tag[]>([])
     const [bucketTags, setBucketTags] = useState<Record<string, string[]>>({})
 
-    useEffect(() => { api.tags().then(setAllTags).catch(() => {}) }, [connId])
+    useEffect(() => { api.tags().then(setAllTags).catch(() => {}) }, [connectionId])
 
     // storage_tag_assignments は (connection_id, bucket, target_kind, target_path) で
     // 一意 — kind='bucket' の対象は「bucket カラムそのもの」で path は常に '' (Task 3)。
     // つまりここで欲しいのは「複数バケットそれぞれの kind='bucket' タグ」であり、
-    // api.tagAssignments(connId, bucket, kind, paths) の「1 bucket 固定 + 複数 path の
+    // api.tagAssignments(connectionId, bucket, kind, paths) の「1 bucket 固定 + 複数 path の
     // バッチ」という軸とは合わない。bucket 数ぶん並列 Promise.all で取得する
     // (ラボ規模の bucket 数を想定。数百件規模になったら bucket 複数対応の別モードを検討)。
     useEffect(() => {
         let cancelled = false
         Promise.all(buckets.map(b =>
-            api.tagAssignments(connId, b.name, 'bucket', ['']).then(m => [b.name, m[''] ?? []] as const),
+            api.tagAssignments(connectionId, b.name, 'bucket', ['']).then(m => [b.name, m[''] ?? []] as const),
         )).then(entries => {
             if (!cancelled) setBucketTags(Object.fromEntries(entries))
         }).catch(() => {})
         return () => { cancelled = true }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [connId, buckets.map(b => b.name).join(' ')])
+    }, [connectionId, buckets.map(b => b.name).join(' ')])
 
     const handleTagsChange = useCallback((bucketName: string, tagIds: string[]) => {
         setBucketTags(prev => ({ ...prev, [bucketName]: tagIds }))
@@ -138,11 +138,11 @@ export default function StorageIndex({connId}: Props) {
         else next.add(name)
         setLoadedFavorites(next)
         try {
-            if (isFav) await api.removeFavorite(connId, name)
-            else await api.addFavorite(connId, name)
+            if (isFav) await api.removeFavorite(connectionId, name)
+            else await api.addFavorite(connectionId, name)
         } catch (e) {
             setLoadedFavorites(favorites)
-            setLoadError({connId, message: (e as Error).message})
+            setLoadError({connectionId, message: (e as Error).message})
         }
     }
 
@@ -155,7 +155,7 @@ export default function StorageIndex({connId}: Props) {
     }
 
     // タグ検索は ?view=tags で表現する。固定セグメント
-    // (/storage/:connId/tags) にすると "tags" という名前のバケットが
+    // (/storage/:connectionId/tags) にすると "tags" という名前のバケットが
     // 開けなくなるため — S3 のバケット名として普通にあり得る。
     // 無効にした機能は URL を直に開かれても一覧へ倒す。
     if (searchParams.get('view') === 'tags' && tagsEnabled) {
@@ -163,10 +163,10 @@ export default function StorageIndex({connId}: Props) {
             <section>
                 {/* バケット画面 (Breadcrumb + ConnectionSwitcher) と同じ並びに揃える。 */}
                 <div className="flex items-center justify-between gap-3">
-                    <ViewBreadcrumb connId={connId} label="タグ検索" href={`${indexHref}?view=tags`}/>
+                    <ViewBreadcrumb connectionId={connectionId} label="タグ検索" href={`${indexHref}?view=tags`}/>
                     <ConnectionSwitcher/>
                 </div>
-                <TagSearchView connId={connId}/>
+                <TagSearchView connectionId={connectionId}/>
             </section>
         )
     }
@@ -180,7 +180,7 @@ export default function StorageIndex({connId}: Props) {
                     そこから開くドロップダウンが画面外へはみ出す。 */}
                 <div className="ml-auto flex flex-wrap items-center justify-end gap-3">
                     <CacheBanner
-                        fetchedAt={api.lastFetched.buckets(connId)}
+                        fetchedAt={api.lastFetched.buckets(connectionId)}
                         revalidating={revalidating}
                         onRefresh={forceRefresh}
                         compact
@@ -189,8 +189,8 @@ export default function StorageIndex({connId}: Props) {
                 </div>
             </header>
 
-            <ReadmeSearchPanel connId={connId}/>
-            <S3PathPanel connId={connId}/>
+            <ReadmeSearchPanel connectionId={connectionId}/>
+            <S3PathPanel connectionId={connectionId}/>
             {/* タグ検索は別ビューへのリンクにする。畳んだパネルとして
                 ここに積むと、README 検索・S3 パス貼付と合わせて一覧の前が混み合う。 */}
             <nav className="mt-3 mb-4 flex flex-wrap items-center gap-x-4 gap-y-1">
@@ -216,7 +216,7 @@ export default function StorageIndex({connId}: Props) {
                         {favoriteRows.map(b => (
                             <BucketLi
                                 key={b.name}
-                                connId={connId}
+                                connectionId={connectionId}
                                 bucket={b}
                                 inUse
                                 onToggle={() => toggleFavorite(b.name)}
@@ -240,7 +240,7 @@ export default function StorageIndex({connId}: Props) {
                         {otherRows.map(b => (
                             <BucketLi
                                 key={b.name}
-                                connId={connId}
+                                connectionId={connectionId}
                                 bucket={b}
                                 inUse={false}
                                 onToggle={() => toggleFavorite(b.name)}
@@ -258,9 +258,9 @@ export default function StorageIndex({connId}: Props) {
 }
 
 function BucketLi({
-                      connId, bucket, inUse, onToggle, allTags, tagIds, onTagsChange, tagsEnabled,
+                      connectionId, bucket, inUse, onToggle, allTags, tagIds, onTagsChange, tagsEnabled,
                   }: {
-    connId: string; bucket: BucketRow; inUse: boolean; onToggle: () => void
+    connectionId: string; bucket: BucketRow; inUse: boolean; onToggle: () => void
     allTags: Tag[]; tagIds: string[]; onTagsChange: (bucketName: string, tagIds: string[]) => void
     tagsEnabled: boolean
 }) {
@@ -269,7 +269,7 @@ function BucketLi({
     const tags = tagsEnabled ? allTags.filter(t => tagIds.includes(t.id)) : []
     // バケット直下を指す URL。パンくず (prefix='') と同じ形に揃えるので
     // S3 URL は末尾スラッシュ付き `s3://<bucket>/` になる。
-    const bucketHref = `/storage/${encodeURIComponent(connId)}/${encodeURIComponent(bucket.name)}/`
+    const bucketHref = `/storage/${encodeURIComponent(connectionId)}/${encodeURIComponent(bucket.name)}/`
     const items = useMemo<MenuItem[]>(() => [
         ...(tagsEnabled
             ? [{kind: 'action' as const, label: 'タグを編集', onSelect: () => setPickerOpen(true)}]
@@ -323,7 +323,7 @@ function BucketLi({
             </span>
             {pickerOpen && (
                 <TagPicker
-                    connId={connId} bucket={bucket.name} kind="bucket" path="" label={bucket.name}
+                    connectionId={connectionId} bucket={bucket.name} kind="bucket" path="" label={bucket.name}
                     allTags={allTags} assignedTagIds={tagIds}
                     onChange={next => onTagsChange(bucket.name, next)}
                     onClose={() => setPickerOpen(false)}

@@ -10,7 +10,7 @@ import { PreviewVideo } from './PreviewVideo'
 import { PreviewArchive } from './PreviewArchive'
 
 interface Props {
-  connId: string
+  connectionId: string
   bucket: string
   k: string | null
   onClose: () => void
@@ -29,19 +29,19 @@ interface Props {
 }
 
 export function PreviewDrawer({
-  connId, bucket, k, onClose,
+  connectionId, bucket, k, onClose,
   onResizeStart, onResizeKeyDown, onResetWidth, widthCustomized,
   entry, onEntryChange,
 }: Props) {
   const { pins, addPin } = usePinnedPreviews()
-  const caps = useCapabilities(connId)
+  const caps = useCapabilities(connectionId)
   if (!k) return null
   const kind = classify(k)
   const filename = k.split('/').pop() ?? 'file'
   // ドロワーの 📌 は「今開いている k」だけを対象にする (tar 内エントリは扱わない
   // — それは TarEntryModal 側の 📌 が担当する) ので entryPath なしで比較する。
   const alreadyPinned = pins.some(
-    p => p.connId === connId && p.bucket === bucket && p.key === k && p.entryPath === undefined,
+    p => p.connectionId === connectionId && p.bucket === bucket && p.key === k && p.entryPath === undefined,
   )
   return (
     <aside className="drawer">
@@ -74,7 +74,7 @@ export function PreviewDrawer({
           <button
             type="button"
             className="ghost"
-            onClick={() => addPin({ connId, bucket, key: k })}
+            onClick={() => addPin({ connectionId, bucket, key: k })}
             disabled={alreadyPinned}
             aria-label={alreadyPinned ? 'ピン留め済み' : 'ピン留め'}
             title={alreadyPinned ? 'ピン留め済み' : 'ピン留め'}
@@ -85,7 +85,7 @@ export function PreviewDrawer({
         {caps.download && (
           <a
             className="ghost no-underline"
-            href={api.downloadUrl(connId, bucket, k)}
+            href={api.downloadUrl(connectionId, bucket, k)}
             download={filename}
             aria-label={`${filename} をダウンロード`}
             title="ダウンロード"
@@ -117,20 +117,20 @@ export function PreviewDrawer({
           </p>
         )}
         {kind === 'unknown' && caps.preview && (
-          <PreviewText key={`${connId}|${bucket}|${k}`} connId={connId} bucket={bucket} k={k} />
+          <PreviewText key={`${connectionId}|${bucket}|${k}`} connectionId={connectionId} bucket={bucket} k={k} />
         )}
-        {kind === 'image' && caps.preview && <PreviewImage connId={connId} bucket={bucket} k={k} />}
+        {kind === 'image' && caps.preview && <PreviewImage connectionId={connectionId} bucket={bucket} k={k} />}
         {kind === 'audio' && caps.preview && (
-          <PreviewAudio key={`${connId}|${bucket}|${k}`} connId={connId} bucket={bucket} k={k} />
+          <PreviewAudio key={`${connectionId}|${bucket}|${k}`} connectionId={connectionId} bucket={bucket} k={k} />
         )}
         {kind === 'video' && caps.preview && (
-          <PreviewVideo key={`${connId}|${bucket}|${k}`} connId={connId} bucket={bucket} k={k} />
+          <PreviewVideo key={`${connectionId}|${bucket}|${k}`} connectionId={connectionId} bucket={bucket} k={k} />
         )}
         {kind === 'archive' && caps.archive && (
           <PreviewArchive
             // ファイル切替時に内部 state (offset / pageSize) を一括リセットする。
-            key={`${connId}|${bucket}|${k}`}
-            connId={connId}
+            key={`${connectionId}|${bucket}|${k}`}
+            connectionId={connectionId}
             bucket={bucket}
             k={k}
             // URL (?entry=) と繋ぐのはこの経路だけ。ピンカードから描画される

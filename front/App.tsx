@@ -39,10 +39,10 @@ function Tab({ to, label }: { to: string; label: string }) {
   )
 }
 
-// connId が変わったときに StoragePage を再マウントしてインメモリ状態をすべてリセットする。
+// connectionId が変わったときに StoragePage を再マウントしてインメモリ状態をすべてリセットする。
 function StoragePageWithKey() {
-  const { connId } = useParams<{ connId: string }>()
-  return <StoragePage key={connId} connId={connId!} />
+  const { connectionId } = useParams<{ connectionId: string }>()
+  return <StoragePage key={connectionId} connectionId={connectionId!} />
 }
 
 function Tabs() {
@@ -123,7 +123,7 @@ export default function App() {
                 <Route path="/edit-note"         element={<NoteEditPage />} />
                 <Route path="/settings/*"        element={<SettingsPage />} />
                 <Route path="/storage"           element={<StorageLanding />} />
-                <Route path="/storage/:connId/*" element={<StoragePageWithKey />} />
+                <Route path="/storage/:connectionId/*" element={<StoragePageWithKey />} />
                 <Route path="/lineage"            element={<LineagePage />} />
                 <Route path="/lineage/register"   element={<LineageRegisterPage />} />
                 <Route path="/access/*"           element={<LegacyAccessRedirect />} />

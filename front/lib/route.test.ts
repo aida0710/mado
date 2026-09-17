@@ -47,7 +47,7 @@ describe('fileLinkToDirRedirect', () => {
     )
   })
 
-  it('connId / bucket / パスセグメントに特殊文字があっても encode する', () => {
+  it('connectionId / bucket / パスセグメントに特殊文字があっても encode する', () => {
     expect(fileLinkToDirRedirect('c 1', 'b/1', 'foo bar/file?.txt'))
       .toBe('/storage/c%201/b%2F1/foo%20bar/?preview=foo%20bar%2Ffile%3F.txt')
   })
@@ -69,7 +69,7 @@ describe('tarEntryWebUrl', () => {
       .toContain('&entry=a%2Fb%2Fc.wav')
   })
 
-  it('connId / bucket / パスセグメント / エントリの特殊文字を encode する', () => {
+  it('connectionId / bucket / パスセグメント / エントリの特殊文字を encode する', () => {
     expect(tarEntryWebUrl('c 1', 'b/1', 'foo bar/x.tar', 'e?#%.wav'))
       .toBe('/storage/c%201/b%2F1/foo%20bar/?preview=foo%20bar%2Fx.tar&entry=e%3F%23%25.wav')
   })

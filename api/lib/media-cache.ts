@@ -3,18 +3,18 @@ import type { Pool } from 'pg'
 import type { AnalyzeResult, MediaMeta } from './media-analyze.js'
 
 export interface MediaRef {
-  connId: string
+  connectionId: string
   bucket: string
   key: string
   entryPath?: string
   etag: string
 }
 
-// sha256(JSON([connId,bucket,key,entryPath,etag])) — 不透明かつ衝突安全な PK。
+// sha256(JSON([connectionId,bucket,key,entryPath,etag])) — 不透明かつ衝突安全な PK。
 // ETag を含めるので S3 側の再アップロードで自然に別キーになる。
 export function mediaCacheKey(ref: MediaRef): string {
   return createHash('sha256')
-    .update(JSON.stringify([ref.connId, ref.bucket, ref.key, ref.entryPath ?? '', ref.etag]))
+    .update(JSON.stringify([ref.connectionId, ref.bucket, ref.key, ref.entryPath ?? '', ref.etag]))
     .digest('hex')
 }
 

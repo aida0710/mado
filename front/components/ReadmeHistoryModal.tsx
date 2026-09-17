@@ -6,7 +6,7 @@ import { api } from '../lib/api/client'
 import { fmtSize } from '../lib/format'
 
 interface Props {
-  connId: string
+  connectionId: string
   bucket: string
   prefix: string
   // README が現在も S3 に存在するなら現在の本文を渡す。履歴と並べて diff 風に
@@ -63,22 +63,22 @@ function fmtTime(iso: string): string {
   })
 }
 
-export function ReadmeHistoryModal({ connId, bucket, prefix, currentBody, onClose }: Props) {
+export function ReadmeHistoryModal({ connectionId, bucket, prefix, currentBody, onClose }: Props) {
   const [state, dispatch] = useReducer(reducer, initial)
   const { versions, error, selectedId, bodyOf } = state
 
   useEffect(() => {
-    api.readmeHistory(connId, bucket, prefix)
+    api.readmeHistory(connectionId, bucket, prefix)
       .then(r => dispatch({ type: 'versionsLoaded', versions: r.versions }))
       .catch((e: Error) => dispatch({ type: 'fail', error: e.message }))
-  }, [connId, bucket, prefix])
+  }, [connectionId, bucket, prefix])
 
   useEffect(() => {
     if (selectedId == null) return
-    api.readmeHistoryVersion(connId, selectedId)
+    api.readmeHistoryVersion(connectionId, selectedId)
       .then(r => dispatch({ type: 'bodyLoaded', body: { id: r.id, body: r.body } }))
       .catch((e: Error) => dispatch({ type: 'fail', error: e.message }))
-  }, [connId, selectedId])
+  }, [connectionId, selectedId])
 
   // Escape で閉じる。
   useEffect(() => {

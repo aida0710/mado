@@ -21,9 +21,9 @@ function reducer(state: State, action: Action): State {
 }
 
 export default function ConnectionEditorPage() {
-  const { connId } = useParams<{ connId: string }>()
+  const { connectionId } = useParams<{ connectionId: string }>()
   const navigate = useNavigate()
-  const creating = connId === undefined
+  const creating = connectionId === undefined
   const [state, dispatch] = useReducer(reducer, {
     loading: !creating,
     connection: null,
@@ -36,7 +36,7 @@ export default function ConnectionEditorPage() {
     api.listConnections()
       .then(connections => {
         if (!current) return
-        const connection = connections.find(row => row.id === connId)
+        const connection = connections.find(row => row.id === connectionId)
         if (!connection) throw new Error('接続が見つかりません')
         dispatch({ type: 'loaded', connection })
       })
@@ -44,7 +44,7 @@ export default function ConnectionEditorPage() {
         if (current) dispatch({ type: 'failed', error: cause.message })
       })
     return () => { current = false }
-  }, [connId, creating])
+  }, [connectionId, creating])
 
   const done = () => {
     invalidateCapabilitiesCache()
@@ -61,7 +61,7 @@ export default function ConnectionEditorPage() {
 
   const mode = creating
     ? { kind: 'create' as const, onSubmit: async (input: Parameters<typeof api.createConnection>[0]) => { await api.createConnection(input); done() } }
-    : { kind: 'edit' as const, current: state.connection!, onSubmit: async (input: Parameters<typeof api.updateConnection>[1]) => { await api.updateConnection(connId!, input); done() } }
+    : { kind: 'edit' as const, current: state.connection!, onSubmit: async (input: Parameters<typeof api.updateConnection>[1]) => { await api.updateConnection(connectionId!, input); done() } }
 
   return (
     <ConnectionForm

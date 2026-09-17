@@ -28,7 +28,7 @@ describe('InsertableFileList', () => {
 
     render(
       <InsertableFileList
-        connId="c1"
+        connectionId="c1"
         bucket="b1"
         prefix="docs/"
         onInsert={() => {}}
@@ -55,7 +55,7 @@ describe('InsertableFileList', () => {
     const user = userEvent.setup()
     render(
       <InsertableFileList
-        connId="c1"
+        connectionId="c1"
         bucket="b1"
         prefix="docs/"
         onInsert={onInsert}
@@ -86,7 +86,7 @@ describe('InsertableFileList', () => {
     const user = userEvent.setup()
     render(
       <InsertableFileList
-        connId="c1"
+        connectionId="c1"
         bucket="b1"
         prefix="docs/"
         onInsert={onInsert}
@@ -120,7 +120,7 @@ describe('InsertableFileList', () => {
     const user = userEvent.setup()
     render(
       <InsertableFileList
-        connId="c1"
+        connectionId="c1"
         bucket="b1"
         prefix="docs/"
         onInsert={onInsert}
@@ -159,7 +159,7 @@ describe('InsertableFileList', () => {
     const user = userEvent.setup()
     render(
       <InsertableFileList
-        connId="c1"
+        connectionId="c1"
         bucket="b1"
         prefix="docs/sub/"
         onInsert={() => {}}
@@ -192,7 +192,7 @@ describe('InsertableFileList', () => {
     const user = userEvent.setup()
     render(
       <InsertableFileList
-        connId="c1"
+        connectionId="c1"
         bucket="b1"
         prefix="docs/sub/"
         onInsert={() => {}}
@@ -216,7 +216,7 @@ describe('InsertableFileList', () => {
 
     render(
       <InsertableFileList
-        connId="c1"
+        connectionId="c1"
         bucket="b1"
         prefix="empty/"
         onInsert={() => {}}
@@ -235,7 +235,7 @@ describe('InsertableFileList', () => {
 
     render(
       <InsertableFileList
-        connId="c1"
+        connectionId="c1"
         bucket="b1"
         prefix="docs/"
         onInsert={() => {}}

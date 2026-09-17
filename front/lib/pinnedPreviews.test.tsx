@@ -8,10 +8,10 @@ function PinsSpy() {
   return <output data-testid="count">{pins.length}</output>
 }
 
-function AddButton({ n, connId = 'c', bucket = 'b' }: { n: number; connId?: string; bucket?: string }) {
+function AddButton({ n, connectionId = 'c', bucket = 'b' }: { n: number; connectionId?: string; bucket?: string }) {
   const { addPin } = usePinnedPreviews()
   return (
-    <button onClick={() => addPin({ connId, bucket, key: `f${n}.txt` })}>
+    <button onClick={() => addPin({ connectionId, bucket, key: `f${n}.txt` })}>
       add{n}
     </button>
   )
@@ -46,8 +46,8 @@ describe('pinnedPreviews context', () => {
       const { pins, addPin, removePin } = usePinnedPreviews()
       return (
         <div>
-          <button onClick={() => addPin({ connId: 'c', bucket: 'b', key: 'f1.txt' })}>add1</button>
-          <button onClick={() => addPin({ connId: 'c', bucket: 'b', key: 'f2.txt' })}>add2</button>
+          <button onClick={() => addPin({ connectionId: 'c', bucket: 'b', key: 'f1.txt' })}>add1</button>
+          <button onClick={() => addPin({ connectionId: 'c', bucket: 'b', key: 'f2.txt' })}>add2</button>
           <button onClick={() => pins[0] && removePin(pins[0].id)}>removeFirst</button>
           <ul>{pins.map(p => <li key={p.id}>{p.key}</li>)}</ul>
         </div>
@@ -68,8 +68,8 @@ describe('pinnedPreviews context', () => {
       const { pins, addPin, clearPins } = usePinnedPreviews()
       return (
         <div>
-          <button onClick={() => addPin({ connId: 'c', bucket: 'b', key: 'f1.txt' })}>add1</button>
-          <button onClick={() => addPin({ connId: 'c', bucket: 'b', key: 'f2.txt' })}>add2</button>
+          <button onClick={() => addPin({ connectionId: 'c', bucket: 'b', key: 'f1.txt' })}>add1</button>
+          <button onClick={() => addPin({ connectionId: 'c', bucket: 'b', key: 'f2.txt' })}>add2</button>
           <button onClick={clearPins}>clear</button>
           <output data-testid="count">{pins.length}</output>
         </div>
@@ -86,7 +86,7 @@ describe('pinnedPreviews context', () => {
   it('usePinnedPreviews outside a Provider returns a no-op API (does not throw)', () => {
     function Standalone() {
       const { pins, addPin, removePin, clearPins } = usePinnedPreviews()
-      addPin({ connId: 'c', bucket: 'b', key: 'x.txt' })
+      addPin({ connectionId: 'c', bucket: 'b', key: 'x.txt' })
       removePin('whatever')
       clearPins()
       return <output data-testid="count">{pins.length}</output>
@@ -97,7 +97,7 @@ describe('pinnedPreviews context', () => {
 })
 
 describe('pinnedPreviews across a route-driven remount (integration)', () => {
-  // StoragePageWithKey (App.tsx) remounts the whole page tree via key={connId}
+  // StoragePageWithKey (App.tsx) remounts the whole page tree via key={connectionId}
   // when navigating between directories/connections. PinnedPreviewsProvider must
   // sit above that remount point (like PlayerDeckProvider) so pins survive it.
   function DirLevel({ n }: { n: number }) {
@@ -105,7 +105,7 @@ describe('pinnedPreviews across a route-driven remount (integration)', () => {
     return (
       <div>
         <span data-testid="level">{n}</span>
-        <button onClick={() => addPin({ connId: 'c', bucket: 'b', key: `dir${n}/f.txt` })}>
+        <button onClick={() => addPin({ connectionId: 'c', bucket: 'b', key: `dir${n}/f.txt` })}>
           pin{n}
         </button>
       </div>

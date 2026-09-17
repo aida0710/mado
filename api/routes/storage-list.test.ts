@@ -69,7 +69,7 @@ beforeEach(() => {
 const FULL_KEY =
   'podcast-webdataset-v2_archive_2026_0505_022326_10_15_22_112-sidon-0000.tar.xz'
 
-describe('GET /storage/:connId/list — exact-key prefix (検索ボックスでフルキー入力)', () => {
+describe('GET /storage/:connectionId/list — exact-key prefix (検索ボックスでフルキー入力)', () => {
   it('v2: prefix がオブジェクトキーと完全一致するファイルを除外しない', async () => {
     // S3PathPanel でフルキーを貼ると prefix === Key の単一ヒットが返る。
     // これは「探しているファイルそのもの」なので files に残すべき。
@@ -102,7 +102,7 @@ describe('GET /storage/:connId/list — exact-key prefix (検索ボックスで�
   })
 })
 
-describe('GET /storage/:connId/list — directory prefix (末尾スラッシュ) は自分自身を隠す', () => {
+describe('GET /storage/:connectionId/list — directory prefix (末尾スラッシュ) は自分自身を隠す', () => {
   it('v2: prefix が "/" 終わりのとき、その placeholder オブジェクト (Key === prefix) は除外する', async () => {
     // foo/bar/ を開くと、互換実装によっては「ディレクトリ自身」を表す
     // 0 バイトの placeholder (Key === "foo/bar/") が返る。これは隠す。

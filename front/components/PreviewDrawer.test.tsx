@@ -28,7 +28,7 @@ const RESET = 'プレビュー幅を既定に戻す'
 function renderDrawer(props: Partial<Parameters<typeof PreviewDrawer>[0]> = {}) {
   return render(
     <PreviewDrawer
-      connId="c"
+      connectionId="c"
       bucket="b"
       k="file.xyz" // unknown: スニッフ結果がバイナリ（mock の readHead が NUL）なので重いプレビューは描画されない
       onClose={() => {}}
@@ -66,7 +66,7 @@ function Wrapper({
 }: { k: string | null } & Partial<Parameters<typeof PreviewDrawer>[0]>) {
   return (
     <PinnedPreviewsProvider>
-      <PreviewDrawer connId="c" bucket="b" k={k} onClose={onClose} {...rest} />
+      <PreviewDrawer connectionId="c" bucket="b" k={k} onClose={onClose} {...rest} />
     </PinnedPreviewsProvider>
   )
 }

@@ -11,14 +11,14 @@ import StorageBucket from './StorageBucket'
 const ReadmeEditPage = lazy(() => import('./ReadmeEditPage'))
 const CapacityMetricsPage = lazy(() => import('./CapacityMetricsPage'))
 
-function StorageIndexRoute({ connId }: Props) {
+function StorageIndexRoute({ connectionId }: Props) {
   const [params] = useSearchParams()
   return params.get('view') === 'capacity'
-    ? <CapacityMetricsPage connId={connId} />
-    : <StorageIndex connId={connId} />
+    ? <CapacityMetricsPage connectionId={connectionId} />
+    : <StorageIndex connectionId={connectionId} />
 }
 
-interface Props { connId: string }
+interface Props { connectionId: string }
 
 interface State {
   connection: Connection | null
@@ -30,7 +30,7 @@ type Action =
   | { type: 'startLoad' }
   | { type: 'loadOk'; conn: Connection | null }
   | { type: 'loadErr'; error: string }
-  | { type: 'notFound'; connId: string }
+  | { type: 'notFound'; connectionId: string }
 
 const initial: State = { connection: null, error: null, loading: true }
 
@@ -43,11 +43,11 @@ function reducer(s: State, a: Action): State {
     case 'loadErr':
       return { ...s, error: a.error, loading: false }
     case 'notFound':
-      return { connection: null, error: `接続が見つかりません: ${a.connId}`, loading: false }
+      return { connection: null, error: `接続が見つかりません: ${a.connectionId}`, loading: false }
   }
 }
 
-export default function StoragePage({ connId }: Props) {
+export default function StoragePage({ connectionId }: Props) {
   const [state, dispatch] = useReducer(reducer, initial)
   const { connection, error, loading } = state
 
@@ -55,12 +55,12 @@ export default function StoragePage({ connId }: Props) {
     dispatch({ type: 'startLoad' })
     api.listConnections()
       .then(list => {
-        const found = list.find(c => c.id === connId) ?? null
+        const found = list.find(c => c.id === connectionId) ?? null
         if (found) dispatch({ type: 'loadOk', conn: found })
-        else dispatch({ type: 'notFound', connId })
+        else dispatch({ type: 'notFound', connectionId })
       })
       .catch(e => dispatch({ type: 'loadErr', error: (e as Error).message }))
-  }, [connId])
+  }, [connectionId])
 
   if (loading) {
     return <p className="text-[13px] text-ink-7">読み込み中…</p>
@@ -77,11 +77,11 @@ export default function StoragePage({ connId }: Props) {
     <ConnectionContext.Provider value={connection}>
       <Suspense fallback={<p className="text-[13px] text-ink-7">読み込み中…</p>}>
         <Routes>
-          <Route path="/"                       element={<StorageIndexRoute connId={connId} />} />
+          <Route path="/"                       element={<StorageIndexRoute connectionId={connectionId} />} />
           {/* edit-readme は固定セグメントから始まるので :bucket/* より specificity が高く、
               :bucket = 'edit-readme' という偶発的衝突は発生しない。               */}
-          <Route path="edit-readme/:bucket/*"   element={<ReadmeEditPage connId={connId} />} />
-          <Route path=":bucket/*"               element={<StorageBucket  connId={connId} />} />
+          <Route path="edit-readme/:bucket/*"   element={<ReadmeEditPage connectionId={connectionId} />} />
+          <Route path=":bucket/*"               element={<StorageBucket  connectionId={connectionId} />} />
         </Routes>
       </Suspense>
     </ConnectionContext.Provider>
