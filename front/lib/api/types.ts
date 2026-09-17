@@ -56,6 +56,7 @@ export const StorageFile = z.object({
   size: z.number(),
   lastModified: z.string().nullable(),
 })
+export type StorageFileEntry = z.infer<typeof StorageFile>
 // nextContinuation: AWS 公式 S3 等で次ページ取得用の opaque トークン。
 // nextStartAfter:   一部の S3 互換実装が NextContinuationToken を返さない
 //                   ときのフォールバック。最終キーを次ページの StartAfter に使う。
