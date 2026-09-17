@@ -86,7 +86,7 @@ export function createScanHandler(deps: ScanHandlerDeps): JobHandler {
       const result = acc.result(partial)
       if (isBucketRoot && !ctx.signal.aborted && deps.capacity) {
         if (partial) await deps.capacity.recordPartial(connectionId, bucket)
-        else await deps.capacity.recordSuccess(ctx.jobId, connectionId, bucket, result)
+        else await deps.capacity.recordSuccess({ jobId: ctx.jobId, connectionId, bucket, result })
       }
       return result
     } catch (error) {

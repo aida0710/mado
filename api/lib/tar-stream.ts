@@ -89,12 +89,12 @@ export interface TarEntryBody {
 // 先頭 64KB しか要らない場面でも 100MB のエントリを丸ごと解凍していた。
 // 本体がちょうど byteLimit のときは truncated=false を保つ必要があるので、
 // 「上限を超えるデータが実際に来た」ことを確認してから畳む。
-export function extractTarEntry(
-  source: NodeJS.ReadableStream,
-  kind: ArchiveKind,
-  entryName: string,
-  byteLimit: number,
-): Promise<TarEntryBody | null> {
+export function extractTarEntry({ source, kind, entryName, byteLimit }: {
+  source: NodeJS.ReadableStream
+  kind: ArchiveKind
+  entryName: string
+  byteLimit: number
+}): Promise<TarEntryBody | null> {
   return new Promise((resolveP, rejectP) => {
     const ext = tarExtract()
     let found = false

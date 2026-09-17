@@ -132,37 +132,37 @@ function fmtUsd(n: number): string {
   return `$${Number(n.toFixed(4))}`
 }
 
-function buildWarnings(
-  src: Endpoint,
-  dst: Endpoint,
-  scan: ScanInput,
-  avgObjectBytes: number,
-  billableBytes: number,
-): EstimateWarning[] {
+function buildWarnings({ source, destination, scan, avgObjectBytes, billableBytes }: {
+  source: Endpoint
+  destination: Endpoint
+  scan: ScanInput
+  avgObjectBytes: number
+  billableBytes: number
+}): EstimateWarning[] {
   const out: EstimateWarning[] = []
-  const cls = dst.profile.storageClass
+  const cls = destination.profile.storageClass
 
-  if (!dst.rates.ratesResolved) {
+  if (!destination.rates.ratesResolved) {
     out.push({
       kind: 'ratesUnavailable',
-      message: `リージョン ${dst.profile.region ?? '(不明)'} の単価が料金カタログにありません。`
+      message: `リージョン ${destination.profile.region ?? '(不明)'} の単価が料金カタログにありません。`
         + '費用は 0 と表示されていますが、無料という意味ではありません。'
         + '接続の設定で単価を手入力するか、カタログを更新してください。',
     })
   }
 
-  if (dst.rates.minDurationDays > 0) {
-    const d = dst.rates.minDurationDays
+  if (destination.rates.minDurationDays > 0) {
+    const d = destination.rates.minDurationDays
     out.push({
       kind: 'minDuration',
       message: `最小保存期間 ${d} 日。${d} 日以内に削除しても ${d} 日分は課金されます。`,
     })
   }
 
-  if (dst.rates.retrievalPerGb > 0) {
+  if (destination.rates.retrievalPerGb > 0) {
     out.push({
       kind: 'retrievalCost',
-      message: `このクラスは読み出しに ${fmtUsd(dst.rates.retrievalPerGb)}/GB かかります`
+      message: `このクラスは読み出しに ${fmtUsd(destination.rates.retrievalPerGb)}/GB かかります`
         + '(置いたあと読み返す用途では月額の安さが相殺されます)。',
     })
   }
@@ -175,7 +175,7 @@ function buildWarnings(
     })
   }
 
-  if (src.profile.storageClass === 'GLACIER' || src.profile.storageClass === 'DEEP_ARCHIVE') {
+  if (source.profile.storageClass === 'GLACIER' || source.profile.storageClass === 'DEEP_ARCHIVE') {
     out.push({
       kind: 'sourceArchiveRestore',
       message: '移動元がアーカイブクラスです。転送前に復元 (restore) が必要で、'
@@ -183,7 +183,7 @@ function buildWarnings(
     })
   }
 
-  if (dst.profile.provider === 'wasabi') {
+  if (destination.profile.provider === 'wasabi') {
     out.push({
       kind: 'wasabiPolicy',
       message: 'egress は無料ですが、月間ダウンロード量が保存量を超えると制限対象です'
@@ -191,7 +191,7 @@ function buildWarnings(
     })
   }
 
-  if (dst.rates.storageRateSource === 'proxy') {
+  if (destination.rates.storageRateSource === 'proxy') {
     out.push({
       kind: 'proxyRate',
       message: 'このクラスのストレージ単価は AWS の料金 API に存在しないため、'
@@ -199,7 +199,7 @@ function buildWarnings(
     })
   }
 
-  if (dst.rates.storageRateSource === 'manual') {
+  if (destination.rates.storageRateSource === 'manual') {
     // 「単価を更新」を押しても変わらない値であることを、行を開けば分かるようにする。
     out.push({
       kind: 'manualRate',
@@ -209,11 +209,11 @@ function buildWarnings(
     })
   }
 
-  if (dst.rates.minBillableBytes > 0 && avgObjectBytes < dst.rates.minBillableBytes) {
+  if (destination.rates.minBillableBytes > 0 && avgObjectBytes < destination.rates.minBillableBytes) {
     out.push({
       kind: 'smallObjects',
       message: `平均 ${fmtBytes(avgObjectBytes)} は最小課金サイズ `
-        + `${fmtBytes(dst.rates.minBillableBytes)} を下回ります。`
+        + `${fmtBytes(destination.rates.minBillableBytes)} を下回ります。`
         + '小さいオブジェクトもこのサイズとして課金されます。',
     })
   }
@@ -221,18 +221,18 @@ function buildWarnings(
   // 最小課金サイズ (IA 系の 128KB) とは別に、Glacier 系はオブジェクトごとに
   // 40KB が**加算**される。最小課金サイズと違って大きいオブジェクトにも乗るので、
   // 小さいものを大量に置くとここが効く。
-  const overheadBytes = scan.objectCount * dst.rates.perObjectOverheadBytes
+  const overheadBytes = scan.objectCount * destination.rates.perObjectOverheadBytes
   if (overheadBytes > scan.totalBytes * OVERHEAD_WARN_RATIO) {
     const pct = Math.round((overheadBytes / (scan.totalBytes + overheadBytes)) * 100)
     out.push({
       kind: 'objectOverhead',
-      message: `このクラスはオブジェクトごとに ${fmtBytes(dst.rates.perObjectOverheadBytes)} の`
+      message: `このクラスはオブジェクトごとに ${fmtBytes(destination.rates.perObjectOverheadBytes)} の`
         + `メタデータが加算されます。${scan.objectCount.toLocaleString()} 件では`
         + ` ${fmtBytes(overheadBytes)} 分が上乗せされ、課金対象の約 ${pct}% を占めます。`,
     })
   }
 
-  const cap = dst.profile.capacityBytes
+  const cap = destination.profile.capacityBytes
   if (cap !== null && billableBytes > cap) {
     out.push({
       kind: 'capacity',
@@ -246,15 +246,15 @@ function buildWarnings(
 
 export interface EstimateInput {
   scan: ScanInput
-  src: Endpoint
-  dst: Endpoint
+  source: Endpoint
+  destination: Endpoint
   partSizeBytes?: number
 }
 
 export function estimateTransfer(input: EstimateInput): TransferEstimate {
-  const { scan, src, dst } = input
+  const { scan, source, destination } = input
   const partSize = input.partSizeBytes ?? DEFAULT_PART_SIZE_BYTES
-  const sameConnection = src.profile.connectionId === dst.profile.connectionId
+  const sameConnection = source.profile.connectionId === destination.profile.connectionId
 
   const avgObjectBytes = scan.objectCount > 0 ? scan.totalBytes / scan.objectCount : 0
   const puts = putRequestCount(scan.objectCount, avgObjectBytes, partSize)
@@ -263,26 +263,26 @@ export function estimateTransfer(input: EstimateInput): TransferEstimate {
   // 帯域律速とオブジェクト律速の大きい方。並列転送では両者が同時に進むので、
   // 和ではなく max が実態に近い。平均サイズが小さいほど後者が支配的になり、
   // 帯域だけから出した見積もりは桁で外れる。
-  const parallelism = Math.max(1, Math.min(src.profile.parallelism, dst.profile.parallelism))
-  const overheadSec = Math.max(src.profile.requestOverheadMs, dst.profile.requestOverheadMs) / 1000
+  const parallelism = Math.max(1, Math.min(source.profile.parallelism, destination.profile.parallelism))
+  const overheadSec = Math.max(source.profile.requestOverheadMs, destination.profile.requestOverheadMs) / 1000
   const tRequests = (scan.objectCount * overheadSec) / parallelism
   // 同一接続内のクラス変更はサーバ側の COPY で済み、データは回線を通らない。
   const tBandwidth = sameConnection
     ? 0
-    : scan.totalBytes / (Math.min(src.profile.readMbps, dst.profile.writeMbps) * BYTES_PER_MB)
+    : scan.totalBytes / (Math.min(source.profile.readMbps, destination.profile.writeMbps) * BYTES_PER_MB)
   const optimistic = Math.max(tBandwidth, tRequests)
-  const instability = Math.max(src.profile.instability, dst.profile.instability)
+  const instability = Math.max(source.profile.instability, destination.profile.instability)
 
   // ── 初期費用 ──
   const gb = scan.totalBytes / GIB
   const egress = sameConnection
     ? 0
-    : tieredCost(Math.max(0, gb - src.rates.egressFreeGb), src.rates.egressTiers)
-  const retrieval = gb * src.rates.retrievalPerGb
+    : tieredCost(Math.max(0, gb - source.rates.egressFreeGb), source.rates.egressTiers)
+  const retrieval = gb * source.rates.retrievalPerGb
   // GET はマルチパートで分割されうるが、単価が PUT より桁で安く、
   // 総額への寄与が誤差なので 1 オブジェクト 1 リクエストとして数える。
-  const getRequests = (scan.objectCount * src.rates.getPer1000) / 1000
-  const putRequests = (puts * dst.rates.putPer1000) / 1000
+  const getRequests = (scan.objectCount * source.rates.getPer1000) / 1000
+  const putRequests = (puts * destination.rates.putPer1000) / 1000
 
   // ── 月額 ──
   // 最小課金サイズは平均で近似する。走査は合計と個数しか持たないため
@@ -291,18 +291,18 @@ export function estimateTransfer(input: EstimateInput): TransferEstimate {
   // 加算 (Glacier 系の 40KB) は最小課金サイズとは別枠。片方は「これ未満は
   // このサイズとして課金」、もう片方は「どのサイズにも上乗せ」で、両方効く。
   const billableBytes = scan.objectCount
-    * (Math.max(avgObjectBytes, dst.rates.minBillableBytes) + dst.rates.perObjectOverheadBytes)
+    * (Math.max(avgObjectBytes, destination.rates.minBillableBytes) + destination.rates.perObjectOverheadBytes)
   const monitoring = avgObjectBytes >= MONITORING_MIN_BYTES
-    ? scan.objectCount * dst.rates.monitoringPerObjectMonth
+    ? scan.objectCount * destination.rates.monitoringPerObjectMonth
     : 0
-  const monthlyUsd = tieredCost(billableBytes / GIB, dst.rates.storageTiers) + monitoring
+  const monthlyUsd = tieredCost(billableBytes / GIB, destination.rates.storageTiers) + monitoring
 
   return {
-    connectionId: dst.profile.connectionId,
-    name: dst.profile.name,
-    provider: dst.profile.provider,
-    storageClass: dst.profile.storageClass,
-    storageClassLabel: dst.rates.storageClassLabel,
+    connectionId: destination.profile.connectionId,
+    name: destination.profile.name,
+    provider: destination.profile.provider,
+    storageClass: destination.profile.storageClass,
+    storageClassLabel: destination.rates.storageClassLabel,
     sameConnection,
     durationSec: { optimistic, pessimistic: optimistic * (1 + instability) },
     upfront: {
@@ -316,6 +316,6 @@ export function estimateTransfer(input: EstimateInput): TransferEstimate {
     billableBytes,
     putRequestCount: puts,
     avgObjectBytes,
-    warnings: buildWarnings(src, dst, scan, avgObjectBytes, billableBytes),
+    warnings: buildWarnings({ source, destination, scan, avgObjectBytes, billableBytes }),
   }
 }

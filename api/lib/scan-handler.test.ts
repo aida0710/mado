@@ -101,9 +101,10 @@ describe('createScanHandler', () => {
       capacity: { recordSuccess, recordPartial: vi.fn(), recordError: vi.fn() },
     })
     await handler({ ...ctx({ connectionId: 'c1', bucket: 'b', prefix: '' }), jobId: 81 })
-    expect(recordSuccess).toHaveBeenCalledWith(81, 'c1', 'b', expect.objectContaining({
-      totalBytes: 123, objectCount: 1,
-    }))
+    expect(recordSuccess).toHaveBeenCalledWith({
+      jobId: 81, connectionId: 'c1', bucket: 'b',
+      result: expect.objectContaining({ totalBytes: 123, objectCount: 1 }),
+    })
 
     await handler({ ...ctx({ connectionId: 'c1', bucket: 'b', prefix: 'dir/' }), jobId: 82 })
     expect(recordSuccess).toHaveBeenCalledTimes(1)

@@ -11,7 +11,7 @@ export interface LineageRoutesDeps {
   service: LineageService
 }
 
-function boundedInt(value: string | undefined, fallback: number, min: number, max: number): number {
+function boundedInt(value: string | undefined, { fallback, min, max }: { fallback: number; min: number; max: number }): number {
   const parsed = Number(value)
   return Number.isInteger(parsed) ? Math.max(min, Math.min(max, parsed)) : fallback
 }
@@ -30,7 +30,7 @@ function backendError(c: Context, error: unknown): Response {
 export function mountLineageRoutes(app: Hono, deps: LineageRoutesDeps): void {
   app.get('/lineage/graph', async c => {
     const mode = c.req.query('mode') ?? 'logical'
-    const depth = boundedInt(c.req.query('depth'), 3, 1, 10)
+    const depth = boundedInt(c.req.query('depth'), { fallback: 3, min: 1, max: 10 })
     try {
       if (mode === 'versions') {
         const versionId = Uuid.safeParse(c.req.query('versionId'))
@@ -71,7 +71,7 @@ export function mountLineageRoutes(app: Hono, deps: LineageRoutesDeps): void {
   app.get('/lineage/search', async c => {
     const q = (c.req.query('q') ?? '').trim()
     const namespace = c.req.query('namespace')?.trim() || undefined
-    const limit = boundedInt(c.req.query('limit'), 50, 1, 100)
+    const limit = boundedInt(c.req.query('limit'), { fallback: 50, min: 1, max: 100 })
     try {
       return c.json(await deps.service.search({ q, namespace, limit }))
     } catch (error) {
@@ -82,8 +82,8 @@ export function mountLineageRoutes(app: Hono, deps: LineageRoutesDeps): void {
   app.get('/lineage/catalog', async c => {
     const q = (c.req.query('q') ?? '').trim()
     const namespace = c.req.query('namespace')?.trim() || undefined
-    const limit = boundedInt(c.req.query('limit'), 20, 1, 100)
-    const offset = boundedInt(c.req.query('offset'), 0, 0, 1_000_000)
+    const limit = boundedInt(c.req.query('limit'), { fallback: 20, min: 1, max: 100 })
+    const offset = boundedInt(c.req.query('offset'), { fallback: 0, min: 0, max: 1_000_000 })
     try {
       return c.json(await deps.service.catalog({ q, namespace, limit, offset }))
     } catch (error) {
@@ -95,7 +95,7 @@ export function mountLineageRoutes(app: Hono, deps: LineageRoutesDeps): void {
     const connectionId = z.string().min(1).max(256).safeParse(c.req.query('connectionId'))
     const bucket = z.string().min(1).max(1024).safeParse(c.req.query('bucket'))
     const key = z.string().max(8192).safeParse(c.req.query('key') ?? '')
-    const limit = boundedInt(c.req.query('limit'), 20, 1, 100)
+    const limit = boundedInt(c.req.query('limit'), { fallback: 20, min: 1, max: 100 })
     if (!connectionId.success || !bucket.success || !key.success) {
       return c.json({ error: 'connectionId, bucket and a valid key are required' }, 400)
     }
@@ -151,7 +151,7 @@ export function mountLineageRoutes(app: Hono, deps: LineageRoutesDeps): void {
     if (!namespace.success || !name.success) {
       return c.json({ error: 'namespace and name are required' }, 400)
     }
-    const limit = boundedInt(c.req.query('limit'), 50, 1, 100)
+    const limit = boundedInt(c.req.query('limit'), { fallback: 50, min: 1, max: 100 })
     try {
       return c.json(await deps.service.jobRuns(namespace.data, name.data, limit))
     } catch (error) {

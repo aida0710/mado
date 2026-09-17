@@ -49,12 +49,12 @@ export interface AnalyzeOpts {
 
 // bitRate の決定順: stream の bit_rate → format の bit_rate → 計算値
 // (sizeBytes*8/durationSec)。どれも無ければ null。
-export function resolveBitRate(
-  streamBitRate: number | null,
-  formatBitRate: number | null,
-  sizeBytes: number | null,
-  durationSec: number,
-): number | null {
+export function resolveBitRate({ streamBitRate, formatBitRate, sizeBytes, durationSec }: {
+  streamBitRate: number | null
+  formatBitRate: number | null
+  sizeBytes: number | null
+  durationSec: number
+}): number | null {
   if (streamBitRate != null) return streamBitRate
   if (formatBitRate != null) return formatBitRate
   if (sizeBytes != null && durationSec > 0) return Math.round((sizeBytes * 8) / durationSec)
@@ -276,7 +276,7 @@ export async function analyzeAudio(opts: AnalyzeOpts): Promise<AnalyzeResult> {
   }
 
   const sizeBytes = opts.getSizeBytes ? opts.getSizeBytes() : null
-  const bitRate = resolveBitRate(probe.streamBitRate, probe.formatBitRate, sizeBytes, durationSec)
+  const bitRate = resolveBitRate({ streamBitRate: probe.streamBitRate, formatBitRate: probe.formatBitRate, sizeBytes, durationSec })
 
   return {
     peaks,

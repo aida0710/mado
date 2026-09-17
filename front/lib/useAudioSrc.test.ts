@@ -15,7 +15,7 @@ describe('useAudioSrc', () => {
   })
 
   it('単体ファイルは即座にストリーミング URL を返し、fetch は呼ばれない', () => {
-    const { result } = renderHook(() => useAudioSrc('c', 'b', 'a.wav'))
+    const { result } = renderHook(() => useAudioSrc({ connectionId: 'c', bucket: 'b', key: 'a.wav' }))
     expect(result.current.loading).toBe(false)
     expect(result.current.error).toBeNull()
     expect(result.current.src).toContain('/preview/audio')
@@ -26,7 +26,7 @@ describe('useAudioSrc', () => {
     let resolveFetch!: (v: Response) => void
     vi.mocked(fetch).mockReturnValue(new Promise(resolve => { resolveFetch = resolve }))
 
-    const { result } = renderHook(() => useAudioSrc('c', 'b', 'shard.tar', 'u1.wav'))
+    const { result } = renderHook(() => useAudioSrc({ connectionId: 'c', bucket: 'b', key: 'shard.tar', entryPath: 'u1.wav' }))
     expect(result.current.loading).toBe(true)
     expect(result.current.src).toBeNull()
     expect(fetch).toHaveBeenCalledWith(
@@ -53,7 +53,7 @@ describe('useAudioSrc', () => {
       blob: () => Promise.resolve(new Blob(['data'])),
     } as unknown as Response)
 
-    const { result, unmount } = renderHook(() => useAudioSrc('c', 'b', 'shard.tar', 'u1.wav'))
+    const { result, unmount } = renderHook(() => useAudioSrc({ connectionId: 'c', bucket: 'b', key: 'shard.tar', entryPath: 'u1.wav' }))
     await waitFor(() => expect(result.current.src).toBe('blob:mock-1'))
 
     unmount()
@@ -67,7 +67,7 @@ describe('useAudioSrc', () => {
       json: () => Promise.resolve({ error: 'entry not found' }),
     } as unknown as Response)
 
-    const { result } = renderHook(() => useAudioSrc('c', 'b', 'shard.tar', 'u1.wav'))
+    const { result } = renderHook(() => useAudioSrc({ connectionId: 'c', bucket: 'b', key: 'shard.tar', entryPath: 'u1.wav' }))
     await waitFor(() => expect(result.current.loading).toBe(false))
     expect(result.current.error).toBe('entry not found')
     expect(result.current.src).toBeNull()

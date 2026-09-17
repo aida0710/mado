@@ -11,16 +11,16 @@ const edges = [
 
 describe('lineage interaction', () => {
   it('選択項目から上流・下流・両方向の経路だけを辿る', () => {
-    expect([...traceLineagePath(nodes, edges, 'run', 'upstream').nodeIds]).toEqual(['run', 'raw', 'source'])
-    expect([...traceLineagePath(nodes, edges, 'run', 'downstream').nodeIds]).toEqual(['run', 'output'])
-    expect(traceLineagePath(nodes, edges, 'run', 'both').nodeIds).toEqual(new Set(['source', 'raw', 'run', 'output']))
-    expect(traceLineagePath(nodes, edges, 'run', 'both').edgeIds).toEqual(new Set(['e1', 'e2', 'e3']))
+    expect([...traceLineagePath({ nodes, edges, selectedId: 'run', direction: 'upstream' }).nodeIds]).toEqual(['run', 'raw', 'source'])
+    expect([...traceLineagePath({ nodes, edges, selectedId: 'run', direction: 'downstream' }).nodeIds]).toEqual(['run', 'output'])
+    expect(traceLineagePath({ nodes, edges, selectedId: 'run', direction: 'both' }).nodeIds).toEqual(new Set(['source', 'raw', 'run', 'output']))
+    expect(traceLineagePath({ nodes, edges, selectedId: 'run', direction: 'both' }).edgeIds).toEqual(new Set(['e1', 'e2', 'e3']))
   })
 
   it('循環があっても停止し、存在しない起点では空集合を返す', () => {
     const cyclic = [...edges, { id: 'back', source: 'output', target: 'raw' }]
-    expect(traceLineagePath(nodes, cyclic, 'run', 'both').nodeIds).toEqual(new Set(['source', 'raw', 'run', 'output']))
-    expect(traceLineagePath(nodes, cyclic, 'missing', 'both').nodeIds.size).toBe(0)
+    expect(traceLineagePath({ nodes, edges: cyclic, selectedId: 'run', direction: 'both' }).nodeIds).toEqual(new Set(['source', 'raw', 'run', 'output']))
+    expect(traceLineagePath({ nodes, edges: cyclic, selectedId: 'missing', direction: 'both' }).nodeIds.size).toBe(0)
   })
 
   it('表示名・技術名・種類を空白区切りで検索する', () => {

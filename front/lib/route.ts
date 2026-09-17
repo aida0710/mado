@@ -85,12 +85,12 @@ function parentPrefixOf(key: string): string {
 //
 // origin は付けない (fileLinkToDirRedirect と同様、window 非依存に保つ)。
 // 共有用の絶対 URL が要るなら呼び出し側で absoluteUrl() に通す。
-export function tarEntryWebUrl(
-  connectionId: string,
-  bucket: string,
-  tarKey: string,
-  entryPath: string,
-): string {
+export function tarEntryWebUrl({ connectionId, bucket, tarKey, entryPath }: {
+  connectionId: string
+  bucket: string
+  tarKey: string
+  entryPath: string
+}): string {
   return (
     `/storage/${encodeURIComponent(connectionId)}` +
     `/${encodeURIComponent(bucket)}` +

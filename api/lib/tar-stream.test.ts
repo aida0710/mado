@@ -212,7 +212,7 @@ describe('extractTarEntry', () => {
     try {
       // 'needle.bin' とは別名で検索させ、"マッチしないエントリをドレインする"
       // 分岐 (found=false, stream.resume() のみ) を通す。
-      extractTarEntry(source, 'tar', 'does-not-exist.bin', big).catch(() => {})
+      extractTarEntry({ source, kind: 'tar', entryName: 'does-not-exist.bin', byteLimit: big }).catch(() => {})
 
       source.push(header)
       // ドレイン分岐は 'entry' ハンドラの中で同期的に stream.resume() を
@@ -265,21 +265,21 @@ describe('extractTarEntry', () => {
 
   it('本体が byteLimit より小さければ全部返り truncated=false', async () => {
     const tar = await packTar('small.bin', 100)
-    const r = await extractTarEntry(Readable.from(tar), 'tar', 'small.bin', 1024)
+    const r = await extractTarEntry({ source: Readable.from(tar), kind: 'tar', entryName: 'small.bin', byteLimit: 1024 })
     expect(r?.truncated).toBe(false)
     expect(r?.buffer.byteLength).toBe(100)
   })
 
   it('本体が byteLimit ちょうどなら truncated=false (境界)', async () => {
     const tar = await packTar('exact.bin', 1024)
-    const r = await extractTarEntry(Readable.from(tar), 'tar', 'exact.bin', 1024)
+    const r = await extractTarEntry({ source: Readable.from(tar), kind: 'tar', entryName: 'exact.bin', byteLimit: 1024 })
     expect(r?.truncated).toBe(false)
     expect(r?.buffer.byteLength).toBe(1024)
   })
 
   it('本体が byteLimit を超えたら先頭 byteLimit バイト + truncated=true', async () => {
     const tar = await packTar('big.bin', 4096)
-    const r = await extractTarEntry(Readable.from(tar), 'tar', 'big.bin', 1024)
+    const r = await extractTarEntry({ source: Readable.from(tar), kind: 'tar', entryName: 'big.bin', byteLimit: 1024 })
     expect(r?.truncated).toBe(true)
     expect(r?.buffer.byteLength).toBe(1024)
     expect(r?.buffer.every(b => b === 7)).toBe(true)
@@ -289,7 +289,7 @@ describe('extractTarEntry', () => {
     // 1MB の本体を 64KB ずつ流し、先頭 1KB だけ要求する。
     const tar = await packTar('huge.bin', 1024 * 1024)
     const { stream, state } = countingStream(tar, 64 * 1024)
-    const r = await extractTarEntry(stream, 'tar', 'huge.bin', 1024)
+    const r = await extractTarEntry({ source: stream, kind: 'tar', entryName: 'huge.bin', byteLimit: 1024 })
     expect(r?.truncated).toBe(true)
     expect(r?.buffer.byteLength).toBe(1024)
     // 上限到達で畳むので、tar 全体 (1MB 超) を読み切っていないこと。

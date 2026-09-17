@@ -37,7 +37,7 @@ function Canvas({ graph, selectedId, direction, onSelect, onClearSelection }: Ca
   const { nodes, edges } = useMemo(() => {
     const elements = toFlowElements(graph)
     const traced = selectedId
-      ? traceLineagePath(elements.nodes, elements.edges, selectedId, direction)
+      ? traceLineagePath({ nodes: elements.nodes, edges: elements.edges, selectedId, direction })
       : null
     const activePath = traced && traced.nodeIds.size > 0 ? traced : null
     const layout = layoutLineage(

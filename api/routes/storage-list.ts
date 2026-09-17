@@ -37,12 +37,12 @@ function withCacheMeta(
 
 /** S3 から取ったばかりの一覧を cache に入れ、その取得時刻を付けて返す。
  *  cache への書き込みに失敗しても応答は返すので、時刻は今から組む。 */
-async function storeFreshList(
-  cache: ResponseCache,
-  scope: CacheScope,
-  body: ListBody,
-  ttlSec: number,
-) {
+async function storeFreshList({ cache, scope, body, ttlSec }: {
+  cache: ResponseCache
+  scope: CacheScope
+  body: ListBody
+  ttlSec: number
+}) {
   const now = new Date()
   const meta = await cache.set(scope, body, ttlSec * 1000) ?? {
     fetchedAt: now.toISOString(),
@@ -181,7 +181,7 @@ export function mountStorageListRoutes(app: Hono, deps: StorageListDeps): void {
       }))
       // V1 には continuation token 概念が無い。pagination は marker (= startAfter) で。
       const body = listBodyFrom(out, prefix, { continuation: null, startAfter: out.NextMarker ?? null })
-      return c.json(await storeFreshList(deps.cache, scope, body, config.listCacheTtlSec))
+      return c.json(await storeFreshList({ cache: deps.cache, scope, body, ttlSec: config.listCacheTtlSec }))
     }
 
     // V2 経路 (既定): 既存挙動を保持。
@@ -204,6 +204,6 @@ export function mountStorageListRoutes(app: Hono, deps: StorageListDeps): void {
     //   (start-after parameter を無視するため)。そういうサーバは接続設定で
     //   list_objects_version='v1' を選んでもらう。
     const body = listBodyFrom(out, prefix, { continuation: out.NextContinuationToken ?? null, startAfter: null })
-    return c.json(await storeFreshList(deps.cache, scope, body, config.listCacheTtlSec))
+    return c.json(await storeFreshList({ cache: deps.cache, scope, body, ttlSec: config.listCacheTtlSec }))
   })
 }

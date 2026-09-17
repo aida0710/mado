@@ -221,8 +221,10 @@ describe('auth routes', () => {
 
   it('Back-channel logoutを一度だけ受理して該当sessionを失効する', async () => {
     const user = (await store.getLocalCredential('local-user'))!
-    const session = await store.createSession(user.id, { idleSeconds: 3600, absoluteSeconds: 7200 }, {}, {
-      issuer: 'https://auth.example/application/o/mado', subject: 'subject-1', sid: 'sid-1',
+    const session = await store.createSession({
+      userId: user.id,
+      lifetime: { idleSeconds: 3600, absoluteSeconds: 7200 },
+      oidc: { issuer: 'https://auth.example/application/o/mado', subject: 'subject-1', sid: 'sid-1' },
     })
     const oidc: OidcProvider = {
       id: 'primary', label: 'Authentik', issuer: 'https://auth.example/application/o/mado',

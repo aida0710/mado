@@ -27,7 +27,7 @@ export function PreviewAudio({ connectionId, bucket, k, entryPath }: Props) {
 
   // tar 内エントリは blob 化して取得する (シークバーが現在位置に巻き戻る不具合の
   // 対策)。詳細は useAudioSrc のコメントを参照。
-  const { src, loading: srcLoading, error: srcError } = useAudioSrc(connectionId, bucket, k, entryPath)
+  const { src, loading: srcLoading, error: srcError } = useAudioSrc({ connectionId, bucket, key: k, entryPath })
 
   // 解析はサーバー側キャッシュがあるので毎マウントで呼んでよい。ファイル切替時の
   // state リセットは呼び出し側 (key で再マウント) に任せ、ここでは同期 setState

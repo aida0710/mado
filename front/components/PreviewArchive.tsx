@@ -316,7 +316,7 @@ export function PreviewArchive({ connectionId, bucket, k, initialEntry = null, o
                 {
                   kind: 'copy',
                   label: 'Web URL をコピー',
-                  value: absoluteUrl(tarEntryWebUrl(connectionId, bucket, k, e.name)),
+                  value: absoluteUrl(tarEntryWebUrl({ connectionId, bucket, tarKey: k, entryPath: e.name })),
                 },
                 {
                   kind: 'copy',

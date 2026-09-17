@@ -31,7 +31,7 @@ function DeckAudio({
   onDuration: (id: string, durationSec: number) => void
   onArrive: (id: string, el: HTMLAudioElement) => void
 }) {
-  const { src } = useAudioSrc(track.connectionId, track.bucket, track.key, track.entryPath)
+  const { src } = useAudioSrc(track)
   const elRef = useRef<HTMLAudioElement | null>(null)
   // ref callback は識別子が安定していないと再レンダーのたびに detach(null) →
   // attach(el) され、その隙間で audioRefs から要素が消える。register を親が

@@ -11,12 +11,12 @@ export interface LineagePathSelection {
   edgeIds: Set<string>
 }
 
-export function traceLineagePath(
-  nodes: NodeRef[],
-  edges: EdgeRef[],
-  selectedId: string,
-  direction: LineageDirection,
-): LineagePathSelection {
+export function traceLineagePath({ nodes, edges, selectedId, direction }: {
+  nodes: NodeRef[]
+  edges: EdgeRef[]
+  selectedId: string
+  direction: LineageDirection
+}): LineagePathSelection {
   const available = new Set(nodes.map(node => node.id))
   const nodeIds = new Set<string>()
   const edgeIds = new Set<string>()

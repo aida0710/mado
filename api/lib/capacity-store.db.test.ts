@@ -64,8 +64,8 @@ describe('createCapacityStore', () => {
       `INSERT INTO jobs (kind, dedup_key, payload, status)
        VALUES ('capacity.test', 'one', '{}', 'done') RETURNING id`,
     )
-    await store.recordSuccess(job.rows[0].id, CONNECTION_ID, 'data', { totalBytes: 1234, objectCount: 7 })
-    await store.recordSuccess(job.rows[0].id, CONNECTION_ID, 'data', { totalBytes: 9999, objectCount: 9 })
+    await store.recordSuccess({ jobId: job.rows[0].id, connectionId: CONNECTION_ID, bucket: 'data', result: { totalBytes: 1234, objectCount: 7 } })
+    await store.recordSuccess({ jobId: job.rows[0].id, connectionId: CONNECTION_ID, bucket: 'data', result: { totalBytes: 9999, objectCount: 9 } })
     const result = await store.overview(CONNECTION_ID, ['data'], 30)
     expect(result.buckets[0].points).toHaveLength(1)
     expect(result.buckets[0].points[0]).toMatchObject({ totalBytes: 1234, objectCount: 7 })

@@ -55,33 +55,33 @@ describe('fileLinkToDirRedirect', () => {
 
 describe('tarEntryWebUrl', () => {
   it('親 prefix のリスト + preview(tar) + entry(エントリ名)', () => {
-    expect(tarEntryWebUrl('c1', 'b1', 'rec/session.tar', 'audio/mic_01.wav'))
+    expect(tarEntryWebUrl({ connectionId: 'c1', bucket: 'b1', tarKey: 'rec/session.tar', entryPath: 'audio/mic_01.wav' }))
       .toBe('/storage/c1/b1/rec/?preview=rec%2Fsession.tar&entry=audio%2Fmic_01.wav')
   })
 
   it('bucket 直下の tar — 空 prefix', () => {
-    expect(tarEntryWebUrl('c1', 'b1', 'shard.tar', 'u1.wav'))
+    expect(tarEntryWebUrl({ connectionId: 'c1', bucket: 'b1', tarKey: 'shard.tar', entryPath: 'u1.wav' }))
       .toBe('/storage/c1/b1/?preview=shard.tar&entry=u1.wav')
   })
 
   it('エントリ名のスラッシュは %2F になる (クエリ値なのでセグメント扱いしない)', () => {
-    expect(tarEntryWebUrl('c1', 'b1', 'a.tar', 'a/b/c.wav'))
+    expect(tarEntryWebUrl({ connectionId: 'c1', bucket: 'b1', tarKey: 'a.tar', entryPath: 'a/b/c.wav' }))
       .toContain('&entry=a%2Fb%2Fc.wav')
   })
 
   it('connectionId / bucket / パスセグメント / エントリの特殊文字を encode する', () => {
-    expect(tarEntryWebUrl('c 1', 'b/1', 'foo bar/x.tar', 'e?#%.wav'))
+    expect(tarEntryWebUrl({ connectionId: 'c 1', bucket: 'b/1', tarKey: 'foo bar/x.tar', entryPath: 'e?#%.wav' }))
       .toBe('/storage/c%201/b%2F1/foo%20bar/?preview=foo%20bar%2Fx.tar&entry=e%3F%23%25.wav')
   })
 
   it('VoxPopuli の実例 — .tar.xz の中の音声を指す', () => {
     expect(
-      tarEntryWebUrl(
-        'mW5dNSSMcQ',
-        'dataset',
-        'voxpopuli-unlabeled-v2-asr-sidon/voxpopuli-unlabeled-bg_2009_2-sidon-0002.tar.xz',
-        'bg_2009_2/20090316-0900-PLENARY-14_bg_1.wav',
-      ),
+      tarEntryWebUrl({
+        connectionId: 'mW5dNSSMcQ',
+        bucket: 'dataset',
+        tarKey: 'voxpopuli-unlabeled-v2-asr-sidon/voxpopuli-unlabeled-bg_2009_2-sidon-0002.tar.xz',
+        entryPath: 'bg_2009_2/20090316-0900-PLENARY-14_bg_1.wav',
+      }),
     ).toBe(
       '/storage/mW5dNSSMcQ/dataset/voxpopuli-unlabeled-v2-asr-sidon/' +
       '?preview=voxpopuli-unlabeled-v2-asr-sidon%2Fvoxpopuli-unlabeled-bg_2009_2-sidon-0002.tar.xz' +

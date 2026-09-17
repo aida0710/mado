@@ -38,7 +38,7 @@ export function TarEntryModal({ connectionId, bucket, archiveKey, entry, onClose
     {
       kind: 'copy',
       label: 'Web URL をコピー',
-      value: absoluteUrl(tarEntryWebUrl(connectionId, bucket, archiveKey, entry.name)),
+      value: absoluteUrl(tarEntryWebUrl({ connectionId, bucket, tarKey: archiveKey, entryPath: entry.name })),
     },
     { kind: 'copy', label: '生データ URL をコピー', value: absoluteUrl(url) },
   ]

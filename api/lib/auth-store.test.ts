@@ -30,7 +30,7 @@ describe('AuthStore', () => {
     expect(credential?.id).toBe(user.id)
     expect((await store.getLocalCredential('ADMIN'))?.id).toBe(user.id)
 
-    const session = await store.createSession(user.id, { idleSeconds: 3600, absoluteSeconds: 7200 })
+    const session = await store.createSession({ userId: user.id, lifetime: { idleSeconds: 3600, absoluteSeconds: 7200 } })
     const db = await pools.rw.query<{ token_hash: Buffer }>(
       'SELECT token_hash FROM auth_sessions WHERE id = $1', [session.id],
     )
@@ -45,7 +45,7 @@ describe('AuthStore', () => {
 
   it('disabled userのsessionを認証しない', async () => {
     const user = await store.createUser({ email: 'u@example.com', displayName: 'U', roles: ['viewer'] })
-    const session = await store.createSession(user.id, { idleSeconds: 60, absoluteSeconds: 120 })
+    const session = await store.createSession({ userId: user.id, lifetime: { idleSeconds: 60, absoluteSeconds: 120 } })
     await store.updateUser(user.id, { status: 'disabled' })
     expect(await store.authenticateSession(session.token, 60)).toBeNull()
   })
@@ -136,11 +136,12 @@ describe('AuthStore', () => {
 
   it('OIDC sid/sub単位でsessionを失効しlogout tokenのreplayを拒否する', async () => {
     const user = await store.createUser({ displayName: 'SSO', roles: ['viewer'] })
-    const a = await store.createSession(user.id, { idleSeconds: 3600, absoluteSeconds: 7200 }, {}, {
-      issuer: 'https://auth.example', subject: 'sub-1', sid: 'sid-a',
+    const lifetime = { idleSeconds: 3600, absoluteSeconds: 7200 }
+    const a = await store.createSession({
+      userId: user.id, lifetime, oidc: { issuer: 'https://auth.example', subject: 'sub-1', sid: 'sid-a' },
     })
-    const b = await store.createSession(user.id, { idleSeconds: 3600, absoluteSeconds: 7200 }, {}, {
-      issuer: 'https://auth.example', subject: 'sub-1', sid: 'sid-b',
+    const b = await store.createSession({
+      userId: user.id, lifetime, oidc: { issuer: 'https://auth.example', subject: 'sub-1', sid: 'sid-b' },
     })
     expect(await store.getSessionOidcContext(a.token)).toEqual({
       issuer: 'https://auth.example', subject: 'sub-1', sid: 'sid-a',

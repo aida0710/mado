@@ -13,13 +13,14 @@ export type AudioSrcState = MediaSrcState
 // あり、その間ほぼ全域が未バッファなためシークバー操作が実質使えなくなる。
 // fetch で一度取得 (= 抽出は 1 回だけ) して blob URL 化すれば、以降のシークは
 // 完全ローカルになりこの制約を受けない。
-export function useAudioSrc(
-  connectionId: string,
-  bucket: string,
-  k: string,
-  entryPath?: string,
-): AudioSrcState {
-  const directUrl = entryPath ? null : api.audioUrl(connectionId, bucket, k)
-  const archiveEntryUrl = entryPath ? api.tarEntryUrl(connectionId, bucket, k, entryPath) : null
+export function useAudioSrc({ connectionId, bucket, key, entryPath }: {
+  connectionId: string
+  bucket: string
+  key: string
+  /** tar 内のエントリなら、その tar 内パス。 */
+  entryPath?: string
+}): AudioSrcState {
+  const directUrl = entryPath ? null : api.audioUrl(connectionId, bucket, key)
+  const archiveEntryUrl = entryPath ? api.tarEntryUrl(connectionId, bucket, key, entryPath) : null
   return useMediaSrc(directUrl, archiveEntryUrl)
 }

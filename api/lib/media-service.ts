@@ -63,9 +63,9 @@ export function createMediaService(deps: MediaServiceDeps): MediaService {
 
   // signal を渡すと、呼び出し元が中断した際に「次の ffmpeg パス」だけでなく
   // 進行中の S3 リクエスト自体も打ち切れる (aws-sdk v3 の abortSignal オプション)。
-  async function openObjectStream(
-    storage: S3Client, bucket: string, key: string, range?: string, signal?: AbortSignal,
-  ): Promise<NodeJS.ReadableStream> {
+  async function openObjectStream({ storage, bucket, key, range, signal }: {
+    storage: S3Client; bucket: string; key: string; range?: string; signal?: AbortSignal
+  }): Promise<NodeJS.ReadableStream> {
     const r = await storage.send(
       new GetObjectCommand({ Bucket: bucket, Key: key, Range: range }),
       { abortSignal: signal },
@@ -114,8 +114,8 @@ export function createMediaService(deps: MediaServiceDeps): MediaService {
         const kind = detectArchive(req.key)
         if (!kind) throw new MediaAnalyzeError('not an archive', '')
         return await analyzeAndCache(req, async () => {
-          const stream = await openObjectStream(storage, req.bucket, req.key, undefined, signal)
-          const extracted = await extractTarEntry(stream, kind, req.entryPath!, ENTRY_MAX_BYTES)
+          const stream = await openObjectStream({ storage, bucket: req.bucket, key: req.key, signal })
+          const extracted = await extractTarEntry({ source: stream, kind, entryName: req.entryPath!, byteLimit: ENTRY_MAX_BYTES })
           if (!extracted || extracted.truncated) {
             throw new MediaAnalyzeError('entry not found or too large', '')
           }
@@ -137,9 +137,9 @@ export function createMediaService(deps: MediaServiceDeps): MediaService {
             return r.Body as unknown as Readable
           },
           probeHead: async () => {
-            const head = await openObjectStream(
-              storage, req.bucket, req.key, `bytes=0-${PROBE_HEAD_BYTES - 1}`, signal,
-            )
+            const head = await openObjectStream({
+              storage, bucket: req.bucket, key: req.key, range: `bytes=0-${PROBE_HEAD_BYTES - 1}`, signal,
+            })
             return readAll(head)
           },
           timeoutMs,

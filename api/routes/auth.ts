@@ -138,7 +138,7 @@ export function mountAuthRoutes(app: Hono, deps: AuthRouteDeps): void {
       )
     }
     await deps.store.recordSuccessfulLogin(credential.id)
-    const session = await deps.store.createSession(credential.id, deps.config.session, metadata)
+    const session = await deps.store.createSession({ userId: credential.id, lifetime: deps.config.session, metadata })
     setSessionCookie(c, session.token, deps.config.session)
     return c.json({ user: publicUser(credential) })
   })
@@ -201,8 +201,11 @@ export function mountAuthRoutes(app: Hono, deps: AuthRouteDeps): void {
       })
       const user = provisioned.user
       if (user.status !== 'active') throw new Error('user disabled')
-      const session = await deps.store.createSession(user.id, deps.config.session, metadata, {
-        issuer: profile.issuer, subject: profile.subject, sid: profile.sid,
+      const session = await deps.store.createSession({
+        userId: user.id,
+        lifetime: deps.config.session,
+        metadata,
+        oidc: { issuer: profile.issuer, subject: profile.subject, sid: profile.sid },
       })
       setSessionCookie(c, session.token, deps.config.session)
       if (provisioned.created || provisioned.linkedExisting || provisioned.profileChanged) {
@@ -348,7 +351,7 @@ export function mountAuthRoutes(app: Hono, deps: AuthRouteDeps): void {
     markAuditChangeCommitted(c)
     await deps.store.revokeUserSessions(principal.user.id)
     const metadata = requestMetadata(c)
-    const session = await deps.store.createSession(principal.user.id, deps.config.session, metadata)
+    const session = await deps.store.createSession({ userId: principal.user.id, lifetime: deps.config.session, metadata })
     setSessionCookie(c, session.token, deps.config.session)
     await deps.audit.write({
       actor: { type: 'user', userId: principal.user.id }, action: 'auth.password.change', outcome: 'success',

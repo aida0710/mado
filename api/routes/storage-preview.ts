@@ -165,12 +165,12 @@ function streamObject(opened: OpenedObject, headers: Record<string, string>): Re
 }
 
 /** 音声・動画は途中から再生できるよう、ブラウザの Range をそのまま S3 へ渡す。 */
-function mountRangeStreamRoute(
-  app: Hono,
-  deps: StoragePreviewDeps,
-  path: string,
-  mimeByExt: Record<string, string>,
-): void {
+function mountRangeStreamRoute({ app, deps, path, mimeByExt }: {
+  app: Hono
+  deps: StoragePreviewDeps
+  path: string
+  mimeByExt: Record<string, string>
+}): void {
   app.get(path, async c => {
     const object = await resolveObjectOrFail(c, deps.getStorage)
     if (object instanceof Response) return object
@@ -230,8 +230,8 @@ export function mountStoragePreviewRoutes(app: Hono, deps: StoragePreviewDeps): 
     })
   })
 
-  mountRangeStreamRoute(app, deps, '/storage/:connectionId/preview/audio', AUDIO_MIME)
-  mountRangeStreamRoute(app, deps, '/storage/:connectionId/preview/video', VIDEO_MIME)
+  mountRangeStreamRoute({ app, deps, path: '/storage/:connectionId/preview/audio', mimeByExt: AUDIO_MIME })
+  mountRangeStreamRoute({ app, deps, path: '/storage/:connectionId/preview/video', mimeByExt: VIDEO_MIME })
 
   app.get('/storage/:connectionId/preview/tar', async c => {
     const object = await resolveObjectOrFail(c, deps.getStorage)
@@ -433,7 +433,7 @@ export function mountStoragePreviewRoutes(app: Hono, deps: StoragePreviewDeps): 
 
     let result: { buffer: Buffer; truncated: boolean } | null
     try {
-      result = await extractTarEntry(stream, kind, entry, byteLimit)
+      result = await extractTarEntry({ source: stream, kind, entryName: entry, byteLimit })
     } catch (e) {
       console.error('storage archive entry failed', {
         name: e instanceof Error ? e.name : 'unknown',

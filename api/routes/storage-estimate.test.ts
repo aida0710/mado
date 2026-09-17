@@ -110,27 +110,27 @@ afterAll(() => closePools(pools))
 
 describe('GET /storage/:connectionId/estimate', () => {
   it('bucket が無ければ 400', async () => {
-    await addConnection('c1'.padEnd(10, '0'), 'src', 'https://minio.lan:9000')
+    await addConnection('c1'.padEnd(10, '0'), 'source', 'https://minio.lan:9000')
     const res = await get('c1'.padEnd(10, '0'), 'prefix=d/')
     expect(res.status).toBe(400)
   })
 
   it('走査していなければ 409', async () => {
     const id = 'c1'.padEnd(10, '0')
-    await addConnection(id, 'src', 'https://minio.lan:9000')
+    await addConnection(id, 'source', 'https://minio.lan:9000')
     const res = await get(id)
     expect(res.status).toBe(409)
     expect((await res.json() as { error: string }).error).toContain('走査')
   })
 
   it('走査があれば登録済み接続ぶんの候補が返る', async () => {
-    const src = 'src'.padEnd(10, '0')
-    const dst = 'dst'.padEnd(10, '0')
-    await addConnection(src, 'mdx-s3', 'https://mdx.lan:9000')
-    await addConnection(dst, 'jamstec-s3', 'https://jamstec.lan:9000')
-    await addScan(src, 'b', 'd/', { objectCount: 1000, totalBytes: 100 * GIB })
+    const source = 'src'.padEnd(10, '0')
+    const destination = 'dst'.padEnd(10, '0')
+    await addConnection(source, 'mdx-s3', 'https://mdx.lan:9000')
+    await addConnection(destination, 'jamstec-s3', 'https://jamstec.lan:9000')
+    await addScan(source, 'b', 'd/', { objectCount: 1000, totalBytes: 100 * GIB })
 
-    const res = await get(src)
+    const res = await get(source)
     expect(res.status).toBe(200)
     const body = await res.json() as EstimateBody
 
@@ -143,14 +143,14 @@ describe('GET /storage/:connectionId/estimate', () => {
   })
 
   it('転送候補から非許可のホワイトリスト接続を除外する', async () => {
-    const src = 'src'.padEnd(10, '0')
+    const source = 'src'.padEnd(10, '0')
     const hidden = 'hidden'.padEnd(10, '0')
-    await addConnection(src, 'source', 'https://source.lan:9000')
+    await addConnection(source, 'source', 'https://source.lan:9000')
     await addConnection(hidden, 'hidden', 'https://hidden.lan:9000')
     await pools.rw.query(
       "UPDATE storage_connections SET visibility_mode = 'whitelist' WHERE id = $1", [hidden],
     )
-    await addScan(src, 'b', 'd/', { objectCount: 1, totalBytes: GIB })
+    await addScan(source, 'b', 'd/', { objectCount: 1, totalBytes: GIB })
 
     const userApp = new Hono()
     userApp.use('*', async (c, next) => {
@@ -166,25 +166,25 @@ describe('GET /storage/:connectionId/estimate', () => {
       await next()
     })
     mountStorageEstimateRoutes(userApp, { pools, store, pricing, now: () => today })
-    const res = await userApp.request(`/storage/${src}/estimate?bucket=b&prefix=d/`)
+    const res = await userApp.request(`/storage/${source}/estimate?bucket=b&prefix=d/`)
     expect(res.status).toBe(200)
     const body = await res.json() as EstimateBody
-    expect(body.candidates.map(candidate => candidate.connectionId)).toEqual([src])
+    expect(body.candidates.map(candidate => candidate.connectionId)).toEqual([source])
   })
 
   it('移動元自身も候補に残り、同一接続の印が立つ', async () => {
-    const src = 'src'.padEnd(10, '0')
-    await addConnection(src, 'mdx-s3', 'https://mdx.lan:9000')
-    await addScan(src, 'b', 'd/', { objectCount: 10, totalBytes: 10 * GIB })
+    const source = 'src'.padEnd(10, '0')
+    await addConnection(source, 'mdx-s3', 'https://mdx.lan:9000')
+    await addScan(source, 'b', 'd/', { objectCount: 10, totalBytes: 10 * GIB })
 
-    const body = await (await get(src)).json() as EstimateBody
-    const self = body.candidates.find(c => c.connectionId === src)
+    const body = await (await get(source)).json() as EstimateBody
+    const self = body.candidates.find(c => c.connectionId === source)
     expect(self?.sameConnection).toBe(true)
   })
 
   it('接続が無ければ 404', async () => {
-    const src = 'src'.padEnd(10, '0')
-    await addConnection(src, 'mdx-s3', 'https://mdx.lan:9000')
+    const source = 'src'.padEnd(10, '0')
+    await addConnection(source, 'mdx-s3', 'https://mdx.lan:9000')
     // 走査だけ別 ID に対して置く (409 ではなく 404 を確かめるため)。
     const ghost = 'gho'.padEnd(10, '0')
     await addScan(ghost, 'b', 'd/', { objectCount: 1, totalBytes: 1 })
@@ -193,13 +193,13 @@ describe('GET /storage/:connectionId/estimate', () => {
   })
 
   it('社内 → AWS では egress が無く、月額とリクエスト料金が乗る', async () => {
-    const src = 'src'.padEnd(10, '0')
+    const source = 'src'.padEnd(10, '0')
     const aws = 'aws'.padEnd(10, '0')
-    await addConnection(src, 'mdx-s3', 'https://mdx.lan:9000')
+    await addConnection(source, 'mdx-s3', 'https://mdx.lan:9000')
     await addConnection(aws, 'aws-s3', 'https://s3.ap-northeast-1.amazonaws.com', 'ap-northeast-1')
-    await addScan(src, 'b', 'd/', { objectCount: 100_000, totalBytes: 10 * 1024 * GIB })
+    await addScan(source, 'b', 'd/', { objectCount: 100_000, totalBytes: 10 * 1024 * GIB })
 
-    const body = await (await get(src)).json() as EstimateBody
+    const body = await (await get(source)).json() as EstimateBody
     const c = body.candidates.find(x => x.connectionId === aws)!
     expect(c.provider).toBe('aws')
     expect(c.storageClass).toBe('STANDARD')
@@ -225,15 +225,15 @@ describe('GET /storage/:connectionId/estimate', () => {
   })
 
   it('ストレージクラスの設定が候補に反映される', async () => {
-    const src = 'src'.padEnd(10, '0')
+    const source = 'src'.padEnd(10, '0')
     const gda = 'gda'.padEnd(10, '0')
-    await addConnection(src, 'mdx-s3', 'https://mdx.lan:9000')
+    await addConnection(source, 'mdx-s3', 'https://mdx.lan:9000')
     await addConnection(gda, 'aws-cold', 'https://s3.ap-northeast-1.amazonaws.com', 'ap-northeast-1', {
       [K.storageClass]: 'DEEP_ARCHIVE',
     })
-    await addScan(src, 'b', 'd/', { objectCount: 1000, totalBytes: 1024 * GIB })
+    await addScan(source, 'b', 'd/', { objectCount: 1000, totalBytes: 1024 * GIB })
 
-    const body = await (await get(src)).json() as EstimateBody
+    const body = await (await get(source)).json() as EstimateBody
     const c = body.candidates.find(x => x.connectionId === gda)!
     expect(c.storageClass).toBe('DEEP_ARCHIVE')
     expect(c.warnings.map(w => w.kind)).toContain('minDuration')
@@ -243,10 +243,10 @@ describe('GET /storage/:connectionId/estimate', () => {
   })
 
   it('接続設定の実測帯域が所要時間に効く', async () => {
-    const src = 'src'.padEnd(10, '0')
+    const source = 'src'.padEnd(10, '0')
     const slow = 'slw'.padEnd(10, '0')
     const fast = 'fst'.padEnd(10, '0')
-    await addConnection(src, 'mdx-s3', 'https://mdx.lan:9000', 'auto', {
+    await addConnection(source, 'mdx-s3', 'https://mdx.lan:9000', 'auto', {
       [K.readMbps]: '1000', [K.instability]: '0',
     })
     await addConnection(slow, 'slow', 'https://slow.lan:9000', 'auto', {
@@ -255,9 +255,9 @@ describe('GET /storage/:connectionId/estimate', () => {
     await addConnection(fast, 'fast', 'https://fast.lan:9000', 'auto', {
       [K.writeMbps]: '700', [K.instability]: '0',
     })
-    await addScan(src, 'b', 'd/', { objectCount: 100, totalBytes: 700_000_000_000 })
+    await addScan(source, 'b', 'd/', { objectCount: 100, totalBytes: 700_000_000_000 })
 
-    const body = await (await get(src)).json() as EstimateBody
+    const body = await (await get(source)).json() as EstimateBody
     const s = body.candidates.find(x => x.connectionId === slow)!
     const f = body.candidates.find(x => x.connectionId === fast)!
     expect(s.durationSec.optimistic).toBeCloseTo(7000, 0)
@@ -265,11 +265,11 @@ describe('GET /storage/:connectionId/estimate', () => {
   })
 
   it('まだ取得していなければ同梱カタログで計算し、古い扱いにする', async () => {
-    const src = 'src'.padEnd(10, '0')
-    await addConnection(src, 'mdx-s3', 'https://mdx.lan:9000')
-    await addScan(src, 'b', 'd/', { objectCount: 1, totalBytes: 1 })
+    const source = 'src'.padEnd(10, '0')
+    await addConnection(source, 'mdx-s3', 'https://mdx.lan:9000')
+    await addScan(source, 'b', 'd/', { objectCount: 1, totalBytes: 1 })
 
-    const body = await (await get(src)).json() as EstimateBody
+    const body = await (await get(source)).json() as EstimateBody
     expect(body.catalog.source).toBe('bundled')
     expect(body.catalog.fetchedAt).toBeNull()
     expect(body.catalog.asOf).toBe(CATALOG.asOf)
@@ -278,27 +278,27 @@ describe('GET /storage/:connectionId/estimate', () => {
   })
 
   it('取得済みなら取得日時と鮮度を返す', async () => {
-    const src = 'src'.padEnd(10, '0')
-    await addConnection(src, 'mdx-s3', 'https://mdx.lan:9000')
-    await addScan(src, 'b', 'd/', { objectCount: 1, totalBytes: 1 })
+    const source = 'src'.padEnd(10, '0')
+    await addConnection(source, 'mdx-s3', 'https://mdx.lan:9000')
+    await addScan(source, 'b', 'd/', { objectCount: 1, totalBytes: 1 })
     await setCachedCatalog('2026-08-22T00:00:00Z')
 
     today = new Date('2026-08-22T06:00:00Z')
-    const fresh = await (await get(src)).json() as EstimateBody
+    const fresh = await (await get(source)).json() as EstimateBody
     expect(fresh.catalog.source).toBe('fetched')
     expect(fresh.catalog.fetchedAt).toBe('2026-08-22T00:00:00.000Z')
     expect(fresh.catalog.stale).toBe(false)
 
     // 既定の更新間隔は 1 日。
     today = new Date('2026-08-24T00:00:00Z')
-    const stale = await (await get(src)).json() as EstimateBody
+    const stale = await (await get(source)).json() as EstimateBody
     expect(stale.catalog.stale).toBe(true)
   })
 
   it('更新間隔は app_settings で変えられる', async () => {
-    const src = 'src'.padEnd(10, '0')
-    await addConnection(src, 'mdx-s3', 'https://mdx.lan:9000')
-    await addScan(src, 'b', 'd/', { objectCount: 1, totalBytes: 1 })
+    const source = 'src'.padEnd(10, '0')
+    await addConnection(source, 'mdx-s3', 'https://mdx.lan:9000')
+    await addScan(source, 'b', 'd/', { objectCount: 1, totalBytes: 1 })
     await setCachedCatalog('2026-08-22T00:00:00Z')
     await pools.rw.query(
       `INSERT INTO app_settings (key, value) VALUES ('pricing_refresh_days', '30')
@@ -306,48 +306,48 @@ describe('GET /storage/:connectionId/estimate', () => {
     )
 
     today = new Date('2026-08-24T00:00:00Z')
-    const body = await (await get(src)).json() as EstimateBody
+    const body = await (await get(source)).json() as EstimateBody
     expect(body.catalog.stale).toBe(false)
   })
 
   it('古ければ裏で更新ジョブを投げる (見積もりは待たずに返す)', async () => {
-    const src = 'src'.padEnd(10, '0')
-    await addConnection(src, 'mdx-s3', 'https://mdx.lan:9000')
-    await addScan(src, 'b', 'd/', { objectCount: 1, totalBytes: 1 })
+    const source = 'src'.padEnd(10, '0')
+    await addConnection(source, 'mdx-s3', 'https://mdx.lan:9000')
+    await addScan(source, 'b', 'd/', { objectCount: 1, totalBytes: 1 })
 
-    const body = await (await get(src)).json() as EstimateBody
+    const body = await (await get(source)).json() as EstimateBody
     // 今回の見積もりは古い単価のまま返る (stale-while-revalidate)。
     expect(body.catalog.source).toBe('bundled')
     expect(await refreshJobs()).toHaveLength(1)
   })
 
   it('更新が実行中なら重ねて投げない', async () => {
-    const src = 'src'.padEnd(10, '0')
-    await addConnection(src, 'mdx-s3', 'https://mdx.lan:9000')
-    await addScan(src, 'b', 'd/', { objectCount: 1, totalBytes: 1 })
+    const source = 'src'.padEnd(10, '0')
+    await addConnection(source, 'mdx-s3', 'https://mdx.lan:9000')
+    await addScan(source, 'b', 'd/', { objectCount: 1, totalBytes: 1 })
 
-    await get(src)
+    await get(source)
     expect(await refreshJobs()).toHaveLength(1)
-    await get(src)
-    await get(src)
+    await get(source)
+    await get(source)
     expect(await refreshJobs()).toHaveLength(1)
   })
 
   it('新しければ更新ジョブを投げない', async () => {
-    const src = 'src'.padEnd(10, '0')
-    await addConnection(src, 'mdx-s3', 'https://mdx.lan:9000')
-    await addScan(src, 'b', 'd/', { objectCount: 1, totalBytes: 1 })
+    const source = 'src'.padEnd(10, '0')
+    await addConnection(source, 'mdx-s3', 'https://mdx.lan:9000')
+    await addScan(source, 'b', 'd/', { objectCount: 1, totalBytes: 1 })
     await setCachedCatalog('2026-08-22T00:00:00Z')
 
     today = new Date('2026-08-22T06:00:00Z')
-    await get(src)
+    await get(source)
     expect(await refreshJobs()).toHaveLength(0)
   })
 
   it('直近の更新が失敗していても、間隔を空けるまで投げ直さない', async () => {
-    const src = 'src'.padEnd(10, '0')
-    await addConnection(src, 'mdx-s3', 'https://mdx.lan:9000')
-    await addScan(src, 'b', 'd/', { objectCount: 1, totalBytes: 1 })
+    const source = 'src'.padEnd(10, '0')
+    await addConnection(source, 'mdx-s3', 'https://mdx.lan:9000')
+    await addScan(source, 'b', 'd/', { objectCount: 1, totalBytes: 1 })
 
     // 外に出られない環境では取得が必ず失敗する。見積もりを開くたびに
     // ジョブを積むと jobs が失敗で埋まるので、失敗も間隔の対象にする。
@@ -357,23 +357,23 @@ describe('GET /storage/:connectionId/estimate', () => {
     const failed = await store.get(id)
     today = new Date(failed!.finishedAt!)
 
-    await get(src)
+    await get(source)
     expect(await refreshJobs()).toHaveLength(1)
 
     // 1 日経てば投げ直す。
     today = new Date(today.getTime() + 2 * 86_400_000)
-    await get(src)
+    await get(source)
     expect(await refreshJobs()).toHaveLength(2)
   })
 
   it('走査は prefix ごとに別のものを引く', async () => {
-    const src = 'src'.padEnd(10, '0')
-    await addConnection(src, 'mdx-s3', 'https://mdx.lan:9000')
-    await addScan(src, 'b', 'a/', { objectCount: 111, totalBytes: 1 * GIB })
-    await addScan(src, 'b', 'z/', { objectCount: 999, totalBytes: 9 * GIB })
+    const source = 'src'.padEnd(10, '0')
+    await addConnection(source, 'mdx-s3', 'https://mdx.lan:9000')
+    await addScan(source, 'b', 'a/', { objectCount: 111, totalBytes: 1 * GIB })
+    await addScan(source, 'b', 'z/', { objectCount: 999, totalBytes: 9 * GIB })
 
-    const a = await (await get(src, 'bucket=b&prefix=a/')).json() as EstimateBody
-    const z = await (await get(src, 'bucket=b&prefix=z/')).json() as EstimateBody
+    const a = await (await get(source, 'bucket=b&prefix=a/')).json() as EstimateBody
+    const z = await (await get(source, 'bucket=b&prefix=z/')).json() as EstimateBody
     expect(a.scan.objectCount).toBe(111)
     expect(z.scan.objectCount).toBe(999)
   })

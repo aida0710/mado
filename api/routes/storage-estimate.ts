@@ -72,14 +72,14 @@ export function mountStorageEstimateRoutes(app: Hono, deps: StorageEstimateDeps)
     const visible = await visibleConnectionIds(deps.pools.ro, c)
     const allRows = (await deps.pools.ro.query<ConnRow>(SELECT_CONNS)).rows
     const rows = allRows.filter(row => visible === null || visible.has(row.id))
-    const srcRow = rows.find(r => r.id === connectionId)
-    if (!srcRow) return c.json({ error: 'connection not found' }, 404)
+    const sourceRow = rows.find(r => r.id === connectionId)
+    if (!sourceRow) return c.json({ error: 'connection not found' }, 404)
 
     const snapshot = await deps.pricing.get()
     const catalog = snapshot.catalog
 
-    const srcProfile = settingsToProfile(srcRow, srcRow.settings)
-    const src: Endpoint = { profile: srcProfile, rates: effectiveRates(srcProfile, catalog) }
+    const sourceProfile = settingsToProfile(sourceRow, sourceRow.settings)
+    const source: Endpoint = { profile: sourceProfile, rates: effectiveRates(sourceProfile, catalog) }
 
     // 移動元自身も候補に残す。「同じ場所のままストレージクラスだけ変える」は
     // 実際の選択肢であり、その場合 egress も回線も要らない。
@@ -87,8 +87,8 @@ export function mountStorageEstimateRoutes(app: Hono, deps: StorageEstimateDeps)
       const profile = settingsToProfile(row, row.settings)
       return estimateTransfer({
         scan: scan.data,
-        src,
-        dst: { profile, rates: effectiveRates(profile, catalog) },
+        source,
+        destination: { profile, rates: effectiveRates(profile, catalog) },
       })
     })
 
@@ -111,11 +111,11 @@ export function mountStorageEstimateRoutes(app: Hono, deps: StorageEstimateDeps)
 
     return c.json({
       source: {
-        connectionId: srcProfile.connectionId,
-        name: srcProfile.name,
-        provider: srcProfile.provider,
-        storageClass: srcProfile.storageClass,
-        storageClassLabel: src.rates.storageClassLabel,
+        connectionId: sourceProfile.connectionId,
+        name: sourceProfile.name,
+        provider: sourceProfile.provider,
+        storageClass: sourceProfile.storageClass,
+        storageClassLabel: source.rates.storageClassLabel,
       },
       scan: {
         objectCount: scan.data.objectCount,

@@ -62,21 +62,21 @@ export class PeakAccumulator {
       this.curMax = -Infinity
       this.curCount = 0
     }
-    const src = this.pairs
-    if (src.length === 0) return { peaks: [], totalSamples: this.total }
-    if (src.length <= bucketCount) {
-      return { peaks: src.map(p => [...p] as [number, number]), totalSamples: this.total }
+    const pairs = this.pairs
+    if (pairs.length === 0) return { peaks: [], totalSamples: this.total }
+    if (pairs.length <= bucketCount) {
+      return { peaks: pairs.map(p => [...p] as [number, number]), totalSamples: this.total }
     }
-    // src.length 個のペアを bucketCount 個へ等分マージ
+    // pairs.length 個のペアを bucketCount 個へ等分マージ
     const peaks: Array<[number, number]> = []
     for (let b = 0; b < bucketCount; b++) {
-      const start = Math.floor((b * src.length) / bucketCount)
-      const end = Math.max(start + 1, Math.floor(((b + 1) * src.length) / bucketCount))
+      const start = Math.floor((b * pairs.length) / bucketCount)
+      const end = Math.max(start + 1, Math.floor(((b + 1) * pairs.length) / bucketCount))
       let mn = Infinity
       let mx = -Infinity
       for (let i = start; i < end; i++) {
-        if (src[i][0] < mn) mn = src[i][0]
-        if (src[i][1] > mx) mx = src[i][1]
+        if (pairs[i][0] < mn) mn = pairs[i][0]
+        if (pairs[i][1] > mx) mx = pairs[i][1]
       }
       peaks.push([mn, mx])
     }

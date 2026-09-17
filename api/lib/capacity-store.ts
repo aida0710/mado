@@ -114,7 +114,12 @@ export interface CapacityStore {
   markConnectionScheduled(connectionId: string): Promise<void>
   markConnectionPaused(connectionId: string): Promise<void>
   recordConnectionError(connectionId: string, error: unknown): Promise<void>
-  recordSuccess(jobId: number, connectionId: string, bucket: string, result: Pick<ScanResult, 'totalBytes' | 'objectCount'>): Promise<void>
+  recordSuccess(input: {
+    jobId: number
+    connectionId: string
+    bucket: string
+    result: Pick<ScanResult, 'totalBytes' | 'objectCount'>
+  }): Promise<void>
   recordPartial(connectionId: string, bucket: string): Promise<void>
   recordError(connectionId: string, bucket: string, error: unknown): Promise<void>
   prune(keepDays: number): Promise<number>
@@ -269,7 +274,7 @@ export function createCapacityStore(pools: Pools): CapacityStore {
           WHERE connection_id = $1`, [connectionId, publicError(error)])
     },
 
-    async recordSuccess(jobId, connectionId, bucket, result) {
+    async recordSuccess({ jobId, connectionId, bucket, result }) {
       const client = await pools.rw.connect()
       try {
         await client.query('BEGIN')

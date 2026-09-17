@@ -113,19 +113,19 @@ describe.skipIf(!hasFfmpeg)('analyzeAudio', () => {
 // ffmpeg 有無に関わらず動く純ロジック。
 describe('resolveBitRate', () => {
   it('stream の bit_rate を最優先する', () => {
-    expect(resolveBitRate(128_000, 130_000, 999_999, 10)).toBe(128_000)
+    expect(resolveBitRate({ streamBitRate: 128_000, formatBitRate: 130_000, sizeBytes: 999_999, durationSec: 10 })).toBe(128_000)
   })
 
   it('stream が無ければ format の bit_rate', () => {
-    expect(resolveBitRate(null, 130_000, 999_999, 10)).toBe(130_000)
+    expect(resolveBitRate({ streamBitRate: null, formatBitRate: 130_000, sizeBytes: 999_999, durationSec: 10 })).toBe(130_000)
   })
 
   it('どちらも無ければ sizeBytes*8/durationSec の計算値', () => {
-    expect(resolveBitRate(null, null, 125_000, 8)).toBe(125_000)
+    expect(resolveBitRate({ streamBitRate: null, formatBitRate: null, sizeBytes: 125_000, durationSec: 8 })).toBe(125_000)
   })
 
   it('sizeBytes / durationSec も無ければ null', () => {
-    expect(resolveBitRate(null, null, null, 8)).toBeNull()
-    expect(resolveBitRate(null, null, 100, 0)).toBeNull()
+    expect(resolveBitRate({ streamBitRate: null, formatBitRate: null, sizeBytes: null, durationSec: 8 })).toBeNull()
+    expect(resolveBitRate({ streamBitRate: null, formatBitRate: null, sizeBytes: 100, durationSec: 0 })).toBeNull()
   })
 })
