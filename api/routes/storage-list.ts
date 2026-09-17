@@ -4,7 +4,7 @@ import {
   ListObjectsV2Command,
 } from '@aws-sdk/client-s3'
 import type { Hono } from 'hono'
-import { resolveStorageOrFail, type GetStorage } from './_connectionId.js'
+import { resolveStorageOrFail, type GetStorage } from './_storageRequest.js'
 import type { ConnectionConfig } from '../storage.js'
 import type { CacheScope, ResponseCache } from '../lib/storage-cache.js'
 

@@ -9,7 +9,7 @@ import type { Pools } from '../db.js'
 import { getSessionPrincipal } from '../lib/rbac.js'
 import { markAuditNoChange } from '../lib/audit-activity.js'
 import type { ResponseCache } from '../lib/storage-cache.js'
-import { resolveStorageOrFail, type GetStorage } from './_connectionId.js'
+import { resolveStorageOrFail, type GetStorage } from './_storageRequest.js'
 
 // 認証有効時の編集者はsession userのアカウント署名を正本にする。
 // editor request値は認証無効の開発・test環境との互換用。

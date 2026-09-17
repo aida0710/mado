@@ -10,7 +10,7 @@ import { Readable as ReadableCtor } from 'node:stream'
 import type { Pools } from '../db.js'
 import type { Env } from '../env.js'
 import type { ConnectionConfig } from '../storage.js'
-import type { GetStorage } from '../routes/_connectionId.js'
+import type { GetStorage } from '../routes/_storageRequest.js'
 import { analyzeAudio, MediaAnalyzeError, type AnalyzeResult } from './media-analyze.js'
 import {
   getCachedMedia,

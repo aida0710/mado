@@ -7,7 +7,7 @@ import {
   getCachedSpectrogram,
   mediaCacheKey,
 } from '../lib/media-cache.js'
-import { resolveStorageOrFail, type GetStorage } from './_connectionId.js'
+import { resolveObjectOrFail, type GetStorage } from './_storageRequest.js'
 
 export interface StorageMediaDeps {
   getStorage: GetStorage
@@ -23,16 +23,11 @@ export function mountStorageMediaRoutes(app: Hono, deps: StorageMediaDeps): void
   // 単一ファイルの解析。キャッシュ命中は即返し、未計算は media-worker に
   // 同期 proxy する (キューは通らない)。202 は返さない。
   app.get('/storage/:connectionId/media/analyze', async c => {
-    const r0 = await resolveStorageOrFail(c, deps.getStorage)
-    if (r0 instanceof Response) return r0
-    const storage = r0
+    const object = await resolveObjectOrFail(c, deps.getStorage)
+    if (object instanceof Response) return object
+    const { storage, bucket, key } = object
     const connectionId = c.req.param('connectionId')
-    const bucket = c.req.query('bucket')
-    const key = c.req.query('key')
     const entryPath = c.req.query('entryPath') || undefined
-    if (!bucket || !key) {
-      return c.json({ error: 'bucket and key required' }, 400)
-    }
 
     let etag: string
     try {

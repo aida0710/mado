@@ -1,5 +1,5 @@
 import { ListBucketsCommand } from '@aws-sdk/client-s3'
-import type { GetStorage } from '../routes/_connectionId.js'
+import type { GetStorage } from '../routes/_storageRequest.js'
 
 /** 容量画面と定期schedulerで共有する、cacheを介さないbucket名一覧。 */
 export async function listStorageBucketNames(getStorage: GetStorage, connectionId: string): Promise<string[]> {

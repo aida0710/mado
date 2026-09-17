@@ -10,7 +10,7 @@ import {
   type ArchiveKind,
 } from '../lib/tar-stream.js'
 import { listTarHeadersByRange, makeStorageRangeReader } from '../lib/tar-range.js'
-import { resolveStorageOrFail, type GetStorage } from './_connectionId.js'
+import { resolveObjectOrFail, type GetStorage, type ObjectRequest } from './_storageRequest.js'
 
 export interface PreviewEnv {
   PREVIEW_TEXT_LIMIT: number
@@ -128,28 +128,68 @@ function storageError(c: Context, e: unknown): Response {
   return c.json({ error: 'storage request failed' }, 500)
 }
 
+interface OpenedObject {
+  body: Readable
+  contentLength: number | undefined
+  /** Range 指定時に S3 が返す "bytes a-b/total"。無ければ全体を返している。 */
+  contentRange: string | undefined
+}
+
+/** GetObject を開いて本文ストリームを返す。失敗は storageError で Response にする。 */
+async function openObject(
+  c: Context,
+  { storage, bucket, key }: ObjectRequest,
+  range?: string,
+): Promise<OpenedObject | Response> {
+  try {
+    const r = await storage.send(new GetObjectCommand({ Bucket: bucket, Key: key, Range: range }))
+    return {
+      body: r.Body as unknown as Readable,
+      contentLength: r.ContentLength,
+      contentRange: r.ContentRange,
+    }
+  } catch (e) {
+    return storageError(c, e)
+  }
+}
+
+/** 開いたオブジェクトをそのまま流す。Content-Range があれば 206 で返す。 */
+function streamObject(opened: OpenedObject, headers: Record<string, string>): Response {
+  const merged: Record<string, string> = { 'Cache-Control': 'private, no-store', ...headers }
+  if (opened.contentLength != null) merged['Content-Length'] = String(opened.contentLength)
+  if (opened.contentRange) merged['Content-Range'] = opened.contentRange
+  return new Response(
+    Readable.toWeb(opened.body) as unknown as ReadableStream<Uint8Array>,
+    { status: opened.contentRange ? 206 : 200, headers: merged },
+  )
+}
+
+/** 音声・動画は途中から再生できるよう、ブラウザの Range をそのまま S3 へ渡す。 */
+function mountRangeStreamRoute(
+  app: Hono,
+  deps: StoragePreviewDeps,
+  path: string,
+  mimeByExt: Record<string, string>,
+): void {
+  app.get(path, async c => {
+    const object = await resolveObjectOrFail(c, deps.getStorage)
+    if (object instanceof Response) return object
+    const opened = await openObject(c, object, c.req.header('Range'))
+    if (opened instanceof Response) return opened
+    return streamObject(opened, {
+      'Content-Type': mimeByExt[ext(object.key)] ?? 'application/octet-stream',
+      'Accept-Ranges': 'bytes',
+    })
+  })
+}
+
 export function mountStoragePreviewRoutes(app: Hono, deps: StoragePreviewDeps): void {
   app.get('/storage/:connectionId/preview/text', async c => {
-    const r0 = await resolveStorageOrFail(c, deps.getStorage)
-    if (r0 instanceof Response) return r0
-    const storage = r0
-    const bucket = c.req.query('bucket')
-    const key = c.req.query('key')
-    if (!bucket || !key) {
-      return c.json({ error: 'bucket and key required' }, 400)
-    }
-    let buf: Buffer
-    try {
-      const r = await storage.send(
-        new GetObjectCommand({ Bucket: bucket, Key: key }),
-      )
-      buf = await readN(
-        r.Body as unknown as NodeJS.ReadableStream,
-        deps.env.PREVIEW_TEXT_LIMIT,
-      )
-    } catch (e) {
-      return storageError(c, e)
-    }
+    const object = await resolveObjectOrFail(c, deps.getStorage)
+    if (object instanceof Response) return object
+    const opened = await openObject(c, object)
+    if (opened instanceof Response) return opened
+    const buf = await readN(opened.body, deps.env.PREVIEW_TEXT_LIMIT)
     // TS の strict 型 (ArrayBufferView<ArrayBuffer>) で BodyInit を満たすため
     // 新しい ArrayBuffer バックの Uint8Array にコピーする。
     const body = new Uint8Array(buf.byteLength)
@@ -165,156 +205,38 @@ export function mountStoragePreviewRoutes(app: Hono, deps: StoragePreviewDeps): 
   // application/octet-stream に固定し、Content-Disposition: attachment で
   // ブラウザにファイル保存ダイアログを促す。
   app.get('/storage/:connectionId/preview/raw', async c => {
-    const r0 = await resolveStorageOrFail(c, deps.getStorage)
-    if (r0 instanceof Response) return r0
-    const storage = r0
-    const bucket = c.req.query('bucket')
-    const key = c.req.query('key')
-    if (!bucket || !key) {
-      return c.json({ error: 'bucket and key required' }, 400)
-    }
-    let stream: Readable
-    let contentLength: number | undefined
-    try {
-      const r = await storage.send(
-        new GetObjectCommand({ Bucket: bucket, Key: key }),
-      )
-      stream = r.Body as unknown as Readable
-      contentLength = r.ContentLength
-    } catch (e) {
-      return storageError(c, e)
-    }
-    const filename = key.split('/').pop() ?? 'file'
+    const object = await resolveObjectOrFail(c, deps.getStorage)
+    if (object instanceof Response) return object
+    const opened = await openObject(c, object)
+    if (opened instanceof Response) return opened
+    const filename = object.key.split('/').pop() ?? 'file'
     // RFC 5987: ASCII fallback + UTF-8 真値で日本語ファイル名にも対応。
     const asciiName = filename.replace(/[^\x20-\x7e]/g, '_').replace(/"/g, '\\"')
-    const headers: Record<string, string> = {
+    return streamObject(opened, {
       'Content-Type': 'application/octet-stream',
-      'Cache-Control': 'private, no-store',
       'Content-Disposition':
         `attachment; filename="${asciiName}"; ` +
         `filename*=UTF-8''${encodeURIComponent(filename)}`,
-    }
-    if (contentLength != null) headers['Content-Length'] = String(contentLength)
-    return new Response(
-      Readable.toWeb(stream) as unknown as ReadableStream<Uint8Array>,
-      { headers },
-    )
+    })
   })
 
   app.get('/storage/:connectionId/preview/image', async c => {
-    const r0 = await resolveStorageOrFail(c, deps.getStorage)
-    if (r0 instanceof Response) return r0
-    const storage = r0
-    const bucket = c.req.query('bucket')
-    const key = c.req.query('key')
-    if (!bucket || !key) {
-      return c.json({ error: 'bucket and key required' }, 400)
-    }
-    let stream: Readable
-    let contentLength: number | undefined
-    try {
-      const r = await storage.send(
-        new GetObjectCommand({ Bucket: bucket, Key: key }),
-      )
-      stream = r.Body as unknown as Readable
-      contentLength = r.ContentLength
-    } catch (e) {
-      return storageError(c, e)
-    }
-    const mime = IMAGE_MIME[ext(key)] ?? 'application/octet-stream'
-    const headers: Record<string, string> = { 'Content-Type': mime, 'Cache-Control': 'private, no-store' }
-    if (contentLength != null) headers['Content-Length'] = String(contentLength)
-    return new Response(
-      Readable.toWeb(stream) as unknown as ReadableStream<Uint8Array>,
-      { headers },
-    )
+    const object = await resolveObjectOrFail(c, deps.getStorage)
+    if (object instanceof Response) return object
+    const opened = await openObject(c, object)
+    if (opened instanceof Response) return opened
+    return streamObject(opened, {
+      'Content-Type': IMAGE_MIME[ext(object.key)] ?? 'application/octet-stream',
+    })
   })
 
-  app.get('/storage/:connectionId/preview/audio', async c => {
-    const r0 = await resolveStorageOrFail(c, deps.getStorage)
-    if (r0 instanceof Response) return r0
-    const storage = r0
-    const bucket = c.req.query('bucket')
-    const key = c.req.query('key')
-    if (!bucket || !key) {
-      return c.json({ error: 'bucket and key required' }, 400)
-    }
-    const range = c.req.header('Range')
-    let stream: Readable
-    let contentLength: number | undefined
-    let contentRange: string | undefined
-    try {
-      const r = await storage.send(new GetObjectCommand({
-        Bucket: bucket, Key: key, Range: range,
-      }))
-      stream = r.Body as unknown as Readable
-      contentLength = r.ContentLength
-      contentRange = r.ContentRange
-    } catch (e) {
-      return storageError(c, e)
-    }
-    const mime = AUDIO_MIME[ext(key)] ?? 'application/octet-stream'
-    const headers: Record<string, string> = {
-      'Content-Type': mime,
-      'Accept-Ranges': 'bytes',
-      'Cache-Control': 'private, no-store',
-    }
-    if (contentLength != null) headers['Content-Length'] = String(contentLength)
-    if (contentRange) headers['Content-Range'] = contentRange
-    const status = contentRange ? 206 : 200
-    return new Response(
-      Readable.toWeb(stream) as unknown as ReadableStream<Uint8Array>,
-      { status, headers },
-    )
-  })
-
-  app.get('/storage/:connectionId/preview/video', async c => {
-    const r0 = await resolveStorageOrFail(c, deps.getStorage)
-    if (r0 instanceof Response) return r0
-    const storage = r0
-    const bucket = c.req.query('bucket')
-    const key = c.req.query('key')
-    if (!bucket || !key) {
-      return c.json({ error: 'bucket and key required' }, 400)
-    }
-    const range = c.req.header('Range')
-    let stream: Readable
-    let contentLength: number | undefined
-    let contentRange: string | undefined
-    try {
-      const r = await storage.send(new GetObjectCommand({
-        Bucket: bucket, Key: key, Range: range,
-      }))
-      stream = r.Body as unknown as Readable
-      contentLength = r.ContentLength
-      contentRange = r.ContentRange
-    } catch (e) {
-      return storageError(c, e)
-    }
-    const mime = VIDEO_MIME[ext(key)] ?? 'application/octet-stream'
-    const headers: Record<string, string> = {
-      'Content-Type': mime,
-      'Accept-Ranges': 'bytes',
-      'Cache-Control': 'private, no-store',
-    }
-    if (contentLength != null) headers['Content-Length'] = String(contentLength)
-    if (contentRange) headers['Content-Range'] = contentRange
-    const status = contentRange ? 206 : 200
-    return new Response(
-      Readable.toWeb(stream) as unknown as ReadableStream<Uint8Array>,
-      { status, headers },
-    )
-  })
+  mountRangeStreamRoute(app, deps, '/storage/:connectionId/preview/audio', AUDIO_MIME)
+  mountRangeStreamRoute(app, deps, '/storage/:connectionId/preview/video', VIDEO_MIME)
 
   app.get('/storage/:connectionId/preview/tar', async c => {
-    const r0 = await resolveStorageOrFail(c, deps.getStorage)
-    if (r0 instanceof Response) return r0
-    const storage = r0
-    const bucket = c.req.query('bucket')
-    const key = c.req.query('key')
-    if (!bucket || !key) {
-      return c.json({ error: 'bucket and key required' }, 400)
-    }
+    const object = await resolveObjectOrFail(c, deps.getStorage)
+    if (object instanceof Response) return object
+    const { storage, bucket, key } = object
     const kind = detectArchive(key)
     if (!kind) {
       return c.json({ error: 'unsupported archive extension' }, 400)
@@ -485,13 +407,11 @@ export function mountStoragePreviewRoutes(app: Hono, deps: StoragePreviewDeps): 
   // フロントエンドはこれを使って tar 全体をダウンロードせずに WebDataset シャード内の
   // `.wav` を再生したり `.json` を表示したりする。
   app.get('/storage/:connectionId/preview/tar-entry', async c => {
-    const r0 = await resolveStorageOrFail(c, deps.getStorage)
-    if (r0 instanceof Response) return r0
-    const storage = r0
-    const bucket = c.req.query('bucket')
-    const key = c.req.query('key')
+    const object = await resolveObjectOrFail(c, deps.getStorage)
+    if (object instanceof Response) return object
+    const { key } = object
     const entry = c.req.query('entry')
-    if (!bucket || !key || !entry) {
+    if (!entry) {
       return c.json({ error: 'bucket, key and entry are required' }, 400)
     }
     const kind = detectArchive(key)
@@ -499,15 +419,9 @@ export function mountStoragePreviewRoutes(app: Hono, deps: StoragePreviewDeps): 
       return c.json({ error: 'unsupported archive extension' }, 400)
     }
 
-    let stream: NodeJS.ReadableStream
-    try {
-      const r = await storage.send(
-        new GetObjectCommand({ Bucket: bucket, Key: key }),
-      )
-      stream = r.Body as unknown as NodeJS.ReadableStream
-    } catch (e) {
-      return storageError(c, e)
-    }
+    const opened = await openObject(c, object)
+    if (opened instanceof Response) return opened
+    const stream: NodeJS.ReadableStream = opened.body
 
     // ?maxBytes=N を付けると「先頭 N バイトだけ」を 200 で返す (head モード)。
     // テキストか判定するだけのために 100MB のエントリを丸ごと解凍するのを避ける

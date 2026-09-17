@@ -1,6 +1,6 @@
 import { ListObjectsCommand, ListObjectsV2Command } from '@aws-sdk/client-s3'
 import { z } from 'zod'
-import type { GetStorage } from '../routes/_connectionId.js'
+import type { GetStorage } from '../routes/_storageRequest.js'
 import type { ConnectionConfig } from '../storage.js'
 import type { JobContext, JobHandler } from './job-runner.js'
 import { createScanAccumulator } from './scan.js'

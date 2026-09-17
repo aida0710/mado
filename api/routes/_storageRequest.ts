@@ -26,3 +26,28 @@ export async function resolveStorageOrFail(
     throw e
   }
 }
+
+export interface ObjectRequest {
+  storage: S3Client
+  bucket: string
+  key: string
+}
+
+/**
+ * `:connectionId` に加えて `?bucket=&key=` で 1 オブジェクトを指す request を解決する。
+ * preview 系のように「接続 + バケット + キー」を必ず揃える route で使う。
+ * 呼び出し元パターンは resolveStorageOrFail と同じで、Response が返ったらそのまま返す。
+ */
+export async function resolveObjectOrFail(
+  c: Context,
+  getStorage: GetStorage,
+): Promise<ObjectRequest | Response> {
+  const storage = await resolveStorageOrFail(c, getStorage)
+  if (storage instanceof Response) return storage
+  const bucket = c.req.query('bucket')
+  const key = c.req.query('key')
+  if (!bucket || !key) {
+    return c.json({ error: 'bucket and key required' }, 400)
+  }
+  return { storage, bucket, key }
+}
