@@ -190,7 +190,7 @@ export function TagSearchView({ connectionId }: Props) {
         const k = `${h.tagId}|${targetUri(h)}`
         if (wanted.has(k)) continue
         try {
-          await api.unassignTag(connectionId, h.bucket, h.kind, h.path, h.tagId)
+          await api.unassignTag({ connectionId, bucket: h.bucket, kind: h.kind, path: h.path, tagId: h.tagId })
           summary.removed = (summary.removed ?? 0) + 1
           existing.delete(k)
         } catch (e) {
@@ -209,7 +209,7 @@ export function TagSearchView({ connectionId }: Props) {
       if (!tag) { summary.skipped++; continue }
       if (existing.has(`${tag.id}|s3://${parsed.bucket}/${parsed.prefix}`)) { summary.skipped++; continue }
       try {
-        await api.assignTag(connectionId, parsed.bucket, kindOf(parsed.prefix), parsed.prefix, tag.id)
+        await api.assignTag({ connectionId, bucket: parsed.bucket, kind: kindOf(parsed.prefix), path: parsed.prefix, tagId: tag.id })
         summary.added++
       } catch (e) {
         summary.failed.push(`${a.target}: ${(e as Error).message}`)

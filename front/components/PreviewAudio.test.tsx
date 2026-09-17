@@ -94,7 +94,7 @@ describe('PreviewAudio', () => {
     expect(screen.getByText('解析中…')).toBeInTheDocument()
     expect(api.mediaAnalyze).toHaveBeenCalledTimes(2)
     expect(api.mediaAnalyze).toHaveBeenLastCalledWith(
-      'c', 'b', 'b.wav', expect.objectContaining({ entryPath: undefined }),
+      expect.objectContaining({ connectionId: 'c', bucket: 'b', key: 'b.wav', entryPath: undefined }),
     )
   })
 
@@ -126,7 +126,7 @@ describe('PreviewAudio', () => {
     expect(audio.src).toContain('blob:')
     expect(screen.queryByText('音声を取得中…')).not.toBeInTheDocument()
     await waitFor(() => expect(api.mediaAnalyze).toHaveBeenCalledWith(
-      'c', 'b', 'shard.tar', expect.objectContaining({ entryPath: 'u1.wav' }),
+      expect.objectContaining({ connectionId: 'c', bucket: 'b', key: 'shard.tar', entryPath: 'u1.wav' }),
     ))
   })
 

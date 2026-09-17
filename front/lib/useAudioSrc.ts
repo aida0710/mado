@@ -21,6 +21,6 @@ export function useAudioSrc({ connectionId, bucket, key, entryPath }: {
   entryPath?: string
 }): AudioSrcState {
   const directUrl = entryPath ? null : api.audioUrl(connectionId, bucket, key)
-  const archiveEntryUrl = entryPath ? api.tarEntryUrl(connectionId, bucket, key, entryPath) : null
+  const archiveEntryUrl = entryPath ? api.tarEntryUrl({ connectionId, bucket, key, entry: entryPath }) : null
   return useMediaSrc(directUrl, archiveEntryUrl)
 }

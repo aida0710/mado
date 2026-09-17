@@ -7,6 +7,15 @@ import { API_BASE, cacheKey, getJson, mutateJson, storagePath } from './http'
 const tagsCache = new TTLCache<z.infer<typeof TagList>>(SHORT_CACHE_TTL_MS)
 const tagAssignmentsCache = new TTLCache<z.infer<typeof TagAssignmentMap>>(SHORT_CACHE_TTL_MS)
 
+/** 「どの対象に、どのタグを」。assign / unassign で同じ形。 */
+export interface TagAssignmentTarget {
+  connectionId: string
+  bucket: string
+  kind: TargetKind
+  path: string
+  tagId: string
+}
+
 const assignmentsScope = (connectionId: string, bucket: string, kind: TargetKind) =>
   cacheKey('tagAssignments', connectionId, bucket, kind)
 
@@ -35,9 +44,9 @@ export const tagsClient = {
 
   // 一覧をまとめて hydrate するバッチ取得。paths が空なら fetch しない
   // (呼び出し側が dirs/files 0 件のときに空 URL を叩かないための短絡)。
-  tagAssignments: (
-    connectionId: string, bucket: string, kind: TargetKind, paths: string[],
-  ): Promise<z.infer<typeof TagAssignmentMap>> => {
+  tagAssignments: ({ connectionId, bucket, kind, paths }: {
+    connectionId: string; bucket: string; kind: TargetKind; paths: string[]
+  }): Promise<z.infer<typeof TagAssignmentMap>> => {
     if (paths.length === 0) return Promise.resolve({})
     return tagAssignmentsCache.get(cacheKey('tagAssignments', connectionId, bucket, kind, ...paths), () => {
       const search = new URLSearchParams({ bucket, kind })
@@ -50,16 +59,12 @@ export const tagsClient = {
     tagAssignmentsCache.invalidatePrefix(assignmentsScope(connectionId, bucket, kind))
   },
 
-  assignTag: async (
-    connectionId: string, bucket: string, kind: TargetKind, path: string, tagId: string,
-  ): Promise<void> => {
+  assignTag: async ({ connectionId, bucket, kind, path, tagId }: TagAssignmentTarget): Promise<void> => {
     await mutateJson(storagePath(connectionId, '/tags'), { method: 'PUT', body: { bucket, kind, path, tagId } }, null)
     tagAssignmentsCache.invalidatePrefix(assignmentsScope(connectionId, bucket, kind))
   },
 
-  unassignTag: async (
-    connectionId: string, bucket: string, kind: TargetKind, path: string, tagId: string,
-  ): Promise<void> => {
+  unassignTag: async ({ connectionId, bucket, kind, path, tagId }: TagAssignmentTarget): Promise<void> => {
     await mutateJson(storagePath(connectionId, '/tags'), { method: 'DELETE', body: { bucket, kind, path, tagId } }, null)
     tagAssignmentsCache.invalidatePrefix(assignmentsScope(connectionId, bucket, kind))
   },

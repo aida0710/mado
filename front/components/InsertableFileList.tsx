@@ -56,7 +56,7 @@ export function InsertableFileList({ connectionId, bucket, prefix: initialPrefix
 
   useEffect(() => {
     let cancelled = false
-    api.list(connectionId, bucket, prefix, {}, { recursive: false })
+    api.list({ connectionId, bucket, prefix, recursive: false })
       .then(data => {
         if (!cancelled) setResult({ connectionId, bucket, prefix, data, error: null })
       })

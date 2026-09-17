@@ -51,7 +51,7 @@ function PinnedEntryImage({ connectionId, bucket, archiveKey, entry }: {
         border: '1px solid var(--rule)',
         boxShadow: '0 1px 4px rgba(10, 9, 4, 0.06)',
       }}
-      src={api.tarEntryUrl(connectionId, bucket, archiveKey, entry)}
+      src={api.tarEntryUrl({ connectionId, bucket, key: archiveKey, entry })}
       alt={entry}
     />
   )
@@ -76,7 +76,7 @@ function PinnedPreviewBody({ item }: { item: PinnedItem }) {
     return (
       <PinnedTextBody
         name={entryPath}
-        url={api.tarEntryUrl(connectionId, bucket, key, entryPath, { maxBytes: TEXT_HEAD_BYTES })}
+        url={api.tarEntryUrl({ connectionId, bucket, key, entry: entryPath, maxBytes: TEXT_HEAD_BYTES })}
       />
     )
   }
@@ -97,7 +97,7 @@ export function PinnedPreviewCard({ item }: { item: PinnedItem }) {
   const fullPath = fullEntryLabel(key, entryPath)
   const filename = basename(entryPath ?? key)
   const downloadUrl = entryPath != null
-    ? api.tarEntryUrl(connectionId, bucket, key, entryPath)
+    ? api.tarEntryUrl({ connectionId, bucket, key, entry: entryPath })
     : api.downloadUrl(connectionId, bucket, key)
 
   return (

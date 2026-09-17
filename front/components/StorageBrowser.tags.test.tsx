@@ -14,7 +14,7 @@ describe('StorageBrowser タグ', () => {
       cache: { fetchedAt: '2026-09-16T00:00:00.000Z', expiresAt: '2026-09-17T00:00:00.000Z', hit: false },
     })
     vi.spyOn(api, 'tags').mockResolvedValue([{ id: 't1', name: '重要', color: '#ff0000' }])
-    vi.spyOn(api, 'tagAssignments').mockImplementation(async (_c, _b, kind): Promise<Record<string, string[]>> =>
+    vi.spyOn(api, 'tagAssignments').mockImplementation(async ({ kind }): Promise<Record<string, string[]>> =>
       kind === 'file' ? { 'a.txt': ['t1'] } : {})
     vi.spyOn(api, 'lastFetched', 'get').mockReturnValue({
       list: () => null, readme: () => null, tar: () => null, buckets: () => null,
@@ -43,7 +43,7 @@ describe('StorageBrowser タグ', () => {
       cache: { fetchedAt: '2026-09-16T00:00:00.000Z', expiresAt: '2026-09-17T00:00:00.000Z', hit: false },
     })
     vi.spyOn(api, 'tags').mockResolvedValue([{ id: 't1', name: '重要', color: '#ff0000' }])
-    vi.spyOn(api, 'tagAssignments').mockImplementation(async (_c, _b, kind): Promise<Record<string, string[]>> =>
+    vi.spyOn(api, 'tagAssignments').mockImplementation(async ({ kind }): Promise<Record<string, string[]>> =>
       kind === 'file' ? { 'a.txt': ['t1'] } : {})
     vi.spyOn(api, 'lastFetched', 'get').mockReturnValue({
       list: () => null, readme: () => null, tar: () => null, buckets: () => null,

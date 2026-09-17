@@ -114,10 +114,10 @@ describe('TarEntryModal - head モード', () => {
     await screen.findByText('hello')
 
     const calls = vi.mocked(api.tarEntryUrl).mock.calls
-    // 本文用 (head モード): 5 番目の引数に maxBytes が入る
-    expect(calls.some(c => c[4]?.maxBytes === 65536)).toBe(true)
-    // DL / <img src> / 生データ URL 用: opts なし
-    expect(calls.some(c => c[4] === undefined)).toBe(true)
+    // 本文用 (head モード): maxBytes が入る
+    expect(calls.some(([input]) => input.maxBytes === 65536)).toBe(true)
+    // DL / <img src> / 生データ URL 用: maxBytes なし
+    expect(calls.some(([input]) => input.maxBytes === undefined)).toBe(true)
   })
 })
 

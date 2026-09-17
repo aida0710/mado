@@ -113,13 +113,13 @@ export default function StorageIndex({connectionId}: Props) {
     // storage_tag_assignments は (connection_id, bucket, target_kind, target_path) で
     // 一意 — kind='bucket' の対象は「bucket カラムそのもの」で path は常に '' (Task 3)。
     // つまりここで欲しいのは「複数バケットそれぞれの kind='bucket' タグ」であり、
-    // api.tagAssignments(connectionId, bucket, kind, paths) の「1 bucket 固定 + 複数 path の
+    // api.tagAssignments({ connectionId, bucket, kind, paths }) の「1 bucket 固定 + 複数 path の
     // バッチ」という軸とは合わない。bucket 数ぶん並列 Promise.all で取得する
     // (ラボ規模の bucket 数を想定。数百件規模になったら bucket 複数対応の別モードを検討)。
     useEffect(() => {
         let cancelled = false
         Promise.all(buckets.map(b =>
-            api.tagAssignments(connectionId, b.name, 'bucket', ['']).then(m => [b.name, m[''] ?? []] as const),
+            api.tagAssignments({ connectionId, bucket: b.name, kind: 'bucket', paths: [''] }).then(m => [b.name, m[''] ?? []] as const),
         )).then(entries => {
             if (!cancelled) setBucketTags(Object.fromEntries(entries))
         }).catch(() => {})

@@ -15,6 +15,7 @@ import { tagsClient } from './tags-client'
 export type { Revalidatable } from './http'
 export type { ListCursor } from './storage-list-client'
 export type { TarEntry, TarPreviewCallbacks } from './preview-client'
+export type { TagAssignmentTarget } from './tags-client'
 
 // 内部 API のクライアント。実体は領域ごとの *-client.ts にあり、ここは 1 つの
 // `api` に束ねるだけ。画面側は領域を意識せず api.xxx で呼ぶ。

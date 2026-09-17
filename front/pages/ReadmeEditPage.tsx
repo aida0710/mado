@@ -38,7 +38,7 @@ export default function ReadmeEditPage({ connectionId }: Props) {
   useEffect(() => {
     if (!bucket || !caps.readmeWrite) return
     let cancelled = false
-    api.readme(connectionId, bucket, prefix)
+    api.readme({ connectionId, bucket, prefix })
       .then(r => { if (!cancelled) setData(r) })
       .catch(() => { if (!cancelled) setData({ exists: false }) })
     return () => { cancelled = true }
@@ -80,7 +80,7 @@ export default function ReadmeEditPage({ connectionId }: Props) {
       title="README を編集"
       initialBody={data.exists ? data.body : ''}
       onSave={(body, editor) =>
-        api.putReadme(connectionId, bucket, prefix, body, editor).then(() => undefined)
+        api.putReadme({ connectionId, bucket, prefix, body, editor }).then(() => undefined)
       }
       onSaved={goBack}
       onCancel={goBack}

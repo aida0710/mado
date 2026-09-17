@@ -11,7 +11,7 @@ interface Props {
 
 export function PreviewVideo({ connectionId, bucket, k, entryPath }: Props) {
   const directUrl = entryPath ? null : api.videoUrl(connectionId, bucket, k)
-  const archiveEntryUrl = entryPath ? api.tarEntryUrl(connectionId, bucket, k, entryPath) : null
+  const archiveEntryUrl = entryPath ? api.tarEntryUrl({ connectionId, bucket, key: k, entry: entryPath }) : null
   const { src, loading, error } = useMediaSrc(directUrl, archiveEntryUrl)
   const label = entryPath ?? k
 

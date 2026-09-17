@@ -20,9 +20,9 @@ describe('storage list cache metadata', () => {
       },
     }), { status: 200, headers: { 'Content-Type': 'application/json' } })))
 
-    await api.list('cache-meta-test', 'bucket', 'prefix/')
+    await api.list({ connectionId: 'cache-meta-test', bucket: 'bucket', prefix: 'prefix/' })
 
-    expect(api.lastFetched.list('cache-meta-test', 'bucket', 'prefix/')?.toISOString())
+    expect(api.lastFetched.list({ connectionId: 'cache-meta-test', bucket: 'bucket', prefix: 'prefix/' })?.toISOString())
       .toBe(fetchedAt)
   })
 })

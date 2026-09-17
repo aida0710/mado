@@ -40,21 +40,23 @@ export const storageListClient = {
     bucketsCache.invalidate(cacheKey('buckets', connectionId))
   },
 
-  list: (
-    connectionId: string,
-    bucket: string,
-    prefix: string,
-    cursor: ListCursor = {},
-    opts: { recursive?: boolean; force?: boolean; refresh?: boolean }
-      & Revalidatable<z.infer<typeof StorageList>> = {},
-  ) => {
+  list: ({ connectionId, bucket, prefix, cursor = {}, recursive, force, refresh, onRevalidate }: {
+    connectionId: string
+    bucket: string
+    prefix: string
+    cursor?: ListCursor
+    recursive?: boolean
+    /** force=true は「forward navigation で同じ cache key に到達して停滞する」現象の防衛。
+     *  一部の S3 互換実装は ContinuationToken / 最終キーを進めずに返してくることがあり、
+     *  そのとき同じ cursor で別ページを取りに行く想定の cache が衝突して前ページが返る。 */
+    force?: boolean
+    /** サーバー側 cache も飛ばして S3 から取り直す。 */
+    refresh?: boolean
+  } & Revalidatable<z.infer<typeof StorageList>>) => {
     // recursive フラグもキャッシュキーに含める (= 通常 list と再帰 list は別エントリ)。
     // prefix の後ろに置くので invalidateList の prefix-match invalidation はそのまま有効。
-    const key = listCacheKey(connectionId, bucket, prefix, opts.recursive, cursor)
-    // force=true は「forward navigation で同じ cache key に到達して停滞する」現象の防衛。
-    // 一部の S3 互換実装は ContinuationToken / 最終キーを進めずに返してくることがあり、
-    // そのとき同じ cursor で別ページを取りに行く想定の cache が衝突して前ページが返る。
-    if (opts.force) listCache.invalidate(key)
+    const key = listCacheKey(connectionId, bucket, prefix, recursive, cursor)
+    if (force) listCache.invalidate(key)
     return listCache.get(
       key,
       () => getJson(buildUrl(storagePath(connectionId, '/list'), {
@@ -62,10 +64,10 @@ export const storageListClient = {
         prefix,
         continuation: cursor.continuation,
         startAfter: cursor.startAfter,
-        recursive: opts.recursive ? '1' : undefined,
-        refresh: opts.refresh ? '1' : undefined,
+        recursive: recursive ? '1' : undefined,
+        refresh: refresh ? '1' : undefined,
       }), StorageList),
-      opts.onRevalidate,
+      onRevalidate,
     )
   },
 
@@ -77,14 +79,10 @@ export const storageListClient = {
   // 該当キャッシュエントリが「いつ S3 から取得されたか」。null = 未取得 / 失敗 / invalidate 直後。
   // fetch 側と同じ引数で同じ cache key を組む。
   lastFetched: {
-    list: (
-      connectionId: string,
-      bucket: string,
-      prefix: string,
-      cursor: ListCursor = {},
-      opts: { recursive?: boolean } = {},
-    ): Date | null => {
-      const value = listCache.peek(listCacheKey(connectionId, bucket, prefix, opts.recursive, cursor))
+    list: ({ connectionId, bucket, prefix, cursor = {}, recursive }: {
+      connectionId: string; bucket: string; prefix: string; cursor?: ListCursor; recursive?: boolean
+    }): Date | null => {
+      const value = listCache.peek(listCacheKey(connectionId, bucket, prefix, recursive, cursor))
       return value ? new Date(value.cache.fetchedAt) : null
     },
     buckets: (connectionId: string): Date | null => {

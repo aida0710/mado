@@ -7,29 +7,22 @@ const readmeCache = new TTLCache<z.infer<typeof Readme>>(LONG_CACHE_TTL_MS, { pe
 
 // ディレクトリごとの README (S3 上の Markdown + DB のメタ) と、その履歴・検索。
 export const readmeClient = {
-  readme: (
-    connectionId: string,
-    bucket: string,
-    prefix: string,
-    opts: Revalidatable<z.infer<typeof Readme>> = {},
-  ) =>
+  readme: ({ connectionId, bucket, prefix, onRevalidate }: {
+    connectionId: string; bucket: string; prefix: string
+  } & Revalidatable<z.infer<typeof Readme>>) =>
     readmeCache.get(
       cacheKey('readme', connectionId, bucket, prefix),
       () => getJson(buildUrl(storagePath(connectionId, '/readme'), { bucket, prefix }), Readme),
-      opts.onRevalidate,
+      onRevalidate,
     ),
 
   invalidateReadme: (connectionId: string, bucket: string, prefix: string): void => {
     readmeCache.invalidate(cacheKey('readme', connectionId, bucket, prefix))
   },
 
-  putReadme: async (
-    connectionId: string,
-    bucket: string,
-    prefix: string,
-    body: string,
-    editor: string,
-  ): Promise<z.infer<typeof PutReadmeOk>> => {
+  putReadme: async ({ connectionId, bucket, prefix, body, editor }: {
+    connectionId: string; bucket: string; prefix: string; body: string; editor: string
+  }): Promise<z.infer<typeof PutReadmeOk>> => {
     const result = await mutateJson(
       storagePath(connectionId, '/readme'),
       { method: 'PUT', body: { bucket, prefix, body, editor } },
@@ -41,7 +34,9 @@ export const readmeClient = {
   },
 
   // README 編集履歴の一覧 (新しい順)。
-  readmeHistory: (connectionId: string, bucket: string, prefix: string, limit?: number) =>
+  readmeHistory: ({ connectionId, bucket, prefix, limit }: {
+    connectionId: string; bucket: string; prefix: string; limit?: number
+  }) =>
     getJson(buildUrl(storagePath(connectionId, '/readme/history'), {
       bucket, prefix, limit: limit != null ? String(limit) : undefined,
     }), ReadmeHistoryList),

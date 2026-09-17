@@ -123,8 +123,8 @@ describe('TagSearchView タグ割り当ての入出力', () => {
 
     await waitFor(() => expect(assign).toHaveBeenCalledTimes(2))
     // パスから種別が決まる: 末尾スラッシュなし=file、空=bucket。
-    expect(assign).toHaveBeenCalledWith('c1', 'bkt', 'file', 'b/c.txt', 't1')
-    expect(assign).toHaveBeenCalledWith('c1', 'bkt2', 'bucket', '', 't1')
+    expect(assign).toHaveBeenCalledWith({ connectionId: 'c1', bucket: 'bkt', kind: 'file', path: 'b/c.txt', tagId: 't1' })
+    expect(assign).toHaveBeenCalledWith({ connectionId: 'c1', bucket: 'bkt2', kind: 'bucket', path: '', tagId: 't1' })
     expect(await screen.findByText('追加 2 件 / スキップ 1 件')).toBeInTheDocument()
   })
 
@@ -149,7 +149,7 @@ describe('TagSearchView タグ割り当ての入出力', () => {
     fireEvent.click(screen.getByRole('button', { name: '作成して取り込む' }))
     // 同梱された色でそのまま作り直す。
     await waitFor(() => expect(create).toHaveBeenCalledWith({ name: '新タグ', color: '#123456' }))
-    await waitFor(() => expect(assign).toHaveBeenCalledWith('c1', 'bkt', 'file', 'x.txt', 't9'))
+    await waitFor(() => expect(assign).toHaveBeenCalledWith({ connectionId: 'c1', bucket: 'bkt', kind: 'file', path: 'x.txt', tagId: 't9' }))
   })
 
   it('作成しないを選ぶとそのタグの割り当ては入らない', async () => {

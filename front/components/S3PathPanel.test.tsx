@@ -37,7 +37,7 @@ describe('S3PathPanel', () => {
     await user.type(screen.getByLabelText('S3 パスで移動'), 's3://dataset/debug/x/')
 
     await waitFor(() =>
-      expect(api.list).toHaveBeenCalledWith('c1', 'dataset', 'debug/x/', {}, { recursive: false }),
+      expect(api.list).toHaveBeenCalledWith({ connectionId: 'c1', bucket: 'dataset', prefix: 'debug/x/', recursive: false }),
     )
   })
 
@@ -62,10 +62,10 @@ describe('S3PathPanel', () => {
     )
 
     await waitFor(() =>
-      expect(listMock).toHaveBeenCalledWith(
-        'c1', 'dataset', 'debug/dialogue-sidon-parakeet-v1/partition-test-1gp',
-        {}, { recursive: false },
-      ),
+      expect(listMock).toHaveBeenCalledWith({
+        connectionId: 'c1', bucket: 'dataset', prefix: 'debug/dialogue-sidon-parakeet-v1/partition-test-1gp',
+        recursive: false,
+      }),
     )
     // 前方一致したディレクトリが「入力 prefix の最後の / 以降」の相対名で出る
     expect(await screen.findByText(/partition-test-1gpu-3h\//)).toBeInTheDocument()

@@ -42,8 +42,9 @@ export function TagPicker({
       return next
     })
     try {
-      if (wasAssigned) await api.unassignTag(connectionId, bucket, kind, path, tag.id)
-      else await api.assignTag(connectionId, bucket, kind, path, tag.id)
+      const target = { connectionId, bucket, kind, path, tagId: tag.id }
+      if (wasAssigned) await api.unassignTag(target)
+      else await api.assignTag(target)
       onChange(settled)
     } catch (e) {
       // 失敗時はチェック状態を戻す (楽観更新のロールバック)。

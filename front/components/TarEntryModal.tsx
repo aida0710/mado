@@ -27,9 +27,9 @@ interface Props {
 export function TarEntryModal({ connectionId, bucket, archiveKey, entry, onClose }: Props) {
   const kind = classifyEntry(entry.name)
   // <img src> / DL / 生データ URL は本体を全部要る。
-  const url = api.tarEntryUrl(connectionId, bucket, archiveKey, entry.name)
+  const url = api.tarEntryUrl({ connectionId, bucket, key: archiveKey, entry: entry.name })
   // テキスト判定は先頭だけで足りる。head モードでサーバーに 100MB を解凍させない。
-  const headUrl = api.tarEntryUrl(connectionId, bucket, archiveKey, entry.name, { maxBytes: TEXT_HEAD_BYTES })
+  const headUrl = api.tarEntryUrl({ connectionId, bucket, key: archiveKey, entry: entry.name, maxBytes: TEXT_HEAD_BYTES })
   const { addPin } = usePinnedPreviews()
   // 人に送る用 (このエントリを開いた状態で復元される) と、curl / VLC 用の生データ。
   // どちらもクリップボードに載せるので絶対 URL にする (相対のままだと受け取った

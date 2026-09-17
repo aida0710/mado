@@ -16,7 +16,7 @@ interface Props {
 // 取得元と見出しだけがここの責務で、表示は HistoryModal と共通。
 export function ReadmeHistoryModal({ connectionId, bucket, prefix, currentBody, onClose }: Props) {
   const loadVersions = useCallback(
-    () => api.readmeHistory(connectionId, bucket, prefix).then(r => r.versions),
+    () => api.readmeHistory({ connectionId, bucket, prefix }).then(r => r.versions),
     [connectionId, bucket, prefix],
   )
   const loadVersion = useCallback(

@@ -43,7 +43,7 @@ describe('tags client', () => {
   it('tagAssignments は paths を繰り返しクエリで渡す', async () => {
     const spy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response(JSON.stringify({ 'a/': ['t1'] }), { status: 200 }))
-    const out = await api.tagAssignments('c1', 'bkt', 'prefix', ['a/', 'b/'])
+    const out = await api.tagAssignments({ connectionId: 'c1', bucket: 'bkt', kind: 'prefix', paths: ['a/', 'b/'] })
     expect(out).toEqual({ 'a/': ['t1'] })
     const [url] = spy.mock.calls[0]
     const u = new URL(String(url), 'http://x')
@@ -54,7 +54,7 @@ describe('tags client', () => {
 
   it('tagAssignments は paths が空なら fetch せず {} を返す', async () => {
     const spy = vi.spyOn(globalThis, 'fetch')
-    const out = await api.tagAssignments('c1', 'bkt', 'file', [])
+    const out = await api.tagAssignments({ connectionId: 'c1', bucket: 'bkt', kind: 'file', paths: [] })
     expect(out).toEqual({})
     expect(spy).not.toHaveBeenCalled()
   })
@@ -62,7 +62,7 @@ describe('tags client', () => {
   it('assignTag は PUT body で bucket/kind/path/tagId を送る', async () => {
     const spy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response(JSON.stringify({ ok: true }), { status: 200 }))
-    await api.assignTag('c1', 'bkt', 'file', 'a/b.txt', 't1')
+    await api.assignTag({ connectionId: 'c1', bucket: 'bkt', kind: 'file', path: 'a/b.txt', tagId: 't1' })
     const [url, init] = spy.mock.calls[0]
     expect(String(url)).toBe('/api/internal/storage/c1/tags')
     expect((init as RequestInit).method).toBe('PUT')
@@ -74,7 +74,7 @@ describe('tags client', () => {
   it('unassignTag は DELETE body で bucket/kind/path/tagId を送る', async () => {
     const spy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response(JSON.stringify({ ok: true }), { status: 200 }))
-    await api.unassignTag('c1', 'bkt', 'prefix', 'a/', 't1')
+    await api.unassignTag({ connectionId: 'c1', bucket: 'bkt', kind: 'prefix', path: 'a/', tagId: 't1' })
     const [url, init] = spy.mock.calls[0]
     expect(String(url)).toBe('/api/internal/storage/c1/tags')
     expect((init as RequestInit).method).toBe('DELETE')

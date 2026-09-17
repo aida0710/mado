@@ -154,7 +154,7 @@ export function PreviewArchive({ connectionId, bucket, k, initialEntry = null, o
   const forceRefresh = (): void => {
     api.invalidateTarPreview(connectionId, bucket, k)
     dispatch({ type: 'startLoad' })
-    api.tarPreview(connectionId, bucket, k, { limit: pageSize, offset })
+    api.tarPreview({ connectionId, bucket, key: k, limit: pageSize, offset })
       .then(r => dispatch({ type: 'loadOk', data: r }))
       .catch((e: Error) => dispatch({ type: 'loadErr', error: e.message }))
   }
@@ -163,7 +163,8 @@ export function PreviewArchive({ connectionId, bucket, k, initialEntry = null, o
     let cancelled = false
     dispatch({ type: 'startLoad' })
 
-    api.tarPreview(connectionId, bucket, k, { limit: pageSize, offset }, {
+    api.tarPreview({
+      connectionId, bucket, key: k, limit: pageSize, offset,
       onMode: (mode: 'range' | 'stream') => {
         if (!cancelled) dispatch({ type: 'setMode', mode })
       },
@@ -212,7 +213,7 @@ export function PreviewArchive({ connectionId, bucket, k, initialEntry = null, o
         </select>
       </label>
       <CacheBanner
-        fetchedAt={api.lastFetched.tar(connectionId, bucket, k, { limit: pageSize, offset })}
+        fetchedAt={api.lastFetched.tar({ connectionId, bucket, key: k, limit: pageSize, offset })}
         revalidating={false}
         onRefresh={forceRefresh}
         compact
@@ -307,7 +308,7 @@ export function PreviewArchive({ connectionId, bucket, k, initialEntry = null, o
                 {
                   kind: 'download',
                   label: 'このエントリをダウンロード',
-                  href: api.tarEntryUrl(connectionId, bucket, k, e.name),
+                  href: api.tarEntryUrl({ connectionId, bucket, key: k, entry: e.name }),
                   filename: e.name.split('/').pop() ?? e.name,
                 },
                 // 人に送る用 (このエントリを開いた状態で復元される) と、
@@ -321,7 +322,7 @@ export function PreviewArchive({ connectionId, bucket, k, initialEntry = null, o
                 {
                   kind: 'copy',
                   label: '生データ URL をコピー',
-                  value: absoluteUrl(api.tarEntryUrl(connectionId, bucket, k, e.name)),
+                  value: absoluteUrl(api.tarEntryUrl({ connectionId, bucket, key: k, entry: e.name })),
                 },
               ]
               return (

@@ -16,7 +16,7 @@ describe('media client', () => {
       cacheKey: 'ck', peaks: [[-1, 1]], durationSec: 2, sampleRate: 16000, hasSpectrogram: true, meta,
     }))
     const ctl = new AbortController()
-    const r = await api.mediaAnalyze('c 1', 'b', 'dir/a.wav', { signal: ctl.signal })
+    const r = await api.mediaAnalyze({ connectionId: 'c 1', bucket: 'b', key: 'dir/a.wav', signal: ctl.signal })
     expect(r.cacheKey).toBe('ck')
     expect(r.meta).toEqual(meta)
     const [url, init] = spy.mock.calls[0]
@@ -28,7 +28,7 @@ describe('media client', () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(okJson({
       cacheKey: 'ck', peaks: [], durationSec: null, sampleRate: null, hasSpectrogram: false, meta: null,
     }))
-    const r = await api.mediaAnalyze('c', 'b', 'a.wav')
+    const r = await api.mediaAnalyze({ connectionId: 'c', bucket: 'b', key: 'a.wav' })
     expect(r.meta).toBeNull()
   })
 
@@ -36,7 +36,7 @@ describe('media client', () => {
     const spy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(okJson({
       cacheKey: 'ck', peaks: [], durationSec: null, sampleRate: null, hasSpectrogram: false, meta: null,
     }))
-    await api.mediaAnalyze('c', 'b', 'shard.tar', { entryPath: 'u1.wav' })
+    await api.mediaAnalyze({ connectionId: 'c', bucket: 'b', key: 'shard.tar', entryPath: 'u1.wav' })
     expect(String(spy.mock.calls[0][0])).toContain('entryPath=u1.wav')
   })
 

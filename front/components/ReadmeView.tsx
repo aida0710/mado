@@ -50,7 +50,8 @@ export function ReadmeView({ connectionId, bucket, prefix }: Props) {
     if (!caps.readmeRead) return
     const sid = ++sessionRef.current
     const current = (): boolean => sessionRef.current === sid
-    api.readme(connectionId, bucket, prefix, {
+    api.readme({
+      connectionId, bucket, prefix,
       // 期限切れキャッシュが返ってきたときだけ呼ばれる。stale をそのまま出しつつ、
       // 到着した最新で差し替える (失敗したら stale のまま「更新中」だけ消す)。
       onRevalidate: fresh => {

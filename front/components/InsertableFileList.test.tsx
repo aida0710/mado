@@ -36,7 +36,7 @@ describe('InsertableFileList', () => {
     )
 
     await screen.findByText(/spec\.md/)
-    expect(api.list).toHaveBeenCalledWith('c1', 'b1', 'docs/', {}, { recursive: false })
+    expect(api.list).toHaveBeenCalledWith({ connectionId: 'c1', bucket: 'b1', prefix: 'docs/', recursive: false })
     // basename だけが表示される (prefix の 'docs/' は剥がれる)
     expect(screen.getByText(/images\//)).toBeInTheDocument()
     expect(screen.getByText(/data\//)).toBeInTheDocument()
@@ -131,7 +131,7 @@ describe('InsertableFileList', () => {
     // 「↓ 開く」 を押す → prefix='docs/sub/' で再 fetch
     await user.click(screen.getByRole('button', { name: 'sub を開く' }))
     await waitFor(() => expect(listMock).toHaveBeenCalledTimes(2))
-    expect(listMock.mock.calls[1]).toEqual(['c1', 'b1', 'docs/sub/', {}, { recursive: false }])
+    expect(listMock.mock.calls[1]).toEqual([{ connectionId: 'c1', bucket: 'b1', prefix: 'docs/sub/', recursive: false }])
 
     // 中身が新しいリストに置き換わる
     await screen.findByText(/inside\.md/)
@@ -171,7 +171,7 @@ describe('InsertableFileList', () => {
     // 'docs' を押すと prefix='docs/' に戻る
     await user.click(screen.getByRole('button', { name: 'docs' }))
     await waitFor(() => expect(listMock).toHaveBeenCalledTimes(2))
-    expect(listMock.mock.calls[1]).toEqual(['c1', 'b1', 'docs/', {}, { recursive: false }])
+    expect(listMock.mock.calls[1]).toEqual([{ connectionId: 'c1', bucket: 'b1', prefix: 'docs/', recursive: false }])
   })
 
   it('breadcrumb root (bucket name) navigates to empty prefix', async () => {
@@ -203,7 +203,7 @@ describe('InsertableFileList', () => {
     // bucket 名 (== prefix='' へのリンク) を押す
     await user.click(screen.getByRole('button', { name: 'b1' }))
     await waitFor(() => expect(listMock).toHaveBeenCalledTimes(2))
-    expect(listMock.mock.calls[1]).toEqual(['c1', 'b1', '', {}, { recursive: false }])
+    expect(listMock.mock.calls[1]).toEqual([{ connectionId: 'c1', bucket: 'b1', prefix: '', recursive: false }])
   })
 
   it('shows empty-state text when the prefix has no entries', async () => {

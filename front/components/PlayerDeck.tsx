@@ -192,7 +192,7 @@ export function PlayerDeck() {
   useEffect(() => {
     for (const t of tracks) {
       if (peaksById[t.id]) continue
-      api.mediaAnalyze(t.connectionId, t.bucket, t.key, { entryPath: t.entryPath })
+      api.mediaAnalyze({ connectionId: t.connectionId, bucket: t.bucket, key: t.key, entryPath: t.entryPath })
         .then(r => {
           setPeaksById(cur => ({ ...cur, [t.id]: r.peaks }))
           setChannelsById(cur => ({ ...cur, [t.id]: r.meta?.channels ?? null }))

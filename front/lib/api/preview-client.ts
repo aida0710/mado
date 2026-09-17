@@ -102,17 +102,16 @@ export const previewClient = {
 
   // `<img src>` / media blob / download用のtarエントリ本体へのURL形式。
   //
-  // opts.maxBytes を渡すと、サーバーはエントリの先頭 maxBytes だけを抽出して返す
+  // maxBytes を渡すと、サーバーはエントリの先頭 maxBytes だけを抽出して返す
   // (head モード)。テキストかどうか見るだけの用途で 100MB のエントリを丸ごと
   // 解凍させないために使う。**<img src> / audio・video blob / downloadでは付けないこと**
   // — 本体が途中で切れる。
-  tarEntryUrl: (
-    connectionId: string, bucket: string, key: string, entry: string,
-    opts: { maxBytes?: number } = {},
-  ): string =>
+  tarEntryUrl: ({ connectionId, bucket, key, entry, maxBytes }: {
+    connectionId: string; bucket: string; key: string; entry: string; maxBytes?: number
+  }): string =>
     buildUrl(storagePath(connectionId, '/preview/tar-entry'), {
       bucket, key, entry,
-      maxBytes: opts.maxBytes != null ? String(opts.maxBytes) : undefined,
+      maxBytes: maxBytes != null ? String(maxBytes) : undefined,
     }),
 
   // URL の先頭 maxBytes だけ読み、残りは reader.cancel() で捨てる。
@@ -150,24 +149,20 @@ export const previewClient = {
     return out
   },
 
-  tarPreview: (
-    connectionId: string,
-    bucket: string,
-    key: string,
-    opts: { limit?: number; offset?: number } = {},
-    callbacks: TarPreviewCallbacks = {},
-  ): Promise<z.infer<typeof TarPreview>> => {
+  tarPreview: ({ connectionId, bucket, key, limit, offset, ...callbacks }: {
+    connectionId: string; bucket: string; key: string; limit?: number; offset?: number
+  } & TarPreviewCallbacks): Promise<z.infer<typeof TarPreview>> => {
     // (offset, limit) 単位でキャッシュ。同じページを再表示しても再 download しない。
     // tar.gz / tar.xz は 1 ページめくるたびにアーカイブ全体を再 download/decode
     // しているので効果が大きい。コールバック (onMode/onEntry/onProgress) は
     // キャッシュヒット時には呼ばれない (= 進捗 UI が出ないが、瞬時に終わる)。
-    const pageKey = cacheKey('tar', connectionId, bucket, key, opts.offset ?? 0, opts.limit ?? 0)
+    const pageKey = cacheKey('tar', connectionId, bucket, key, offset ?? 0, limit ?? 0)
     return tarCache.get(pageKey, async () => {
       const res = await fetchOk(buildUrl(storagePath(connectionId, '/preview/tar'), {
         bucket,
         key,
-        limit:  opts.limit  != null ? String(opts.limit)  : undefined,
-        offset: opts.offset != null ? String(opts.offset) : undefined,
+        limit:  limit  != null ? String(limit)  : undefined,
+        offset: offset != null ? String(offset) : undefined,
       }))
       return readTarPreviewStream(res, callbacks)
     })
@@ -179,13 +174,10 @@ export const previewClient = {
   },
 
   lastFetched: {
-    tar: (
-      connectionId: string,
-      bucket: string,
-      key: string,
-      opts: { limit?: number; offset?: number } = {},
-    ): Date | null => {
-      const at = tarCache.getFetchedAt(cacheKey('tar', connectionId, bucket, key, opts.offset ?? 0, opts.limit ?? 0))
+    tar: ({ connectionId, bucket, key, limit, offset }: {
+      connectionId: string; bucket: string; key: string; limit?: number; offset?: number
+    }): Date | null => {
+      const at = tarCache.getFetchedAt(cacheKey('tar', connectionId, bucket, key, offset ?? 0, limit ?? 0))
       return at != null ? new Date(at) : null
     },
   },

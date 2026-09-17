@@ -40,7 +40,7 @@ export function PreviewAudio({ connectionId, bucket, k, entryPath }: Props) {
   useEffect(() => {
     if (!caps.audioInfo) return
     const ctl = new AbortController()
-    api.mediaAnalyze(connectionId, bucket, k, { entryPath, signal: ctl.signal })
+    api.mediaAnalyze({ connectionId, bucket, key: k, entryPath, signal: ctl.signal })
       .then(r => setAnalyze(r))
       .catch((e: unknown) => {
         if (!ctl.signal.aborted) setError((e as Error).message)

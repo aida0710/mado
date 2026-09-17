@@ -41,7 +41,7 @@ describe('TagPicker', () => {
     fireEvent.click(screen.getByRole('checkbox', { name: '重要' }))
     await Promise.resolve()
     await Promise.resolve()
-    expect(assignSpy).toHaveBeenCalledWith('c1', 'bkt', 'file', 'a.txt', 't1')
+    expect(assignSpy).toHaveBeenCalledWith({ connectionId: 'c1', bucket: 'bkt', kind: 'file', path: 'a.txt', tagId: 't1' })
     expect(onChange).toHaveBeenCalledWith(['t1'])
   })
 
@@ -60,7 +60,7 @@ describe('TagPicker', () => {
     fireEvent.click(screen.getByRole('checkbox', { name: '重要' }))
     await Promise.resolve()
     await Promise.resolve()
-    expect(unassignSpy).toHaveBeenCalledWith('c1', 'bkt', 'file', 'a.txt', 't1')
+    expect(unassignSpy).toHaveBeenCalledWith({ connectionId: 'c1', bucket: 'bkt', kind: 'file', path: 'a.txt', tagId: 't1' })
     expect(onChange).toHaveBeenCalledWith([])
   })
 

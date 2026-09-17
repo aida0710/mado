@@ -122,7 +122,8 @@ export function StorageBrowser({ connectionId, bucket, prefix, onSelectFile }: P
   //  cache key 衝突で前ページのデータが返ってしまう問題への防衛)。
   const load = useCallback((cursor: Cursor, opts: { force?: boolean; refresh?: boolean } = {}) => {
     const sid = ++sessionRef.current
-    api.list(connectionId, bucket, effectivePrefix, cursor, {
+    api.list({
+      connectionId, bucket, prefix: effectivePrefix, cursor,
       recursive,
       force: opts.force,
       refresh: opts.refresh,
@@ -250,8 +251,8 @@ export function StorageBrowser({ connectionId, bucket, prefix, onSelectFile }: P
     if (!tagsEnabled) return
     let cancelled = false
     Promise.all([
-      api.tagAssignments(connectionId, bucket, 'prefix', dirs),
-      api.tagAssignments(connectionId, bucket, 'file', files.map(f => f.key)),
+      api.tagAssignments({ connectionId, bucket, kind: 'prefix', paths: dirs }),
+      api.tagAssignments({ connectionId, bucket, kind: 'file', paths: files.map(f => f.key) }),
     ]).then(([d, f]) => {
       if (cancelled) return
       setDirTags(d)
@@ -380,7 +381,7 @@ export function StorageBrowser({ connectionId, bucket, prefix, onSelectFile }: P
         {/* 「いつのデータか」はテーブルヘッダの真上に置く。ページャの隅では
             視線が届かず、古いキャッシュを最新だと思って見てしまうため。 */}
         <CacheBanner
-          fetchedAt={api.lastFetched.list(connectionId, bucket, effectivePrefix, history[pageIdx] ?? {}, { recursive })}
+          fetchedAt={api.lastFetched.list({ connectionId, bucket, prefix: effectivePrefix, cursor: history[pageIdx] ?? {}, recursive })}
           revalidating={revalidating}
           onRefresh={forceRefresh}
           trailing={
