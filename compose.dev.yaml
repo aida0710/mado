@@ -23,8 +23,10 @@ services:
       - db_data:/var/lib/postgresql/data
       - ./db/init:/docker-entrypoint-initdb.d:ro
       - ./db/migrations:/migrations:ro
+    # 初回 init 中の一時サーバは Unix socket だけを listen する。socket 経由の pg_isready は
+    # migration 適用前に healthy を返すため、init 完了後に立つ本サーバだけが応える TCP で確認する。
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d dashboard"]
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U postgres -d dashboard"]
       interval: 5s
       timeout: 3s
       retries: 10
