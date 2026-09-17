@@ -5,7 +5,7 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-describe('storage list cache metadata', () => {
+describe('一覧 cache の取得時刻', () => {
   it('APIを受け取った時刻ではなくS3取得時刻をlastFetchedへ使う', async () => {
     const fetchedAt = '2026-09-15T01:23:45.000Z'
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({

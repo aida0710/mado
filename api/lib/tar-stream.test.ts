@@ -33,7 +33,7 @@ async function packHeaderOnlyChunk(name: string, bodySize: number): Promise<Buff
 }
 
 describe('listTarEntries', () => {
-  it('lists entries in plain tar', async () => {
+  it('無圧縮の tar のエントリを列挙する', async () => {
     const r = await listTarEntries(
       createReadStream(fix('sample.tar')),
       'tar',
@@ -46,7 +46,7 @@ describe('listTarEntries', () => {
     ]))
   })
 
-  it('lists entries in tar.gz', async () => {
+  it('tar.gz のエントリを列挙する', async () => {
     const r = await listTarEntries(
       createReadStream(fix('sample.tar.gz')),
       'gz',
@@ -58,7 +58,7 @@ describe('listTarEntries', () => {
       .toEqual(['d/', 'd/a.txt', 'd/b.txt', 'd/c.txt'])
   })
 
-  it('lists entries in tar.xz', async () => {
+  it('tar.xz のエントリを列挙する', async () => {
     const r = await listTarEntries(
       createReadStream(fix('sample.tar.xz')),
       'xz',
@@ -70,7 +70,7 @@ describe('listTarEntries', () => {
       .toEqual(['d/', 'd/a.txt', 'd/b.txt', 'd/c.txt'])
   })
 
-  it('stops at entryLimit and signals hasMore', async () => {
+  it('entryLimit で止まり、hasMore を立てる', async () => {
     const r = await listTarEntries(
       createReadStream(fix('sample.tar')),
       'tar',
@@ -82,7 +82,7 @@ describe('listTarEntries', () => {
     expect(r.truncated).toBe(false)
   })
 
-  it('paginates with offset', async () => {
+  it('offset で次のページを返す', async () => {
     // sample.tar.gz には 4 エントリある: d/, d/a.txt, d/b.txt, d/c.txt
     const page1 = await listTarEntries(
       createReadStream(fix('sample.tar.gz')),
@@ -104,7 +104,7 @@ describe('listTarEntries', () => {
     expect(allNames).toEqual(['d/', 'd/a.txt', 'd/b.txt', 'd/c.txt'])
   })
 
-  it('offset past the end returns empty without hasMore', async () => {
+  it('末尾を超えた offset は空を返し、hasMore は立たない', async () => {
     const r = await listTarEntries(
       createReadStream(fix('sample.tar.gz')),
       'gz',
@@ -114,7 +114,7 @@ describe('listTarEntries', () => {
     expect(r.hasMore).toBe(false)
   })
 
-  it('stops at byteLimit and marks truncated', async () => {
+  it('byteLimit で止まり、truncated を立てる', async () => {
     // 展開後の sample.tar.xz は 50 バイトを超える。バイトカウンタは
     // デコンプレッサの後に位置するため、展開後のストリームで強制される。
     const r = await listTarEntries(
@@ -126,7 +126,7 @@ describe('listTarEntries', () => {
     expect(r.entries.length).toBeLessThan(4)
   })
 
-  it('reports size on entries', async () => {
+  it('各エントリにサイズを付ける', async () => {
     const r = await listTarEntries(
       createReadStream(fix('sample.tar')),
       'tar',

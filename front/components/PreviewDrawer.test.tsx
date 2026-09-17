@@ -40,20 +40,20 @@ function renderDrawer(props: Partial<Parameters<typeof PreviewDrawer>[0]> = {}) 
   )
 }
 
-describe('PreviewDrawer - width reset button', () => {
-  it('is hidden until the width has been customized', () => {
+describe('PreviewDrawer - 幅のリセットボタン', () => {
+  it('幅を変えるまでは出ない', () => {
     renderDrawer({ widthCustomized: false })
     expect(screen.queryByRole('button', { name: RESET })).toBeNull()
   })
 
-  it('appears once customized and calls onResetWidth when clicked', async () => {
+  it('幅を変えると出て、押すと onResetWidth を呼ぶ', async () => {
     const onResetWidth = vi.fn()
     renderDrawer({ widthCustomized: true, onResetWidth })
     await userEvent.click(screen.getByRole('button', { name: RESET }))
     expect(onResetWidth).toHaveBeenCalledOnce()
   })
 
-  it('is not rendered when no reset handler is provided', () => {
+  it('リセット処理が無ければ描かない', () => {
     renderDrawer({ widthCustomized: true, onResetWidth: undefined })
     expect(screen.queryByRole('button', { name: RESET })).toBeNull()
   })
@@ -71,15 +71,15 @@ function Wrapper({
   )
 }
 
-describe('PreviewDrawer - pin button', () => {
+describe('PreviewDrawer - ピン留めボタン', () => {
   // ピン留めしたカードの表示は BottomDock が担う。ここではドロワーの 📌 が
   // 現在ファイルを Context に積み、積んだら無効化されることだけを検証する。
-  it('renders nothing when k is null', () => {
+  it('k が null なら何も描かない', () => {
     const { container } = render(<Wrapper k={null} />)
     expect(container).toBeEmptyDOMElement()
   })
 
-  it('📌 pins the current file and becomes disabled once pinned', () => {
+  it('📌 で今のファイルをピン留めし、留めた後は押せなくなる', () => {
     render(<Wrapper k="file.xyz" />)
     const pinBtn = screen.getByRole('button', { name: 'ピン留め' })
     expect(pinBtn).toBeEnabled()
@@ -88,7 +88,7 @@ describe('PreviewDrawer - pin button', () => {
     expect(screen.getByRole('button', { name: 'ピン留め済み' })).toBeDisabled()
   })
 
-  it('closing the current preview (✕) fires onClose', () => {
+  it('✕ で閉じると onClose を呼ぶ', () => {
     const onClose = vi.fn()
     render(<Wrapper k="file.xyz" onClose={onClose} />)
     fireEvent.click(screen.getByRole('button', { name: 'Close preview' }))

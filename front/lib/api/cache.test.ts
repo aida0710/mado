@@ -67,7 +67,7 @@ describe('TTLCache', () => {
     expect(cache._size()).toBe(1) // 'b/z' のみ
   })
 
-  describe('stale-while-revalidate (onRevalidate)', () => {
+  describe('期限切れを返しつつ裏で取り直す (onRevalidate)', () => {
     it('期限切れでも stale を即返し、裏で loader を走らせる', async () => {
       const cache = new TTLCache<number>(1_000)
       let n = 0

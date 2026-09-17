@@ -18,13 +18,13 @@ beforeEach(async () => {
 afterAll(() => closePools(pools))
 
 describe('GET /notes/:slug', () => {
-  it('returns {exists: false} for non-existent slug', async () => {
+  it('無い slug は {exists: false} を返す', async () => {
     const res = await app.request('/notes/home')
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ exists: false })
   })
 
-  it('returns body + editor + timestamp after PUT', async () => {
+  it('PUT した後は body と editor と時刻を返す', async () => {
     const put = await app.request('/notes/home', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -45,7 +45,7 @@ describe('GET /notes/:slug', () => {
 })
 
 describe('PUT /notes/:slug', () => {
-  it('upserts: second write overwrites the first', async () => {
+  it('2 回目の書き込みは 1 回目を上書きする', async () => {
     await app.request('/notes/home', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -63,7 +63,7 @@ describe('PUT /notes/:slug', () => {
     expect(body.last_editor).toBe('b')
   })
 
-  it('returns 400 when editor is missing', async () => {
+  it('editor が無ければ 400', async () => {
     const res = await app.request('/notes/home', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -72,7 +72,7 @@ describe('PUT /notes/:slug', () => {
     expect(res.status).toBe(400)
   })
 
-  it('returns 400 when editor is empty', async () => {
+  it('editor が空なら 400', async () => {
     const res = await app.request('/notes/home', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -81,7 +81,7 @@ describe('PUT /notes/:slug', () => {
     expect(res.status).toBe(400)
   })
 
-  it('keeps body and editor independent across slugs', async () => {
+  it('slug が違えば body と editor は混ざらない', async () => {
     await app.request('/notes/home', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },

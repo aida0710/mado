@@ -55,7 +55,7 @@ function request(body: unknown, token = 'mado_lin_key.secret'): Request {
   })
 }
 
-describe('OpenLineage ingest route', () => {
+describe('OpenLineage 受け口', () => {
   it('Bearerなしを拒否する', async () => {
     const recordUse = vi.fn().mockResolvedValue(undefined)
     const app = new Hono()

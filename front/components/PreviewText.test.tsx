@@ -23,7 +23,7 @@ afterEach(() => {
 })
 
 describe('PreviewText - copy', () => {
-  it('copies the loaded text content', async () => {
+  it('読み込んだテキストをコピーできる', async () => {
     vi.mocked(api.readHead).mockResolvedValue(utf8('hello\nworld'))
     render(<PreviewText connectionId="c" bucket="b" k="x.txt" />)
     const button = await screen.findByRole('button', { name: '内容をコピー' })
@@ -31,7 +31,7 @@ describe('PreviewText - copy', () => {
     expect(copyToClipboard).toHaveBeenCalledWith('hello\nworld')
   })
 
-  it('shows no copy button while loading', () => {
+  it('読み込み中はコピーボタンを出さない', () => {
     vi.mocked(api.readHead).mockReturnValue(new Promise<Uint8Array>(() => {}))
     render(<PreviewText connectionId="c" bucket="b" k="x.txt" />)
     expect(screen.queryByRole('button', { name: '内容をコピー' })).toBeNull()

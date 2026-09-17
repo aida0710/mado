@@ -24,7 +24,7 @@ function renderPanel() {
 }
 
 describe('S3PathPanel', () => {
-  it('parses an s3:// path and calls api.list with the bucket + prefix', async () => {
+  it('s3:// パスを解釈して bucket と prefix で api.list を呼ぶ', async () => {
     ;(api.list as ReturnType<typeof vi.fn>).mockResolvedValue({
       directories: ['debug/x/sub/'],
       files: [],
@@ -72,7 +72,7 @@ describe('S3PathPanel', () => {
     expect(screen.getByText(/partition-test-2gpu-6h\//)).toBeInTheDocument()
   })
 
-  it('renders a directory row link to the StorageBucket page', async () => {
+  it('ディレクトリ行は StorageBucket ページへのリンクになる', async () => {
     ;(api.list as ReturnType<typeof vi.fn>).mockResolvedValue({
       directories: ['debug/x/sub/'],
       files: [],
@@ -88,7 +88,7 @@ describe('S3PathPanel', () => {
     expect(link.getAttribute('href')).toBe('/storage/c1/dataset/debug/x/sub/')
   })
 
-  it('renders a file row link that redirects to parent dir + ?preview=', async () => {
+  it('ファイル行は親ディレクトリ + ?preview= へのリンクになる', async () => {
     ;(api.list as ReturnType<typeof vi.fn>).mockResolvedValue({
       directories: [],
       files: [{ key: 'debug/x/result.tar.xz', size: 1, lastModified: null }],
@@ -138,7 +138,7 @@ describe('S3PathPanel', () => {
     expect(screen.queryByRole('link', { name: /を開く/ })).toBeNull()
   })
 
-  it('shows a "too many results" hint when the response is truncated', async () => {
+  it('応答が打ち切られていれば「多すぎる」ことを示す', async () => {
     ;(api.list as ReturnType<typeof vi.fn>).mockResolvedValue({
       directories: ['debug/a/'],
       files: [],
@@ -170,7 +170,7 @@ describe('S3PathPanel', () => {
     expect(await screen.findByText('一致するパスがありません。')).toBeInTheDocument()
   })
 
-  it('does not call api.list for an unparseable (empty) input', async () => {
+  it('解釈できない (空の) 入力では api.list を呼ばない', async () => {
     const user = userEvent.setup()
     renderPanel()
     const input = screen.getByLabelText('S3 パスで移動')

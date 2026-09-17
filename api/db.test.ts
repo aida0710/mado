@@ -14,7 +14,7 @@ beforeEach(async () => {
 afterAll(() => closePools(pools))
 
 describe('createPools', () => {
-  it('rw can insert, ro can select', async () => {
+  it('rw は INSERT でき、ro は SELECT できる', async () => {
     await pools.rw.query(
       `INSERT INTO notes(slug, body, last_editor) VALUES ($1, $2, $3)`,
       ['db-test', 'hello', 'tester']
@@ -25,7 +25,7 @@ describe('createPools', () => {
     expect(r.rows).toEqual([{ slug: 'db-test', body: 'hello' }])
   })
 
-  it('ro cannot insert', async () => {
+  it('ro は INSERT できない', async () => {
     await expect(
       pools.ro.query(
         `INSERT INTO notes(slug, body) VALUES ('x','y')`
@@ -33,7 +33,7 @@ describe('createPools', () => {
     ).rejects.toThrow(/permission denied/i)
   })
 
-  it('ro cannot create tables', async () => {
+  it('ro は CREATE TABLE できない', async () => {
     await expect(
       pools.ro.query('CREATE TABLE t (id int)')
     ).rejects.toThrow(/permission denied/i)

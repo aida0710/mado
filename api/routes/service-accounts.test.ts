@@ -27,7 +27,7 @@ beforeEach(async () => {
 })
 afterAll(() => closePools(pools))
 
-describe('service account routes', () => {
+describe('Service Account route', () => {
   it('account/keyを作成し、秘密値は発行responseだけに含める', async () => {
     const accountRes = await app.request('/service-accounts', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },

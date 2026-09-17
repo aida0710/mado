@@ -28,12 +28,12 @@ function setup() {
 }
 
 describe('pinnedPreviews context', () => {
-  it('starts empty', () => {
+  it('最初は空', () => {
     setup()
     expect(screen.getByTestId('count').textContent).toBe('0')
   })
 
-  it('adds pins in order and ignores duplicate pins', () => {
+  it('ピンは順に増え、同じものは二度入らない', () => {
     setup()
     fireEvent.click(screen.getByText('add1'))
     fireEvent.click(screen.getByText('add1'))
@@ -41,7 +41,7 @@ describe('pinnedPreviews context', () => {
     expect(screen.getByTestId('count').textContent).toBe('2')
   })
 
-  it('removePin removes only the matching id', () => {
+  it('removePin は一致する id だけを外す', () => {
     function Harness() {
       const { pins, addPin, removePin } = usePinnedPreviews()
       return (
@@ -63,7 +63,7 @@ describe('pinnedPreviews context', () => {
     expect(screen.getByText('f2.txt')).toBeInTheDocument()
   })
 
-  it('clearPins empties the list', () => {
+  it('clearPins で空になる', () => {
     function Harness() {
       const { pins, addPin, clearPins } = usePinnedPreviews()
       return (
@@ -83,7 +83,7 @@ describe('pinnedPreviews context', () => {
     expect(screen.getByTestId('count').textContent).toBe('0')
   })
 
-  it('usePinnedPreviews outside a Provider returns a no-op API (does not throw)', () => {
+  it('Provider の外で usePinnedPreviews を使っても何もしない API が返り、throw しない', () => {
     function Standalone() {
       const { pins, addPin, removePin, clearPins } = usePinnedPreviews()
       addPin({ connectionId: 'c', bucket: 'b', key: 'x.txt' })
@@ -96,7 +96,7 @@ describe('pinnedPreviews context', () => {
   })
 })
 
-describe('pinnedPreviews across a route-driven remount (integration)', () => {
+describe('pinnedPreviews はルーティングによる再マウントをまたぐ (結合)', () => {
   // StoragePageWithKey (App.tsx) remounts the whole page tree via key={connectionId}
   // when navigating between directories/connections. PinnedPreviewsProvider must
   // sit above that remount point (like PlayerDeckProvider) so pins survive it.
@@ -124,7 +124,7 @@ describe('pinnedPreviews across a route-driven remount (integration)', () => {
     )
   }
 
-  it('keeps pins across a remount of the routed subtree', () => {
+  it('ルーティング配下を再マウントしてもピンは残る', () => {
     const { rerender } = render(<Harness n={1} />)
     fireEvent.click(screen.getByText('pin1'))
     expect(screen.getByTestId('count').textContent).toBe('1')

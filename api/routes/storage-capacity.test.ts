@@ -35,7 +35,7 @@ beforeEach(() => {
   capacityMetricsEnabled = true
 })
 
-describe('storage capacity routes', () => {
+describe('容量メトリクス route', () => {
   it('全bucketの指定期間履歴を1回で返す', async () => {
     const response = await app.request('/storage/c1/capacity?days=90')
     expect(response.status).toBe(200)

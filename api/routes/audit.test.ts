@@ -10,7 +10,7 @@ const admin = {
   roles: ['admin'], permissions: ['audit:read'], mustChangePassword: false,
 }
 
-describe('audit routes', () => {
+describe('監査ログ route', () => {
   it('通常一覧を成功した変更だけへ限定する', async () => {
     const query = vi.fn().mockResolvedValue({ rows: [] })
     const app = new Hono()

@@ -8,12 +8,12 @@ import { STORAGE_CLASS_KEYS } from './pricing-types.js'
 const CONN = { id: 'c1', name: 'test', endpoint: 'https://s3.example.com', region: 'auto' }
 
 describe('inferProvider', () => {
-  it('AWS', () => {
+  it('amazonaws.com は aws と判定する', () => {
     expect(inferProvider('https://s3.ap-northeast-1.amazonaws.com')).toBe('aws')
     expect(inferProvider('https://bucket.s3.amazonaws.com')).toBe('aws')
   })
 
-  it('Wasabi', () => {
+  it('wasabisys.com は wasabi と判定する', () => {
     expect(inferProvider('https://s3.ap-northeast-1.wasabisys.com')).toBe('wasabi')
   })
 

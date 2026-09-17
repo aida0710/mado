@@ -83,7 +83,7 @@ function renderPage(entry = '/lineage') {
 }
 
 describe('LineagePage', () => {
-  it('does not guess a root and explains how to start', async () => {
+  it('起点を推測せず、どう始めるかを案内する', async () => {
     renderPage()
     expect(screen.getByText('登録一覧からデータセットを選んでください')).toBeInTheDocument()
     expect(await screen.findByText('登録 0件')).toBeInTheDocument()
@@ -110,7 +110,7 @@ describe('LineagePage', () => {
     expect(screen.getByTestId('query')).toHaveTextContent('name=raw')
   })
 
-  it('loads a logical graph from URL-driven root fields', async () => {
+  it('URL の起点指定から logical グラフを読む', async () => {
     vi.mocked(api.lineageGraph).mockResolvedValue(graph)
     renderPage('/lineage?namespace=speech&name=raw&depth=2')
     expect(await screen.findByTestId('lineage-graph')).toBeInTheDocument()
@@ -119,7 +119,7 @@ describe('LineagePage', () => {
     })
   })
 
-  it('selects an opaque node through the URL and loads Registry detail', async () => {
+  it('URL で指定したノードを選び、Registry の詳細を読む', async () => {
     vi.mocked(api.lineageGraph).mockResolvedValue(graph)
     vi.mocked(api.lineageDataset).mockResolvedValue(dataset)
     renderPage('/lineage?namespace=speech&name=raw')
@@ -129,7 +129,7 @@ describe('LineagePage', () => {
     expect(await screen.findByText('Purchased speech')).toBeInTheDocument()
   })
 
-  it('uses an explicitly registered current version when switching projections', async () => {
+  it('表示を切り替えるとき、明示された現在版を使う', async () => {
     vi.mocked(api.lineageGraph).mockResolvedValue(graph)
     vi.mocked(api.lineageDataset).mockResolvedValue(dataset)
     renderPage('/lineage?namespace=speech&name=raw')
@@ -141,14 +141,14 @@ describe('LineagePage', () => {
     }))
   })
 
-  it('shows truncation and backend warnings', async () => {
+  it('打ち切りと backend の警告を出す', async () => {
     vi.mocked(api.lineageGraph).mockResolvedValue({ ...graph, truncated: true, warnings: ['Marquez is stale'] })
     renderPage('/lineage?namespace=speech&name=raw')
     expect(await screen.findByText(/表示範囲を広げる/)).toBeInTheDocument()
     expect(screen.getByText('Marquez is stale')).toBeInTheDocument()
   })
 
-  it('shows fetch errors without leaving a blank canvas', async () => {
+  it('取得に失敗しても白紙にせず理由を出す', async () => {
     vi.mocked(api.lineageGraph).mockRejectedValue(new Error('Registry unavailable'))
     renderPage('/lineage?namespace=speech&name=raw')
     expect(await screen.findByRole('alert')).toHaveTextContent('Registry unavailable')

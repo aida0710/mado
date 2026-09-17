@@ -47,7 +47,7 @@ function appWith(registryOverrides: Partial<RegistryClient> = {}) {
   return { app, registry, pool, audit }
 }
 
-describe('lineage curation routes', () => {
+describe('lineage 手動登録 route', () => {
   it('Datasetの説明情報だけを更新して変更項目を監査する', async () => {
     const { app, registry, audit } = appWith()
     const datasetId = '00000000-0000-4000-8000-000000000010'

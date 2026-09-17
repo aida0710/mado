@@ -50,8 +50,8 @@ function item(overrides: Partial<PinnedItem> = {}): PinnedItem {
 
 const utf8 = (s: string): Uint8Array => new TextEncoder().encode(s)
 
-describe('PinnedPreviewCard - kind branching', () => {
-  it('renders text preview for a plain text file', async () => {
+describe('PinnedPreviewCard - 種別ごとの描き分け', () => {
+  it('テキストファイルはテキストプレビューで描く', async () => {
     vi.mocked(api.readHead).mockResolvedValue(utf8('hello text'))
     render(<PinnedPreviewCard item={item({ key: 'notes/readme.txt' })} />)
     expect(await screen.findByText('hello text')).toBeInTheDocument()
@@ -60,29 +60,29 @@ describe('PinnedPreviewCard - kind branching', () => {
     expect(title).toHaveTextContent('readme.txt')
   })
 
-  it('renders PreviewAudio for a direct audio file', () => {
+  it('音声ファイルは PreviewAudio で描く', () => {
     render(<PinnedPreviewCard item={item({ key: 'ch1.wav' })} />)
     expect(screen.getByTestId('preview-audio')).toHaveTextContent('audio:ch1.wav')
   })
 
-  it('renders PreviewAudio with entryPath for a tar-entry audio pin', () => {
+  it('tar 内の音声は entryPath 付きの PreviewAudio で描く', () => {
     render(<PinnedPreviewCard item={item({ key: 'shard.tar', entryPath: 'u1.wav', id: 'c|b|shard.tar|u1.wav' })} />)
     expect(screen.getByTestId('preview-audio')).toHaveTextContent('audio:shard.tar>u1.wav')
   })
 
-  it('renders PreviewVideo for a direct MP4 file', () => {
+  it('MP4 は PreviewVideo で描く', () => {
     render(<PinnedPreviewCard item={item({ key: 'clip.mp4' })} />)
     expect(screen.getByTestId('preview-video')).toHaveTextContent('video:clip.mp4')
   })
 
-  it('renders PreviewVideo with entryPath for a tar-entry MP4 pin', () => {
+  it('tar 内の MP4 は entryPath 付きの PreviewVideo で描く', () => {
     render(<PinnedPreviewCard item={item({
       key: 'shard.tar', entryPath: 'clip.mp4', id: 'c|b|shard.tar|clip.mp4',
     })} />)
     expect(screen.getByTestId('preview-video')).toHaveTextContent('video:shard.tar>clip.mp4')
   })
 
-  it('renders a lightweight tarEntryText body for a tar-entry text pin', async () => {
+  it('tar 内のテキストは軽量な tarEntryText で描く', async () => {
     vi.mocked(api.readHead).mockResolvedValue(utf8('entry text body'))
     render(<PinnedPreviewCard item={item({
       key: 'shard.tar', entryPath: 'meta.json', id: 'c|b|shard.tar|meta.json',
@@ -187,7 +187,7 @@ describe('PinnedPreviewCard - パスのコピー', () => {
 })
 
 describe('PinnedPreviewCard - remove', () => {
-  it('the ✕ button calls removePin with the item id', () => {
+  it('✕ を押すとその id で removePin を呼ぶ', () => {
     function Harness() {
       const { pins, addPin, removePin } = usePinnedPreviews()
       return (

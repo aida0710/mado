@@ -41,8 +41,8 @@ function renderEntry(name: string) {
   )
 }
 
-describe('TarEntryModal - copy all', () => {
-  it('copies the full pretty-printed text of a .json entry', async () => {
+describe('TarEntryModal - 全文コピー', () => {
+  it('.json エントリは整形した全文をコピーする', async () => {
     vi.mocked(api.readHead).mockResolvedValue(utf8('{"a":1}'))
     renderEntry('x.json')
     // テキスト読み込み後にコピーボタンが現れる
@@ -51,7 +51,7 @@ describe('TarEntryModal - copy all', () => {
     expect(copyToClipboard).toHaveBeenCalledWith('{\n  "a": 1\n}')
   })
 
-  it('copies the raw text of a .jsonl entry (no pretty-print)', async () => {
+  it('.jsonl エントリは整形せずそのままコピーする', async () => {
     vi.mocked(api.readHead).mockResolvedValue(utf8('{"a":1}\n{"b":2}'))
     renderEntry('x.jsonl')
     const button = await screen.findByRole('button', { name: '内容をコピー' })

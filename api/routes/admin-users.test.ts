@@ -31,7 +31,7 @@ beforeEach(async () => {
 })
 afterAll(() => closePools(pools))
 
-describe('admin user routes', () => {
+describe('ユーザー管理 route', () => {
   it('User一覧と実際のSSO Role mappingを返す', async () => {
     const res = await app.request('/users')
     expect(res.status).toBe(200)

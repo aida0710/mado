@@ -131,13 +131,13 @@ async function createOne(overrides: Partial<{
 }
 
 describe('GET /connections', () => {
-  it('returns [] when no connections exist', async () => {
+  it('接続が無ければ [] を返す', async () => {
     const res = await app.request('/connections')
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual([])
   })
 
-  it('returns the masked record after a POST', async () => {
+  it('POST した接続をマスク済みの形で返す', async () => {
     const created = await createOne()
     const res = await app.request('/connections')
     expect(res.status).toBe(200)
@@ -189,7 +189,7 @@ describe('GET /connections', () => {
 })
 
 describe('POST /connections', () => {
-  it('creates a connection: 200, returns masked record (id is 10 chars)', async () => {
+  it('作成すると 200 で、10 文字の id を持つマスク済みの接続を返す', async () => {
     const created = await createOne()
     expect(created.id).toHaveLength(10)
     expect(created.name).toBe('primary')
@@ -211,7 +211,7 @@ describe('POST /connections', () => {
     expect(dump).not.toContain('AKIAEXAMPLE12345')
   })
 
-  it('stores ENCRYPTED keys in DB (not plaintext) and stores correct mask', async () => {
+  it('認証情報は DB に暗号化して保存し、マスクは正しい形になる', async () => {
     const created = await createOne()
     const r = await pools.rw.query<DbRow>(
       `SELECT id, access_key_id_enc, secret_access_key_enc, access_key_id_masked
@@ -233,7 +233,7 @@ describe('POST /connections', () => {
     expect(row.access_key_id_masked).toBe('AKIA…2345')
   })
 
-  it('returns 400 on malformed body (missing required fields)', async () => {
+  it('必須項目が欠けた body は 400', async () => {
     const res = await app.request('/connections', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -242,7 +242,7 @@ describe('POST /connections', () => {
     expect(res.status).toBe(400)
   })
 
-  it('returns 400 on non-URL endpoint', async () => {
+  it('URL でないエンドポイントは 400', async () => {
     const res = await app.request('/connections', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -261,7 +261,7 @@ describe('POST /connections', () => {
     ['unspecified IPv4', 'http://0.0.0.0/'],
     ['IPv6 loopback',    'http://[::1]:9000/'],
     ['IPv6 link-local',  'http://[fe80::1]:9000/'],
-  ])('returns 400 on SSRF-prone endpoint (%s)', async (_label, endpoint) => {
+  ])('%s へ向くエンドポイントは 400 (SSRF 対策)', async (_label, endpoint) => {
     const res = await app.request('/connections', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -274,7 +274,7 @@ describe('POST /connections', () => {
     expect(res.status).toBe(400)
   })
 
-  it('accepts listObjectsVersion=v1 and round-trips it through GET', async () => {
+  it('listObjectsVersion=v1 を受け付け、GET でそのまま返す', async () => {
     // V1 only の S3 互換サーバ のために v1 を明示できる。
     const created = await createOne({ name: 'legacy-v1-storage', listObjectsVersion: 'v1' })
     expect(created.listObjectsVersion).toBe('v1')
@@ -285,7 +285,7 @@ describe('POST /connections', () => {
     expect(got?.listObjectsVersion).toBe('v1')
   })
 
-  it('rejects an invalid listObjectsVersion value', async () => {
+  it('不正な listObjectsVersion は拒否する', async () => {
     const res = await app.request('/connections', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -299,7 +299,7 @@ describe('POST /connections', () => {
     expect(res.status).toBe(400)
   })
 
-  it('returns 409 on duplicate name', async () => {
+  it('同じ名前で作ると 409', async () => {
     await createOne({ name: 'dup' })
     const res = await app.request('/connections', {
       method: 'POST',
@@ -355,7 +355,7 @@ describe('PUT /connections/:id', () => {
     expect(invalidate).not.toHaveBeenCalled()
   })
 
-  it('updates name only: returns updated record, encrypted keys unchanged in DB', async () => {
+  it('名前だけ更新すると、更新後の接続を返し、DB の暗号化済み認証情報は変わらない', async () => {
     const created = await createOne()
     const before = await pools.rw.query<DbRow>(
       `SELECT id, access_key_id_enc, secret_access_key_enc, access_key_id_masked
@@ -386,7 +386,7 @@ describe('PUT /connections/:id', () => {
     expect(invalidate).toHaveBeenCalledWith(created.id)
   })
 
-  it('updates accessKeyId+secret: encrypted values change in DB, mask updates', async () => {
+  it('accessKeyId と secret を更新すると、DB の暗号文とマスクが変わる', async () => {
     const created = await createOne()
     const before = await pools.rw.query<DbRow>(
       `SELECT access_key_id_enc, secret_access_key_enc, access_key_id_masked
@@ -424,7 +424,7 @@ describe('PUT /connections/:id', () => {
     expect(invalidate).toHaveBeenCalledWith(created.id)
   })
 
-  it('with empty body returns current record (no update, no invalidate)', async () => {
+  it('空の body なら現在の接続をそのまま返し、更新も invalidate もしない', async () => {
     const created = await createOne()
     const res = await app.request(`/connections/${created.id}`, {
       method: 'PUT',
@@ -508,7 +508,7 @@ describe('PUT /connections/:id', () => {
     expect(invalid.status).toBe(400)
   })
 
-  it('updates listObjectsVersion v2 → v1 and back', async () => {
+  it('listObjectsVersion を v2 → v1 → v2 と切り替えられる', async () => {
     const created = await createOne()
     expect(created.listObjectsVersion).toBe('v2')
 
@@ -534,7 +534,7 @@ describe('PUT /connections/:id', () => {
     expect(updated.listObjectsVersion).toBe('v2')
   })
 
-  it('returns 404 for non-existent id', async () => {
+  it('存在しない id は 404', async () => {
     const res = await app.request('/connections/doesnotexist', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -546,7 +546,7 @@ describe('PUT /connections/:id', () => {
 })
 
 describe('DELETE /connections/:id', () => {
-  it('removes record and invokes invalidate', async () => {
+  it('削除すると行が消え、invalidate が呼ばれる', async () => {
     const created = await createOne()
     const res = await app.request(`/connections/${created.id}`, {
       method: 'DELETE',
@@ -558,7 +558,7 @@ describe('DELETE /connections/:id', () => {
     expect(invalidate).toHaveBeenCalledWith(created.id)
   })
 
-  it('returns 404 for non-existent id', async () => {
+  it('存在しない id は 404', async () => {
     const res = await app.request('/connections/doesnotexist', {
       method: 'DELETE',
     })
@@ -567,7 +567,7 @@ describe('DELETE /connections/:id', () => {
   })
 })
 
-describe('default connection', () => {
+describe('デフォルト接続', () => {
   it('GET /connections は isDefault を返す (初期は全て false)', async () => {
     await createOne({ name: 'connection-a' })
     await createOne({ name: 'connection-b' })

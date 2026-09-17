@@ -62,7 +62,7 @@ afterEach(() => {
 })
 
 describe('EditorShell — saving', () => {
-  it('passes current body and editor name to onSave, persists name, calls onSaved', async () => {
+  it('保存すると本文と署名名を onSave に渡し、署名名を保存して onSaved を呼ぶ', async () => {
     const onSave = vi.fn().mockResolvedValue(undefined)
     const onSaved = vi.fn()
     const user = userEvent.setup()
@@ -79,7 +79,7 @@ describe('EditorShell — saving', () => {
     expect(localStorage.getItem('dashboard.lastEditor')).toBe('tanaka')
   })
 
-  it('does not call onSaved on save failure and surfaces the error', async () => {
+  it('保存に失敗したら onSaved を呼ばず、理由を出す', async () => {
     const onSave = vi.fn().mockRejectedValue(new Error('boom'))
     const onSaved = vi.fn()
     const user = userEvent.setup()
@@ -90,7 +90,7 @@ describe('EditorShell — saving', () => {
     expect(await screen.findByText(/boom/)).toBeTruthy()
   })
 
-  it('prefills editor name from the signature setting', () => {
+  it('署名名の設定が編集者名に入る', () => {
     localStorage.setItem('dashboard.lastEditor', 'sato')
     render(shellWith({ initialBody: '' }))
     expect((screen.getByLabelText('編集者名') as HTMLInputElement).value).toBe('sato')
@@ -104,8 +104,8 @@ describe('EditorShell — saving', () => {
   })
 })
 
-describe('EditorShell — leave warning', () => {
-  it('cancels without confirm when nothing has changed', async () => {
+describe('EditorShell — 離脱の警告', () => {
+  it('何も変えていなければ確認なしでキャンセルできる', async () => {
     const onCancel = vi.fn()
     const user = userEvent.setup()
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
@@ -118,7 +118,7 @@ describe('EditorShell — leave warning', () => {
     expect(onCancel).toHaveBeenCalledTimes(1)
   })
 
-  it('asks for confirm on cancel when the body is dirty, and skips onCancel if the user declines', async () => {
+  it('本文を変えた後のキャンセルは確認し、断ればキャンセルしない', async () => {
     const onCancel = vi.fn()
     const user = userEvent.setup()
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
@@ -134,7 +134,7 @@ describe('EditorShell — leave warning', () => {
     expect(onCancel).not.toHaveBeenCalled()
   })
 
-  it('proceeds with cancel when the user confirms the dirty leave', async () => {
+  it('本文を変えた後でも確認に応じればキャンセルする', async () => {
     const onCancel = vi.fn()
     const user = userEvent.setup()
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
@@ -149,7 +149,7 @@ describe('EditorShell — leave warning', () => {
     expect(onCancel).toHaveBeenCalledTimes(1)
   })
 
-  it('registers a beforeunload listener while dirty and removes it when clean', async () => {
+  it('本文を変えている間だけ beforeunload を登録し、戻せば外す', async () => {
     const addSpy = vi.spyOn(window, 'addEventListener')
     const removeSpy = vi.spyOn(window, 'removeEventListener')
     const user = userEvent.setup()
@@ -178,14 +178,14 @@ describe('EditorShell — leave warning', () => {
 })
 
 describe('EditorShell — layout', () => {
-  it('renders 1-pane when leftPane is omitted', () => {
+  it('leftPane が無ければ 1 ペインで描く', () => {
     const { container } = render(shellWith({ initialBody: '' }))
     const section = container.querySelector('.editpage')!
     expect(section.classList.contains('editpage--two-pane')).toBe(false)
     expect(container.querySelector('.editpage__sidebar')).toBeNull()
   })
 
-  it('renders 2-pane when leftPane is provided', () => {
+  it('leftPane があれば 2 ペインで描く', () => {
     const { container } = render(
       shellWith({
         initialBody: '',
@@ -197,12 +197,12 @@ describe('EditorShell — layout', () => {
     expect(screen.getByTestId('left-pane')).toBeInTheDocument()
   })
 
-  it('does not render the sidebar toggle button when leftPane is omitted', () => {
+  it('leftPane が無ければサイドバーの開閉ボタンを出さない', () => {
     render(shellWith({ initialBody: '' }))
     expect(screen.queryByRole('button', { name: /ファイル参照/ })).toBeNull()
   })
 
-  it('toggles the mobile-open data attribute on the sidebar when the toggle is clicked', async () => {
+  it('開閉ボタンを押すとサイドバーの mobile-open 属性が切り替わる', async () => {
     const user = userEvent.setup()
     const { container } = render(
       shellWith({

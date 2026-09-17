@@ -9,7 +9,7 @@ const edges = [
   { id: 'e3', source: 'run', target: 'output' },
 ]
 
-describe('lineage interaction', () => {
+describe('lineage の経路強調', () => {
   it('選択項目から上流・下流・両方向の経路だけを辿る', () => {
     expect([...traceLineagePath({ nodes, edges, selectedId: 'run', direction: 'upstream' }).nodeIds]).toEqual(['run', 'raw', 'source'])
     expect([...traceLineagePath({ nodes, edges, selectedId: 'run', direction: 'downstream' }).nodeIds]).toEqual(['run', 'output'])

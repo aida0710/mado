@@ -31,7 +31,7 @@ mountStoragePreviewRoutes(app, {
 beforeEach(() => storageMock.reset())
 
 describe('GET /storage/:connectionId/preview/text', () => {
-  it('returns first PREVIEW_TEXT_LIMIT bytes with text/plain', async () => {
+  it('先頭 PREVIEW_TEXT_LIMIT バイトを text/plain で返す', async () => {
     storageMock.on(GetObjectCommand).resolves({
       Body: Readable.from(Buffer.from('hello world!! more content')) as never,
       ContentLength: 26,
@@ -44,12 +44,12 @@ describe('GET /storage/:connectionId/preview/text', () => {
     expect(res.headers.get('content-type')).toMatch(/^text\/plain/)
   })
 
-  it('400 if bucket or key missing', async () => {
+  it('bucket か key が無ければ 400', async () => {
     const res = await app.request(`/storage/${TEST_CONN_ID}/preview/text?key=a.txt`)
     expect(res.status).toBe(400)
   })
 
-  it('404 when storage returns NoSuchKey', async () => {
+  it('storage が NoSuchKey なら 404', async () => {
     storageMock.on(GetObjectCommand).rejects(
       new NoSuchKey({ message: 'no', $metadata: {} })
     )
@@ -60,7 +60,7 @@ describe('GET /storage/:connectionId/preview/text', () => {
 })
 
 describe('GET /storage/:connectionId/preview/raw', () => {
-  it('streams bytes as application/octet-stream with attachment Content-Disposition', async () => {
+  it('application/octet-stream と attachment の Content-Disposition で本文を流す', async () => {
     storageMock.on(GetObjectCommand).resolves({
       Body: Readable.from(Buffer.from('binary-bytes')) as never,
       ContentLength: 12,
@@ -94,12 +94,12 @@ describe('GET /storage/:connectionId/preview/raw', () => {
     expect(cd).toContain(encodeURIComponent('サンプル.wav'))
   })
 
-  it('400 if bucket or key missing', async () => {
+  it('bucket か key が無ければ 400', async () => {
     const res = await app.request(`/storage/${TEST_CONN_ID}/preview/raw?key=a`)
     expect(res.status).toBe(400)
   })
 
-  it('404 when storage returns NoSuchKey', async () => {
+  it('storage が NoSuchKey なら 404', async () => {
     storageMock.on(GetObjectCommand).rejects(
       new NoSuchKey({ message: 'no', $metadata: {} }),
     )
@@ -109,7 +109,7 @@ describe('GET /storage/:connectionId/preview/raw', () => {
 })
 
 describe('GET /storage/:connectionId/preview/image', () => {
-  it('proxies image bytes with content-type guessed from key', async () => {
+  it('キーの拡張子から推定した Content-Type で画像を中継する', async () => {
     storageMock.on(GetObjectCommand).resolves({
       Body: Readable.from(Buffer.from([0xff, 0xd8, 0xff])) as never,
     })
@@ -137,12 +137,12 @@ describe('GET /storage/:connectionId/preview/image', () => {
     expect(res.headers.get('content-type')).toBe(expected)
   })
 
-  it('400 if bucket or key missing', async () => {
+  it('bucket か key が無ければ 400', async () => {
     const res = await app.request(`/storage/${TEST_CONN_ID}/preview/image?bucket=b`)
     expect(res.status).toBe(400)
   })
 
-  it('forwards Content-Length when known', async () => {
+  it('Content-Length が分かっていればそのまま付ける', async () => {
     storageMock.on(GetObjectCommand).resolves({
       Body: Readable.from(Buffer.from([1, 2, 3, 4, 5])) as never,
       ContentLength: 5,
@@ -153,7 +153,7 @@ describe('GET /storage/:connectionId/preview/image', () => {
     expect(res.headers.get('content-length')).toBe('5')
   })
 
-  it('404 when storage returns NoSuchKey', async () => {
+  it('storage が NoSuchKey なら 404', async () => {
     storageMock.on(GetObjectCommand).rejects(
       new NoSuchKey({ message: 'no', $metadata: {} })
     )
@@ -163,7 +163,7 @@ describe('GET /storage/:connectionId/preview/image', () => {
 })
 
 describe('GET /storage/:connectionId/preview/audio', () => {
-  it('forwards Range header to storage and returns 206', async () => {
+  it('Range ヘッダを storage へ渡して 206 で返す', async () => {
     storageMock.on(GetObjectCommand, {
       Bucket: 'b', Key: 'a.mp3', Range: 'bytes=0-9',
     }).resolves({
@@ -181,7 +181,7 @@ describe('GET /storage/:connectionId/preview/audio', () => {
     expect(res.headers.get('accept-ranges')).toBe('bytes')
   })
 
-  it('returns 200 without Range', async () => {
+  it('Range が無ければ 200 で全体を返す', async () => {
     storageMock.on(GetObjectCommand).resolves({
       Body: Readable.from(Buffer.from('full')) as never,
       ContentLength: 4,
@@ -217,12 +217,12 @@ describe('GET /storage/:connectionId/preview/audio', () => {
     expect(res.headers.get('content-type')).toBe(expected)
   })
 
-  it('400 if bucket or key missing', async () => {
+  it('bucket か key が無ければ 400', async () => {
     const res = await app.request(`/storage/${TEST_CONN_ID}/preview/audio?bucket=b`)
     expect(res.status).toBe(400)
   })
 
-  it('404 when storage returns NoSuchKey', async () => {
+  it('storage が NoSuchKey なら 404', async () => {
     storageMock.on(GetObjectCommand).rejects(
       new NoSuchKey({ message: 'no', $metadata: {} })
     )
@@ -300,7 +300,7 @@ function doneOf(lines: NdjsonLine[]): NdjsonDoneLine['done'] | undefined {
 }
 
 describe('GET /storage/:connectionId/preview/tar', () => {
-  it('streams entries from a tar.gz as NDJSON ending with done', async () => {
+  it('tar.gz のエントリを NDJSON で流し、最後に done を出す', async () => {
     storageMock.on(GetObjectCommand).resolves({
       Body: createReadStream(fixture('sample.tar.gz')) as never,
     })
@@ -317,7 +317,7 @@ describe('GET /storage/:connectionId/preview/tar', () => {
     )
   })
 
-  it('streams entries from a plain tar', async () => {
+  it('無圧縮の tar でもエントリを流せる', async () => {
     storageMock.on(GetObjectCommand).resolves({
       Body: createReadStream(fixture('sample.tar')) as never,
     })
@@ -331,7 +331,7 @@ describe('GET /storage/:connectionId/preview/tar', () => {
     ]))
   })
 
-  it('streams entries from a tar.xz', async () => {
+  it('tar.xz でもエントリを流せる', async () => {
     storageMock.on(GetObjectCommand).resolves({
       Body: createReadStream(fixture('sample.tar.xz')) as never,
     })
@@ -343,7 +343,7 @@ describe('GET /storage/:connectionId/preview/tar', () => {
     expect(names).toEqual(['d/', 'd/a.txt', 'd/b.txt', 'd/c.txt'])
   })
 
-  it('respects ?limit=2 and reports hasMore:true in the done line', async () => {
+  it('?limit=2 で 2 件に絞り、done 行で hasMore:true を知らせる', async () => {
     storageMock.on(GetObjectCommand).resolves({
       Body: createReadStream(fixture('sample.tar.gz')) as never,
     })
@@ -360,7 +360,7 @@ describe('GET /storage/:connectionId/preview/tar', () => {
     expect(done?.limit).toBe(2)
   })
 
-  it('paginates with ?offset', async () => {
+  it('?offset で次のページを返す', async () => {
     storageMock.on(GetObjectCommand).resolves({
       Body: createReadStream(fixture('sample.tar.gz')) as never,
     })
@@ -389,14 +389,14 @@ describe('GET /storage/:connectionId/preview/tar', () => {
       .toEqual(['d/', 'd/a.txt', 'd/b.txt', 'd/c.txt'])
   })
 
-  it('400 for unsupported extension (.zip)', async () => {
+  it('対応していない拡張子 (.zip) は 400', async () => {
     const res = await app.request(
       `/storage/${TEST_CONN_ID}/preview/tar?bucket=b&key=foo.zip`,
     )
     expect(res.status).toBe(400)
   })
 
-  it('detects .tgz as gz', async () => {
+  it('.tgz を gz として扱う', async () => {
     storageMock.on(GetObjectCommand).resolves({
       Body: createReadStream(fixture('sample.tar.gz')) as never,
     })
@@ -406,12 +406,12 @@ describe('GET /storage/:connectionId/preview/tar', () => {
     expect(res.status).toBe(200)
   })
 
-  it('400 if bucket or key missing', async () => {
+  it('bucket か key が無ければ 400', async () => {
     const res = await app.request(`/storage/${TEST_CONN_ID}/preview/tar?bucket=b`)
     expect(res.status).toBe(400)
   })
 
-  it('emits {error} line when storage returns NoSuchKey (status 200, error in body)', async () => {
+  it('storage が NoSuchKey なら status 200 のまま {error} 行を出す', async () => {
     storageMock.on(GetObjectCommand).rejects(
       new NoSuchKey({ message: 'no', $metadata: {} })
     )

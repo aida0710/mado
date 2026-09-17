@@ -41,8 +41,8 @@ function renderBrowser(prefix = 'voice/') {
   )
 }
 
-describe('StorageBrowser - directory row', () => {
-  it('renders directory name inside an <a href> for native cmd+click support', async () => {
+describe('StorageBrowser - ディレクトリ行', () => {
+  it('ディレクトリ名は <a href> で描き、cmd+click がそのまま効く', async () => {
     ;(api.list as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
       directories: ['voice/jp/'],
       files: [],
@@ -57,7 +57,7 @@ describe('StorageBrowser - directory row', () => {
     expect(link.getAttribute('href')).toBe('/storage/c1/b1/voice/jp/')
   })
 
-  it('shows a progress bar while a re-list is in flight (prefix change)', async () => {
+  it('prefix を変えて取り直している間はプログレスバーを出す', async () => {
     const listMock = api.list as ReturnType<typeof vi.fn>
     // 1 回目 (初回 mount): 即解決
     listMock.mockResolvedValueOnce({
@@ -102,7 +102,7 @@ describe('StorageBrowser - directory row', () => {
     )
   })
 
-  it('issues api.list with prefix + query when user searches in current directory', async () => {
+  it('現在のディレクトリで検索すると prefix + 入力で api.list を呼ぶ', async () => {
     const listMock = api.list as ReturnType<typeof vi.fn>
     // 1 回目 (初回 mount): prefix='voice/', q=''
     listMock.mockResolvedValueOnce({
@@ -133,7 +133,7 @@ describe('StorageBrowser - directory row', () => {
     expect(listMock.mock.calls[1]).toEqual([{ connectionId: 'c1', bucket: 'b1', prefix: 'voice/j', cursor: {}, recursive: false, onRevalidate: expect.any(Function) }])
   })
 
-  it('passes recursive=true to api.list when the recursive checkbox is toggled', async () => {
+  it('再帰チェックを入れると api.list に recursive=true を渡す', async () => {
     const listMock = api.list as ReturnType<typeof vi.fn>
     listMock.mockResolvedValueOnce({
       directories: ['voice/jp/'],
@@ -218,7 +218,7 @@ describe('StorageBrowser - directory row', () => {
     expect(screen.getByRole('button', { name: '前のページへ' })).toBeEnabled()
   })
 
-  it('advances through multiple pages: page 1 → 2 → 3 each with distinct cursor', async () => {
+  it('ページ 1 → 2 → 3 とそれぞれ別の cursor で進む', async () => {
     const listMock = api.list as ReturnType<typeof vi.fn>
     // 3 ページ分用意。各 nextContinuation は別物。
     listMock.mockResolvedValueOnce({
@@ -265,7 +265,7 @@ describe('StorageBrowser - directory row', () => {
     expect(screen.queryByText(/p2\.mp3/)).toBeNull()
   })
 
-  it('uses the startAfter fallback when the response carries no continuation token', async () => {
+  it('応答に continuation token が無ければ startAfter で次に進む', async () => {
     const listMock = api.list as ReturnType<typeof vi.fn>
     // 一部の S3 互換実装は IsTruncated=true でも nextContinuation を返さない
     // ことがあり、backend は最終キーを nextStartAfter にフォールバックさせる。
@@ -336,7 +336,7 @@ describe('StorageBrowser - directory row', () => {
     expect(screen.getByText(/cursor を進めずに同じトークン/)).toBeInTheDocument()
   })
 
-  it('shows a copy menu on directory row with Web URL and S3 URL items', async () => {
+  it('ディレクトリ行のコピーメニューに Web URL と S3 URL がある', async () => {
     ;(api.list as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
       directories: ['voice/jp/'],
       files: [],

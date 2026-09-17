@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createMarquezClient, marquezNodeId } from './marquez-client.js'
 
-describe('Marquez read client', () => {
+describe('Marquez 読み取り client', () => {
   it('structured identityからnodeIdを作り、GET以外を持たない', async () => {
     const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(new Response(
       JSON.stringify({ graph: [] }),

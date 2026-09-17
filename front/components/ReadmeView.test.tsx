@@ -45,8 +45,8 @@ function renderView() {
   )
 }
 
-describe('ReadmeView - collapse fade', () => {
-  it('does NOT render the bottom fade when the README fits within the collapsed height', async () => {
+describe('ReadmeView - 折りたたみのフェード', () => {
+  it('README が折りたたみの高さに収まれば下端のフェードを出さない', async () => {
     mockHeights(100, 100) // scrollHeight == clientHeight → 収まっている (= 短い README)
     readmeMock.mockResolvedValue({ exists: true, body: '# short' })
     const { container } = renderView()
@@ -57,7 +57,7 @@ describe('ReadmeView - collapse fade', () => {
     expect(body.className).toContain('is-collapsed')
   })
 
-  it('renders the bottom fade only when the README overflows the collapsed height', async () => {
+  it('README が折りたたみの高さを超えるときだけ下端のフェードを出す', async () => {
     mockHeights(1000, 100) // scrollHeight > clientHeight → あふれている (= 長い README)
     readmeMock.mockResolvedValue({ exists: true, body: '# long' })
     const { container } = renderView()

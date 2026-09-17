@@ -21,14 +21,14 @@ beforeEach(async () => {
 })
 afterAll(() => closePools(pools))
 
-describe('app settings', () => {
-  it('GET /settings returns all settings as a key-value map', async () => {
+describe('アプリ設定', () => {
+  it('GET /settings は全設定を key-value で返す', async () => {
     const res = await app.request('/settings')
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ tags_enabled: 'true' })
   })
 
-  it('PUT /settings/:key updates the value', async () => {
+  it('PUT /settings/:key で値を更新できる', async () => {
     const res = await app.request('/settings/tags_enabled', {
       method: 'PUT',
       headers: { 'content-type': 'application/json' },
@@ -41,7 +41,7 @@ describe('app settings', () => {
       .toEqual({ tags_enabled: 'false' })
   })
 
-  it('PUT is idempotent (upsert, not duplicate rows)', async () => {
+  it('PUT は冪等 (upsert で行は増えない)', async () => {
     for (const v of ['false', 'false', 'true']) {
       await app.request('/settings/tags_enabled', {
         method: 'PUT',
@@ -56,7 +56,7 @@ describe('app settings', () => {
   })
 
   // 未知のキーを弾く。UI のタイプミスや古いクライアントが設定表を汚さないように。
-  it('PUT rejects an unknown key', async () => {
+  it('PUT は知らない key を拒否する', async () => {
     const res = await app.request('/settings/nope', {
       method: 'PUT',
       headers: { 'content-type': 'application/json' },
@@ -67,7 +67,7 @@ describe('app settings', () => {
     expect(r.rows[0].n).toBe(0)
   })
 
-  it('PUT rejects a non-string value', async () => {
+  it('PUT は文字列以外の値を拒否する', async () => {
     const res = await app.request('/settings/tags_enabled', {
       method: 'PUT',
       headers: { 'content-type': 'application/json' },

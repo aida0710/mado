@@ -15,7 +15,7 @@ describe('About', () => {
     expect(repo).toHaveAttribute('href', 'https://github.com/aida0710/mado')
   })
 
-  it('shows the commit as plain text (no link) when commit info is absent', () => {
+  it('コミット情報が無ければリンクにせず文字だけ出す', () => {
     render(<About />)
     expect(screen.getByText('dev')).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'dev' })).toBeNull()

@@ -7,7 +7,7 @@ const okJson = (body: unknown): Response =>
 afterEach(() => vi.restoreAllMocks())
 
 describe('media client', () => {
-  it('mediaAnalyze: URL / signal / zod parse', async () => {
+  it('mediaAnalyze は URL を組み、signal を渡し、応答を zod で検証する', async () => {
     const meta = {
       codec: 'flac', container: 'flac', channels: 2, bitsPerSample: 24,
       bitRate: 1411000, sizeBytes: 2097152, peakDb: -0.3, rmsDb: -18.2,

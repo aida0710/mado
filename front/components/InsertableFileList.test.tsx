@@ -15,7 +15,7 @@ afterEach(() => {
 })
 
 describe('InsertableFileList', () => {
-  it('fetches with recursive:false and renders files + directories under the current prefix', async () => {
+  it('recursive:false で取得し、現在の prefix 配下のファイルとディレクトリを描く', async () => {
     ;(api.list as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
       directories: ['docs/images/', 'docs/data/'],
       files: [
@@ -43,7 +43,7 @@ describe('InsertableFileList', () => {
     expect(screen.getByText(/notes\.txt/)).toBeInTheDocument()
   })
 
-  it('fires onInsert with { name, isDir:true, fullKey } when a directory row is clicked', async () => {
+  it('ディレクトリ行を押すと { name, isDir:true, fullKey } で onInsert を呼ぶ', async () => {
     ;(api.list as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
       directories: ['docs/images/'],
       files: [],
@@ -74,7 +74,7 @@ describe('InsertableFileList', () => {
     })
   })
 
-  it('fires onInsert with isDir:false for a file row', async () => {
+  it('ファイル行なら isDir:false で onInsert を呼ぶ', async () => {
     ;(api.list as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
       directories: [],
       files: [{ key: 'docs/spec.md', size: 100, lastModified: null }],
@@ -139,7 +139,7 @@ describe('InsertableFileList', () => {
     expect(onInsert).not.toHaveBeenCalled()
   })
 
-  it('renders breadcrumbs and navigates up when a higher segment is clicked', async () => {
+  it('パンくずを描き、上の階層を押すとそこへ移動する', async () => {
     const listMock = api.list as ReturnType<typeof vi.fn>
     // 1 回目: prefix='docs/sub/'
     listMock.mockResolvedValueOnce({
@@ -174,7 +174,7 @@ describe('InsertableFileList', () => {
     expect(listMock.mock.calls[1]).toEqual([{ connectionId: 'c1', bucket: 'b1', prefix: 'docs/', recursive: false }])
   })
 
-  it('breadcrumb root (bucket name) navigates to empty prefix', async () => {
+  it('パンくずの先頭 (バケット名) を押すと prefix が空になる', async () => {
     const listMock = api.list as ReturnType<typeof vi.fn>
     listMock.mockResolvedValueOnce({
       directories: [],
@@ -206,7 +206,7 @@ describe('InsertableFileList', () => {
     expect(listMock.mock.calls[1]).toEqual([{ connectionId: 'c1', bucket: 'b1', prefix: '', recursive: false }])
   })
 
-  it('shows empty-state text when the prefix has no entries', async () => {
+  it('prefix にエントリが無ければその旨を出す', async () => {
     ;(api.list as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
       directories: [],
       files: [],
@@ -225,7 +225,7 @@ describe('InsertableFileList', () => {
     expect(await screen.findByText('エントリなし')).toBeInTheDocument()
   })
 
-  it('shows a "many entries" hint when the response indicates more pages exist', async () => {
+  it('次のページがあると分かれば「まだある」ことを示す', async () => {
     ;(api.list as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
       directories: [],
       files: [{ key: 'docs/a.md', size: 1, lastModified: null }],

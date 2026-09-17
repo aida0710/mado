@@ -30,7 +30,7 @@ beforeEach(async () => {
 })
 afterAll(() => closePools(pools))
 
-describe('auth routes', () => {
+describe('認証 route', () => {
   it('local loginでHttpOnly sessionを発行し/meで認証する', async () => {
     const login = await app.request('/local/login', {
       method: 'POST',

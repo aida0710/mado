@@ -18,21 +18,21 @@ const graph: LineageGraph = {
   generatedAt: '2026-01-01T00:00:00Z', truncated: false, warnings: [],
 }
 
-describe('lineage graph model', () => {
-  it('turns domain nodes into flow nodes and keeps opaque IDs', () => {
+describe('lineage のグラフモデル', () => {
+  it('domain のノードを flow のノードにし、ID はそのまま持つ', () => {
     const result = toFlowElements(graph)
     expect(result.nodes.map(node => node.id)).toEqual(['d:raw', 'j:clean', 'd:out'])
     expect(result.edges.map(edge => edge.id)).toEqual(['e1', 'e2'])
     expect(result.nodes[1].data.status).toBe('完了')
   })
 
-  it('does not expose storage locations as canvas nodes', () => {
+  it('保存場所はキャンバスのノードにしない', () => {
     const result = toFlowElements(graph)
     expect(result.nodes.map(node => node.id)).not.toContain('loc:1')
     expect(result.edges.some(edge => edge.target === 'loc:1')).toBe(false)
   })
 
-  it('lays a DAG left to right without mutating domain-derived nodes', () => {
+  it('DAG を左から右に並べ、元のノードは書き換えない', () => {
     const elements = toFlowElements(graph)
     const before = structuredClone(elements.nodes)
     const laidOut = layoutLineage(elements.nodes, elements.edges)
@@ -42,7 +42,7 @@ describe('lineage graph model', () => {
     expect(laidOut.nodes[0]).toMatchObject({ width: LINEAGE_NODE_WIDTH, height: LINEAGE_NODE_HEIGHT })
   })
 
-  it('returns finite positions even when the input contains a cycle', () => {
+  it('循環があっても有限の座標を返す', () => {
     const elements = toFlowElements({
       ...graph,
       edges: [...graph.edges.slice(0, 2), { id: 'back', source: 'd:out', target: 'd:raw', kind: 'lineage' }],

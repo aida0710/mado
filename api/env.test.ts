@@ -4,7 +4,7 @@ import { loadEnv, loadLineageEnv } from './env.js'
 const VALID_KEY = '0'.repeat(64)
 
 describe('loadEnv', () => {
-  it('parses required env vars', () => {
+  it('必須の環境変数を読める', () => {
     const env = loadEnv({
       PORT: '3000',
       DATABASE_URL_RW: 'postgres://rw@localhost/dashboard',
@@ -23,7 +23,7 @@ describe('loadEnv', () => {
     expect(env.AUTH_COOKIE_SECURE).toBe(false)
   })
 
-  it('splits ALLOWED_ORIGINS by comma + trims spaces + drops empty', () => {
+  it('ALLOWED_ORIGINS はカンマで分け、空白を除き、空要素を落とす', () => {
     const env = loadEnv({
       DATABASE_URL_RW: 'postgres://rw@localhost/dashboard',
       DATABASE_URL_RO: 'postgres://ro@localhost/dashboard',
@@ -36,7 +36,7 @@ describe('loadEnv', () => {
     ])
   })
 
-  it('throws on missing ALLOWED_ORIGINS', () => {
+  it('ALLOWED_ORIGINS が無ければ throw する', () => {
     expect(() => loadEnv({
       PORT: '3000',
       DATABASE_URL_RW: 'postgres://rw@localhost/dashboard',
@@ -45,7 +45,7 @@ describe('loadEnv', () => {
     })).toThrow(/ALLOWED_ORIGINS/)
   })
 
-  it('throws on ALLOWED_ORIGINS with only commas/whitespace (transform → empty)', () => {
+  it('ALLOWED_ORIGINS がカンマと空白だけなら空とみなして throw する', () => {
     expect(() => loadEnv({
       DATABASE_URL_RW: 'postgres://rw@localhost/dashboard',
       DATABASE_URL_RO: 'postgres://ro@localhost/dashboard',
@@ -54,11 +54,11 @@ describe('loadEnv', () => {
     })).toThrow(/ALLOWED_ORIGINS/)
   })
 
-  it('throws on missing required var', () => {
+  it('必須変数が無ければ throw する', () => {
     expect(() => loadEnv({ PORT: '3000' })).toThrow(/DATABASE_URL_RW/)
   })
 
-  it('throws on missing ENCRYPTION_KEY', () => {
+  it('ENCRYPTION_KEY が無ければ throw する', () => {
     expect(() => loadEnv({
       PORT: '3000',
       DATABASE_URL_RW: 'postgres://rw@localhost/dashboard',
@@ -67,7 +67,7 @@ describe('loadEnv', () => {
     })).toThrow(/ENCRYPTION_KEY/)
   })
 
-  it('throws on ENCRYPTION_KEY with wrong length', () => {
+  it('ENCRYPTION_KEY の長さが違えば throw する', () => {
     expect(() => loadEnv({
       PORT: '3000',
       DATABASE_URL_RW: 'postgres://rw@localhost/dashboard',
@@ -77,7 +77,7 @@ describe('loadEnv', () => {
     })).toThrow(/ENCRYPTION_KEY/)
   })
 
-  it('throws on ENCRYPTION_KEY with non-hex chars', () => {
+  it('ENCRYPTION_KEY に hex 以外の文字があれば throw する', () => {
     expect(() => loadEnv({
       PORT: '3000',
       DATABASE_URL_RW: 'postgres://rw@localhost/dashboard',

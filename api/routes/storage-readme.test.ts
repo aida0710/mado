@@ -69,7 +69,7 @@ beforeEach(async () => {
 afterAll(() => closePools(pools))
 
 describe('GET /storage/:connectionId/readme', () => {
-  it('returns body and meta when README exists', async () => {
+  it('README があれば本文と meta を返す', async () => {
     storageMock.on(GetObjectCommand, { Bucket: 'b', Key: 'voice/jp/README.md' })
       .resolves({
         Body: Readable.from(Buffer.from('# Voice JP\nhello')) as never,
@@ -91,7 +91,7 @@ describe('GET /storage/:connectionId/readme', () => {
     expect(body.last_editor).toBe('tanaka')
   })
 
-  it('returns exists:false when README is absent', async () => {
+  it('README が無ければ exists:false を返す', async () => {
     storageMock.on(GetObjectCommand).rejects(
       new NoSuchKey({ message: 'no', $metadata: {} })
     )
@@ -102,7 +102,7 @@ describe('GET /storage/:connectionId/readme', () => {
     expect(await res.json()).toEqual({ exists: false })
   })
 
-  it('handles bucket root (empty prefix)', async () => {
+  it('バケット直下 (空の prefix) でも扱える', async () => {
     storageMock.on(GetObjectCommand, { Bucket: 'b', Key: 'README.md' })
       .resolves({
         Body: Readable.from(Buffer.from('root')) as never,
@@ -113,14 +113,14 @@ describe('GET /storage/:connectionId/readme', () => {
     expect(body.body).toBe('root')
   })
 
-  it('400 when bucket missing', async () => {
+  it('bucket が無ければ 400', async () => {
     const res = await app.request(`/storage/${TEST_CONN_ID}/readme`)
     expect(res.status).toBe(400)
   })
 })
 
 describe('PUT /storage/:connectionId/readme', () => {
-  it('uploads body and upserts meta', async () => {
+  it('本文を書き込み、meta を upsert する', async () => {
     storageMock.on(PutObjectCommand).resolves({})
     const res = await app.request(`/storage/${TEST_CONN_ID}/readme`, {
       method: 'PUT',
@@ -155,7 +155,7 @@ describe('PUT /storage/:connectionId/readme', () => {
     ])
   })
 
-  it('upserts (overwrites) the existing meta row', async () => {
+  it('既にある meta 行は上書きする', async () => {
     storageMock.on(PutObjectCommand).resolves({})
     await pools.rw.query(
       `INSERT INTO storage_readme_meta(connection_id, bucket, prefix, last_editor, size_bytes)
@@ -176,7 +176,7 @@ describe('PUT /storage/:connectionId/readme', () => {
     expect(r.rows).toEqual([{ last_editor: 'sato', size_bytes: 5 }])
   })
 
-  it('does NOT touch DB when storage PUT fails (atomicity)', async () => {
+  it('storage への PUT が失敗したら DB には触らない', async () => {
     storageMock.on(PutObjectCommand).rejects(new Error('storage down'))
     const res = await app.request(`/storage/${TEST_CONN_ID}/readme`, {
       method: 'PUT',
@@ -190,7 +190,7 @@ describe('PUT /storage/:connectionId/readme', () => {
     expect(r.rows[0].count).toBe('0')
   })
 
-  it('400 on malformed JSON body', async () => {
+  it('壊れた JSON body は 400', async () => {
     const res = await app.request(`/storage/${TEST_CONN_ID}/readme`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -199,7 +199,7 @@ describe('PUT /storage/:connectionId/readme', () => {
     expect(res.status).toBe(400)
   })
 
-  it('returns ok+meta_stale when DB write fails after storage PUT succeeds', async () => {
+  it('storage への PUT 後に DB 書き込みが失敗したら ok と meta_stale を返す', async () => {
     storageMock.on(PutObjectCommand).resolves({})
     // 制約違反でDB書き込みを失敗させる。最も信頼性の高い方法: プールをエラーを起こす
     // クエリで毒見させる。sentinel `editor` 値を用いて `pools.rw.query` を一度
@@ -382,8 +382,8 @@ describe('GET /storage/:connectionId/readmes/search', () => {
   })
 })
 
-describe('connection-not-found behaviour', () => {
-  it('GET returns 404 when connectionId does not exist via factory', async () => {
+describe('接続が見つからないとき', () => {
+  it('存在しない connectionId への GET は 404', async () => {
     // テストのローカルフェイク getStorage をバイパスするため、
     // ConnectionNotFoundError を投げるファクトリを持つ新しいアプリをマウントする。
     const { ConnectionNotFoundError } = await import('../storage.js')

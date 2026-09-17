@@ -25,7 +25,7 @@ function service(overrides: Partial<LineageService> = {}): LineageService {
   }
 }
 
-describe('lineage read routes', () => {
+describe('lineage 読み取り route', () => {
   it('logical graph queryを検証しdepthをclampする', async () => {
     const svc = service()
     const app = new Hono()

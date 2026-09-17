@@ -33,7 +33,7 @@ const version = {
 }
 
 describe('LineageDetailPanel', () => {
-  it('shows manifest provenance and links a bound location into Storage', () => {
+  it('manifest の由来を出し、binding 済みの保存場所は Storage へリンクする', () => {
     render(
       <MemoryRouter>
         <LineageDetailPanel
@@ -54,7 +54,7 @@ describe('LineageDetailPanel', () => {
       .toHaveAttribute('href', '/storage/connection%201/dataset/callhome/raw/')
   })
 
-  it('does not render a Storage link for an unbound replica', () => {
+  it('binding の無い複製には Storage リンクを出さない', () => {
     render(
       <MemoryRouter>
         <LineageDetailPanel
@@ -70,7 +70,7 @@ describe('LineageDetailPanel', () => {
     expect(screen.queryByRole('link', { name: /Storageで開く/ })).toBeNull()
   })
 
-  it('shows README evidence, runtime settings, and acquisition sources', () => {
+  it('README の根拠・実行設定・取得元を出す', () => {
     const run = {
       id: '44444444-4444-4444-8444-444444444444',
       runKey: 'backfill-fisher',
@@ -140,7 +140,7 @@ describe('LineageDetailPanel', () => {
     })))
   })
 
-  it('shows embedded source provenance in version graphs', () => {
+  it('版のグラフでは埋め込まれた取得元の由来を出す', () => {
     render(
       <MemoryRouter>
         <LineageDetailPanel

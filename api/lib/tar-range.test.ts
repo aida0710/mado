@@ -23,7 +23,7 @@ beforeAll(async () => { tarBuf = await loadFixture('sample.tar') })
 afterAll(() => {})
 
 describe('listTarHeadersByRange', () => {
-  it('lists all entries from a small tar via byte-range reads', async () => {
+  it('小さい tar の全エントリを Range 読みで列挙する', async () => {
     const calls: string[] = []
     const r = await listTarHeadersByRange(
       bufferReader(tarBuf),
@@ -36,7 +36,7 @@ describe('listTarHeadersByRange', () => {
     expect(calls).toEqual(r.entries.map(e => e.name))
   })
 
-  it('reads file sizes correctly', async () => {
+  it('各ファイルのサイズを正しく読む', async () => {
     const r = await listTarHeadersByRange(
       bufferReader(tarBuf),
       { entryLimit: 10 },
@@ -45,7 +45,7 @@ describe('listTarHeadersByRange', () => {
     expect(a?.size).toBe(6) // 'alpha\n' の長さ
   })
 
-  it('respects entryLimit and reports hasMore', async () => {
+  it('entryLimit で止まり、hasMore を立てる', async () => {
     const r = await listTarHeadersByRange(
       bufferReader(tarBuf),
       { entryLimit: 2 },
@@ -54,7 +54,7 @@ describe('listTarHeadersByRange', () => {
     expect(r.hasMore).toBe(true)
   })
 
-  it('paginates with offset', async () => {
+  it('offset で次のページを返す', async () => {
     const r1 = await listTarHeadersByRange(bufferReader(tarBuf), { entryLimit: 2, offset: 0 })
     const r2 = await listTarHeadersByRange(bufferReader(tarBuf), { entryLimit: 2, offset: 2 })
     expect(r1.entries).toHaveLength(2)
@@ -64,7 +64,7 @@ describe('listTarHeadersByRange', () => {
     expect(r2.hasMore).toBe(false)
   })
 
-  it('issues few range reads when entries are tiny (no body draining)', async () => {
+  it('小さいエントリが並ぶ tar でも Range 読みの回数は少ない (本文を読み飛ばさない)', async () => {
     let reads = 0
     const counting: RangeReader = async (start, length) => {
       reads++

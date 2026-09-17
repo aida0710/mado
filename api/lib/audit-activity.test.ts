@@ -10,7 +10,7 @@ const user = {
   roles: ['admin'], permissions: ['storage:read'], mustChangePassword: false,
 }
 
-describe('audit activity', () => {
+describe('監査の記録判定', () => {
   it('主要な変更だけを分類する', () => {
     expect(classifyActivity('PUT', '/api/internal/notes/home')).toMatchObject({ action: 'note.update', resourceId: 'home' })
     expect(classifyActivity('DELETE', '/api/internal/storage/c1/favorites/bucket')).toMatchObject({ action: 'storage.favorite.remove' })

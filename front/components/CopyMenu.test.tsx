@@ -18,10 +18,10 @@ const rect = (top: number, bottom: number): DOMRect =>
     toJSON: () => ({}),
   }) as DOMRect
 
-describe('CopyMenu - download item alignment', () => {
+describe('CopyMenu - ダウンロード項目の揃え', () => {
   // ダウンロード項目 (<a>) は td の text-right を継承して右寄せにならないよう、
   // コピー項目 (<button>) と同じく text-left を明示している。
-  it('left-aligns the download link like the copy items', async () => {
+  it('ダウンロードのリンクもコピー項目と同じく左寄せになる', async () => {
     const user = userEvent.setup()
     const items: MenuItem[] = [
       { kind: 'download', label: 'このファイルをダウンロード', href: 'http://x/dl', filename: 'f.bin' },
@@ -34,7 +34,7 @@ describe('CopyMenu - download item alignment', () => {
   })
 })
 
-describe('CopyMenu - keyboard close', () => {
+describe('CopyMenu - キーボードで閉じる', () => {
   const items: MenuItem[] = [
     { kind: 'copy', label: 'A', value: 'a' },
     { kind: 'copy', label: 'B', value: 'b' },
@@ -43,7 +43,7 @@ describe('CopyMenu - keyboard close', () => {
   // トリガーの onKeyDown は Enter/Space だけ止める (行の誤発火防止)。Escape は
   // 止めないので、開いた直後にトリガーへフォーカスが残った状態でも document の
   // keydown リスナに届き、メニューを閉じられる。
-  it('closes on Escape while the trigger still has focus', async () => {
+  it('Escape で閉じ、トリガーにフォーカスが残る', async () => {
     const user = userEvent.setup()
     render(<CopyMenu items={items} />)
     const trigger = screen.getByRole('button', { name: 'アクション' })
@@ -56,13 +56,13 @@ describe('CopyMenu - keyboard close', () => {
   })
 })
 
-describe('CopyMenu - open direction (portal + fixed)', () => {
+describe('CopyMenu - 開く向き (portal + fixed)', () => {
   const items: MenuItem[] = [
     { kind: 'copy', label: 'A', value: 'a' },
     { kind: 'copy', label: 'B', value: 'b' },
   ]
 
-  it('renders the menu fixed-positioned outside the row (portaled to body)', async () => {
+  it('メニューは行の外に fixed で描く (body へ portal)', async () => {
     const user = userEvent.setup()
     const { container } = render(<CopyMenu items={items} />)
     const trigger = screen.getByRole('button', { name: 'アクション' })
@@ -75,7 +75,7 @@ describe('CopyMenu - open direction (portal + fixed)', () => {
     expect(menu.style.position).toBe('fixed')
   })
 
-  it('opens downward when there is room below the trigger', async () => {
+  it('トリガーの下に余裕があれば下に開く', async () => {
     const user = userEvent.setup()
     render(<CopyMenu items={items} />)
     const trigger = screen.getByRole('button', { name: 'アクション' })
@@ -86,7 +86,7 @@ describe('CopyMenu - open direction (portal + fixed)', () => {
     expect(menu.style.bottom).toBe('')
   })
 
-  it('flips upward when the trigger sits near the bottom of the viewport', async () => {
+  it('トリガーが画面下端に近ければ上に開く', async () => {
     const user = userEvent.setup()
     render(<CopyMenu items={items} />)
     const trigger = screen.getByRole('button', { name: 'アクション' })
@@ -102,7 +102,7 @@ describe('CopyMenu - open direction (portal + fixed)', () => {
 // スマホ幅で「横に突き抜ける」不具合の回帰テスト。right をトリガ右端に揃える
 // だけだと、トリガが画面左寄り (パンくず等) にあるとき right が大きくなりすぎ、
 // メニューの左端が負の座標へ回り込んで見切れる。
-describe('CopyMenu - horizontal clamping', () => {
+describe('CopyMenu - 横方向の画面内収め', () => {
   const items: MenuItem[] = [
     { kind: 'copy', label: 'A', value: 'a' },
     { kind: 'copy', label: 'B', value: 'b' },
@@ -117,7 +117,7 @@ describe('CopyMenu - horizontal clamping', () => {
   const originalWidth = window.innerWidth
   afterEach(() => setViewportWidth(originalWidth))
 
-  it('keeps the left edge on screen when the trigger sits far from the right edge', async () => {
+  it('トリガーが右端から遠ければ左端を画面内に収める', async () => {
     const user = userEvent.setup()
     render(<CopyMenu items={items} />)
     const trigger = screen.getByRole('button', { name: 'アクション' })
@@ -132,7 +132,7 @@ describe('CopyMenu - horizontal clamping', () => {
     expect(window.innerWidth - right - MIN_W).toBeGreaterThanOrEqual(MARGIN)
   })
 
-  it('shrinks the menu to the viewport on a phone-width screen', async () => {
+  it('phone 幅ではメニューを画面幅に縮める', async () => {
     const user = userEvent.setup()
     setViewportWidth(360)
     render(<CopyMenu items={items} />)
@@ -148,7 +148,7 @@ describe('CopyMenu - horizontal clamping', () => {
     expect(parseFloat(menu.style.right)).toBeGreaterThanOrEqual(MARGIN)
   })
 
-  it('still caps the width at 480px on a wide screen', async () => {
+  it('広い画面でも幅は 480px で止める', async () => {
     const user = userEvent.setup()
     setViewportWidth(1600)
     render(<CopyMenu items={items} />)

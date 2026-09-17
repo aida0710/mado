@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { createCapacityScheduler } from './capacity-scheduler.js'
 import { scanDedupKey } from '../routes/storage-scan.js'
 
-describe('capacity scheduler', () => {
+describe('容量計測の scheduler', () => {
   it('期限を迎えたconnectionの全bucketをroot走査へ投入する', async () => {
     const attachJob = vi.fn()
     const markConnectionScheduled = vi.fn()

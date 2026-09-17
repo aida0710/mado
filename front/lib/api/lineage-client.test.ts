@@ -3,8 +3,8 @@ import { api } from './client'
 
 afterEach(() => vi.unstubAllGlobals())
 
-describe('lineage api client', () => {
-  it('encodes a unified graph query without parsing opaque values', async () => {
+describe('lineage client', () => {
+  it('graph の query は値を解釈せずそのまま encode する', async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
       nodes: [], edges: [], projection: { state: 'synced', pendingEvents: 0, oldestPendingAt: null },
       generatedAt: '2026-08-26T00:00:00Z', truncated: false, warnings: [],
@@ -20,7 +20,7 @@ describe('lineage api client', () => {
     expect(new URL(url, 'http://mado').searchParams.get('mode')).toBe('versions')
   })
 
-  it('encodes detail IDs as a single path segment', async () => {
+  it('詳細の ID は 1 つのパス要素として encode する', async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
       id: 'v/a:b', datasetId: 'd', version: 'v1', contentHash: null, manifestUri: null,
       manifestHash: null, schemaUri: null, createdAt: '2026-08-26T00:00:00Z', metadata: {}, locations: [],
