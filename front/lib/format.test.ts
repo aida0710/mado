@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { fmtCacheAge, fmtDurationRange, fmtSize, fmtUsd, prettyPrintJson } from './format'
+import { fmtCacheAge, fmtDateTime, fmtDurationRange, fmtSize, fmtUsd, prettyPrintJson } from './format'
 
 describe('prettyPrintJson', () => {
   it('.json は minify されていても整形する', () => {
@@ -142,5 +142,16 @@ describe('fmtDurationRange', () => {
 
   it('両端が同じに丸まったら 1 つだけ出す', () => {
     expect(fmtDurationRange(200, 200)).toBe('3.3 分')
+  })
+})
+
+describe('fmtDateTime', () => {
+  it('年月日と時分を 2 桁で出す', () => {
+    expect(fmtDateTime(new Date(2026, 8, 18, 3, 5))).toBe('2026/09/18 03:05')
+    expect(fmtDateTime('2026-09-18T03:05:00')).toBe('2026/09/18 03:05')
+  })
+
+  it('解釈できない文字列はそのまま返す', () => {
+    expect(fmtDateTime('not a date')).toBe('not a date')
   })
 })

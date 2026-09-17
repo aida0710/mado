@@ -90,15 +90,18 @@ export const PutReadmeOk = z.object({
   size_bytes: z.number(),
 })
 
-// README 編集履歴 (一覧) - body は重いので含めない、選択時だけ取りに行く。
-export const ReadmeHistoryListItem = z.object({
+// 編集履歴の一覧 1 件。README と Team note で共通。body は重いので含めず、選択時だけ取りに行く。
+export const HistoryListItem = z.object({
   id: z.number(),
   editor: z.string(),
   edited_at: z.string(),
   size_bytes: z.number(),
 })
+export type HistoryListItem = z.infer<typeof HistoryListItem>
+
+// README 編集履歴 (一覧)
 export const ReadmeHistoryList = z.object({
-  versions: z.array(ReadmeHistoryListItem),
+  versions: z.array(HistoryListItem),
 })
 
 // 1 件の履歴 (body 含む)
@@ -125,14 +128,8 @@ export const ReadmeSearchResult = z.object({
 })
 
 // Team notes (postgres notes テーブル) の編集履歴 — slug 単位、S3 README 履歴と並列。
-export const NoteHistoryListItem = z.object({
-  id: z.number(),
-  editor: z.string(),
-  edited_at: z.string(),
-  size_bytes: z.number(),
-})
 export const NoteHistoryList = z.object({
-  versions: z.array(NoteHistoryListItem),
+  versions: z.array(HistoryListItem),
 })
 export const NoteHistoryVersion = z.object({
   id: z.number(),

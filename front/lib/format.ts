@@ -56,6 +56,17 @@ export function basename(path: string): string {
   return path.split('/').pop() || path
 }
 
+/** 年月日と時分の絶対表示 (2026/09/18 03:40)。履歴一覧のように「いつ」を正確に示す場所で使う。
+ *  ISO 文字列が解釈できなければそのまま返す。 */
+export function fmtDateTime(value: string | Date): string {
+  const d = value instanceof Date ? value : new Date(value)
+  if (Number.isNaN(d.getTime())) return typeof value === 'string' ? value : ''
+  return d.toLocaleString('ja-JP', {
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  })
+}
+
 export function fmtAgo(iso: string): string {
   const ms = Date.now() - new Date(iso).getTime()
   const s = Math.max(0, Math.floor(ms / 1000))
@@ -92,10 +103,7 @@ export function fmtCacheAge(d: Date, now: Date = new Date(), opts: CacheAgeOptio
         : d.toLocaleString('ja-JP', {
             month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false,
           }))
-    : d.toLocaleString('ja-JP', {
-        year: 'numeric', month: '2-digit', day: '2-digit',
-        hour: '2-digit', minute: '2-digit', hour12: false,
-      })
+    : fmtDateTime(d)
 
   const min = Math.floor((now.getTime() - d.getTime()) / 60_000)
   const rel =
