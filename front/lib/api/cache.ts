@@ -244,3 +244,22 @@ export class TTLCache<V> {
   // 単体テストから内部状態を覗くため。本番コードでは使わない。
   _size(): number { return this.store.size }
 }
+
+// セッション内 (タブを開いている間) のレスポンスキャッシュの TTL。
+// S3 ディレクトリの行き来や preview の開閉で毎回 fetch が走るのを抑える。
+//
+// 短 TTL (5 分) — in-memory のみ、永続化しない:
+//   favorites: DB 由来で他端末からの toggle が概ね 5 分以内に見える。
+//   tar:       一度プレビューすれば次は別アーカイブを見るユースケースが多く、
+//              localStorage に貯める価値が薄い (容量も大きい)。in-flight dedup と
+//              ページャ内の前後ボタン用にのみ in-memory cache を残す。
+// 長 TTL (6 時間) — localStorage 永続化:
+//   list / readme / buckets: 上流のレイテンシが 7〜24 秒と高く、ディレクトリ階層や
+//              README の増減は緩いのでリロード越しのキャッシュ効果が大きい。
+//   UI で「取得 HH:mm」を薄く表示してキャッシュ鮮度を可視化 (api.lastFetched.*)。
+//   TTL 切れ後は onRevalidate 付きで呼ぶことで stale-while-revalidate になる
+//   (古い一覧を即表示 →「更新中…」→ 到着したら差し替え)。
+//   変更時は対応する invalidateXxx() を明示的に呼んで破棄する設計
+//   (アップロード/削除/編集等のミューテーション + UI の 🔄 refresh ボタン)。
+export const SHORT_CACHE_TTL_MS = 5 * 60 * 1000
+export const LONG_CACHE_TTL_MS = 6 * 60 * 60 * 1000
