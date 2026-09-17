@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api } from '../../lib/api/client'
-import type { DatasetCatalogItem } from '../../lib/api/types'
+import type { RegistryDatasetSummary } from '../../lib/api/types'
 
 export interface VersionChoice {
   id: string
@@ -12,14 +12,14 @@ export interface VersionChoice {
 }
 
 interface DatasetPickerProps {
-  value: DatasetCatalogItem | null
-  onChange: (value: DatasetCatalogItem | null) => void
+  value: RegistryDatasetSummary | null
+  onChange: (value: RegistryDatasetSummary | null) => void
   label?: string
 }
 
 export function DatasetPicker({ value, onChange, label = 'データセット' }: DatasetPickerProps) {
   const [query, setQuery] = useState('')
-  const [results, setResults] = useState<DatasetCatalogItem[]>([])
+  const [results, setResults] = useState<RegistryDatasetSummary[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -97,7 +97,7 @@ interface VersionPickerProps {
 }
 
 export function VersionPicker({ value, onChange, label = 'データのバージョン' }: VersionPickerProps) {
-  const [dataset, setDataset] = useState<DatasetCatalogItem | null>(null)
+  const [dataset, setDataset] = useState<RegistryDatasetSummary | null>(null)
   const [versions, setVersions] = useState<Array<{ id: string; version: string }>>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)

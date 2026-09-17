@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { api } from '../lib/api/client'
 import type {
   Connection,
-  DatasetCatalogItem,
+  RegistryDatasetSummary,
   ManualDatasetRegistrationInput,
   ManualLineageRegistrationInput,
   ManualStorageLocationInput,
@@ -112,7 +112,7 @@ function ResultNotice({ message, to }: { message: string; to?: string }) {
 
 function DatasetRegistrationForm({ connections }: { connections: Connection[] }) {
   const [target, setTarget] = useState<'new' | 'existing'>('new')
-  const [dataset, setDataset] = useState<DatasetCatalogItem | null>(null)
+  const [dataset, setDataset] = useState<RegistryDatasetSummary | null>(null)
   const [withLocation, setWithLocation] = useState(true)
   const [withSource, setWithSource] = useState(false)
   const [withProcessing, setWithProcessing] = useState(false)

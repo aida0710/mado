@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { api } from '../lib/api/client'
 import type { Tag, TagSearchResult } from '../lib/api/types'
 import { encPath, fileLinkToDirRedirect, parseS3Path } from '../lib/route'
-import { TagBadge } from './TagBadge'
+import { TagToggleChips } from './TagToggleChips'
 import { ImportExportButtons } from './ImportExportButtons'
 import { downloadJson, type ImportMode, type ImportSummary } from '../lib/jsonFile'
 
@@ -268,25 +268,9 @@ export function TagSearchView({ connectionId }: Props) {
       ) : (
         <>
           <div className="mt-1 flex flex-wrap items-center gap-2">
-            {allTags.map(tag => (
-              <button
-                key={tag.id}
-                type="button"
-                onClick={() => toggle(tag.id)}
-                className="cursor-pointer border-0 bg-transparent p-0"
-                // 未選択は淡くするが 0.4 だと薄い。バッジ自体が淡いティントに
-                // なったので、それより薄くすると読めなくなる。
-                style={{ opacity: selected.size === 0 || selected.has(tag.id) ? 1 : 0.55 }}
-                aria-pressed={selected.has(tag.id)}
-              >
-                <TagBadge tag={tag} />
-              </button>
-            ))}
-            {selected.size > 0 && (
-              <button type="button" className="ghost" onClick={() => setSelected(new Set())}>
-                クリア
-              </button>
-            )}
+            <TagToggleChips
+              tags={allTags} selected={selected} onToggle={toggle} onClear={() => setSelected(new Set())}
+            />
             {loading && <span className="text-[11px] text-ink-7">検索中…</span>}
           </div>
 

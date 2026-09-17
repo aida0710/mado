@@ -568,7 +568,9 @@ export type TransferEstimate = z.infer<typeof TransferEstimate>
 export const LineageProjection = z.enum(['logical', 'versions'])
 export type LineageProjection = z.infer<typeof LineageProjection>
 
-export const DatasetCatalogItem = z.object({
+// Registry が Dataset / Source について返す共通の項目。一覧、Lineage ノード、詳細のどれも
+// この形を土台にして、必要な項目だけを足す。
+export const RegistryDatasetSummary = z.object({
   kind: z.enum(['dataset', 'source']),
   datasetId: z.string().nullable(),
   datasetKey: z.string().nullable(),
@@ -582,14 +584,14 @@ export const DatasetCatalogItem = z.object({
   currentVersionId: z.string().nullable(),
   versionCount: z.number().int().nonnegative(),
 })
-export type DatasetCatalogItem = z.infer<typeof DatasetCatalogItem>
+export type RegistryDatasetSummary = z.infer<typeof RegistryDatasetSummary>
 
 export const DatasetCatalogResponse = z.object({
-  results: z.array(DatasetCatalogItem),
+  results: z.array(RegistryDatasetSummary),
   totalCount: z.number().int().nonnegative(),
 })
 
-export const StorageLineageMatch = DatasetCatalogItem.extend({
+export const StorageLineageMatch = RegistryDatasetSummary.extend({
   versionId: z.string(),
   version: z.string(),
   versionCreatedAt: z.string(),
@@ -708,20 +710,7 @@ export const LineageNodeSummary = z.object({
   data: z.record(z.string(), z.unknown()).optional().default({}),
   updatedAt: z.string().nullable().optional(),
   completeness: z.enum(['complete', 'partial', 'unregistered']).optional(),
-  registry: z.object({
-    kind: z.enum(['dataset', 'source']),
-    datasetId: z.string().nullable(),
-    datasetKey: z.string().nullable(),
-    namespace: z.string(),
-    name: z.string(),
-    displayName: z.string().nullable().default(null),
-    aliases: z.array(z.string()).default([]),
-    description: z.string().nullable(),
-    mediaType: z.string().nullable(),
-    owner: z.string().nullable(),
-    currentVersionId: z.string().nullable(),
-    versionCount: z.number().int().nonnegative(),
-  }).nullable().optional(),
+  registry: RegistryDatasetSummary.nullable().optional(),
   latestRun: z.object({
     id: z.string().nullable(),
     state: z.string().nullable(),
@@ -793,19 +782,7 @@ export const DatasetVersionDetail = z.object({
 })
 export type DatasetVersionDetail = z.infer<typeof DatasetVersionDetail>
 
-export const DatasetDetail = z.object({
-  kind: z.enum(['dataset', 'source']),
-  datasetId: z.string().nullable(),
-  datasetKey: z.string().nullable(),
-  namespace: z.string(),
-  name: z.string(),
-  displayName: z.string().nullable().default(null),
-  aliases: z.array(z.string()).default([]),
-  description: z.string().nullable(),
-  mediaType: z.string().nullable(),
-  owner: z.string().nullable(),
-  currentVersionId: z.string().nullable(),
-  versionCount: z.number().int().nonnegative(),
+export const DatasetDetail = RegistryDatasetSummary.extend({
   createdAt: z.string(),
   versions: z.array(DatasetVersionDetail),
 })

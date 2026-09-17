@@ -440,6 +440,12 @@ function toMasked(row: ConnectionRow, includeAllowedUsers = true) {
   }
 }
 
+/** storage_connections.name の unique 制約違反。作成・更新のどちらでも 409 にする。 */
+function isDuplicateNameError(e: unknown): boolean {
+  const message = (e as Error).message
+  return message.includes('storage_connections_name_key') || message.includes('duplicate key')
+}
+
 export function mountConnectionsRoutes(app: Hono, deps: ConnectionsDeps): void {
   app.get('/connections', async c => {
     const visible = await visibleConnectionIds(deps.pools.ro, c)
@@ -518,10 +524,7 @@ export function mountConnectionsRoutes(app: Hono, deps: ConnectionsDeps): void {
       return c.json(toMasked(r.rows[0]))
     } catch (e) {
       await client.query('ROLLBACK')
-      const msg = (e as Error).message
-      if (msg.includes('storage_connections_name_key') || msg.includes('duplicate key')) {
-        return c.json({ error: 'name already exists' }, 409)
-      }
+      if (isDuplicateNameError(e)) return c.json({ error: 'name already exists' }, 409)
       throw e
     } finally {
       client.release()
@@ -741,10 +744,7 @@ export function mountConnectionsRoutes(app: Hono, deps: ConnectionsDeps): void {
       return c.json(toMasked(r.rows[0]))
     } catch (e) {
       await client.query('ROLLBACK')
-      const msg = (e as Error).message
-      if (msg.includes('storage_connections_name_key') || msg.includes('duplicate key')) {
-        return c.json({ error: 'name already exists' }, 409)
-      }
+      if (isDuplicateNameError(e)) return c.json({ error: 'name already exists' }, 409)
       throw e
     } finally {
       client.release()

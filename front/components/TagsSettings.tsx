@@ -1,6 +1,7 @@
 import { useEffect, useReducer } from 'react'
 import { api } from '../lib/api/client'
 import type { Tag } from '../lib/api/types'
+import { DeleteConfirmDialog } from './DeleteConfirmDialog'
 import { TagBadge } from './TagBadge'
 import { ImportExportButtons } from './ImportExportButtons'
 import { downloadJson, type ImportMode, type ImportSummary } from '../lib/jsonFile'
@@ -99,40 +100,16 @@ function TagForm({
 function DeleteConfirm({
   tag, onConfirm, onCancel,
 }: { tag: Tag; onConfirm: () => Promise<void>; onCancel: () => void }) {
-  const [busy, setBusy] = useReducer((_: boolean, v: boolean) => v, false)
-  const [error, setError] = useReducer((_: string | null, v: string | null) => v, null)
-  const submit = async () => {
-    setBusy(true)
-    setError(null)
-    try {
-      await onConfirm()
-    } catch (e) {
-      setError((e as Error).message)
-    } finally {
-      setBusy(false)
-    }
-  }
   return (
-    <div className="modal-backdrop">
-      <div className="modal modal--narrow" role="dialog" aria-modal="true" aria-labelledby="tag-delete-title">
-        <p className="kicker">Settings · タグ · 削除</p>
-        <h3 id="tag-delete-title">タグを削除</h3>
-        <p className="text-[14px] leading-relaxed text-ink-9">
-          タグ「{tag.name}」を削除します。全ての割り当ても消えます。よろしいですか?
-        </p>
-        {error && <p className="error" aria-live="polite">{error}</p>}
-        <div className="modal-actions">
-          <button onClick={onCancel} disabled={busy}>キャンセル</button>
-          <button
-            onClick={submit}
-            disabled={busy}
-            style={{ background: 'var(--danger)', borderColor: 'var(--danger)', color: 'var(--paper)' }}
-          >
-            {busy ? '削除中…' : '削除'}
-          </button>
-        </div>
-      </div>
-    </div>
+    <DeleteConfirmDialog
+      titleId="tag-delete-title"
+      kicker="Settings · タグ · 削除"
+      title="タグを削除"
+      onConfirm={onConfirm}
+      onCancel={onCancel}
+    >
+      タグ「{tag.name}」を削除します。全ての割り当ても消えます。よろしいですか?
+    </DeleteConfirmDialog>
   )
 }
 

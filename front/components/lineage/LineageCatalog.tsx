@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react'
 import { api } from '../../lib/api/client'
-import type { DatasetCatalogItem } from '../../lib/api/types'
+import type { RegistryDatasetSummary } from '../../lib/api/types'
 
 const PAGE_SIZE = 20
 const SEARCH_DELAY_MS = 200
 
 interface Props {
   hasSelection: boolean
-  onSelect: (dataset: DatasetCatalogItem) => void
+  onSelect: (dataset: RegistryDatasetSummary) => void
 }
 
 export function LineageCatalog({ hasSelection, onSelect }: Props) {
@@ -17,7 +17,7 @@ export function LineageCatalog({ hasSelection, onSelect }: Props) {
   const [offset, setOffset] = useState(0)
   const [response, setResponse] = useState<{
     key: string
-    results: DatasetCatalogItem[]
+    results: RegistryDatasetSummary[]
     total: number
     error: string | null
   } | null>(null)

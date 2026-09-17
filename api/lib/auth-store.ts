@@ -186,15 +186,27 @@ export function createAuthStore(pool: Pool): AuthStore {
     if (Number(admins.rows[0]?.count ?? 0) <= 1) throw new LastActiveAdminError()
   }
 
-  async function updateUserIfChanged(
+  // 編集できる列と、その DB 列名。undefined を渡した項目は「変更しない」。
+  const EDITABLE_USER_COLUMNS = {
+    username: 'username',
+    email: 'email',
+    displayName: 'display_name',
+    status: 'status',
+    signatureName: 'signature_name',
+  } as const
+  type EditableUserField = keyof typeof EDITABLE_USER_COLUMNS
+
+  /** auth_users の 1 行を、値が変わった列だけ UPDATE する。変更が無ければ DB を触らない。
+   *  行ロック → 変更判定 → UPDATE を 1 transaction で行い、削除済みなら null を返す。 */
+  async function updateUserFieldsIfChanged(
     id: string,
-    patch: { username?: string | null; email?: string | null; displayName?: string; status?: UserStatus },
+    normalized: Partial<Pick<AuthUser, EditableUserField>>,
+    beforeLock?: (client: PoolClient) => Promise<void>,
   ): Promise<AuthUserMutationResult | null> {
     const client = await pool.connect()
     try {
       await client.query('BEGIN')
-      // 管理者不変条件を触る経路は全て advisory lock → user row の順に統一する。
-      if (patch.status === 'disabled') await assertAdminRemovalAllowed(client, id)
+      await beforeLock?.(client)
       const locked = await client.query(
         `SELECT id FROM auth_users WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`, [id],
       )
@@ -204,13 +216,7 @@ export function createAuthStore(pool: Pool): AuthStore {
       }
       const before = await loadUser(id, client)
       if (!before) throw new Error('locked user disappeared')
-      const normalized = {
-        username: patch.username === undefined ? undefined : patch.username?.trim().toLowerCase() || null,
-        email: patch.email === undefined ? undefined : patch.email?.trim().toLowerCase() || null,
-        displayName: patch.displayName?.trim(),
-        status: patch.status,
-      }
-      const changedFields = (Object.keys(normalized) as Array<keyof typeof normalized>)
+      const changedFields = (Object.keys(normalized) as EditableUserField[])
         .filter(key => normalized[key] !== undefined && normalized[key] !== before[key])
       if (changedFields.length === 0) {
         await client.query('COMMIT')
@@ -218,10 +224,9 @@ export function createAuthStore(pool: Pool): AuthStore {
       }
       const fields: string[] = []
       const values: unknown[] = []
-      const columns = { username: 'username', email: 'email', displayName: 'display_name', status: 'status' } as const
       for (const key of changedFields) {
         values.push(normalized[key])
-        fields.push(`${columns[key]} = $${values.length}`)
+        fields.push(`${EDITABLE_USER_COLUMNS[key]} = $${values.length}`)
       }
       values.push(id)
       await client.query(
@@ -238,6 +243,23 @@ export function createAuthStore(pool: Pool): AuthStore {
     } finally {
       client.release()
     }
+  }
+
+  async function updateUserIfChanged(
+    id: string,
+    patch: { username?: string | null; email?: string | null; displayName?: string; status?: UserStatus },
+  ): Promise<AuthUserMutationResult | null> {
+    return updateUserFieldsIfChanged(
+      id,
+      {
+        username: patch.username === undefined ? undefined : patch.username?.trim().toLowerCase() || null,
+        email: patch.email === undefined ? undefined : patch.email?.trim().toLowerCase() || null,
+        displayName: patch.displayName?.trim(),
+        status: patch.status,
+      },
+      // 管理者不変条件を触る経路は全て advisory lock → user row の順に統一する。
+      patch.status === 'disabled' ? client => assertAdminRemovalAllowed(client, id) : undefined,
+    )
   }
 
   async function setUserRolesIfChanged(
@@ -284,51 +306,11 @@ export function createAuthStore(pool: Pool): AuthStore {
   async function updateProfileIfChanged(
     id: string, patch: { username?: string | null; displayName?: string; signatureName: string },
   ): Promise<AuthUserMutationResult | null> {
-    const client = await pool.connect()
-    try {
-      await client.query('BEGIN')
-      const locked = await client.query(
-        `SELECT id FROM auth_users WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`, [id],
-      )
-      if (locked.rowCount === 0) {
-        await client.query('ROLLBACK')
-        return null
-      }
-      const before = await loadUser(id, client)
-      if (!before) throw new Error('locked user disappeared')
-      const normalized = {
-        username: patch.username === undefined ? undefined : patch.username?.trim().toLowerCase() || null,
-        displayName: patch.displayName?.trim(),
-        signatureName: patch.signatureName.trim(),
-      }
-      const changedFields = (Object.keys(normalized) as Array<keyof typeof normalized>)
-        .filter(key => normalized[key] !== undefined && normalized[key] !== before[key])
-      if (changedFields.length === 0) {
-        await client.query('COMMIT')
-        return { before, user: before, changedFields: [] }
-      }
-      const fields: string[] = []
-      const values: unknown[] = []
-      const columns = { username: 'username', displayName: 'display_name', signatureName: 'signature_name' } as const
-      for (const key of changedFields) {
-        values.push(normalized[key])
-        fields.push(`${columns[key]} = $${values.length}`)
-      }
-      values.push(id)
-      await client.query(
-        `UPDATE auth_users SET ${fields.join(', ')}, updated_at = now() WHERE id = $${values.length}`,
-        values,
-      )
-      const user = await loadUser(id, client)
-      if (!user) throw new Error('updated user disappeared')
-      await client.query('COMMIT')
-      return { before, user, changedFields }
-    } catch (e) {
-      await client.query('ROLLBACK')
-      throw e
-    } finally {
-      client.release()
-    }
+    return updateUserFieldsIfChanged(id, {
+      username: patch.username === undefined ? undefined : patch.username?.trim().toLowerCase() || null,
+      displayName: patch.displayName?.trim(),
+      signatureName: patch.signatureName.trim(),
+    })
   }
 
   return {
