@@ -8,7 +8,6 @@ import { managesConnections, visibleConnectionIds } from '../lib/connection-acce
 import { getSessionPrincipal } from '../lib/rbac.js'
 import {
   CONNECTION_SETTINGS_SUBQUERY,
-  capabilitySettingKey,
   settingsToCapabilities,
   settingsToScanEnabled,
   settingsToScanPageSize,
@@ -16,11 +15,16 @@ import {
   settingsToListCacheTtlSec,
   type Capabilities,
 } from '../storage.js'
+import { PRICING_SETTING_KEYS as PK, effectiveRates, settingsToProfile } from '../lib/pricing.js'
 import {
-  PRICING_SETTING_KEYS as PK,
-  effectiveRates,
-  settingsToProfile,
-} from '../lib/pricing.js'
+  allowedUsersExist,
+  deleteSettings,
+  replaceAllowedUsers,
+  upsertCapabilities,
+  upsertCapacitySettings,
+  upsertSettings,
+} from '../lib/connection-settings-store.js'
+import { PricingPatch, splitPricingPatch } from '../lib/connection-pricing-patch.js'
 import { CAPACITY_INTERVALS } from '../lib/capacity-store.js'
 
 // ルート単位のRBACは internal.ts で適用する。接続一覧はさらにここでユーザー別に
@@ -96,193 +100,6 @@ const CapacityTrackingPatch = z.object({
   intervalSeconds: z.number().int()
     .refine(value => CAPACITY_INTERVALS.includes(value as typeof CAPACITY_INTERVALS[number])),
 }).strict()
-
-/** connection_settings への upsert。値は TEXT なので 'true' / 'false' で持つ。
- *  「行が無い = 既定 (有効)」なので、既定に戻すだけなら DELETE でもよいが、
- *  設定画面で明示的に入れた値がそのまま行として見えるほうが追いやすいので
- *  true も書き込む。 */
-/** connection_settings への素の key/value 書き込み (権限以外の接続別設定)。 */
-async function upsertSettings(
-  q: { query: (sql: string, values: unknown[]) => Promise<unknown> },
-  connectionId: string,
-  entries: ReadonlyArray<readonly [string, string]>,
-): Promise<void> {
-  if (entries.length === 0) return
-  await q.query(
-    `INSERT INTO connection_settings (connection_id, key, value)
-       SELECT $1, k, v FROM UNNEST($2::text[], $3::text[]) AS t(k, v)
-     ON CONFLICT (connection_id, key)
-     DO UPDATE SET value = EXCLUDED.value, updated_at = now()`,
-    [connectionId, entries.map(e => e[0]), entries.map(e => e[1])],
-  )
-}
-
-/** connection_settings からキーを消す。「既定に戻す」= 行を消す、の意味。
- *  権限 (cap.*) が true も書き込むのと違い、見積もり設定は既定が
- *  「プロバイダから推定」なので、明示値の有無が意味を持つ。 */
-async function deleteSettings(
-  q: { query: (sql: string, values: unknown[]) => Promise<unknown> },
-  connectionId: string,
-  keys: readonly string[],
-): Promise<void> {
-  if (keys.length === 0) return
-  await q.query(
-    `DELETE FROM connection_settings WHERE connection_id = $1 AND key = ANY($2::text[])`,
-    [connectionId, keys],
-  )
-}
-
-async function upsertCapabilities(
-  q: { query: (sql: string, values: unknown[]) => Promise<unknown> },
-  connectionId: string,
-  caps: Partial<Capabilities>,
-): Promise<void> {
-  const entries = (Object.keys(caps) as Array<keyof Capabilities>)
-    .filter(k => caps[k] !== undefined)
-    .map(k => [capabilitySettingKey(k), caps[k] ? 'true' : 'false'] as const)
-  if (entries.length === 0) return
-  // 1 文にまとめる (UNNEST) — トグルを複数変えても往復は 1 回。
-  await q.query(
-    `INSERT INTO connection_settings (connection_id, key, value)
-       SELECT $1, k, v FROM UNNEST($2::text[], $3::text[]) AS t(k, v)
-     ON CONFLICT (connection_id, key)
-       DO UPDATE SET value = EXCLUDED.value, updated_at = now()`,
-    [connectionId, entries.map(e => e[0]), entries.map(e => e[1])],
-  )
-}
-
-async function allowedUsersExist(
-  q: { query: (sql: string, values: unknown[]) => Promise<{ rows: unknown[] }> },
-  userIds: readonly string[],
-): Promise<boolean> {
-  if (userIds.length === 0) return true
-  const result = await q.query(
-    `SELECT id FROM auth_users
-      WHERE id = ANY($1::uuid[]) AND deleted_at IS NULL`,
-    [userIds],
-  )
-  return result.rows.length === userIds.length
-}
-
-async function replaceAllowedUsers(
-  q: { query: (sql: string, values: unknown[]) => Promise<unknown> },
-  connectionId: string,
-  userIds: readonly string[],
-  addedBy: string | null,
-): Promise<void> {
-  await q.query('DELETE FROM connection_user_allowlist WHERE connection_id = $1', [connectionId])
-  if (userIds.length === 0) return
-  await q.query(
-    `INSERT INTO connection_user_allowlist (connection_id, user_id, added_by)
-       SELECT $1, user_id, $3::uuid FROM UNNEST($2::uuid[]) AS selected(user_id)`,
-    [connectionId, userIds, addedBy],
-  )
-}
-
-async function upsertCapacitySettings(
-  q: { query: (sql: string, values: unknown[]) => Promise<unknown> },
-  connectionId: string,
-  value: { enabled: boolean; intervalSeconds: number },
-  updatedBy: string | null,
-): Promise<void> {
-  await q.query(
-    `INSERT INTO storage_capacity_settings
-       (connection_id, enabled, interval_seconds, next_run_at, last_status, updated_by)
-     VALUES ($1, $2, $3, CASE WHEN $2 THEN now() ELSE NULL END,
-             CASE WHEN $2 THEN 'waiting' ELSE 'paused' END, $4)
-     ON CONFLICT (connection_id) DO UPDATE SET
-       enabled = EXCLUDED.enabled,
-       interval_seconds = EXCLUDED.interval_seconds,
-       next_run_at = CASE
-         WHEN NOT EXCLUDED.enabled THEN NULL
-         WHEN NOT storage_capacity_settings.enabled
-           OR storage_capacity_settings.interval_seconds <> EXCLUDED.interval_seconds THEN now()
-         ELSE storage_capacity_settings.next_run_at END,
-       last_status = CASE
-         WHEN NOT EXCLUDED.enabled THEN 'paused'
-         WHEN NOT storage_capacity_settings.enabled THEN 'waiting'
-         ELSE storage_capacity_settings.last_status END,
-       last_error = CASE
-         WHEN NOT EXCLUDED.enabled OR NOT storage_capacity_settings.enabled THEN NULL
-         ELSE storage_capacity_settings.last_error END,
-       consecutive_failures = CASE
-         WHEN NOT EXCLUDED.enabled OR NOT storage_capacity_settings.enabled THEN 0
-         ELSE storage_capacity_settings.consecutive_failures END,
-       updated_at = now(), updated_by = EXCLUDED.updated_by`,
-    [connectionId, value.enabled, value.intervalSeconds, updatedBy],
-  )
-  await q.query(
-    `UPDATE storage_capacity_targets
-        SET enabled = $2, interval_seconds = $3,
-            last_status = CASE WHEN $2 THEN last_status ELSE 'paused' END,
-            updated_at = now()
-      WHERE connection_id = $1`,
-    [connectionId, value.enabled, value.intervalSeconds],
-  )
-}
-
-// 転送見積もり用の接続プロファイル (spec: 2026-08-22-transfer-estimate-design.md)。
-// 全て connection_settings の key/value なのでマイグレーションは要らない。
-//
-// **null は「既定に戻す」** (行を消す)。undefined は「触らない」。
-// プロバイダは既定がエンドポイントからの推定なので、この区別が意味を持つ。
-const ProviderEnum = z.enum(['aws', 'wasabi', 'onprem', 'other'])
-const StorageClassEnum = z.enum([
-  'STANDARD', 'INTELLIGENT_TIERING', 'STANDARD_IA', 'ONEZONE_IA',
-  'GLACIER_IR', 'GLACIER', 'DEEP_ARCHIVE',
-])
-
-const PricingPatch = z.object({
-  provider:          ProviderEnum.nullable().optional(),
-  region:            z.string().min(1).max(64).nullable().optional(),
-  storageClass:      StorageClassEnum.nullable().optional(),
-  readMbps:          z.number().positive().nullable().optional(),
-  writeMbps:         z.number().positive().nullable().optional(),
-  parallelism:       z.number().int().positive().nullable().optional(),
-  requestOverheadMs: z.number().positive().nullable().optional(),
-  // 0 (上振れ無し) は意味のある設定なので許す。
-  instability:       z.number().min(0).nullable().optional(),
-  capacityBytes:     z.number().positive().nullable().optional(),
-  // 単価の手動上書き。0 は「無料」を意味するので許す。
-  storagePerGbMonth: z.number().min(0).nullable().optional(),
-  egressPerGb:       z.number().min(0).nullable().optional(),
-  putPer1000:        z.number().min(0).nullable().optional(),
-  getPer1000:        z.number().min(0).nullable().optional(),
-})
-
-type PricingPatch = z.infer<typeof PricingPatch>
-
-/** body のフィールド名 → connection_settings のキー。 */
-const PRICING_FIELD_KEYS: Record<keyof PricingPatch, string> = {
-  provider:          PK.provider,
-  region:            PK.region,
-  storageClass:      PK.storageClass,
-  readMbps:          PK.readMbps,
-  writeMbps:         PK.writeMbps,
-  parallelism:       PK.parallelism,
-  requestOverheadMs: PK.requestOverheadMs,
-  instability:       PK.instability,
-  capacityBytes:     PK.capacityBytes,
-  storagePerGbMonth: PK.storagePerGbMonth,
-  egressPerGb:       PK.egressPerGb,
-  putPer1000:        PK.putPer1000,
-  getPer1000:        PK.getPer1000,
-}
-
-/** PricingPatch → (書き込む key/value, 消す key)。 */
-function splitPricingPatch(
-  patch: PricingPatch,
-): { upserts: Array<readonly [string, string]>; deletes: string[] } {
-  const upserts: Array<readonly [string, string]> = []
-  const deletes: string[] = []
-  for (const field of Object.keys(PRICING_FIELD_KEYS) as Array<keyof PricingPatch>) {
-    const v = patch[field]
-    if (v === undefined) continue
-    if (v === null) deletes.push(PRICING_FIELD_KEYS[field])
-    else upserts.push([PRICING_FIELD_KEYS[field], String(v)])
-  }
-  return { upserts, deletes }
-}
 
 const CreateBody = z.object({
   name: z.string().min(1).max(64),
