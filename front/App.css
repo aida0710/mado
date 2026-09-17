@@ -517,10 +517,10 @@ pre { font-size: 12px; }
 .about-link:hover { color: var(--color-link-hover); }
 
 /* Subtle "danger" variant of .ghost — Connection 行の Delete 用。 */
-.conn-row__danger {
+.connection-row__danger {
   border-color: color-mix(in srgb, var(--danger) 30%, var(--color-rule-strong));
 }
-.conn-row__danger:hover:not(:disabled) {
+.connection-row__danger:hover:not(:disabled) {
   color: var(--danger);
   border-color: var(--danger);
   background: color-mix(in srgb, var(--danger) 4%, var(--paper));

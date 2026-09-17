@@ -39,7 +39,7 @@ export function parseS3Path(input: string): S3PathParts | null {
   return { bucket: s.slice(0, slash), prefix: s.slice(slash + 1) }
 }
 
-// ファイル直リンク (`/storage/<conn>/<bucket>/<...>/file.ext`) を、その親ディレクトリの
+// ファイル直リンク (`/storage/<connectionId>/<bucket>/<...>/file.ext`) を、その親ディレクトリの
 // リスト + `?preview=<key>` URL に書き換えるためのヘルパー。
 //
 // 例:

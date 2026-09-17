@@ -18,7 +18,7 @@ afterEach(() => vi.restoreAllMocks())
 
 // StorageIndex.tags.test.tsx と同じ Provider 構成 (ConnectionSwitcher が
 // useConnection() を呼ぶため Provider 配下でないと例外になる)。
-const conn: Connection = {
+const connection: Connection = {
   id: 'c1',
   name: 'c1',
   endpoint: 'https://example.com',
@@ -47,7 +47,7 @@ function mountWithOneBucket() {
   })
   return render(
     <MemoryRouter>
-      <ConnectionContext.Provider value={conn}>
+      <ConnectionContext.Provider value={connection}>
         <StorageIndex connectionId="c1" />
       </ConnectionContext.Provider>
     </MemoryRouter>,

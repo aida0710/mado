@@ -7,7 +7,7 @@ import { PRICING_FIXTURE } from '../lib/api/fixtures'
 import type { Connection } from '../lib/api/types'
 import { api } from '../lib/api/client'
 
-const conn: Connection = {
+const connection: Connection = {
   id: 'c1', name: 'primary', endpoint: 'https://s3.example.com/', region: 'auto',
   accessKeyIdMasked: 'AKIA…2345', forcePathStyle: true, listObjectsVersion: 'v2',
   capabilities: ALL_CAPABILITIES_ON,
@@ -39,7 +39,7 @@ describe('ConnectionForm の権限トグル', () => {
 
   it('編集では変えたトグルだけを差分で送る', async () => {
     const onSubmit = vi.fn().mockResolvedValue(undefined)
-    render(<ConnectionForm mode={{ kind: 'edit', current: conn, onSubmit }} onClose={() => {}} />)
+    render(<ConnectionForm mode={{ kind: 'edit', current: connection, onSubmit }} onClose={() => {}} />)
 
     await userEvent.click(screen.getByRole('checkbox', { name: 'ファイルのダウンロード' }))
     await userEvent.click(screen.getByRole('button', { name: '保存' }))
@@ -50,7 +50,7 @@ describe('ConnectionForm の権限トグル', () => {
 
   it('README 読み込みを切ると編集も一緒に落ちて操作できなくなる', async () => {
     const onSubmit = vi.fn().mockResolvedValue(undefined)
-    render(<ConnectionForm mode={{ kind: 'edit', current: conn, onSubmit }} onClose={() => {}} />)
+    render(<ConnectionForm mode={{ kind: 'edit', current: connection, onSubmit }} onClose={() => {}} />)
 
     const write = screen.getByRole('checkbox', { name: 'README の編集' })
     expect(write).not.toBeDisabled()
@@ -69,7 +69,7 @@ describe('ConnectionForm の権限トグル', () => {
 
   it('制限のある接続を開くと外したトグルが反映されている', () => {
     const restricted: Connection = {
-      ...conn, capabilities: { ...ALL_CAPABILITIES_ON, download: false, archive: false },
+      ...connection, capabilities: { ...ALL_CAPABILITIES_ON, download: false, archive: false },
     }
     render(
       <ConnectionForm
@@ -90,7 +90,7 @@ describe('ConnectionForm の権限トグル', () => {
       }],
     })
     const onSubmit = vi.fn().mockResolvedValue(undefined)
-    render(<ConnectionForm mode={{ kind: 'edit', current: conn, onSubmit }} onClose={() => {}} />)
+    render(<ConnectionForm mode={{ kind: 'edit', current: connection, onSubmit }} onClose={() => {}} />)
 
     await userEvent.click(screen.getByRole('radio', { name: 'ホワイトリスト' }))
     await userEvent.click(await screen.findByRole('checkbox', { name: '許可ユーザーを許可' }))
@@ -106,7 +106,7 @@ describe('ConnectionForm の権限トグル', () => {
 
   it('容量の周期をconnection設定として保存する', async () => {
     const onSubmit = vi.fn().mockResolvedValue(undefined)
-    render(<ConnectionForm mode={{ kind: 'edit', current: conn, onSubmit }} onClose={() => {}} />)
+    render(<ConnectionForm mode={{ kind: 'edit', current: connection, onSubmit }} onClose={() => {}} />)
 
     const interval = screen.getByRole('combobox', { name: '容量の計測周期' })
     expect(interval).toBeDisabled()
@@ -121,7 +121,7 @@ describe('ConnectionForm の権限トグル', () => {
 
   it('走査ページサイズをconnection設定として保存する', async () => {
     const onSubmit = vi.fn().mockResolvedValue(undefined)
-    render(<ConnectionForm mode={{ kind: 'edit', current: conn, onSubmit }} onClose={() => {}} />)
+    render(<ConnectionForm mode={{ kind: 'edit', current: connection, onSubmit }} onClose={() => {}} />)
 
     const pageSize = screen.getByRole('combobox', { name: '走査のページサイズ' })
     expect(pageSize).toHaveValue('1000')
@@ -134,7 +134,7 @@ describe('ConnectionForm の権限トグル', () => {
   it('メトリクス集計を無効にすると定期計測と周期をグレーアウトする', async () => {
     const onSubmit = vi.fn().mockResolvedValue(undefined)
     const tracked: Connection = {
-      ...conn, capacityTracking: { enabled: true, intervalSeconds: 86400 },
+      ...connection, capacityTracking: { enabled: true, intervalSeconds: 86400 },
     }
     render(<ConnectionForm mode={{ kind: 'edit', current: tracked, onSubmit }} onClose={() => {}} />)
 
@@ -154,7 +154,7 @@ describe('ConnectionForm の権限トグル', () => {
   it('走査を無効にすると容量の定期計測も無効にする', async () => {
     const onSubmit = vi.fn().mockResolvedValue(undefined)
     const tracked: Connection = {
-      ...conn, capacityTracking: { enabled: true, intervalSeconds: 86400 },
+      ...connection, capacityTracking: { enabled: true, intervalSeconds: 86400 },
     }
     render(<ConnectionForm mode={{ kind: 'edit', current: tracked, onSubmit }} onClose={() => {}} />)
 

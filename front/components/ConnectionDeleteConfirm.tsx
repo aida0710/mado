@@ -28,10 +28,10 @@ export function ConnectionDeleteConfirm({ name, onConfirm, onCancel }: Props) {
         className="modal modal--narrow"
         role="dialog"
         aria-modal="true"
-        aria-labelledby="conn-delete-title"
+        aria-labelledby="connection-delete-title"
       >
         <p className="kicker">Settings · 削除</p>
-        <h3 id="conn-delete-title">接続を削除</h3>
+        <h3 id="connection-delete-title">接続を削除</h3>
         <p className="text-[14px] leading-relaxed text-ink-9">
           接続&nbsp;
           <span
@@ -46,7 +46,7 @@ export function ConnectionDeleteConfirm({ name, onConfirm, onCancel }: Props) {
         <div className="modal-actions">
           <button onClick={onCancel} disabled={busy}>キャンセル</button>
           <button
-            className="conn-row__danger"
+            className="connection-row__danger"
             onClick={submit}
             disabled={busy}
             style={{

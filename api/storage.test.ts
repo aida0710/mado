@@ -26,8 +26,8 @@ describe('createStorageFactory の権限読み出し', () => {
     await insertConnection('conn000001')
     const f = createStorageFactory({ pools, crypto })
     try {
-      const cfg = await f.getConnectionConfig('conn000001')
-      expect(cfg.capabilities).toEqual({
+      const config = await f.getConnectionConfig('conn000001')
+      expect(config.capabilities).toEqual({
         list: true, preview: true, download: true, archive: true,
         audioInfo: true, audioSpectrogram: true, readmeRead: true, readmeWrite: true,
       })
@@ -45,10 +45,10 @@ describe('createStorageFactory の権限読み出し', () => {
     )
     const f = createStorageFactory({ pools, crypto })
     try {
-      const cfg = await f.getConnectionConfig('conn000002')
-      expect(cfg.capabilities.download).toBe(false)
-      expect(cfg.capabilities.readmeRead).toBe(true)
-      expect(cfg.capabilities.archive).toBe(true)
+      const config = await f.getConnectionConfig('conn000002')
+      expect(config.capabilities.download).toBe(false)
+      expect(config.capabilities.readmeRead).toBe(true)
+      expect(config.capabilities.archive).toBe(true)
     } finally {
       await f.close()
     }
@@ -63,8 +63,8 @@ describe('createStorageFactory の権限読み出し', () => {
     )
     const f = createStorageFactory({ pools, crypto })
     try {
-      const cfg = await f.getConnectionConfig('conn000003')
-      expect(Object.values(cfg.capabilities).every(Boolean)).toBe(true)
+      const config = await f.getConnectionConfig('conn000003')
+      expect(Object.values(config.capabilities).every(Boolean)).toBe(true)
     } finally {
       await f.close()
     }
@@ -94,11 +94,11 @@ describe('接続ごとの走査可否とキャッシュ TTL', () => {
     await insertConnection('conn000010')
     const f = createStorageFactory({ pools, crypto })
     try {
-      const cfg = await f.getConnectionConfig('conn000010')
-      expect(cfg.scanEnabled).toBe(true)
-      expect(cfg.scanPageSize).toBe(1000)
-      expect(cfg.capacityMetricsEnabled).toBe(true)
-      expect(cfg.listCacheTtlSec).toBe(86400)
+      const config = await f.getConnectionConfig('conn000010')
+      expect(config.scanEnabled).toBe(true)
+      expect(config.scanPageSize).toBe(1000)
+      expect(config.capacityMetricsEnabled).toBe(true)
+      expect(config.listCacheTtlSec).toBe(86400)
     } finally {
       await f.close()
     }

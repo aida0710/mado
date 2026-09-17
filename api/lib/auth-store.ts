@@ -91,7 +91,7 @@ export interface AuthStore {
   }) | null>
   setLocalPassword(userId: string, hash: string, mustChange: boolean): Promise<boolean>
   recordSuccessfulLogin(userId: string): Promise<void>
-  createSession(userId: string, cfg: SessionLifetime, metadata?: RequestMetadata, oidc?: OidcSessionContext): Promise<CreatedSession>
+  createSession(userId: string, lifetime: SessionLifetime, metadata?: RequestMetadata, oidc?: OidcSessionContext): Promise<CreatedSession>
   authenticateSession(token: string, idleSeconds: number, touchIntervalSeconds?: number): Promise<SessionPrincipal | null>
   revokeSession(token: string): Promise<boolean>
   revokeUserSessions(userId: string): Promise<number>
@@ -539,12 +539,12 @@ export function createAuthStore(pool: Pool): AuthStore {
       )
     },
 
-    async createSession(userId, cfg, metadata = {}, oidc) {
+    async createSession(userId, lifetime, metadata = {}, oidc) {
       const id = newId()
       const token = randomToken(32)
-      const absolute = new Date(Date.now() + cfg.absoluteSeconds * 1000)
+      const absolute = new Date(Date.now() + lifetime.absoluteSeconds * 1000)
       const idle = new Date(Math.min(
-        Date.now() + cfg.idleSeconds * 1000,
+        Date.now() + lifetime.idleSeconds * 1000,
         absolute.getTime(),
       ))
       await pool.query(

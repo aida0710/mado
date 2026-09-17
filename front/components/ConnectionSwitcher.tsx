@@ -53,7 +53,7 @@ export function ConnectionSwitcher() {
         onClick={() => setOpen(o => !o)}
       >
         <span className="text-[10.5px] font-semibold uppercase tracking-[0.18em] text-ink-7">
-          conn
+          connection
         </span>
         <span className="text-ink-12">{current.name}</span>
         <span aria-hidden className="text-ink-7">▾</span>

@@ -114,7 +114,7 @@ export function mountStorageListRoutes(app: Hono, deps: StorageListDeps): void {
     }
 
     const config = await deps.getConnectionConfig(connectionId)
-    const useV1 = config.listObjectsVersion === 'v1'
+    const isListObjectsV1 = config.listObjectsVersion === 'v1'
 
     // V1 / V2 で送るパラメータも応答の cursor フィールドも違うので、ここで分岐する。
     // V1 (?marker=…&prefix=…&delimiter=/): V1 only の S3 互換サーバ。
@@ -124,7 +124,7 @@ export function mountStorageListRoutes(app: Hono, deps: StorageListDeps): void {
     // V2 (?list-type=2&prefix=…&continuation-token=…): AWS / R2 / MinIO 推奨。
     //   ContinuationToken (不透明文字列) で次ページを指す。互換実装で
     //   NextContinuationToken が欠けている場合に最終キーを startAfter としてフォールバック。
-    if (useV1) {
+    if (isListObjectsV1) {
       const marker = startAfter ?? continuation
       const out = await storage.send(new ListObjectsCommand({
         Bucket: bucket,

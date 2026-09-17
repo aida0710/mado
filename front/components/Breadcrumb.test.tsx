@@ -8,7 +8,7 @@ import type { Connection } from '../lib/api/types'
 import { PRICING_FIXTURE } from '../lib/api/fixtures'
 import { ALL_CAPABILITIES_ON } from '../lib/api/types'
 
-const conn: Connection = {
+const connection: Connection = {
   id: 'c1',
   name: 'lab-storage',
   endpoint: 'https://example.com',
@@ -29,7 +29,7 @@ const conn: Connection = {
 function renderBreadcrumb(prefix: string) {
   return render(
     <MemoryRouter>
-      <ConnectionContext.Provider value={conn}>
+      <ConnectionContext.Provider value={connection}>
         <Breadcrumb connectionId="c1" bucket="dataset" prefix={prefix} />
       </ConnectionContext.Provider>
     </MemoryRouter>,

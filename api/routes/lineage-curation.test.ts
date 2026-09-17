@@ -88,7 +88,7 @@ describe('lineage curation routes', () => {
         },
         version: { version: 'v1' },
         location: {
-          connectionId: 'conn-1', bucket: 'dataset', key: 'raw/', status: 'available', isPrimary: true,
+          connectionId: 'connection-1', bucket: 'dataset', key: 'raw/', status: 'available', isPrimary: true,
         },
         evidenceRefs: ['https://example.test/readme'],
       }),

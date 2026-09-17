@@ -13,7 +13,7 @@ vi.mock('../lib/clipboard', () => ({ copyToClipboard: vi.fn(async () => true) })
 
 afterEach(() => vi.clearAllMocks())
 
-const conn: Connection = {
+const connection: Connection = {
   id: 'c1', name: 'lab-storage', endpoint: 'https://e', region: 'r',
   accessKeyIdMasked: '****', forcePathStyle: true, listObjectsVersion: 'v2',
   capabilities: ALL_CAPABILITIES_ON,
@@ -26,7 +26,7 @@ const conn: Connection = {
 function renderCrumb() {
   return render(
     <MemoryRouter>
-      <ConnectionContext.Provider value={conn}>
+      <ConnectionContext.Provider value={connection}>
         <ViewBreadcrumb connectionId="c1" label="タグ検索" href="/storage/c1/?view=tags" />
       </ConnectionContext.Provider>
     </MemoryRouter>,

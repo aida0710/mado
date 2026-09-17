@@ -5,9 +5,9 @@ import { absoluteUrl, encPath } from '../lib/route'
 import { CopyMenu, type MenuItem } from './CopyMenu'
 
 // 現在の bucket+prefix から「1階層上」へ移動する:
-//   /storage/<conn>/b/voice/jp/  → /storage/<conn>/b/voice/
-//   /storage/<conn>/b/voice/     → /storage/<conn>/b/
-//   /storage/<conn>/b/           → /storage/<conn>/        (バケット一覧)
+//   /storage/<connectionId>/b/voice/jp/  → /storage/<connectionId>/b/voice/
+//   /storage/<connectionId>/b/voice/     → /storage/<connectionId>/b/
+//   /storage/<connectionId>/b/           → /storage/<connectionId>/        (バケット一覧)
 function parentPath(connectionId: string, bucket: string, prefix: string): string {
   const segs = prefix.split('/').filter(Boolean)
   if (segs.length === 0) return `/storage/${encodeURIComponent(connectionId)}/`

@@ -72,7 +72,7 @@ describe('storage favorite buckets', () => {
     expect(await res.json()).toEqual({ ok: true })
   })
 
-  it('favorites are scoped per-connection (different conn -> different list)', async () => {
+  it('favorites are scoped per-connection (different connection -> different list)', async () => {
     await app.request(`/storage/${TEST_CONN_ID}/favorites/only-for-test`, { method: 'PUT' })
     await app.request(`/storage/${OTHER_CONN_ID}/favorites/only-for-other`, { method: 'PUT' })
 

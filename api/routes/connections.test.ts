@@ -569,8 +569,8 @@ describe('DELETE /connections/:id', () => {
 
 describe('default connection', () => {
   it('GET /connections は isDefault を返す (初期は全て false)', async () => {
-    await createOne({ name: 'conn-a' })
-    await createOne({ name: 'conn-b' })
+    await createOne({ name: 'connection-a' })
+    await createOne({ name: 'connection-b' })
     const res = await app.request('/connections')
     const list = (await res.json()) as MaskedConnection[]
     expect(list.length).toBeGreaterThanOrEqual(2)
@@ -578,8 +578,8 @@ describe('default connection', () => {
   })
 
   it('PUT /:id/default で切り替わり、常に 1 件だけ true', async () => {
-    const a = await createOne({ name: 'conn-a' })
-    const b = await createOne({ name: 'conn-b' })
+    const a = await createOne({ name: 'connection-a' })
+    const b = await createOne({ name: 'connection-b' })
 
     let res = await app.request(`/connections/${a.id}/default`, { method: 'PUT' })
     expect(res.status).toBe(200)
@@ -594,8 +594,8 @@ describe('default connection', () => {
   })
 
   it('既にデフォルトの id への PUT は冪等 (200 でデフォルトはその 1 件のまま)', async () => {
-    const a = await createOne({ name: 'conn-a' })
-    await createOne({ name: 'conn-b' })
+    const a = await createOne({ name: 'connection-a' })
+    await createOne({ name: 'connection-b' })
 
     let res = await app.request(`/connections/${a.id}/default`, { method: 'PUT' })
     expect(res.status).toBe(200)
@@ -623,24 +623,24 @@ describe('接続ごとの権限 (capabilities)', () => {
   ]
 
   it('省略して作るとすべて有効 (マイグレーション前と同じ挙動)', async () => {
-    const conn = await createOne()
-    expect(Object.keys(conn.capabilities).sort()).toEqual([...ALL].sort())
-    expect(Object.values(conn.capabilities).every(Boolean)).toBe(true)
+    const connection = await createOne()
+    expect(Object.keys(connection.capabilities).sort()).toEqual([...ALL].sort())
+    expect(Object.values(connection.capabilities).every(Boolean)).toBe(true)
   })
 
   it('作成時に一部だけ落とせる (指定しなかったキーは有効のまま)', async () => {
-    const conn = await createOne({
+    const connection = await createOne({
       capabilities: { download: false, archive: false },
     })
-    expect(conn.capabilities.download).toBe(false)
-    expect(conn.capabilities.archive).toBe(false)
-    expect(conn.capabilities.list).toBe(true)
-    expect(conn.capabilities.preview).toBe(true)
+    expect(connection.capabilities.download).toBe(false)
+    expect(connection.capabilities.archive).toBe(false)
+    expect(connection.capabilities.list).toBe(true)
+    expect(connection.capabilities.preview).toBe(true)
   })
 
   it('PUT は差分更新 — 送ったキーだけ変わる', async () => {
-    const conn = await createOne()
-    const res = await app.request(`/connections/${conn.id}`, {
+    const connection = await createOne()
+    const res = await app.request(`/connections/${connection.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ capabilities: { download: false } }),
@@ -650,7 +650,7 @@ describe('接続ごとの権限 (capabilities)', () => {
     expect(updated.capabilities.download).toBe(false)
     expect(updated.capabilities.audioInfo).toBe(true)
     // 権限を変えたら S3Client キャッシュを捨てて次回リクエストで反映させる。
-    expect(invalidate).toHaveBeenCalledWith(conn.id)
+    expect(invalidate).toHaveBeenCalledWith(connection.id)
   })
 
   it('README 編集だけ有効にして作ると 400 (編集には読み込みが必要)', async () => {
@@ -667,8 +667,8 @@ describe('接続ごとの権限 (capabilities)', () => {
   })
 
   it('編集を有効にしたまま読み込みだけ落とす PUT は 400', async () => {
-    const conn = await createOne()
-    const res = await app.request(`/connections/${conn.id}`, {
+    const connection = await createOne()
+    const res = await app.request(`/connections/${connection.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ capabilities: { readmeRead: false } }),
@@ -680,8 +680,8 @@ describe('接続ごとの権限 (capabilities)', () => {
   })
 
   it('読み込みと編集を同時に落とすのは通る', async () => {
-    const conn = await createOne()
-    const res = await app.request(`/connections/${conn.id}`, {
+    const connection = await createOne()
+    const res = await app.request(`/connections/${connection.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ capabilities: { readmeRead: false, readmeWrite: false } }),
@@ -708,19 +708,19 @@ describe('connection_settings に行が無い接続 (マイグレーション前
   })
 
   it('権限を落とすと connection_settings に cap.* の行として入る', async () => {
-    const conn = await createOne({ capabilities: { download: false } })
+    const connection = await createOne({ capabilities: { download: false } })
     const r = await pools.ro.query<{ key: string; value: string }>(
       `SELECT key, value FROM connection_settings WHERE connection_id = $1 AND key = 'cap.download'`,
-      [conn.id],
+      [connection.id],
     )
     expect(r.rows).toEqual([{ key: 'cap.download', value: 'false' }])
   })
 
   it('接続を消すと権限行も連鎖削除される', async () => {
-    const conn = await createOne({ capabilities: { download: false } })
-    await app.request(`/connections/${conn.id}`, { method: 'DELETE' })
+    const connection = await createOne({ capabilities: { download: false } })
+    await app.request(`/connections/${connection.id}`, { method: 'DELETE' })
     const r = await pools.ro.query(
-      `SELECT 1 FROM connection_settings WHERE connection_id = $1`, [conn.id],
+      `SELECT 1 FROM connection_settings WHERE connection_id = $1`, [connection.id],
     )
     expect(r.rowCount).toBe(0)
   })

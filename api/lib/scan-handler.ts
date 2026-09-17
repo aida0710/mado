@@ -33,7 +33,7 @@ export function createScanHandler(deps: ScanHandlerDeps): JobHandler {
     try {
       const storage = await deps.getStorage(connectionId)
       const config = await deps.getConnectionConfig(connectionId)
-      const useV1 = config.listObjectsVersion === 'v1'
+      const isListObjectsV1 = config.listObjectsVersion === 'v1'
       const pageSize = config.scanPageSize
 
       const acc = createScanAccumulator(prefix)
@@ -46,7 +46,7 @@ export function createScanHandler(deps: ScanHandlerDeps): JobHandler {
         let contents: Array<{ Key?: string; Size?: number }>
         let next: string | undefined
         try {
-          if (useV1) {
+          if (isListObjectsV1) {
             const out = await storage.send(new ListObjectsCommand({
               Bucket: bucket, Prefix: prefix, Marker: cursor, MaxKeys: pageSize,
             }))

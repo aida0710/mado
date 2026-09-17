@@ -79,14 +79,14 @@ function publicUser(user: {
 function setSessionCookie(
   c: Parameters<typeof setCookie>[0],
   token: string,
-  cfg: AuthRouteConfig['session'],
+  session: AuthRouteConfig['session'],
 ): void {
-  setCookie(c, cfg.cookieName ?? SESSION_COOKIE, token, {
+  setCookie(c, session.cookieName ?? SESSION_COOKIE, token, {
     httpOnly: true,
-    secure: cfg.secure,
+    secure: session.secure,
     sameSite: 'Lax',
     path: '/',
-    maxAge: cfg.absoluteSeconds,
+    maxAge: session.absoluteSeconds,
   })
 }
 

@@ -75,7 +75,7 @@ type Action =
   | { type: 'startLoad' }
   | { type: 'loadOk'; rows: Connection[] }
   | { type: 'loadErr'; error: string }
-  | { type: 'openDelete'; conn: Connection }
+  | { type: 'openDelete'; connection: Connection }
   | { type: 'closeDelete' }
 
 const initial: State = {
@@ -94,7 +94,7 @@ function reducer(s: State, a: Action): State {
     case 'loadErr':
       return { ...s, loading: false, error: a.error }
     case 'openDelete':
-      return { ...s, deleting: a.conn }
+      return { ...s, deleting: a.connection }
     case 'closeDelete':
       return { ...s, deleting: null }
   }
@@ -256,9 +256,9 @@ export default function ConnectionsPage() {
 
         {connections.length > 0 && (
           <ul className="m-0 list-none p-0">
-            {connections.map(conn => (
+            {connections.map(connection => (
               <li
-                key={conn.id}
+                key={connection.id}
                 className={
                   // 狭い画面では縦積み (名前 + メタ → ボタン行)。横並びのままだと
                   // shrink-0 のボタン群が幅を取り、左カラムが潰れて meta が細切れに
@@ -270,8 +270,8 @@ export default function ConnectionsPage() {
               >
                 <div className="min-w-0 sm:flex-1">
                   <strong className="block text-[15px] font-semibold tracking-[0.005em] text-ink-12">
-                    {conn.name}
-                    {conn.isDefault ? (
+                    {connection.name}
+                    {connection.isDefault ? (
                       <span
                         className="ml-2 align-middle text-[9.5px] font-semibold uppercase tracking-[0.18em] text-ink-7"
                         style={{ border: '1px solid var(--rule)', borderRadius: 2, padding: '1px 5px' }}
@@ -280,13 +280,13 @@ export default function ConnectionsPage() {
                         DEFAULT
                       </span>
                     ) : null}
-                    {conn.visibility.mode === 'whitelist' ? (
+                    {connection.visibility.mode === 'whitelist' ? (
                       <span
                         className="ml-2 align-middle text-[9.5px] font-semibold uppercase tracking-[0.12em] text-ink-7"
                         style={{ border: '1px solid var(--rule)', borderRadius: 2, padding: '1px 5px' }}
-                        title={`${conn.visibility.allowedUsers.length}人を許可`}
+                        title={`${connection.visibility.allowedUsers.length}人を許可`}
                       >
-                        WHITELIST · {conn.visibility.allowedUsers.length}
+                        WHITELIST · {connection.visibility.allowedUsers.length}
                       </span>
                     ) : null}
                   </strong>
@@ -298,25 +298,25 @@ export default function ConnectionsPage() {
                     className="mt-1 font-mono text-[12px] text-ink-7 wrap-anywhere"
                     style={{ letterSpacing: '0.01em' }}
                   >
-                    {conn.endpoint} <span className="text-ink-3">·</span>{' '}
-                    {conn.region} <span className="text-ink-3">·</span>{' '}
-                    {conn.accessKeyIdMasked}
-                    {conn.forcePathStyle && (
+                    {connection.endpoint} <span className="text-ink-3">·</span>{' '}
+                    {connection.region} <span className="text-ink-3">·</span>{' '}
+                    {connection.accessKeyIdMasked}
+                    {connection.forcePathStyle && (
                       <>
                         {' '}<span className="text-ink-3">·</span>{' '}
                         <span className="text-ink-5">path-style</span>
                       </>
                     )}
                     {' '}<span className="text-ink-3">·</span>{' '}
-                    <span className="text-ink-5">list-{conn.listObjectsVersion}</span>
+                    <span className="text-ink-5">list-{connection.listObjectsVersion}</span>
                   </div>
                   {/* 制限がかかっている接続は一覧から分かるようにする
                       (編集モーダルを開かないと分からないと、事故の原因になる)。 */}
-                  {CAPABILITY_UI.some(({ key }) => !conn.capabilities[key]) && (
+                  {CAPABILITY_UI.some(({ key }) => !connection.capabilities[key]) && (
                     <div className="mt-1 text-[12px] text-ink-7">
                       制限:{' '}
                       {CAPABILITY_UI
-                        .filter(({ key }) => !conn.capabilities[key])
+                        .filter(({ key }) => !connection.capabilities[key])
                         .map(({ label }) => label)
                         .join(' / ')}
                     </div>
@@ -324,20 +324,20 @@ export default function ConnectionsPage() {
                 </div>
                 {/* 4 ボタンが 360px 幅に収まらないことがあるので折り返しを許可。 */}
                 <div className="flex flex-wrap gap-2 sm:shrink-0">
-                  {!conn.isDefault && (
+                  {!connection.isDefault && (
                     <button
                       className="ghost"
-                      onClick={() => void handleSetDefault(conn.id)}
+                      onClick={() => void handleSetDefault(connection.id)}
                       title="Storage タブで開く接続にする"
                     >
                       デフォルトにする
                     </button>
                   )}
-                  <Link className="ghost" to={`/storage/${encodeURIComponent(conn.id)}/`}>開く</Link>
-                  <Link className="ghost" to={`/settings/connections/${encodeURIComponent(conn.id)}`}>編集</Link>
+                  <Link className="ghost" to={`/storage/${encodeURIComponent(connection.id)}/`}>開く</Link>
+                  <Link className="ghost" to={`/settings/connections/${encodeURIComponent(connection.id)}`}>編集</Link>
                   <button
-                    className="ghost conn-row__danger"
-                    onClick={() => dispatch({ type: 'openDelete', conn })}
+                    className="ghost connection-row__danger"
+                    onClick={() => dispatch({ type: 'openDelete', connection })}
                   >
                     削除
                   </button>

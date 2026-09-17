@@ -147,23 +147,23 @@ function parseStorageClass(v: string | undefined): StorageClassKey | null {
  *  権限と同じく **行が無い = 既定** の約束を守る。設定を一度も触っていない
  *  接続でも、エンドポイントからの推定と既定値で見積もりが出る。 */
 export function settingsToProfile(
-  conn: { id: string; name: string; endpoint: string; region: string },
+  connection: { id: string; name: string; endpoint: string; region: string },
   settings: Record<string, string>,
 ): ConnectionProfile {
   const provider = parseProvider(settings[PRICING_SETTING_KEYS.provider])
-    ?? inferProvider(conn.endpoint)
+    ?? inferProvider(connection.endpoint)
   const perf = PERF_DEFAULTS[provider]
 
   // リージョンは明示設定 → 接続の region の順。カタログに載っているかは
   // ここでは判定しない (載っていないことは effectiveRates が
   // ratesResolved: false として伝える)。勝手に別リージョンで代用はしない。
   const region = provider === 'aws'
-    ? (settings[PRICING_SETTING_KEYS.region] || conn.region)
+    ? (settings[PRICING_SETTING_KEYS.region] || connection.region)
     : null
 
   return {
-    connectionId: conn.id,
-    name: conn.name,
+    connectionId: connection.id,
+    name: connection.name,
     provider,
     region,
     storageClass: provider === 'aws'

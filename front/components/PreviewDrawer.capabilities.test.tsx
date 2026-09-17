@@ -16,7 +16,7 @@ vi.mock('./PreviewArchive', () => ({ PreviewArchive: () => <div>archive-preview<
 afterEach(() => vi.restoreAllMocks())
 
 function renderDrawer(caps: Partial<Capabilities>, k = 'a/b.txt') {
-  const conn: Connection = {
+  const connection: Connection = {
     id: 'c1', name: 'primary', endpoint: 'https://s3.example.com/', region: 'auto',
     accessKeyIdMasked: 'AKIA…2345', forcePathStyle: true, listObjectsVersion: 'v2',
     capabilities: { ...ALL_CAPABILITIES_ON, ...caps },
@@ -26,7 +26,7 @@ function renderDrawer(caps: Partial<Capabilities>, k = 'a/b.txt') {
     pricing: PRICING_FIXTURE,
   }
   return render(
-    <ConnectionContext.Provider value={conn}>
+    <ConnectionContext.Provider value={connection}>
       <PreviewDrawer connectionId="c1" bucket="bkt" k={k} onClose={() => {}} />
     </ConnectionContext.Provider>,
   )

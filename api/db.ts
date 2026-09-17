@@ -10,10 +10,10 @@ export interface PoolConfig {
   ro: string
 }
 
-export function createPools(cfg: PoolConfig): Pools {
+export function createPools(config: PoolConfig): Pools {
   return {
-    rw: new Pool({ connectionString: cfg.rw, max: 10 }),
-    ro: new Pool({ connectionString: cfg.ro, max: 10 }),
+    rw: new Pool({ connectionString: config.rw, max: 10 }),
+    ro: new Pool({ connectionString: config.ro, max: 10 }),
   }
 }
 

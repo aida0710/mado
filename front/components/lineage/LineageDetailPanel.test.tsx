@@ -27,7 +27,7 @@ const version = {
     status: 'available' as const,
     isPrimary: true,
     observedAt: '2026-08-26T00:00:00Z',
-    madoConnectionId: 'conn 1',
+    madoConnectionId: 'connection 1',
     metadata: {},
   }],
 }
@@ -51,7 +51,7 @@ describe('LineageDetailPanel', () => {
     expect(screen.getByLabelText('補足情報 JSON').textContent).toBe(JSON.stringify(version.metadata, null, 2))
     expect(screen.getByText('2026-01-09頃（厳密な時刻は不明）')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'この保存場所をStorageで開く' }))
-      .toHaveAttribute('href', '/storage/conn%201/dataset/callhome/raw/')
+      .toHaveAttribute('href', '/storage/connection%201/dataset/callhome/raw/')
   })
 
   it('does not render a Storage link for an unbound replica', () => {

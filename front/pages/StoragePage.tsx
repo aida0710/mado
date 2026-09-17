@@ -28,7 +28,7 @@ interface State {
 
 type Action =
   | { type: 'startLoad' }
-  | { type: 'loadOk'; conn: Connection | null }
+  | { type: 'loadOk'; connection: Connection | null }
   | { type: 'loadErr'; error: string }
   | { type: 'notFound'; connectionId: string }
 
@@ -39,7 +39,7 @@ function reducer(s: State, a: Action): State {
     case 'startLoad':
       return { ...s, loading: true, error: null }
     case 'loadOk':
-      return { connection: a.conn, error: null, loading: false }
+      return { connection: a.connection, error: null, loading: false }
     case 'loadErr':
       return { ...s, error: a.error, loading: false }
     case 'notFound':
@@ -56,7 +56,7 @@ export default function StoragePage({ connectionId }: Props) {
     api.listConnections()
       .then(list => {
         const found = list.find(c => c.id === connectionId) ?? null
-        if (found) dispatch({ type: 'loadOk', conn: found })
+        if (found) dispatch({ type: 'loadOk', connection: found })
         else dispatch({ type: 'notFound', connectionId })
       })
       .catch(e => dispatch({ type: 'loadErr', error: (e as Error).message }))

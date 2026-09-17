@@ -19,7 +19,7 @@ vi.mock('../lib/api/client', async importOriginal => {
 
 afterEach(() => vi.clearAllMocks())
 
-const conn = (id: string, isDefault: boolean) => ({
+const connection = (id: string, isDefault: boolean) => ({
   id, name: id, endpoint: 'http://e', region: 'r', accessKeyIdMasked: 'x…y',
   forcePathStyle: false, listObjectsVersion: 'v2' as const,
   capabilities: ALL_CAPABILITIES_ON,
@@ -31,7 +31,7 @@ const conn = (id: string, isDefault: boolean) => ({
 
 describe('ConnectionsPage デフォルト切り替え', () => {
   it('デフォルト行にバッジ、他の行にボタンが出る', async () => {
-    vi.mocked(api.listConnections).mockResolvedValue([conn('a', true), conn('b', false)])
+    vi.mocked(api.listConnections).mockResolvedValue([connection('a', true), connection('b', false)])
     render(<MemoryRouter><ConnectionsPage /></MemoryRouter>)
     await waitFor(() => expect(screen.getByText('DEFAULT')).toBeInTheDocument())
     expect(screen.getAllByText('デフォルトにする')).toHaveLength(1)
@@ -39,8 +39,8 @@ describe('ConnectionsPage デフォルト切り替え', () => {
 
   it('ボタンで setDefaultConnection が呼ばれ一覧を再取得する', async () => {
     vi.mocked(api.listConnections)
-      .mockResolvedValueOnce([conn('a', true), conn('b', false)])
-      .mockResolvedValueOnce([conn('a', false), conn('b', true)])
+      .mockResolvedValueOnce([connection('a', true), connection('b', false)])
+      .mockResolvedValueOnce([connection('a', false), connection('b', true)])
     vi.mocked(api.setDefaultConnection).mockResolvedValue(undefined)
     render(<MemoryRouter><ConnectionsPage /></MemoryRouter>)
     await waitFor(() => expect(screen.getByText('デフォルトにする')).toBeInTheDocument())

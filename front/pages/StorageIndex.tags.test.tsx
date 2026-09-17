@@ -13,7 +13,7 @@ afterEach(() => vi.restoreAllMocks())
 // StorageIndex は <ConnectionSwitcher/> 経由で useConnection() を呼ぶため、
 // ConnectionContext.Provider 配下でないとレンダリング時に例外を投げる
 // (Breadcrumb.test.tsx / StoragePage.tsx と同じパターン)。
-const conn: Connection = {
+const connection: Connection = {
   id: 'c1',
   name: 'c1',
   endpoint: 'https://example.com',
@@ -34,7 +34,7 @@ const conn: Connection = {
 function renderIndex() {
   return render(
     <MemoryRouter>
-      <ConnectionContext.Provider value={conn}>
+      <ConnectionContext.Provider value={connection}>
         <StorageIndex connectionId="c1" />
       </ConnectionContext.Provider>
     </MemoryRouter>,

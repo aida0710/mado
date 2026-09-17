@@ -65,9 +65,9 @@ describe('settingsToProfile', () => {
   })
 
   it('リージョンは明示設定が接続の region より優先される', () => {
-    const conn = { ...CONN, region: 'us-east-1' }
-    expect(settingsToProfile(conn, { [K.provider]: 'aws' }).region).toBe('us-east-1')
-    expect(settingsToProfile(conn, {
+    const connection = { ...CONN, region: 'us-east-1' }
+    expect(settingsToProfile(connection, { [K.provider]: 'aws' }).region).toBe('us-east-1')
+    expect(settingsToProfile(connection, {
       [K.provider]: 'aws', [K.region]: 'ap-northeast-1',
     }).region).toBe('ap-northeast-1')
   })

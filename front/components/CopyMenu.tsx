@@ -43,9 +43,9 @@ export const CopyMenu = memo(function CopyMenu({ items, trigger = '⋯', ariaLab
   // 収まらなければ上向きに開く。メニュー高さは実測 (offsetHeight) を優先し、
   // レイアウト未確定の環境では項目数からの概算でフォールバックする。
   const place = useCallback(() => {
-    const btn = triggerRef.current
-    if (!btn) return
-    const r = btn.getBoundingClientRect()
+    const trigger = triggerRef.current
+    if (!trigger) return
+    const r = trigger.getBoundingClientRect()
     const menuH = menuRef.current?.offsetHeight || items.length * 48 + 8
     const gap = 6
     const margin = 8

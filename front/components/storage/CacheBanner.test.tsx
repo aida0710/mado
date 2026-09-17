@@ -72,8 +72,8 @@ describe('compact', () => {
 
   it('compact でも ↻ は同じ形で出る', () => {
     render(<CacheBanner fetchedAt={AT} revalidating={false} onRefresh={noop} compact />)
-    const btn = screen.getByRole('button', { name: '再読み込み' })
-    expect(btn.className).toContain('cache-banner__refresh')
+    const button = screen.getByRole('button', { name: '再読み込み' })
+    expect(button.className).toContain('cache-banner__refresh')
   })
 })
 

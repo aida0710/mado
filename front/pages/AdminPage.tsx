@@ -293,7 +293,7 @@ function UsersPage() {
               <div className="admin-user__actions">
                 <button type="submit">保存</button>
                 {!(user.authMethods.includes('sso') && !user.authMethods.includes('local')) && <button type="button" className="ghost" onClick={() => void resetPassword(user)}>パスワードを再発行</button>}
-                {user.id !== currentUser?.id && <button type="button" className="ghost conn-row__danger" onClick={() => void deleteUser(user)}>削除</button>}
+                {user.id !== currentUser?.id && <button type="button" className="ghost connection-row__danger" onClick={() => void deleteUser(user)}>削除</button>}
               </div>
             </form>
           </details>

@@ -8,7 +8,7 @@ import type { Connection } from '../lib/api/types'
 
 const TIB = 1024 ** 4
 
-const conn: Connection = {
+const connection: Connection = {
   id: 'c1', name: 'mdx-s3', endpoint: 'https://mdx.lan:9000', region: 'auto',
   accessKeyIdMasked: 'AKIA…2345', forcePathStyle: true, listObjectsVersion: 'v2',
   capabilities: ALL_CAPABILITIES_ON,
@@ -20,7 +20,7 @@ const conn: Connection = {
 }
 
 const awsConn: Connection = {
-  ...conn,
+  ...connection,
   name: 'aws-s3',
   endpoint: 'https://s3.ap-northeast-1.amazonaws.com',
   region: 'ap-northeast-1',
@@ -52,14 +52,14 @@ describe('ConnectionForm の見積もり設定', () => {
   })
 
   it('自動判定の結果をプロバイダの既定として見せる', () => {
-    renderEdit(conn)
+    renderEdit(connection)
     const select = screen.getByLabelText('プロバイダ')
     expect(select).toHaveValue('')
     expect(screen.getByRole('option', { name: /自動判定 \(社内/ })).toBeInTheDocument()
   })
 
   it('社内ストレージではストレージクラスを出さない', () => {
-    renderEdit(conn)
+    renderEdit(connection)
     expect(screen.queryByLabelText('ストレージクラス')).toBeNull()
   })
 
@@ -69,7 +69,7 @@ describe('ConnectionForm の見積もり設定', () => {
   })
 
   it('プロバイダを AWS に変えるとその場でストレージクラスが現れる', async () => {
-    renderEdit(conn)
+    renderEdit(connection)
     expect(screen.queryByLabelText('ストレージクラス')).toBeNull()
     await userEvent.selectOptions(screen.getByLabelText('プロバイダ'), 'aws')
     expect(screen.getByLabelText('ストレージクラス')).toBeInTheDocument()
@@ -81,7 +81,7 @@ describe('ConnectionForm の見積もり設定', () => {
   })
 
   it('費用のかからない接続はそう伝える', () => {
-    renderEdit(conn)
+    renderEdit(connection)
     expect(screen.getByText('費用のかからない接続として計算します。')).toBeInTheDocument()
   })
 
@@ -95,14 +95,14 @@ describe('ConnectionForm の見積もり設定', () => {
   })
 
   it('触らなければ何も送らない', async () => {
-    const onSubmit = renderEdit(conn)
+    const onSubmit = renderEdit(connection)
     await userEvent.click(screen.getByRole('button', { name: '保存' }))
     await waitFor(() => expect(onSubmit).toHaveBeenCalled())
     expect(onSubmit.mock.calls[0][0]).toEqual({})
   })
 
   it('変えた項目だけを差分で送る', async () => {
-    const onSubmit = renderEdit(conn)
+    const onSubmit = renderEdit(connection)
     const read = screen.getByLabelText('読み出し帯域 (MB/s)')
     await userEvent.clear(read)
     await userEvent.type(read, '840')
@@ -113,7 +113,7 @@ describe('ConnectionForm の見積もり設定', () => {
   })
 
   it('プロバイダを明示すると送る', async () => {
-    const onSubmit = renderEdit(conn)
+    const onSubmit = renderEdit(connection)
     await userEvent.selectOptions(screen.getByLabelText('プロバイダ'), 'wasabi')
     await userEvent.click(screen.getByRole('button', { name: '保存' }))
     await waitFor(() => expect(onSubmit).toHaveBeenCalled())
@@ -122,7 +122,7 @@ describe('ConnectionForm の見積もり設定', () => {
 
   it('自動判定に戻すと null を送る (設定行を消させる)', async () => {
     const explicit: Connection = {
-      ...conn,
+      ...connection,
       pricing: { ...PRICING_FIXTURE, provider: 'wasabi', providerExplicit: true },
     }
     const onSubmit = renderEdit(explicit)
@@ -134,7 +134,7 @@ describe('ConnectionForm の見積もり設定', () => {
   })
 
   it('容量は TB で入れてバイトで送る', async () => {
-    const onSubmit = renderEdit(conn)
+    const onSubmit = renderEdit(connection)
     await userEvent.type(screen.getByLabelText('容量 (TB)'), '320')
     await userEvent.click(screen.getByRole('button', { name: '保存' }))
     await waitFor(() => expect(onSubmit).toHaveBeenCalled())
@@ -143,7 +143,7 @@ describe('ConnectionForm の見積もり設定', () => {
 
   it('容量を空にすると null を送る (警告を止める)', async () => {
     const withCapacity: Connection = {
-      ...conn,
+      ...connection,
       pricing: { ...PRICING_FIXTURE, capacityBytes: 320 * TIB },
     }
     const onSubmit = renderEdit(withCapacity)
@@ -164,7 +164,7 @@ describe('ConnectionForm の見積もり設定', () => {
   })
 
   it('ストレージ単価を上書きできる', async () => {
-    const onSubmit = renderEdit(conn)
+    const onSubmit = renderEdit(connection)
     await userEvent.type(screen.getByLabelText('ストレージ単価の上書き ($/GB-月)'), '0.004')
     await userEvent.click(screen.getByRole('button', { name: '保存' }))
     await waitFor(() => expect(onSubmit).toHaveBeenCalled())
@@ -173,7 +173,7 @@ describe('ConnectionForm の見積もり設定', () => {
 
   it('単価の上書きを空にするとカタログに戻す', async () => {
     const overridden: Connection = {
-      ...conn,
+      ...connection,
       pricing: { ...PRICING_FIXTURE, storagePerGbMonth: 0.004 },
     }
     const onSubmit = renderEdit(overridden)
@@ -188,7 +188,7 @@ describe('ConnectionForm の見積もり設定', () => {
   it('手入力の単価は「更新では変わらない」と伝える', () => {
     // Wasabi のように料金 API が無いプロバイダ。
     renderEdit({
-      ...conn,
+      ...connection,
       pricing: {
         ...PRICING_FIXTURE,
         provider: 'wasabi',
@@ -217,7 +217,7 @@ describe('ConnectionForm の見積もり設定', () => {
   })
 
   it('不安定さは 0 も送れる (上振れ無しは意味のある設定)', async () => {
-    const onSubmit = renderEdit(conn)
+    const onSubmit = renderEdit(connection)
     const inst = screen.getByLabelText('不安定さ')
     await userEvent.clear(inst)
     await userEvent.type(inst, '0')

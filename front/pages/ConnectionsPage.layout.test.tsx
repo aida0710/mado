@@ -18,7 +18,7 @@ afterEach(() => vi.clearAllMocks())
 // R2 の endpoint は空白なしで 60 文字超になる。
 const LONG_ENDPOINT = 'https://07d0626c8c662f767b2d07796dc0d087.r2.cloudflarestorage.com'
 
-const conn = {
+const connection = {
   id: 'r2', name: 'cloudflare r2', endpoint: LONG_ENDPOINT, region: 'auto',
   accessKeyIdMasked: '20a1…7a30', forcePathStyle: true, listObjectsVersion: 'v2' as const,
   capabilities: ALL_CAPABILITIES_ON,
@@ -33,7 +33,7 @@ const conn = {
 // 確認はスマホ幅のスクリーンショットで実施済み)。
 describe('ConnectionsPage の狭い画面向けレイアウト', () => {
   it('長い endpoint を語中で折り返せるようにしている', async () => {
-    vi.mocked(api.listConnections).mockResolvedValue([conn])
+    vi.mocked(api.listConnections).mockResolvedValue([connection])
     render(<MemoryRouter><ConnectionsPage /></MemoryRouter>)
 
     await waitFor(() => expect(screen.getByText('cloudflare r2')).toBeInTheDocument())
@@ -48,7 +48,7 @@ describe('ConnectionsPage の狭い画面向けレイアウト', () => {
   })
 
   it('狭い画面では行を縦積みにし、ボタン群も折り返せるようにしている', async () => {
-    vi.mocked(api.listConnections).mockResolvedValue([conn])
+    vi.mocked(api.listConnections).mockResolvedValue([connection])
     render(<MemoryRouter><ConnectionsPage /></MemoryRouter>)
     await waitFor(() => expect(screen.getByText('cloudflare r2')).toBeInTheDocument())
 
@@ -104,7 +104,7 @@ describe('ConnectionsPage インポート / エクスポート', () => {
 
   it('鍵を書き足した項目は createConnection で作る', async () => {
     vi.mocked(api.listConnections).mockResolvedValue([])
-    const create = vi.spyOn(api, 'createConnection').mockResolvedValue(conn)
+    const create = vi.spyOn(api, 'createConnection').mockResolvedValue(connection)
     render(<MemoryRouter><ConnectionsPage /></MemoryRouter>)
     await screen.findByLabelText('接続をインポート')
 

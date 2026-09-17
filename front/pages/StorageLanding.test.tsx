@@ -13,7 +13,7 @@ vi.mock('../lib/api/client', async importOriginal => {
 
 afterEach(() => vi.clearAllMocks())
 
-const conn = (id: string, createdAt: string, isDefault = false) => ({
+const connection = (id: string, createdAt: string, isDefault = false) => ({
   id, name: id, endpoint: 'http://e', region: 'r', accessKeyIdMasked: 'x…y',
   forcePathStyle: true, listObjectsVersion: 'v2' as const,
   capabilities: ALL_CAPABILITIES_ON,
@@ -37,8 +37,8 @@ function renderLanding() {
 describe('StorageLanding', () => {
   it('デフォルト接続へ直行する (複数あっても選択画面を出さない)', async () => {
     vi.mocked(api.listConnections).mockResolvedValue([
-      conn('older', '2026-01-01T00:00:00Z'),
-      conn('newer-default', '2026-06-01T00:00:00Z', true),
+      connection('older', '2026-01-01T00:00:00Z'),
+      connection('newer-default', '2026-06-01T00:00:00Z', true),
     ])
     renderLanding()
     await waitFor(() => expect(screen.getByTestId('dest')).toBeInTheDocument())
@@ -47,8 +47,8 @@ describe('StorageLanding', () => {
 
   it('デフォルト未設定なら created_at 最古へ', async () => {
     vi.mocked(api.listConnections).mockResolvedValue([
-      conn('newer', '2026-06-01T00:00:00Z'),
-      conn('oldest', '2026-01-01T00:00:00Z'),
+      connection('newer', '2026-06-01T00:00:00Z'),
+      connection('oldest', '2026-01-01T00:00:00Z'),
     ])
     renderLanding()
     await waitFor(() => expect(screen.getByTestId('dest')).toBeInTheDocument())

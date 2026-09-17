@@ -1,6 +1,6 @@
 // `/storage/:connectionId/edit-readme/:bucket/*` — 任意 prefix の README を Monaco で編集する
 // 2-pane ページ。左ペインに「現在 prefix の直下のファイル/ディレクトリ」を出し、
-// 行クリックで Monaco の現在カーソル位置に `[name](/storage/conn/bucket/path)` を挿入する。
+// 行クリックで Monaco の現在カーソル位置に `[name](/storage/connection/bucket/path)` を挿入する。
 //
 // 保存後は元の StorageBucket ページに戻る。
 

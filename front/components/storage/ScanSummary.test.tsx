@@ -26,8 +26,8 @@ describe('ScanSummary', () => {
   it('未走査なら集計を促す', async () => {
     const onOpen = vi.fn()
     render(<ScanSummary result={null} onOpen={onOpen} />)
-    const btn = screen.getByRole('button', { name: '配下を集計する' })
-    await userEvent.click(btn)
+    const button = screen.getByRole('button', { name: '配下を集計する' })
+    await userEvent.click(button)
     expect(onOpen).toHaveBeenCalledTimes(1)
   })
 
@@ -41,8 +41,8 @@ describe('走査中', () => {
   it('走査中はその旨を出し、押せば開ける', async () => {
     const onOpen = vi.fn()
     render(<ScanSummary result={null} running onOpen={onOpen} />)
-    const btn = screen.getByRole('button', { name: /走査中/ })
-    await userEvent.click(btn)
+    const button = screen.getByRole('button', { name: /走査中/ })
+    await userEvent.click(button)
     expect(onOpen).toHaveBeenCalledTimes(1)
   })
 

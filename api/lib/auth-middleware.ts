@@ -24,17 +24,17 @@ export function requirePasswordChangeComplete(): MiddlewareHandler {
 
 export function requireSession(
   store: AuthStore,
-  cfg: SessionMiddlewareConfig,
+  config: SessionMiddlewareConfig,
 ): MiddlewareHandler {
   return async (c, next) => {
-    const token = getCookie(c, cfg.cookieName ?? SESSION_COOKIE)
+    const token = getCookie(c, config.cookieName ?? SESSION_COOKIE)
     if (!token) {
-      await cfg.onDenied?.(c, 'missing').catch(error => console.error('session denial audit failed', error))
+      await config.onDenied?.(c, 'missing').catch(error => console.error('session denial audit failed', error))
       return c.json({ error: 'unauthorized' }, 401)
     }
-    const principal = await store.authenticateSession(token, cfg.idleSeconds)
+    const principal = await store.authenticateSession(token, config.idleSeconds)
     if (!principal) {
-      await cfg.onDenied?.(c, 'invalid').catch(error => console.error('session denial audit failed', error))
+      await config.onDenied?.(c, 'invalid').catch(error => console.error('session denial audit failed', error))
       return c.json({ error: 'unauthorized' }, 401)
     }
     setSessionPrincipal(c, principal)

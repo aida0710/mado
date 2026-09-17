@@ -26,8 +26,8 @@ describe('PreviewText - copy', () => {
   it('copies the loaded text content', async () => {
     vi.mocked(api.readHead).mockResolvedValue(utf8('hello\nworld'))
     render(<PreviewText connectionId="c" bucket="b" k="x.txt" />)
-    const btn = await screen.findByRole('button', { name: '内容をコピー' })
-    await userEvent.click(btn)
+    const button = await screen.findByRole('button', { name: '内容をコピー' })
+    await userEvent.click(button)
     expect(copyToClipboard).toHaveBeenCalledWith('hello\nworld')
   })
 

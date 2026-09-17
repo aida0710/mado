@@ -93,23 +93,23 @@ function stringArrayClaim(value: unknown): string[] {
 export function createOidcProvider(
   pool: Pool,
   crypto: CryptoModule,
-  cfg: OidcProviderConfig,
+  provider: OidcProviderConfig,
 ): OidcProvider {
-  const issuer = new URL(cfg.issuerUrl)
+  const issuer = new URL(provider.issuerUrl)
   const issuerId = canonicalIssuer(issuer.href)
-  const redirectUri = new URL(cfg.redirectUri)
-  const postLogoutRedirectUri = new URL(cfg.postLogoutRedirectUri ?? '/', redirectUri)
+  const redirectUri = new URL(provider.redirectUri)
+  const postLogoutRedirectUri = new URL(provider.postLogoutRedirectUri ?? '/', redirectUri)
   let configuration: Promise<oidc.Configuration> | undefined
   let jwks: ReturnType<typeof createRemoteJWKSet> | undefined
 
   const getConfiguration = () => {
-    configuration ??= oidc.discovery(issuer, cfg.clientId, cfg.clientSecret)
+    configuration ??= oidc.discovery(issuer, provider.clientId, provider.clientSecret)
     return configuration
   }
 
   return {
-    id: cfg.id,
-    label: cfg.label,
+    id: provider.id,
+    label: provider.label,
     issuer: issuerId,
 
     async start(returnTo, browserBinding) {
@@ -135,12 +135,12 @@ export function createOidcProvider(
           (state_hash, provider_id, nonce_enc, code_verifier_enc, return_to,
            browser_binding_hash, expires_at)
          VALUES ($1, $2, $3, $4, $5, $6, now() + interval '5 minutes')`,
-        [sha256(state), cfg.id, crypto.encrypt(nonce), crypto.encrypt(verifier),
+        [sha256(state), provider.id, crypto.encrypt(nonce), crypto.encrypt(verifier),
           safeReturnTo(returnTo), bindingHash],
       )
       return oidc.buildAuthorizationUrl(config, {
         redirect_uri: redirectUri.href,
-        scope: cfg.scopes ?? 'openid email profile',
+        scope: provider.scopes ?? 'openid email profile',
         response_type: 'code',
         state,
         nonce,
@@ -158,7 +158,7 @@ export function createOidcProvider(
           WHERE state_hash = $1 AND provider_id = $2 AND browser_binding_hash = $3
             AND used_at IS NULL AND expires_at > now()
           RETURNING nonce_enc, code_verifier_enc, return_to`,
-        [sha256(state), cfg.id, sha256(browserBinding)],
+        [sha256(state), provider.id, sha256(browserBinding)],
       )
       const row = attempt.rows[0]
       if (!row) throw new Error('invalid or expired oidc state')
@@ -216,7 +216,7 @@ export function createOidcProvider(
       const expectedIssuer = metadata.issuer ?? issuer.href
       const verified = await jwtVerify(token, jwks, {
         issuer: expectedIssuer,
-        audience: cfg.clientId,
+        audience: provider.clientId,
         clockTolerance: 60,
         maxTokenAge: '10 minutes',
       })

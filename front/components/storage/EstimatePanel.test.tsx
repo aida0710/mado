@@ -94,8 +94,8 @@ describe('EstimatePanel', () => {
     vi.mocked(api.estimate).mockResolvedValue(null)
     const { onNeedScan } = renderPanel()
 
-    const btn = await screen.findByRole('button', { name: '走査する' })
-    await userEvent.click(btn)
+    const button = await screen.findByRole('button', { name: '走査する' })
+    await userEvent.click(button)
     expect(onNeedScan).toHaveBeenCalled()
   })
 

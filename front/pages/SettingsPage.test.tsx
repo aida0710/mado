@@ -53,7 +53,7 @@ describe('SettingsPage', () => {
 
   it('接続IDのURLから編集ページを開ける', async () => {
     vi.spyOn(api, 'listConnections').mockResolvedValue([{
-      id: 'conn-1', name: 'production', endpoint: 'https://s3.example.com', region: 'auto',
+      id: 'connection-1', name: 'production', endpoint: 'https://s3.example.com', region: 'auto',
       accessKeyIdMasked: 'AKIA…TEST', forcePathStyle: true, listObjectsVersion: 'v2',
       capabilities: ALL_CAPABILITIES_ON, scanEnabled: true, listCacheTtlSec: 86400,
       pricing: PRICING_FIXTURE, isDefault: true,
@@ -61,7 +61,7 @@ describe('SettingsPage', () => {
       createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z',
     }])
     render(
-      <MemoryRouter initialEntries={['/settings/connections/conn-1']}>
+      <MemoryRouter initialEntries={['/settings/connections/connection-1']}>
         <Routes><Route path="/settings/*" element={<SettingsPage />} /></Routes>
       </MemoryRouter>,
     )
