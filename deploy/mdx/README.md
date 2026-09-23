@@ -8,6 +8,21 @@ dedicated OpenLineage ingest listener binds `127.0.0.1:8081`; it accepts only
 `POST /api/openlineage/v1/lineage` and is reserved for a host TLS reverse proxy.
 Do not point the public vhost at `:8080`.
 
+Bucket capacity metrics are available to a host-side Prometheus scraper at
+`http://127.0.0.1:9318/metrics`. The `api-internal` service publishes only the
+dedicated metrics listener on this port. To scrape from another host, change
+the host IP in its `ports` entry in `compose.mdx.yaml` and restrict access with
+the host firewall. Do not proxy this listener through the public vhost.
+
+The endpoint exports each bucket's latest saved scan result as
+`mado_storage_bucket_bytes` and `mado_storage_bucket_objects`, along with
+`mado_storage_capacity_collection_age_seconds` and
+`mado_storage_capacity_collection_failures`. Labels are `connection_id` and
+`bucket`. Buckets without a successful scan have no size, object count, or age
+sample; failed scans leave the last successful values in place. Scraping does
+not initiate a scan. Enable capacity tracking for a connection or run a manual
+capacity scan in Mado to populate results.
+
 Required layout:
 
 ```text

@@ -48,6 +48,7 @@ import { requestLogger } from './lib/request-logger.js'
 import { createCapacityStore } from './lib/capacity-store.js'
 import { mountStorageCapacityRoutes } from './routes/storage-capacity.js'
 import { listStorageBucketNames } from './lib/storage-buckets.js'
+import { createCapacityMetricsApp, loadCapacityMetricRows } from './lib/capacity-metrics.js'
 
 // LAN ダッシュボード: 1 つのストリーム teardown 起因の未捕捉例外で全ユーザーの
 // リクエストを巻き添えにしない。root cause は都度直す前提の最後の砦 (ログは大声で)。
@@ -320,6 +321,10 @@ const server = serve({ fetch: app.fetch, port: env.PORT }, info => {
     `allowed origins: ${env.ALLOWED_ORIGINS.join(', ')}`,
   )
 })
+const metricsApp = createCapacityMetricsApp(() => loadCapacityMetricRows(pools.ro))
+const metricsServer = serve({ fetch: metricsApp.fetch, port: 9318 }, info => {
+  console.log(`capacity metrics listening on port ${info.port}`)
+})
 
 let shuttingDown = false
 const shutdown = async () => {
@@ -327,7 +332,10 @@ const shutdown = async () => {
   shuttingDown = true
   if (authCleanupTimer) clearInterval(authCleanupTimer)
   setTimeout(() => process.exit(1), 10_000).unref()
-  await new Promise<void>(resolve => server.close(() => resolve()))
+  await Promise.all([
+    new Promise<void>(resolve => server.close(() => resolve())),
+    new Promise<void>(resolve => metricsServer.close(() => resolve())),
+  ])
   await storageFactory.close()
   await closePools(pools)
   process.exit(0)

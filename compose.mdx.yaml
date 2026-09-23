@@ -130,6 +130,9 @@ services:
       DATASET_REGISTRY_URL: http://registry-api:8080
       DATASET_REGISTRY_TOKEN: "${REGISTRY_INGEST_TOKEN:?REGISTRY_INGEST_TOKEN is required}"
       MARQUEZ_URL: http://marquez-api:5000
+    # Prometheus scrape only. Change the host IP here if the collector runs elsewhere.
+    ports:
+      - "127.0.0.1:9318:9318"
     depends_on:
       postgres:
         condition: service_healthy
