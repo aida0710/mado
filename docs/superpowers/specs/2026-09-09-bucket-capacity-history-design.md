@@ -4,6 +4,11 @@
 > 容量画面は全bucketを同時表示し、各bucketの指標・小型graphとconnection全体の合計を出す。
 > 周期設定はconnection編集画面へ置き、設定変更と全bucket強制実行はどちらも
 > `connections:manage`を必須とする。本書内でこれと矛盾する旧bucket単位の記述は本改訂で置き換える。
+>
+> **2026-09-23 改訂:** Prometheus向けmetricsは専用listenerではなく、intranet hostの
+> `GET /api/mado/metrics/capacity`に置き、`metrics:read` scopeのService Account keyで認証する。
+> 専用portをDockerでpublishするとDNATでUFWを迂回し、bind先を現地で書き換えても次の同期で消えるため。
+> Service Account keyでMado自身のデータを読む入口は`/api/mado/`にまとめ、読み取り専用とする。
 
 ## 背景
 
@@ -447,19 +452,31 @@ bucket 名と connection id は cardinality が管理可能な範囲だが、obj
 
 ## Grafana 連携の境界
 
-Grafana が必要になった場合、Mado internal API や PostgreSQL を Grafana から直接読ませない。
-代わりに API container の private listener に `/metrics` を追加し、最新 snapshot だけを gauge として
-公開する。
+Grafana が必要になった場合、Mado の browser 用 API や PostgreSQL を Grafana から直接読ませない。
+代わりに intranet host の `GET /api/mado/metrics/capacity` で、保存済みの最新 snapshot だけを gauge として公開する。
+scrape で走査は始めない。
 
 ```text
-mado_storage_bucket_bytes{connection_id="...",bucket="dataset"} 9.92e14
+mado_storage_bucket_bytes{connection_id="...",bucket="dataset"} 992000000000000
 mado_storage_bucket_objects{connection_id="...",bucket="dataset"} 547259
 mado_storage_capacity_collection_age_seconds{connection_id="...",bucket="dataset"} 412
 mado_storage_capacity_collection_failures{connection_id="...",bucket="dataset"} 0
+mado_storage_connection_info{connection_id="...",connection_name="mdx s3"} 1
+mado_storage_capacity_tracking_enabled{connection_id="..."} 1
+mado_storage_capacity_tracking_interval_seconds{connection_id="..."} 21600
 ```
 
-- public OpenLineage host には公開しない
-- Prometheus から private network 経由で scrape する
+- 認証は `metrics:read` scope の Service Account key (Bearer)。browser session とは分け、
+  OpenLineage 投入用の key (`lineage:write`) とも scope で分ける。Service Account key で Mado 自身の
+  データを読む入口は `/api/mado/` にまとめ、読み取り専用 (GET のみ) とする
+- intranet 用 nginx `:8080` と edge の TLS・CIDR ACL の内側にだけ置き、公開 OpenLineage 入口 (`:8081`) には載せない
+- 専用 port は publish しない。Docker の publish は DNAT で UFW を迂回するため、host firewall では絞れない
+- key は connection の利用者制限に関係なく全 connection の bucket 名と容量を読める。Grafana の閲覧範囲はこの前提で決める
+- 定期計測を止めた connection で経過秒の alert が鳴り続けないよう、有効・周期も gauge で出す
+- 領域ごとに `/api/mado/metrics/<領域>` を足して拡充する。path を分けるのは、変化の速さに合わせて
+  scrape 間隔を変えられるようにするため (容量は最短でも 6 時間ごとにしか変わらない)。
+  領域名は画面・コードで既に使っている言葉 (容量メトリクス → `capacity`) にする
+- 値を読めなかった領域は 503 を返し、Prometheus の `up` で失敗を知らせる
 - Grafana は Prometheus の retention を使い、Mado DB の正本履歴とは独立した運用 cache とみなす
 - bucket 数が大きくなったら label cardinality と scrape payload を再評価する
 
@@ -532,7 +549,7 @@ rollback 時は UI / scheduler を旧 image へ戻す。追加 table は直ち�
 - 週次 / 月次増加量と満杯予測
 - 急増、急減、取得停止の通知
 - 複数 bucket / connection の比較画面
-- Prometheus exporter と Grafana dashboard
+- Grafana dashboard
 - prefix / Dataset 単位の明示的な追跡。bucket と同じ表へ安易に混在させず、走査費用と cardinality を再設計する
 
 ## 関連資料

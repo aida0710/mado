@@ -105,4 +105,45 @@ describe('createCapacityStore', () => {
         WHERE connection_id = $1 AND bucket = 'archive'`, [CONNECTION_ID])
     expect(target.rows[0]).toEqual({ last_status: 'queued', last_error: null })
   })
+
+  it('metrics用にtargetごとの最新snapshotを返し、未計測bucketは値をnullにする', async () => {
+    await pools.rw.query(
+      `INSERT INTO storage_capacity_targets
+         (connection_id, bucket, enabled, interval_seconds, next_run_at, last_status, consecutive_failures)
+       VALUES ($1, 'data', true, 86400, now(), 'success', 0),
+              ($1, 'new', true, 86400, now(), 'error', 3)`, [CONNECTION_ID])
+    // 同じcollected_atではidの大きい方を最新とみなす。
+    await pools.rw.query(
+      `INSERT INTO storage_capacity_snapshots (connection_id, bucket, total_bytes, object_count, collected_at)
+       VALUES ($1, 'data', 1, 1, '2026-09-20T00:00:00Z'),
+              ($1, 'data', 2, 2, '2026-09-23T00:00:00Z'),
+              ($1, 'data', 9007199254740993, 547259, '2026-09-23T00:00:00Z')`, [CONNECTION_ID])
+
+    const rows = (await store.listLatestBucketCapacity()).filter(row => row.connectionId === CONNECTION_ID)
+    expect(rows).toEqual([
+      {
+        connectionId: CONNECTION_ID, bucket: 'data', consecutiveFailures: 0,
+        totalBytes: '9007199254740993', objectCount: '547259',
+        collectedAt: new Date('2026-09-23T00:00:00Z'),
+      },
+      {
+        connectionId: CONNECTION_ID, bucket: 'new', consecutiveFailures: 3,
+        totalBytes: null, objectCount: null, collectedAt: null,
+      },
+    ])
+  })
+
+  it('metrics用にconnection名と定期計測の設定を返し、未設定なら無効・周期なしにする', async () => {
+    const find = async () => (await store.listConnectionTracking())
+      .find(row => row.connectionId === CONNECTION_ID)
+    expect(await find()).toEqual({
+      connectionId: CONNECTION_ID, connectionName: 'capacity-store-test',
+      trackingEnabled: false, intervalSeconds: null,
+    })
+    await pools.rw.query(
+      `INSERT INTO storage_capacity_settings
+         (connection_id, enabled, interval_seconds, next_run_at, last_status)
+       VALUES ($1, true, 43200, now(), 'waiting')`, [CONNECTION_ID])
+    expect(await find()).toMatchObject({ trackingEnabled: true, intervalSeconds: 43200 })
+  })
 })

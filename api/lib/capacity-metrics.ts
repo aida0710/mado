@@ -1,84 +1,79 @@
-import type { Pool } from 'pg'
-import { Hono } from 'hono'
+import type { CapacityStore, ConnectionCapacityTracking, LatestBucketCapacity } from './capacity-store.js'
+import type { MetricFamily, MetricSample, MetricsCollector } from './metrics-collector.js'
 
-export interface CapacityMetricRow {
-  connection_id: string
-  bucket: string
-  consecutive_failures: number
-  total_bytes: string | null
-  object_count: string | null
-  collected_at: Date | null
+type MeasuredBucketCapacity = LatestBucketCapacity & {
+  totalBytes: string
+  objectCount: string
+  collectedAt: Date
 }
 
-// The target table includes buckets whose first scan has not succeeded yet.
-// The history index makes the lateral lookup select only the newest snapshot.
-export async function loadCapacityMetricRows(pool: Pool): Promise<CapacityMetricRow[]> {
-  const result = await pool.query<CapacityMetricRow>(
-    `SELECT t.connection_id, t.bucket, t.consecutive_failures,
-            snapshot.total_bytes, snapshot.object_count, snapshot.collected_at
-       FROM storage_capacity_targets t
-       LEFT JOIN LATERAL (
-         SELECT total_bytes, object_count, collected_at
-           FROM storage_capacity_snapshots
-          WHERE connection_id = t.connection_id AND bucket = t.bucket
-          ORDER BY collected_at DESC, id DESC LIMIT 1
-       ) snapshot ON true
-      ORDER BY t.connection_id, t.bucket`,
-  )
-  return result.rows
+function isMeasured(bucket: LatestBucketCapacity): bucket is MeasuredBucketCapacity {
+  return bucket.totalBytes !== null && bucket.objectCount !== null && bucket.collectedAt !== null
 }
 
-function escapeLabel(value: string): string {
-  return value.replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/"/g, '\\"')
+function gauge(name: string, help: string, samples: MetricSample[]): MetricFamily {
+  return { name, help, type: 'gauge', samples }
 }
 
-function labels(row: CapacityMetricRow): string {
-  return `{connection_id="${escapeLabel(row.connection_id)}",bucket="${escapeLabel(row.bucket)}"}`
+function bucketLabels(bucket: LatestBucketCapacity): Record<string, string> {
+  return { connection_id: bucket.connectionId, bucket: bucket.bucket }
 }
 
-function metric(name: string, help: string, samples: string[]): string[] {
-  return [`# HELP ${name} ${help}`, `# TYPE ${name} gauge`, ...samples]
+export interface CapacityMetricsInput {
+  buckets: LatestBucketCapacity[]
+  connections: ConnectionCapacityTracking[]
+  now: Date
 }
 
-export function renderCapacityMetrics(rows: CapacityMetricRow[], now = new Date()): string {
-  const bytes: string[] = []
-  const objects: string[] = []
-  const age: string[] = []
-  const failures: string[] = []
-
-  for (const row of rows) {
-    const label = labels(row)
-    failures.push(`mado_storage_capacity_collection_failures${label} ${row.consecutive_failures}`)
-    if (row.total_bytes === null || row.object_count === null || row.collected_at === null) continue
-    // PostgreSQL BIGINT stays a decimal string: converting it to a JS number first
-    // would lose precision before Prometheus receives it.
-    bytes.push(`mado_storage_bucket_bytes${label} ${row.total_bytes}`)
-    objects.push(`mado_storage_bucket_objects${label} ${row.object_count}`)
-    age.push(`mado_storage_capacity_collection_age_seconds${label} ${Math.max(0, (now.getTime() - row.collected_at.getTime()) / 1000)}`)
-  }
-
+/**
+ * 保存済みの最新値だけを出す。scrapeで走査は始めない。
+ * 未計測bucketは容量・object数・経過秒を出さず、失敗回数だけを出す。
+ */
+export function capacityMetricFamilies({ buckets, connections, now }: CapacityMetricsInput): MetricFamily[] {
+  const measured = buckets.filter(isMeasured)
   return [
-    ...metric('mado_storage_bucket_bytes', 'Latest measured bucket size in bytes.', bytes),
-    ...metric('mado_storage_bucket_objects', 'Latest measured bucket object count.', objects),
-    ...metric('mado_storage_capacity_collection_age_seconds', 'Seconds since the latest successful bucket scan.', age),
-    ...metric('mado_storage_capacity_collection_failures', 'Consecutive failed bucket scans.', failures),
-    '',
-  ].join('\n')
+    // connection_idはnanoidなので、Grafanaで名前を引けるよう値1のinfo metricを添える。
+    gauge('mado_storage_connection_info', 'Storage connection name. Always 1.',
+      connections.map(connection => ({
+        labels: { connection_id: connection.connectionId, connection_name: connection.connectionName },
+        value: 1,
+      }))),
+    // 定期計測を止めたconnectionでage alertを鳴らさないための条件に使う。
+    gauge('mado_storage_capacity_tracking_enabled', 'Whether scheduled capacity tracking is enabled (1) or not (0).',
+      connections.map(connection => ({
+        labels: { connection_id: connection.connectionId },
+        value: connection.trackingEnabled ? 1 : 0,
+      }))),
+    gauge('mado_storage_capacity_tracking_interval_seconds', 'Configured interval of scheduled capacity tracking.',
+      connections.flatMap(connection => connection.intervalSeconds === null ? [] : [{
+        labels: { connection_id: connection.connectionId },
+        value: connection.intervalSeconds,
+      }])),
+    gauge('mado_storage_bucket_bytes', 'Latest measured bucket size in bytes.',
+      measured.map(bucket => ({ labels: bucketLabels(bucket), value: bucket.totalBytes }))),
+    gauge('mado_storage_bucket_objects', 'Latest measured bucket object count.',
+      measured.map(bucket => ({ labels: bucketLabels(bucket), value: bucket.objectCount }))),
+    gauge('mado_storage_capacity_collection_age_seconds', 'Seconds since the latest successful bucket scan.',
+      measured.map(bucket => ({
+        labels: bucketLabels(bucket),
+        value: Math.max(0, (now.getTime() - bucket.collectedAt.getTime()) / 1000),
+      }))),
+    gauge('mado_storage_capacity_collection_failures', 'Consecutive failed bucket scans.',
+      buckets.map(bucket => ({ labels: bucketLabels(bucket), value: bucket.consecutiveFailures }))),
+  ]
 }
 
-export function createCapacityMetricsApp(load: () => Promise<CapacityMetricRow[]>): Hono {
-  const app = new Hono()
-  app.get('/metrics', async c => {
-    try {
-      const body = renderCapacityMetrics(await load())
-      return c.body(body, 200, {
-        'Content-Type': 'text/plain; version=0.0.4; charset=utf-8',
-        'Cache-Control': 'no-store',
-      })
-    } catch (error) {
-      console.error('capacity metrics scrape failed', error)
-      return c.text('metrics unavailable', 503)
-    }
-  })
-  return app
+export function createCapacityMetricsCollector(
+  store: Pick<CapacityStore, 'listLatestBucketCapacity' | 'listConnectionTracking'>,
+): MetricsCollector {
+  return {
+    name: 'capacity',
+    async collect() {
+      const [buckets, connections] = await Promise.all([
+        store.listLatestBucketCapacity(),
+        store.listConnectionTracking(),
+      ])
+      return capacityMetricFamilies({ buckets, connections, now: new Date() })
+    },
+  }
 }
