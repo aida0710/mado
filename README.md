@@ -23,7 +23,7 @@ Local UserまたはOIDC SSOでログインでき、Pipelineは人とは別のSer
 - **接続ごとの権限** — 「一覧は見せるがダウンロードと README 書き戻しは禁止」のように、接続単位で操作を絞れる
 - **Dataset Lineage** — OpenLineageの`Dataset → Job → Dataset`と、版ごとの`DatasetVersion → Run → DatasetVersion`をReact Flowで辿る
 - **認証とRBAC** — Local User / OIDC SSO、Viewer・Curator・Operator・Admin、監査ログ
-- **Pipeline API key** — namespaceを限定したService Account keyを一度だけ表示して発行
+- **Service Account key** — PipelineのOpenLineage送信用（namespace限定）と、Prometheusのmetrics読み取り用のkeyを一度だけ表示して発行
 
 ---
 
@@ -184,7 +184,7 @@ Pipelineへの導入方法、DatasetとVersionの分け方、OpenLineage event�
 - 「最新らしい版」は推測しません。版表示には明示version IDが必要です
 - Registryが正本で、Marquez停止中は警告を表示します。MadoからMarquezへ直接書き込みません
 
-Adminの**Access**ではLocal UserとService Accountを作成し、`lineage:write`と許可namespaceを持つkeyを発行できます。keyの秘密部分は発行時に一度だけ表示されます。
+Adminの**Access**ではLocal UserとService Accountを作成し、OpenLineage送信用に`lineage:write`と許可namespaceを持つkey、Prometheus収集用に`metrics:read`だけを持つkeyを発行できます。Madoのデータを返すkeyは読み取り専用です。keyの秘密部分は発行時に一度だけ表示されます。
 
 ### バージョン確認
 
@@ -282,6 +282,8 @@ passwordはTTYからのみ読み、引数・環境変数・ログには渡しま
 
 Pipelineは`MADO_API_HOSTNAME`の`POST /api/openlineage/v1/lineage`へService Account keyをBearer送信します。Madoがprofile/scope/namespaceを検証し、keyを除いたprincipal envelopeをRegistryへ転送します。production nginxはintranet UI用`:8080`とOpenLineage専用`:8081`を分離し、`:8081`ではこのPOSTだけを受け付け、その他のpath/methodを404にします。Composeは両listenerをhostのloopbackへだけpublishし、MDX edgeではbrowser用`MADO_HOSTNAME`と公開API用`MADO_API_HOSTNAME`を別TLS vhostとして終端します。
 
+Service Account keyでMado自身のデータを読む入口は`/api/mado/`にまとめ、すべて読み取り専用（GETのみ）にしています。Prometheusは`MADO_HOSTNAME`の`GET /api/mado/metrics/<領域>`を、`metrics:read`のService Account keyをBearer送信して読みます。現在の領域は容量メトリクスの`/api/mado/metrics/capacity`だけです。この入口はintranet用`:8080`にだけ置き、`:8081`では404です。scrape設定と出力するmetricsは[`deploy/mdx/README.md`](deploy/mdx/README.md#prometheus-metrics)を参照してください。
+
 ### OSSリリース
 
 MadoはSemVerを採用し、最初の正式版候補を`v1.0.0`とします。GitHub上のannotated tagだけがrelease workflowを起動し、通常の`main` pushや社内deployからOSS releaseが始まることはありません。
@@ -318,9 +320,9 @@ OSS releaseと社内環境へのdeployは独立しています。release workflo
 
 - **外部公開前にHTTPS必須**。標準配布bundleはloopback上のHTTP入口へ用途別TLS proxyを接続します。Browser側TLS終端後に`AUTH_COOKIE_SECURE=true`と`AUTH_MODE=local|oidc|hybrid`を設定します。
 - MDXでは`compose.mdx.yaml`の`edge` nginxがbrowser用TLSを終端します。証明書取得・UFW・自動更新は[`docs/mdx-tls.md`](docs/mdx-tls.md)を参照してください。
-- Web UI、`/api/auth/`、`/api/internal/`はintranet内に閉じます。外部公開するhost TLS proxyは`127.0.0.1:8081`だけへ接続し、OpenLineage ingest以外を公開しません。公開入口には送信元IP 10 req/s（burst 50）・全体50 req/s（burst 200）のrate limit、送信元20・全体200のconnection limit、2 MiB body上限、timeout、`Cache-Control: no-store`を設定済みです。
+- Web UI、`/api/auth/`、`/api/internal/`、`/api/mado/`はintranet内に閉じます。外部公開するhost TLS proxyは`127.0.0.1:8081`だけへ接続し、OpenLineage ingest以外を公開しません。公開入口には送信元IP 10 req/s（burst 50）・全体50 req/s（burst 200）のrate limit、送信元20・全体200のconnection limit、2 MiB body上限、timeout、`Cache-Control: no-store`を設定済みです。
 - productionは認証無効で起動できません。初期・一時passwordの変更完了前は、直接APIを呼んでも通常機能を利用できません。
-- Browser sessionとPipeline Service Account keyを分離し、API keyはhashだけを保存します。
+- Browser sessionとService Account key（PipelineのOpenLineage送信、Prometheusのmetrics読み取り）を分離し、API keyはhashだけを保存します。keyはscopeごとに発行し、Madoのデータを返すscopeは読み取りだけです。
 - RBACと接続capabilityを重ね、監査ログには成功して実際に状態が変わった操作だけを残します。閲覧、認証拒否、失敗した操作、同じ値の再保存、既存ジョブへの合流は記録しません。変更操作は開始時にdurableなintentを置き、失敗・変更なしなら破棄します。password/token/OIDC code/OpenLineage event本体は保存しません。
 - sessionの利用時刻、login attempt、response cache、API keyの最終利用時刻など、認証・cache維持のための内部更新は操作監査の対象外です。
 - **`ENCRYPTION_KEY`** で `storage_connections` の S3 認証情報を保存時暗号化 (AES-256-GCM)。DB ダンプだけ漏れても解読不能。
@@ -347,6 +349,7 @@ Browser ─:5173 ─►│ front (vite dev / dev)                        │
                  │ nginx :8080 (intranet UI / prod)              │
                  │   └─► /api/internal/* → api-internal (Hono)   │
                  │   └─► /api/auth/*     → api-internal          │
+                 │   └─► /api/mado/*     → api-internal          │
 Pipeline ─TLS proxy─► nginx :8081 (POST ingest only)              │
                  │   └─► /api/openlineage/v1/lineage → api-lineage│
                  │                              ├─► media-worker │
@@ -360,7 +363,7 @@ Pipeline ─TLS proxy─► nginx :8081 (POST ingest only)              │
 | サービス | dev | prod |
 |---|---|---|
 | `front` | `vite dev` (HMR) | (なし、nginx に焼き込み) |
-| `nginx` | (なし、Vite proxy が代替) | `:8080` 静的配信・内部API + `:8081` OpenLineage POST専用 |
+| `nginx` | (なし、Vite proxy が代替) | `:8080` 静的配信・内部API・`/api/mado/` + `:8081` OpenLineage POST専用 |
 | `api-internal` | `tsx watch internal.ts` | `node dist/internal.js` |
 | `api-lineage` | `tsx watch lineage.ts` | `node dist/lineage.js` |
 | `media-worker` | `tsx watch worker.ts` | `node dist/worker.js` |

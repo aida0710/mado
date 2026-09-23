@@ -41,6 +41,25 @@ export interface CapacityScanActivity {
   jobs: CapacityScanJob[]
 }
 
+/** targetごとの最新snapshot。初回の完全走査が成功していないbucketは値がnullになる。 */
+export interface LatestBucketCapacity {
+  connectionId: string
+  bucket: string
+  consecutiveFailures: number
+  /** BIGINTを10進文字列のまま返す。JS numberへ変換すると2^53を超えた値が丸まる。 */
+  totalBytes: string | null
+  objectCount: string | null
+  collectedAt: Date | null
+}
+
+export interface ConnectionCapacityTracking {
+  connectionId: string
+  connectionName: string
+  trackingEnabled: boolean
+  /** 定期計測を一度も設定していないconnectionはnull。 */
+  intervalSeconds: number | null
+}
+
 interface SettingsRow {
   connection_id: string
   enabled: boolean
@@ -108,6 +127,8 @@ export interface CapacityStore {
     scan: CapacityScanActivity
   }>
   scanActivity(connectionId: string): Promise<CapacityScanActivity>
+  listLatestBucketCapacity(): Promise<LatestBucketCapacity[]>
+  listConnectionTracking(): Promise<ConnectionCapacityTracking[]>
   reserveDueConnections(limit: number): Promise<string[]>
   syncBuckets(connectionId: string, buckets: string[]): Promise<void>
   attachJob(connectionId: string, bucket: string, jobId: number): Promise<void>
@@ -204,6 +225,58 @@ export function createCapacityStore(pools: Pools): CapacityStore {
 
     async scanActivity(connectionId) {
       return loadScanActivity(pools, connectionId)
+    },
+
+    async listLatestBucketCapacity() {
+      // recordSuccessは必ずtargetもupsertするので、target起点で全snapshotのbucketを拾える。
+      const result = await pools.ro.query<{
+        connection_id: string
+        bucket: string
+        consecutive_failures: number
+        total_bytes: string | null
+        object_count: string | null
+        collected_at: Date | null
+      }>(
+        `SELECT target.connection_id, target.bucket, target.consecutive_failures,
+                latest.total_bytes, latest.object_count, latest.collected_at
+           FROM storage_capacity_targets target
+           LEFT JOIN LATERAL (
+             SELECT total_bytes, object_count, collected_at
+               FROM storage_capacity_snapshots
+              WHERE connection_id = target.connection_id AND bucket = target.bucket
+              ORDER BY collected_at DESC, id DESC LIMIT 1
+           ) latest ON true
+          ORDER BY target.connection_id, target.bucket`,
+      )
+      return result.rows.map(row => ({
+        connectionId: row.connection_id,
+        bucket: row.bucket,
+        consecutiveFailures: row.consecutive_failures,
+        totalBytes: row.total_bytes,
+        objectCount: row.object_count,
+        collectedAt: row.collected_at,
+      }))
+    },
+
+    async listConnectionTracking() {
+      const result = await pools.ro.query<{
+        connection_id: string
+        connection_name: string
+        tracking_enabled: boolean
+        interval_seconds: number | null
+      }>(
+        `SELECT connection.id AS connection_id, connection.name AS connection_name,
+                COALESCE(settings.enabled, false) AS tracking_enabled, settings.interval_seconds
+           FROM storage_connections connection
+           LEFT JOIN storage_capacity_settings settings ON settings.connection_id = connection.id
+          ORDER BY connection.id`,
+      )
+      return result.rows.map(row => ({
+        connectionId: row.connection_id,
+        connectionName: row.connection_name,
+        trackingEnabled: row.tracking_enabled,
+        intervalSeconds: row.interval_seconds,
+      }))
     },
 
     async reserveDueConnections(limit) {

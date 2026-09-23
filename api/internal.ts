@@ -48,6 +48,8 @@ import { requestLogger } from './lib/request-logger.js'
 import { createCapacityStore } from './lib/capacity-store.js'
 import { mountStorageCapacityRoutes } from './routes/storage-capacity.js'
 import { listStorageBucketNames } from './lib/storage-buckets.js'
+import { createCapacityMetricsCollector } from './lib/capacity-metrics.js'
+import { mountMetricsRoutes } from './routes/metrics.js'
 
 // LAN ダッシュボード: 1 つのストリーム teardown 起因の未捕捉例外で全ユーザーの
 // リクエストを巻き添えにしない。root cause は都度直す前提の最後の砦 (ログは大声で)。
@@ -295,6 +297,15 @@ if (authEnabled) {
 }
 
 app.route('/api/internal', api)
+
+// Service Account keyでMado自身のデータを読む入口。すべて読み取り専用で、browser sessionの
+// `/api/internal`とは分ける。公開用の:8081には載せない。
+const madoApi = new Hono()
+mountMetricsRoutes(madoApi, {
+  authenticate: token => serviceAccounts.authenticate(token),
+  collectors: [createCapacityMetricsCollector(capacityStore)],
+})
+app.route('/api/mado', madoApi)
 
 // 未 catch のエラーをユーザフレンドリーに翻訳する。S3 系は 502 + 短い説明、
 // それ以外は内部 error をログに出して 500 + "internal error" だけ返す

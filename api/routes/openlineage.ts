@@ -5,6 +5,7 @@ import {
 } from '../lib/openlineage-schema.js'
 import type { RegistryClient } from '../lib/registry-client.js'
 import { RegistryClientError } from '../lib/registry-client.js'
+import { getServiceKeyPrincipal, requireServiceKeyScope } from '../lib/service-key-auth.js'
 
 export const OPENLINEAGE_INGEST_PATH = '/openlineage/v1/lineage'
 export const DEFAULT_OPENLINEAGE_BODY_LIMIT = 2 * 1024 * 1024
@@ -35,12 +36,6 @@ export interface OpenLineageRoutesDeps {
   log?: Pick<Console, 'warn'>
 }
 
-function bearerToken(header: string | undefined): string | null {
-  if (!header) return null
-  const match = /^Bearer[ \t]+([^ \t]+)$/i.exec(header)
-  return match?.[1] ?? null
-}
-
 async function audit(
   deps: OpenLineageRoutesDeps,
   principal: LineageServicePrincipal,
@@ -57,27 +52,12 @@ async function audit(
 }
 
 export function mountOpenLineageRoutes(app: Hono, deps: OpenLineageRoutesDeps): void {
-  app.post(OPENLINEAGE_INGEST_PATH, async c => {
-    const token = bearerToken(c.req.header('Authorization'))
-    if (!token) {
-      c.header('WWW-Authenticate', 'Bearer')
-      return c.json({ error: 'Bearer service key is required' }, 401)
-    }
-
-    let principal: LineageServicePrincipal | null
-    try {
-      principal = await deps.auth.authenticate(token)
-    } catch {
-      return c.json({ error: 'authentication service unavailable' }, 503)
-    }
-    if (!principal) {
-      c.header('WWW-Authenticate', 'Bearer')
-      return c.json({ error: 'invalid service key' }, 401)
-    }
-    if (!principal.scopes.includes('lineage:write')) {
-      return c.json({ error: 'lineage:write scope is required' }, 403)
-    }
-
+  const requireLineageWrite = requireServiceKeyScope({
+    authenticate: token => deps.auth.authenticate(token),
+    scope: 'lineage:write',
+  })
+  app.post(OPENLINEAGE_INGEST_PATH, requireLineageWrite, async c => {
+    const principal = getServiceKeyPrincipal<LineageServicePrincipal>(c)
     const bodyLimit = deps.bodyLimitBytes ?? DEFAULT_OPENLINEAGE_BODY_LIMIT
     const announcedSize = Number(c.req.header('Content-Length'))
     if (Number.isFinite(announcedSize) && announcedSize > bodyLimit) {
