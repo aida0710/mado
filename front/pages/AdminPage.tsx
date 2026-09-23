@@ -105,6 +105,14 @@ const ROLE_OPTIONS = [
 
 type RoleId = (typeof ROLE_OPTIONS)[number]['id']
 
+// Service Account keyの用途。Madoのデータへは読み取りのscopeだけを開く。
+const KEY_SCOPE_OPTIONS = [
+  { scope: 'lineage:write', label: 'OpenLineage送信（lineage:write）', help: '許可したNamespaceへだけLineageを書き込めます。' },
+  { scope: 'metrics:read', label: 'Prometheus収集（metrics:read）', help: '/api/mado/metrics/capacity（容量メトリクス）から、利用者を限定した接続も含めて全接続のバケット名・容量を読み取れます。書き込みはできません。' },
+] as const
+
+type KeyScope = (typeof KEY_SCOPE_OPTIONS)[number]['scope']
+
 interface UsersResponse {
   users: UserRow[]
   ssoRoleMapping?: Record<string, string>
@@ -336,6 +344,7 @@ function ServiceAccountsPage() {
   const [notice, setNotice] = useState<string | null>(null)
   const [secret, setSecret] = useState<{ label: string; value: string } | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [keyScope, setKeyScope] = useState<KeyScope>('lineage:write')
 
   const reload = useCallback(async () => {
     setError(null)
@@ -380,14 +389,17 @@ function ServiceAccountsPage() {
     const formElement = event.currentTarget
     const form = new FormData(formElement)
     const accountId = String(form.get('accountId') ?? '')
-    const namespaces = String(form.get('namespaces') ?? '').split(',').map(value => value.trim()).filter(Boolean)
+    // namespaceはOpenLineageの書き込み先を絞るもので、読み取り用keyには送らない。
+    const namespaces = keyScope === 'lineage:write'
+      ? String(form.get('namespaces') ?? '').split(',').map(value => value.trim()).filter(Boolean)
+      : []
     setError(null)
     try {
       const body = await jsonRequest<{ key: { name: string; token: string } }>(
         `/api/internal/service-accounts/${encodeURIComponent(accountId)}/keys`,
         {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: form.get('name'), scopes: ['lineage:write'], namespaces }),
+          body: JSON.stringify({ name: form.get('name'), scopes: [keyScope], namespaces }),
         },
       )
       setSecret({ label: body.key.name, value: body.key.token })
@@ -423,10 +435,19 @@ function ServiceAccountsPage() {
           <button type="submit">作成</button>
         </form>
         <form className="admin-form" onSubmit={issueKey}>
-          <h4>OpenLineage APIキーを発行</h4>
+          <h4>APIキーを発行</h4>
           <label className="admin-field"><span>Service Account</span><select name="accountId" required defaultValue=""><option value="" disabled>選択してください</option>{accounts.filter(a => a.status === 'active').map(account => <option key={account.id} value={account.id}>{account.name}</option>)}</select></label>
+          <label className="admin-field">
+            <span>用途</span>
+            <select name="scope" value={keyScope} onChange={event => setKeyScope(event.target.value as KeyScope)}>
+              {KEY_SCOPE_OPTIONS.map(option => <option key={option.scope} value={option.scope}>{option.label}</option>)}
+            </select>
+            <small className="admin-field__help">{KEY_SCOPE_OPTIONS.find(option => option.scope === keyScope)?.help}</small>
+          </label>
           <label className="admin-field"><span>Key名</span><input name="name" placeholder="例: production-2026-08" required /></label>
-          <label className="admin-field"><span>許可するNamespace</span><input name="namespaces" placeholder="speech,podcast（カンマ区切り）" required /></label>
+          {keyScope === 'lineage:write' && (
+            <label className="admin-field"><span>許可するNamespace</span><input name="namespaces" placeholder="speech,podcast（カンマ区切り）" required /></label>
+          )}
           <button type="submit">一度だけkeyを表示</button>
         </form>
       </div>

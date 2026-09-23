@@ -61,6 +61,39 @@ describe('AdminPage', () => {
     expect(container.querySelector('.admin-list')).not.toBeInTheDocument()
   })
 
+  it('Prometheus用のkeyはmetrics:readだけを付け、Namespaceを求めずに発行する', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (_url, init) => {
+      const issuing = init?.method === 'POST'
+      const body = issuing
+        ? { key: { name: 'grafana', token: 'mado_lin_example.secret' } }
+        : { accounts: [{ id: 'sa-1', name: 'prometheus', description: '', status: 'active' }] }
+      return new Response(JSON.stringify(body), {
+        status: issuing ? 201 : 200, headers: { 'Content-Type': 'application/json' },
+      })
+    })
+    render(
+      <AuthContext.Provider value={auth}>
+        <MemoryRouter initialEntries={['/settings/access/service-accounts']}>
+          <Routes><Route path="/settings/access/*" element={<AdminPage />} /></Routes>
+        </MemoryRouter>
+      </AuthContext.Provider>,
+    )
+
+    await screen.findByRole('option', { name: 'prometheus' })
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: /^Service Account/ }), 'sa-1')
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: /^用途/ }), 'metrics:read')
+    expect(screen.queryByRole('textbox', { name: '許可するNamespace' })).not.toBeInTheDocument()
+    expect(screen.getByText(/利用者を限定した接続も含めて全接続のバケット名・容量を読み取れます/)).toBeInTheDocument()
+    await userEvent.type(screen.getByRole('textbox', { name: 'Key名' }), 'grafana')
+    await userEvent.click(screen.getByRole('button', { name: '一度だけkeyを表示' }))
+
+    expect(await screen.findByText('mado_lin_example.secret')).toBeInTheDocument()
+    const issueRequest = fetchMock.mock.calls.find(([, init]) => init?.method === 'POST')!
+    expect(issueRequest[0]).toBe('/api/internal/service-accounts/sa-1/keys')
+    expect(JSON.parse(String(issueRequest[1]!.body)))
+      .toEqual({ name: 'grafana', scopes: ['metrics:read'], namespaces: [] })
+  })
+
   it('ユーザー行を展開して編集・再発行・削除を管理できる', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
       users: [{

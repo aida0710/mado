@@ -2,6 +2,7 @@ import type { Hono } from 'hono'
 import { z } from 'zod'
 import type { AuditWriter } from '../lib/audit.js'
 import type { ServiceAccountStore } from '../lib/auth-api-keys.js'
+import { SERVICE_KEY_SCOPES } from '../lib/auth-types.js'
 import { getSessionPrincipal, requirePermission } from '../lib/rbac.js'
 import { requestMetadata } from '../lib/request-metadata.js'
 import { markAuditChangeCommitted } from '../lib/audit-activity.js'
@@ -20,12 +21,14 @@ const PatchAccount = z.object({
   description: z.string().trim().max(2048).optional(),
   status: z.enum(['active', 'disabled']).optional(),
 })
+// namespaceはOpenLineageの書き込み先を絞るためのもの。lineage:writeには必須、
+// それ以外のscopeだけのkeyには意味がないので受け付けない。
 const CreateKey = z.object({
   name: z.string().trim().min(1).max(128),
-  scopes: z.array(z.enum(['lineage:write'])).min(1).max(16),
-  namespaces: z.array(z.string().min(1).max(512)).min(1).max(128),
+  scopes: z.array(z.enum(SERVICE_KEY_SCOPES)).min(1).max(16),
+  namespaces: z.array(z.string().min(1).max(512)).max(128).default([]),
   expiresAt: z.string().datetime().nullable().optional(),
-})
+}).refine(key => key.scopes.includes('lineage:write') === key.namespaces.length > 0)
 
 export function mountServiceAccountRoutes(app: Hono, deps: ServiceAccountsDeps): void {
   app.use('/service-accounts', requirePermission('service_accounts:manage'))

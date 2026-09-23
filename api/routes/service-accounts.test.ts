@@ -63,4 +63,23 @@ describe('Service Account route', () => {
     )
     expect(events.rows[0].count).toBe('0')
   })
+
+  it('metrics:readのkeyはnamespaceなしで発行し、namespaceの有無がscopeと合わない依頼を拒否する', async () => {
+    const admin = (await auth.listUsers())[0]
+    const account = await keys.createAccount({ name: 'prometheus', createdBy: admin.id })
+    const issue = (body: unknown) => app.request(`/service-accounts/${account.id}/keys`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    })
+
+    const metrics = await issue({ name: 'grafana', scopes: ['metrics:read'] })
+    expect(metrics.status).toBe(201)
+    const issued = (await metrics.json() as { key: { token: string; scopes: string[]; namespaces: string[] } }).key
+    expect(issued.scopes).toEqual(['metrics:read'])
+    expect(issued.namespaces).toEqual([])
+    expect((await keys.authenticate(issued.token))?.scopes).toEqual(['metrics:read'])
+
+    expect((await issue({ name: 'lineage', scopes: ['lineage:write'] })).status).toBe(400)
+    expect((await issue({ name: 'mixed', scopes: ['metrics:read'], namespaces: ['speech'] })).status).toBe(400)
+    expect((await issue({ name: 'write', scopes: ['metrics:write'] })).status).toBe(400)
+  })
 })
