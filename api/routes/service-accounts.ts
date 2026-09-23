@@ -21,11 +21,13 @@ const PatchAccount = z.object({
   description: z.string().trim().max(2048).optional(),
   status: z.enum(['active', 'disabled']).optional(),
 })
+// keyは用途ごとに発行し、1本に1つのscopeだけを付ける。書き込み用のkeyが漏れても
+// Madoのデータを読めないようにするため。
 // namespaceはOpenLineageの書き込み先を絞るためのもの。lineage:writeには必須、
-// それ以外のscopeだけのkeyには意味がないので受け付けない。
+// それ以外のscopeのkeyには意味がないので受け付けない。
 const CreateKey = z.object({
   name: z.string().trim().min(1).max(128),
-  scopes: z.array(z.enum(SERVICE_KEY_SCOPES)).min(1).max(16),
+  scopes: z.array(z.enum(SERVICE_KEY_SCOPES)).length(1),
   namespaces: z.array(z.string().min(1).max(512)).max(128).default([]),
   expiresAt: z.string().datetime().nullable().optional(),
 }).refine(key => key.scopes.includes('lineage:write') === key.namespaces.length > 0)

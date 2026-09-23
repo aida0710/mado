@@ -82,4 +82,15 @@ describe('Service Account route', () => {
     expect((await issue({ name: 'mixed', scopes: ['metrics:read'], namespaces: ['speech'] })).status).toBe(400)
     expect((await issue({ name: 'write', scopes: ['metrics:write'] })).status).toBe(400)
   })
+
+  it('lineage:writeとmetrics:readを1本のkeyに混ぜる依頼を拒否する', async () => {
+    const admin = (await auth.listUsers())[0]
+    const account = await keys.createAccount({ name: 'mixed', createdBy: admin.id })
+    const response = await app.request(`/service-accounts/${account.id}/keys`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'both', scopes: ['lineage:write', 'metrics:read'], namespaces: ['speech'] }),
+    })
+    expect(response.status).toBe(400)
+    expect(await keys.listKeys(account.id)).toEqual([])
+  })
 })
