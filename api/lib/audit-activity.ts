@@ -1,5 +1,5 @@
 import type { Context, MiddlewareHandler } from 'hono'
-import type { AuditWriter } from './audit.js'
+import type { AuditEventInput, AuditWriter } from './audit.js'
 import { getSessionPrincipal } from './rbac.js'
 import { requestMetadata } from './request-metadata.js'
 
@@ -13,6 +13,7 @@ interface Activity {
 
 const AUDIT_CHANGED_KEY = 'madoAuditChanged'
 const AUDIT_COMMITTED_KEY = 'madoAuditCommitted'
+const DEDICATED_AUDIT_WRITTEN_KEY = 'madoDedicatedAuditWritten'
 
 /** 成功応答でも永続状態が変わらなかったことを共通監査へ伝える。 */
 export function markAuditNoChange(c: Context): void {
@@ -25,13 +26,28 @@ export function markAuditChangeCommitted(c: Context): void {
   c.set(AUDIT_COMMITTED_KEY, true)
 }
 
+/**
+ * commit 後に、変更の詳細を載せた専用の監査を書く。書き込みに失敗しても投げない。
+ * 変更はもう反映済みなので、ここで 500 を返すと利用者は失敗したと思って操作を繰り返し、
+ * 一度しか見せない token なども失われる。失敗した場合は、共通 middleware が変更前に書いた
+ * intent を成功として残すので、監査が 1 件も無い状態にはならない。
+ */
+export async function writeDedicatedAudit(c: Context, audit: AuditWriter, event: AuditEventInput): Promise<void> {
+  try {
+    await audit.write(event)
+    c.set(DEDICATED_AUDIT_WRITTEN_KEY, true)
+  } catch (error) {
+    console.error('dedicated audit write failed; keeping the audit intent instead', error)
+  }
+}
+
 function decoded(value: string | undefined): string | null {
   if (!value) return null
   try { return decodeURIComponent(value) } catch { return value }
 }
 
 function pathParts(pathname: string): string[] {
-  const path = pathname.replace(/^\/api\/internal(?=\/|$)/, '')
+  const path = pathname.replace(/^\/api\/(internal|auth)(?=\/|$)/, '')
   return path.split('/').filter(Boolean)
 }
 
@@ -122,10 +138,14 @@ export function auditActivity(audit: AuditWriter): MiddlewareHandler {
       ...metadata,
     })
 
+    // 変更は commit 済みなのに、それを詳しく書いた専用の監査が無い状態。intent を成功として残す。
+    const committedWithoutDedicatedAudit = () =>
+      c.get(AUDIT_COMMITTED_KEY) === true && c.get(DEDICATED_AUDIT_WRITTEN_KEY) !== true
+
     try {
       await next()
     } catch (error) {
-      if (c.get(AUDIT_COMMITTED_KEY) === true) {
+      if (committedWithoutDedicatedAudit()) {
         await audit.finish(intentId, 'success', {
           method: c.req.method, state: 'committed', completionInterrupted: true,
         }).catch(auditError => console.error('committed audit intent completion failed', auditError))
@@ -139,9 +159,10 @@ export function auditActivity(audit: AuditWriter): MiddlewareHandler {
     const outcome = status >= 200 && status < 400 ? 'success'
       : status === 401 || status === 403 ? 'denied' : 'failure'
     const changed = c.get(AUDIT_CHANGED_KEY) !== false
-    if (c.get(AUDIT_COMMITTED_KEY) === true && outcome !== 'success') {
+    if (committedWithoutDedicatedAudit()) {
       await audit.finish(intentId, 'success', {
-        method: c.req.method, status, state: 'committed', completionInterrupted: true,
+        method: c.req.method, status, state: 'committed',
+        ...(outcome === 'success' ? { dedicatedAuditMissing: true } : { completionInterrupted: true }),
       }).catch(error => console.error('committed audit intent completion failed', error))
     } else if (outcome !== 'success' || !changed || activity.dedicatedSuccessAudit) {
       await audit.discard(intentId).catch(error => console.error('audit intent discard failed', error))

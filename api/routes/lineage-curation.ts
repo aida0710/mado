@@ -10,7 +10,7 @@ import type {
   RegistryManualLocationInput,
 } from '../lib/registry-client.js'
 import { RegistryClientError } from '../lib/registry-client.js'
-import { markAuditChangeCommitted } from '../lib/audit-activity.js'
+import { markAuditChangeCommitted, writeDedicatedAudit } from '../lib/audit-activity.js'
 
 const Text = z.string().trim().min(1).max(1024)
 const OptionalText = z.string().trim().max(8192).optional()
@@ -273,7 +273,7 @@ export function mountLineageCurationRoutes(app: Hono, deps: LineageCurationDeps)
         if (unchanged) return c.json(current)
         const result = await deps.registry.updateDataset(datasetId, parsed.data)
         markAuditChangeCommitted(c)
-        await deps.audit.write({
+        await writeDedicatedAudit(c, deps.audit, {
           actor: { type: 'user', userId: principal.user.id },
           action: 'lineage.dataset.update', outcome: 'success',
           resourceType: 'dataset', resourceId: datasetId,
@@ -327,7 +327,7 @@ export function mountLineageCurationRoutes(app: Hono, deps: LineageCurationDeps)
       markAuditChangeCommitted(c)
       const dataset = result.dataset as Record<string, unknown> | undefined
       const version = result.version as Record<string, unknown> | undefined
-      await deps.audit.write({
+      await writeDedicatedAudit(c, deps.audit, {
         actor: { type: 'user', userId: principal.user.id },
         action: 'lineage.dataset.register', outcome: 'success',
         resourceType: 'dataset', resourceId: typeof dataset?.datasetId === 'string'
@@ -365,7 +365,7 @@ export function mountLineageCurationRoutes(app: Hono, deps: LineageCurationDeps)
         submitted_by: principal.user.id,
       })
       markAuditChangeCommitted(c)
-      await deps.audit.write({
+      await writeDedicatedAudit(c, deps.audit, {
         actor: { type: 'user', userId: principal.user.id },
         action: 'lineage.location.register', outcome: 'success',
         resourceType: 'dataset_version', resourceId: parsed.data.versionId,
@@ -404,7 +404,7 @@ export function mountLineageCurationRoutes(app: Hono, deps: LineageCurationDeps)
         submitted_by: principal.user.id,
       })
       markAuditChangeCommitted(c)
-      await deps.audit.write({
+      await writeDedicatedAudit(c, deps.audit, {
         actor: { type: 'user', userId: principal.user.id },
         action: 'lineage.run.register', outcome: 'success',
         resourceType: 'run', resourceId: typeof result.id === 'string' ? result.id : null,
