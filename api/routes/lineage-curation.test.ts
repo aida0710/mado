@@ -48,7 +48,8 @@ function appWith(
   })
   const canAccessConnection = async (_c: unknown, connectionId: string) =>
     accessibleConnectionIds?.includes(connectionId) ?? true
-  mountLineageCurationRoutes(app, { registry, pool: pool as never, audit, canAccessConnection })
+  const visibleConnectionIds = async () => accessibleConnectionIds ? new Set(accessibleConnectionIds) : null
+  mountLineageCurationRoutes(app, { registry, pool: pool as never, audit, canAccessConnection, visibleConnectionIds })
   return { app, registry, pool, audit }
 }
 
@@ -156,5 +157,31 @@ describe('lineage 手動登録 route', () => {
     // 存在を明かさないよう、紐付けの無い接続と同じ応答にする。
     expect(res.status).toBe(422)
     expect(registry.registerManualLocation).not.toHaveBeenCalled()
+  })
+
+  it('Dataset の更新の応答にも、見えない接続の ID を出さない', async () => {
+    const hiddenLocation = {
+      id: 'l1', uri: 's3://raw/a', storageKind: 's3', storageSystemKey: 'mdx-s3', region: null, bucket: 'raw',
+      status: 'available', isPrimary: true, observedAt: '2026-08-31T00:00:00Z',
+      madoConnectionId: 'hidden0001', metadata: { madoConnectionId: 'hidden0001' },
+    }
+    const updated = {
+      datasetId: '00000000-0000-4000-8000-000000000010', namespace: 'speech', name: 'raw', displayName: '更新後',
+      aliases: [], description: null, mediaType: null, owner: null, currentVersionId: null, versionCount: 1,
+      createdAt: '2026-08-31T00:00:00Z', kind: 'dataset', datasetKey: 'raw',
+      versions: [{ id: 'v1', locations: [hiddenLocation] }],
+    }
+    const { app } = appWith(
+      { updateDataset: vi.fn().mockResolvedValue(updated) },
+      { accessibleConnectionIds: ['public0001'] },
+    )
+    const res = await app.request('/lineage/curation/datasets/00000000-0000-4000-8000-000000000010', {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ displayName: '更新後' }),
+    })
+    expect(res.status).toBe(200)
+    const body = await res.json() as { versions: Array<{ locations: Array<{ madoConnectionId: string | null }> }> }
+    expect(JSON.stringify(body)).not.toContain('hidden0001')
+    expect(body.versions[0].locations[0].madoConnectionId).toBeNull()
   })
 })

@@ -272,6 +272,7 @@ if (env.DATASET_REGISTRY_URL && env.DATASET_REGISTRY_TOKEN && env.MARQUEZ_URL) {
       pool: pools.ro,
       audit,
       canAccessConnection: (c, connectionId) => canAccessConnection(pools.ro, c, connectionId),
+      visibleConnectionIds: c => visibleConnectionIds(pools.ro, c),
     })
   }
 } else {

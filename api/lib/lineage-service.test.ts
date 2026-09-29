@@ -204,4 +204,24 @@ describe('lineage service', () => {
       'mdx-s3', 's3://dataset/raw/part/a.tar', 20,
     )
   })
+
+  it('StorageSystem binding が無くても、Registry が返した見えない接続の ID は除く', async () => {
+    const reg = registry({
+      getVersion: vi.fn().mockResolvedValue({
+        id: 'v1', datasetId: 'd1', version: '1', contentHash: null,
+        manifestUri: null, manifestHash: null, schemaUri: null,
+        createdAt: '2026-08-26T00:00:00Z', metadata: {},
+        locations: [{
+          id: 'l1', uri: 's3://raw/a', storageKind: 's3', storageSystemKey: null,
+          region: null, bucket: 'raw', status: 'available', isPrimary: true,
+          observedAt: '2026-08-26T00:00:00Z', madoConnectionId: 'hidden0001',
+          metadata: { madoConnectionId: 'hidden0001' },
+        }],
+      }),
+    })
+    const service = createLineageService({ registry: reg, marquez: marquez() })
+    const location = (await service.version('v1', new Set(['public0001']))).locations[0]
+    expect(location.madoConnectionId).toBeNull()
+    expect(location.metadata).toEqual({})
+  })
 })

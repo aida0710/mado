@@ -11,6 +11,7 @@ import type {
 } from '../lib/registry-client.js'
 import { RegistryClientError } from '../lib/registry-client.js'
 import { markAuditChangeCommitted, writeDedicatedAudit } from '../lib/audit-activity.js'
+import { datasetWithoutHiddenConnections } from '../lib/lineage-connection-visibility.js'
 
 const Text = z.string().trim().min(1).max(1024)
 const OptionalText = z.string().trim().max(8192).optional()
@@ -144,6 +145,8 @@ export interface LineageCurationDeps {
   audit: AuditWriter
   /** 保存場所に使う接続を、利用者が使えるか。ホワイトリスト接続を body の ID で指定させないため。 */
   canAccessConnection: (c: Context, connectionId: string) => Promise<boolean>
+  /** 利用者に見える接続。null は全接続。更新の応答に見えない接続の ID を出さないために使う。 */
+  visibleConnectionIds: (c: Context) => Promise<ReadonlySet<string> | null>
 }
 
 const datasetMutationTails = new Map<string, Promise<void>>()
@@ -270,7 +273,8 @@ export function mountLineageCurationRoutes(app: Hono, deps: LineageCurationDeps)
             ? JSON.stringify(value) === JSON.stringify(existing)
             : value === existing
         })
-        if (unchanged) return c.json(current)
+        const visibleConnectionIds = await deps.visibleConnectionIds(c)
+        if (unchanged) return c.json(datasetWithoutHiddenConnections(current, visibleConnectionIds))
         const result = await deps.registry.updateDataset(datasetId, parsed.data)
         markAuditChangeCommitted(c)
         await writeDedicatedAudit(c, deps.audit, {
@@ -280,7 +284,7 @@ export function mountLineageCurationRoutes(app: Hono, deps: LineageCurationDeps)
           details: { changedFields: Object.keys(parsed.data) },
           ...requestMetadata(c),
         })
-        return c.json(result)
+        return c.json(datasetWithoutHiddenConnections(result, visibleConnectionIds))
       } catch (error) {
         return mutationError(c, error)
       }

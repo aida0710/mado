@@ -14,6 +14,7 @@ import type {
 import type { MarquezClient, MarquezGraphNode } from './marquez-client.js'
 import { MarquezClientError, marquezNodeId } from './marquez-client.js'
 import type { RegistryClient } from './registry-client.js'
+import { withoutHiddenConnection } from './lineage-connection-visibility.js'
 
 export interface LogicalGraphQuery {
   kind: 'dataset' | 'job'
@@ -297,27 +298,23 @@ export function createLineageService(deps: {
     return { storageSystemKey, uri: resolved.uri, matches: resolved.matches }
   }
 
+  /** 保存場所に Mado の接続 ID を付ける。binding が無ければ Registry の値のまま。見えない接続の ID は除く。 */
   const bindVersionLocations = async (
     version: DatasetVersionDetail,
     visibleConnectionIds: ReadonlySet<string> | null,
   ): Promise<DatasetVersionDetail> => {
-    if (!deps.bindings) return version
     const keys = [...new Set(version.locations
       .map(location => location.storageSystemKey)
       .filter((key): key is string => key !== null))]
-    if (keys.length === 0) return version
-    const bindings = await deps.bindings.resolve(keys)
-    const visibleConnectionOf = (storageSystemKey: string | null): string | null => {
-      const connectionId = storageSystemKey ? bindings.get(storageSystemKey) ?? null : null
-      if (connectionId === null) return null
-      return visibleConnectionIds === null || visibleConnectionIds.has(connectionId) ? connectionId : null
-    }
+    const bindings = deps.bindings && keys.length > 0 ? await deps.bindings.resolve(keys) : null
     return {
       ...version,
-      locations: version.locations.map(location => ({
+      locations: version.locations.map(location => withoutHiddenConnection({
         ...location,
-        madoConnectionId: visibleConnectionOf(location.storageSystemKey),
-      })),
+        madoConnectionId: bindings
+          ? (location.storageSystemKey ? bindings.get(location.storageSystemKey) ?? null : null)
+          : location.madoConnectionId,
+      }, visibleConnectionIds)),
     }
   }
 
