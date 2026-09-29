@@ -6,11 +6,10 @@ import { createPools, closePools } from './db.js'
 import { createCrypto } from './crypto.js'
 import { createStorageFactory } from './storage.js'
 import { requireSafeOrigin } from './lib/originCheck.js'
-import { requireCapability } from './lib/capabilityGuard.js'
+import { mountStorageCapabilityGuards } from './lib/storage-capability-routes.js'
 import {
   canAccessConnection, requireConnectionAccess, requireConnectionQueryAccess,
 } from './lib/connection-access.js'
-import type { Capability } from './storage.js'
 import { explainStorageError } from './lib/storageError.js'
 import { mountStorageListRoutes } from './routes/storage-list.js'
 import { createResponseCache } from './lib/storage-cache.js'
@@ -179,29 +178,9 @@ if (authEnabled) {
   api.use('/lineage/resolve-location', requireConnectionQueryAccess(pools.ro))
 }
 
-// 接続ごとの権限ガード。「どのエンドポイントがどの権限に属するか」をここ 1 箇所に
-// 集約する (ルートハンドラ側には権限の知識を持たせない)。
+// 接続ごとの権限ガード。対応表は lib/storage-capability-routes.ts の 1 箇所にある。
 // Hono は登録順に実行するので、必ずルートの mount より前に登録すること。
-const cap = (k: Capability) => requireCapability(k, storageFactory.getConnectionConfig)
-api.use('/storage/:connectionId/buckets',           cap('list'))
-api.use('/storage/:connectionId/list',              cap('list'))
-api.use('/storage/:connectionId/capacity',          cap('list'))
-api.use('/storage/:connectionId/capacity/*',        cap('list'))
-api.use('/storage/:connectionId/preview/text',      cap('preview'))
-api.use('/storage/:connectionId/preview/image',     cap('preview'))
-api.use('/storage/:connectionId/preview/audio',     cap('preview'))
-api.use('/storage/:connectionId/preview/video',     cap('preview'))
-api.use('/storage/:connectionId/preview/raw',       cap('download'))
-api.use('/storage/:connectionId/preview/tar',       cap('archive'))
-api.use('/storage/:connectionId/preview/tar-entry', cap('archive'))
-api.use('/storage/:connectionId/media/analyze',     cap('audioInfo'))
-api.use('/storage/:connectionId/media/spectrogram', cap('audioSpectrogram'))
-// README は同じパスで GET = 読み込み / PUT = 編集。メソッドごとに権限が違う。
-api.on('GET', '/storage/:connectionId/readme',      cap('readmeRead'))
-api.on('PUT', '/storage/:connectionId/readme',      cap('readmeWrite'))
-api.use('/storage/:connectionId/readme/history',    cap('readmeRead'))
-api.use('/storage/:connectionId/readme/history/:id', cap('readmeRead'))
-api.use('/storage/:connectionId/readmes/search',    cap('readmeRead'))
+mountStorageCapabilityGuards(api, storageFactory.getConnectionConfig)
 
 mountConnectionsRoutes(api, {
   pools,
@@ -240,7 +219,7 @@ mountStorageCapacityRoutes(api, {
   getConnectionConfig: storageFactory.getConnectionConfig,
   listBuckets: connectionId => listStorageBucketNames(storageFactory.getStorage, connectionId),
 })
-// 見積もりは S3 を叩かないので cap() のガードには載せない (上のコメント参照)。
+// 見積もりは S3 を叩かないので接続ごとの権限ガードには載せない (lib/storage-capability-routes.ts)。
 mountStorageEstimateRoutes(api, { pools, store: jobStore, pricing: pricingStore })
 mountPricingRoutes(api, { pools, store: jobStore, pricing: pricingStore })
 mountStorageFavoritesRoutes(api, { pools })
