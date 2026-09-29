@@ -51,6 +51,10 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
+// 401 → /api/auth/me の取り直し → ログイン画面の描画、と非同期が 3 段続くので、
+// 並列実行で CPU が混んでいても待てる時間を取る (ほかのテストと同じ 3 秒)。
+const SESSION_CHECK_TIMEOUT_MS = 3000
+
 describe('AuthGate — API の 401', () => {
   it('ログイン中に API が 401 を返し、session も切れていれば、理由を添えてログイン画面へ切り替える', async () => {
     let sessionAlive = true
@@ -65,7 +69,7 @@ describe('AuthGate — API の 401', () => {
     sessionAlive = false
     await act(async () => { await fetchOk('/api/internal/notes/home').catch(() => {}) })
 
-    expect(await screen.findByRole('heading', { name: 'ログイン' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'ログイン' }, { timeout: SESSION_CHECK_TIMEOUT_MS })).toBeInTheDocument()
     expect(screen.getByText('セッションが切れました。もう一度ログインしてください。')).toBeInTheDocument()
     expect(screen.queryByText('ログイン後の画面')).not.toBeInTheDocument()
   })
@@ -84,7 +88,7 @@ describe('AuthGate — API の 401', () => {
     sessionAlive = false
     await act(async () => { await fetchOk('/api/internal/notes/home').catch(() => {}) })
 
-    await screen.findByRole('heading', { name: 'ログイン' })
+    await screen.findByRole('heading', { name: 'ログイン' }, { timeout: SESSION_CHECK_TIMEOUT_MS })
     expect(localStorage.getItem(CACHED_LIST_KEY)).toBeNull()
   })
 
@@ -119,7 +123,7 @@ describe('AuthGate — API の 401', () => {
       await Promise.all([1, 2, 3].map(() => fetchOk('/api/internal/notes/home').catch(() => {})))
     })
 
-    await screen.findByRole('heading', { name: 'ログイン' })
+    await screen.findByRole('heading', { name: 'ログイン' }, { timeout: SESSION_CHECK_TIMEOUT_MS })
     expect(server.callsTo('/api/auth/me')).toBe(2) // 起動時の 1 回 + 401 の確認 1 回
   })
 
@@ -144,7 +148,7 @@ describe('AuthGate — API の 401', () => {
     })
     const user = userEvent.setup()
     renderGate()
-    await screen.findByRole('heading', { name: 'ログイン' })
+    await screen.findByRole('heading', { name: 'ログイン' }, { timeout: SESSION_CHECK_TIMEOUT_MS })
 
     await user.type(screen.getByLabelText('ユーザー名またはメールアドレス'), 'aida')
     await user.type(screen.getByLabelText('パスワード'), 'wrong-password')
@@ -170,7 +174,7 @@ describe('AuthGate — サインアウト', () => {
 
     await user.click(screen.getByRole('button', { name: 'サインアウト' }))
 
-    expect(await screen.findByRole('heading', { name: 'ログイン' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'ログイン' }, { timeout: SESSION_CHECK_TIMEOUT_MS })).toBeInTheDocument()
     expect(localStorage.getItem(CACHED_LIST_KEY)).toBeNull()
   })
 
@@ -223,7 +227,7 @@ describe('AuthGate — サインアウト', () => {
 
     await user.click(screen.getByRole('button', { name: 'サインアウト' }))
 
-    expect(await screen.findByRole('heading', { name: 'ログイン' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'ログイン' }, { timeout: SESSION_CHECK_TIMEOUT_MS })).toBeInTheDocument()
     expect(localStorage.getItem(CACHED_LIST_KEY)).toBeNull()
   })
 })
