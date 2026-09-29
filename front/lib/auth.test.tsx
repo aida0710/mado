@@ -197,7 +197,9 @@ describe('AuthGate — サインアウト', () => {
     expect(localStorage.getItem(CACHED_LIST_KEY)).not.toBeNull()
   })
 
-  it('サーバーに接続できずサインアウトできないときも、ログイン状態を保ち、失敗を伝える', async () => {
+  // 要求がサーバーに届いて session を失効させたあとで通信が切れた可能性もあるので、
+  // 「ログイン状態のまま」とは言い切らない。
+  it('サーバーに接続できないときは、サインアウトできたか確認できなかったと伝え、画面を残す', async () => {
     stubServer({
       '/api/auth/config': () => json(200, LOCAL_LOGIN_CONFIG),
       '/api/auth/me': () => json(200, { user: signedInUser }),
@@ -210,7 +212,7 @@ describe('AuthGate — サインアウト', () => {
     await user.click(screen.getByRole('button', { name: 'サインアウト' }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      'サインアウトできませんでした（サーバーに接続できません）。ログイン状態のままです。時間をおいてもう一度お試しください。',
+      'サーバーに接続できず、サインアウトできたか確認できませんでした。もう一度お試しください。',
     )
     expect(screen.getByText('ログイン後の画面')).toBeInTheDocument()
   })

@@ -9,8 +9,6 @@ interface AuthConfig {
   oidc: { enabled: boolean; id?: string; label?: string }
 }
 
-const LOGOUT_FAILED_FOLLOW_UP = 'ログイン状態のままです。時間をおいてもう一度お試しください。'
-
 /** 今の session の User。session が無い・切れていれば null。 */
 async function fetchCurrentUser(): Promise<AuthUser | null> {
   const response = await fetch('/api/auth/me', { headers: { Accept: 'application/json' } })
@@ -104,15 +102,19 @@ export function AuthGate({ children }: { children: ReactNode }) {
     try {
       response = await fetch('/api/auth/logout', { method: 'POST' })
     } catch {
-      throw new Error(`サインアウトできませんでした（サーバーに接続できません）。${LOGOUT_FAILED_FOLLOW_UP}`)
+      // 要求がサーバーに届いて session を失効させたあとで通信が切れた可能性もあるので、
+      // 「ログイン状態のまま」とは言い切らない。
+      throw new Error('サーバーに接続できず、サインアウトできたか確認できませんでした。もう一度お試しください。')
     }
     // /logout は sessionGuard の後ろにあるので、401 は session がもう無いことを表す。
     if (response.status === 401) {
       logoutLocally()
       return
     }
+    // /logout は session を失効させられれば、IdP の logout URL を作れなくても 200 を返す。
+    // したがってそれ以外の失敗は、session が残っていることを表す。
     if (!response.ok) {
-      throw new Error(`サインアウトできませんでした（HTTP ${response.status}）。${LOGOUT_FAILED_FOLLOW_UP}`)
+      throw new Error(`サインアウトできませんでした（HTTP ${response.status}）。ログイン状態のままです。時間をおいてもう一度お試しください。`)
     }
     const body = await response.json().catch(() => null) as { logoutUrl?: string | null } | null
     logoutLocally()
