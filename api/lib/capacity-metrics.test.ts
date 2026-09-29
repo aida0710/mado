@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { capacityMetricFamilies, createCapacityMetricsCollector } from './capacity-metrics.js'
-import type { ConnectionCapacityTracking, LatestBucketCapacity } from './capacity-store.js'
+import type { ConnectionCapacityTracking, LatestBucketCapacity, LatestPrefixCapacity } from './capacity-store.js'
 import type { MetricFamily } from './metrics-collector.js'
 
 const measured: LatestBucketCapacity = {
@@ -11,6 +11,10 @@ const measured: LatestBucketCapacity = {
 const unmeasured: LatestBucketCapacity = {
   connectionId: 'connection-a', bucket: 'new', consecutiveFailures: 1,
   totalBytes: null, objectCount: null, collectedAt: null,
+}
+const measuredPrefix: LatestPrefixCapacity = {
+  connectionId: 'connection-a', bucket: 'dataset', prefix: 'ja/',
+  totalBytes: '9007199254740993', objectCount: '312440',
 }
 const tracked: ConnectionCapacityTracking = {
   connectionId: 'connection-a', connectionName: 'mdx s3', trackingEnabled: true, intervalSeconds: 21600,
@@ -28,6 +32,7 @@ function family(families: MetricFamily[], name: string): MetricFamily {
 describe('capacityMetricFamilies', () => {
   const families = capacityMetricFamilies({
     buckets: [measured, unmeasured],
+    prefixes: [measuredPrefix],
     connections: [tracked, neverConfigured],
     now: new Date('2026-09-23T00:01:00Z'),
   })
@@ -40,6 +45,14 @@ describe('capacityMetricFamilies', () => {
       .toEqual([{ labels, value: '547259' }])
     expect(family(families, 'mado_storage_capacity_collection_age_seconds').samples)
       .toEqual([{ labels, value: 60 }])
+  })
+
+  it('直下のディレクトリ別の容量とobject数をprefixのlabel付きで出す', () => {
+    const labels = { connection_id: 'connection-a', bucket: 'dataset', prefix: 'ja/' }
+    expect(family(families, 'mado_storage_prefix_bytes').samples)
+      .toEqual([{ labels, value: '9007199254740993' }])
+    expect(family(families, 'mado_storage_prefix_objects').samples)
+      .toEqual([{ labels, value: '312440' }])
   })
 
   it('未計測bucketは失敗回数だけを出す', () => {
@@ -65,7 +78,7 @@ describe('capacityMetricFamilies', () => {
 
   it('snapshotの時刻が現在より後でも経過秒を負にしない', () => {
     const future = capacityMetricFamilies({
-      buckets: [measured], connections: [], now: new Date('2026-09-22T23:59:00Z'),
+      buckets: [measured], prefixes: [], connections: [], now: new Date('2026-09-22T23:59:00Z'),
     })
     expect(family(future, 'mado_storage_capacity_collection_age_seconds').samples[0].value).toBe(0)
   })
@@ -75,13 +88,16 @@ describe('createCapacityMetricsCollector', () => {
   it('storeから最新値とconnection設定を読んでfamilyを組み立てる', async () => {
     const store = {
       listLatestBucketCapacity: vi.fn().mockResolvedValue([measured]),
+      listLatestPrefixCapacity: vi.fn().mockResolvedValue([measuredPrefix]),
       listConnectionTracking: vi.fn().mockResolvedValue([tracked]),
     }
     const collector = createCapacityMetricsCollector(store)
     expect(collector.name).toBe('capacity')
     const families = await collector.collect()
     expect(family(families, 'mado_storage_bucket_bytes').samples).toHaveLength(1)
+    expect(family(families, 'mado_storage_prefix_bytes').samples).toHaveLength(1)
     expect(store.listLatestBucketCapacity).toHaveBeenCalledOnce()
+    expect(store.listLatestPrefixCapacity).toHaveBeenCalledOnce()
     expect(store.listConnectionTracking).toHaveBeenCalledOnce()
   })
 })

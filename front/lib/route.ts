@@ -13,6 +13,12 @@ export function encPath(s: string): string {
   return s.split('/').map(encodeURIComponent).join('/')
 }
 
+// 一覧画面の URL。prefix が空ならバケット直下。
+// 例: ('c1', 'b1', 'foo/bar baz/') → '/storage/c1/b1/foo/bar%20baz/'
+export function storageDirectoryHref(connectionId: string, bucket: string, prefix: string): string {
+  return `/storage/${encodeURIComponent(connectionId)}/${encodeURIComponent(bucket)}/${encPath(prefix)}`
+}
+
 export interface S3PathParts {
   bucket: string
   prefix: string

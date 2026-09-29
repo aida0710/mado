@@ -37,14 +37,17 @@ function mount(permissions: string[] | null = null, scanJobs: CapacityScanJob[] 
       {
         bucket: 'archive', lastSuccessAt: '2026-09-10T00:00:00Z', lastStatus: 'success', lastError: null,
         points: [point(1000, 10, '2026-09-09T00:00:00Z'), point(1500, 12, '2026-09-10T00:00:00Z')],
+        prefixes: [{ prefix: 'ja/', totalBytes: 1200, objectCount: 9, previous: { totalBytes: 800, objectCount: 7 } }],
       },
       {
         bucket: 'dataset', lastSuccessAt: '2026-09-10T00:00:00Z', lastStatus: 'success', lastError: null,
         points: [point(2500, 20, '2026-09-10T00:00:00Z')],
+        prefixes: [],
       },
       {
         bucket: 'unmeasured', lastSuccessAt: null, lastStatus: 'waiting', lastError: null,
         points: [],
+        prefixes: [],
       },
     ],
   })
@@ -80,6 +83,14 @@ describe('CapacityMetricsPage', () => {
     expect(screen.getByText('2 / 3 バケット')).toBeInTheDocument()
     expect(screen.queryByRole('combobox', { name: 'バケット' })).not.toBeInTheDocument()
     expect(screen.getAllByRole('heading', { level: 3 }).map(element => element.textContent)).toEqual(['dataset', 'archive', 'unmeasured'])
+  })
+
+  it('計測済みbucketのカードに直下のディレクトリ別の内訳を出す', async () => {
+    mount()
+    const breakdown = await screen.findByRole('region', { name: 'archiveの直下のディレクトリ別の容量' })
+    expect(breakdown).toHaveTextContent('ja/')
+    expect(breakdown).toHaveTextContent('+400 B (+50.0%)')
+    expect(screen.getByText(/直下のディレクトリ別の内訳はありません/)).toBeInTheDocument()
   })
 
   it('connection編集権限がある場合だけ全bucket強制計測を表示する', async () => {

@@ -9,7 +9,7 @@ export interface ScanEntry {
 export interface ScanResult {
   objectCount: number
   totalBytes: number
-  /** 直下のサブディレクトリ別の内訳。サイズ降順、最大 50 件。 */
+  /** 直下のサブディレクトリ別の内訳。サイズ降順、最大 SCAN_CHILDREN_LIMIT 件。 */
   children: Array<{ name: string; objectCount: number; totalBytes: number }>
   /** 拡張子別の内訳。サイズ降順、最大 10 件。 */
   extensions: Array<{ ext: string; objectCount: number; totalBytes: number }>
@@ -17,7 +17,8 @@ export interface ScanResult {
   partial: boolean
 }
 
-const CHILDREN_LIMIT = 50
+/** 直下のサブディレクトリ別の内訳に残す件数。容量メトリクスのディレクトリ別の値もこの件数まで。 */
+export const SCAN_CHILDREN_LIMIT = 50
 const EXTENSIONS_LIMIT = 10
 
 // 最後のドット以降を取ると .tar.gz が .gz になってしまうので、
@@ -85,7 +86,7 @@ export function createScanAccumulator(prefix: string) {
       return {
         objectCount,
         totalBytes,
-        children: topBySize(children, CHILDREN_LIMIT).map(([name, v]) => ({
+        children: topBySize(children, SCAN_CHILDREN_LIMIT).map(([name, v]) => ({
           name, objectCount: v.objectCount, totalBytes: v.totalBytes,
         })),
         extensions: topBySize(extensions, EXTENSIONS_LIMIT).map(([ext, v]) => ({

@@ -1,6 +1,5 @@
-import type { CapacityBucketHistory } from './api/types'
+import type { CapacityPoint } from './api/types'
 
-type Point = CapacityBucketHistory['points'][number]
 export type CapacityChartPoint = {
   collectedAt: number
   totalBytes: number | null
@@ -8,7 +7,7 @@ export type CapacityChartPoint = {
 }
 
 /** 長い欠測区間へnull点を入れ、グラフが未計測期間を補間しないようにする。 */
-export function capacityChartData(points: Point[], intervalSeconds: number): CapacityChartPoint[] {
+export function capacityChartData(points: CapacityPoint[], intervalSeconds: number): CapacityChartPoint[] {
   const rows: CapacityChartPoint[] = []
   for (let i = 0; i < points.length; i++) {
     const point = points[i]

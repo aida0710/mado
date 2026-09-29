@@ -9,6 +9,11 @@ import type { JobStore } from '../lib/jobs.js'
 import { enqueueCapacityScans } from '../lib/capacity-scheduler.js'
 
 const Days = z.coerce.number().int().refine(value => [7, 30, 90, 400].includes(value))
+const PrefixHistoryQuery = z.object({
+  bucket: z.string().min(1),
+  prefix: z.string().min(1),
+  days: Days.default(90),
+})
 
 export interface StorageCapacityDeps {
   store: CapacityStore
@@ -35,6 +40,14 @@ export function mountStorageCapacityRoutes(app: Hono, deps: StorageCapacityDeps)
       if (Number.isSafeInteger(n) && n > 0) capacityBytes = n
     }
     return c.json({ connectionId, days: parsedDays.data, capacityBytes, ...data })
+  })
+
+  // 内訳のディレクトリはbucketごとに数十件あるので、推移は画面で開いたものだけ個別に読む。
+  app.get('/storage/:connectionId/capacity/prefix', async c => {
+    const query = PrefixHistoryQuery.safeParse(c.req.query())
+    if (!query.success) return c.json({ error: 'bucket and prefix are required; days must be one of 7, 30, 90, 400' }, 400)
+    const points = await deps.store.prefixHistory({ connectionId: c.req.param('connectionId'), ...query.data })
+    return c.json({ points })
   })
 
   app.post('/storage/:connectionId/capacity/scan', async c => {

@@ -54,6 +54,19 @@ sample; failed scans leave the last successful values in place. Scraping does
 not initiate a scan. Enable capacity tracking for a connection or run a manual
 capacity scan in Mado to populate results.
 
+The same scan also counts each top-level directory of the bucket, so the
+largest 50 are exported as `mado_storage_prefix_bytes` and
+`mado_storage_prefix_objects` (labels `connection_id`, `bucket`, and `prefix`,
+for example `prefix="ja/"`). Files directly under the bucket root and
+directories outside the largest 50 are not exported; they are the difference
+from the bucket value:
+
+```promql
+mado_storage_bucket_bytes
+  - on (connection_id, bucket)
+    sum by (connection_id, bucket) (mado_storage_prefix_bytes)
+```
+
 Per connection, `mado_storage_connection_info{connection_id,connection_name}`
 is always 1 and maps the opaque ID to its name, and
 `mado_storage_capacity_tracking_enabled` and

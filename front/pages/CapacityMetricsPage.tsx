@@ -4,18 +4,14 @@ import { api } from '../lib/api/client'
 import type { CapacityBucketHistory, CapacityOverview, CapacityScanJob } from '../lib/api/types'
 import { useAuth } from '../lib/auth-context'
 import { useConnection } from '../lib/connectionContext'
+import { fmtCapacityBytes, fmtCapacityDelta } from '../lib/format'
+import { storageDirectoryHref } from '../lib/route'
 import { ConnectionSwitcher } from '../components/ConnectionSwitcher'
 import { ViewBreadcrumb } from '../components/ViewBreadcrumb'
+import { BucketPrefixCapacity } from '../components/storage/BucketPrefixCapacity'
 
-const BucketCapacityChart = lazy(() => import('../components/storage/BucketCapacityChart'))
+const CapacityHistoryChart = lazy(() => import('../components/storage/CapacityHistoryChart'))
 const DAYS = [7, 30, 90, 400] as const
-
-const formatBytes = (bytes: number): string => {
-  if (bytes === 0) return '0 B'
-  const units = ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB']
-  const unit = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1)
-  return `${(bytes / 1024 ** unit).toLocaleString('ja-JP', { maximumFractionDigits: 2 })} ${units[unit]}`
-}
 
 export default function CapacityMetricsPage({ connectionId }: { connectionId: string }) {
   const [params, setParams] = useSearchParams()
@@ -145,7 +141,7 @@ export default function CapacityMetricsPage({ connectionId }: { connectionId: st
 
       {overview && (
         <div className="mb-5 grid gap-px border border-rule bg-rule sm:grid-cols-3">
-          <Metric label="全バケットの容量" value={measuredCount ? formatBytes(totalBytes) : '—'} />
+          <Metric label="全バケットの容量" value={measuredCount ? fmtCapacityBytes(totalBytes) : '—'} />
           <Metric label="全バケットのオブジェクト数" value={measuredCount ? totalObjects.toLocaleString('ja-JP') : '—'} />
           <Metric label="集計範囲" value={`${measuredCount.toLocaleString('ja-JP')} / ${bucketCount.toLocaleString('ja-JP')} バケット`} />
         </div>
@@ -181,6 +177,7 @@ export default function CapacityMetricsPage({ connectionId }: { connectionId: st
               key={bucket.bucket}
               connectionId={connectionId}
               history={bucket}
+              days={days}
               intervalSeconds={overview.tracking.intervalSeconds}
               scanJob={activeByBucket.get(bucket.bucket)}
             />
@@ -229,17 +226,15 @@ function ScanActivity({ jobs, now }: { jobs: CapacityScanJob[]; now: number }) {
   )
 }
 
-function BucketMetrics({ connectionId, history, intervalSeconds, scanJob }: {
+function BucketMetrics({ connectionId, history, days, intervalSeconds, scanJob }: {
   connectionId: string
   history: CapacityBucketHistory
+  days: number
   intervalSeconds: number
   scanJob?: CapacityScanJob
 }) {
   const latest = history.points.at(-1)
   const previous = history.points.at(-2)
-  const delta = latest && previous ? latest.totalBytes - previous.totalBytes : null
-  const deltaRate = delta != null && previous && previous.totalBytes > 0
-    ? delta / previous.totalBytes * 100 : null
   return (
     <article className="border border-rule-strong bg-paper px-4 py-3">
       <div className="mb-2 flex items-center justify-between gap-3">
@@ -250,12 +245,12 @@ function BucketMetrics({ connectionId, history, intervalSeconds, scanJob }: {
               {scanJob.status === 'running' ? `走査中 · ${scanJob.objectCount.toLocaleString('ja-JP')}件` : '計測待ち'}
             </span>
           )}
-          <Link className="text-[11px] text-link hover:text-link-hover" to={`/storage/${encodeURIComponent(connectionId)}/${encodeURIComponent(history.bucket)}/`}>開く →</Link>
+          <Link className="text-[11px] text-link hover:text-link-hover" to={storageDirectoryHref(connectionId, history.bucket, '')}>開く →</Link>
         </div>
       </div>
       <div className="grid gap-px bg-rule sm:grid-cols-4">
-        <CompactMetric label="現在の容量" value={latest ? formatBytes(latest.totalBytes) : '—'} />
-        <CompactMetric label="前回から" value={delta == null ? '—' : `${delta >= 0 ? '+' : '−'}${formatBytes(Math.abs(delta))}${deltaRate == null ? '' : ` (${deltaRate >= 0 ? '+' : ''}${deltaRate.toFixed(1)}%)`}`} />
+        <CompactMetric label="現在の容量" value={latest ? fmtCapacityBytes(latest.totalBytes) : '—'} />
+        <CompactMetric label="前回から" value={latest && previous ? fmtCapacityDelta({ current: latest.totalBytes, previous: previous.totalBytes }) : '—'} />
         <CompactMetric label="オブジェクト数" value={latest ? latest.objectCount.toLocaleString('ja-JP') : '—'} />
         <CompactMetric label="最終取得" value={latest ? new Date(latest.collectedAt).toLocaleString('ja-JP') : '—'} />
       </div>
@@ -263,12 +258,23 @@ function BucketMetrics({ connectionId, history, intervalSeconds, scanJob }: {
       <div className="mt-2 border-t border-rule pt-1">
         {history.points.length >= 2 ? (
           <Suspense fallback={<div className="h-[120px] pt-4 text-[12px] text-ink-7">グラフを読み込み中…</div>}>
-            <BucketCapacityChart points={history.points} intervalSeconds={intervalSeconds} capacityBytes={null} label={history.bucket} />
+            <CapacityHistoryChart points={history.points} intervalSeconds={intervalSeconds} capacityBytes={null} label={history.bucket} />
           </Suspense>
         ) : (
           <div className="flex h-14 items-center justify-center text-[12px] text-ink-7">2回計測するとグラフを表示します</div>
         )}
       </div>
+      {latest && (
+        <BucketPrefixCapacity
+          connectionId={connectionId}
+          bucket={history.bucket}
+          bucketTotalBytes={latest.totalBytes}
+          bucketObjectCount={latest.objectCount}
+          prefixes={history.prefixes}
+          days={days}
+          intervalSeconds={intervalSeconds}
+        />
+      )}
     </article>
   )
 }

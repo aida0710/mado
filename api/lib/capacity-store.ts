@@ -20,12 +20,24 @@ export interface CapacityPoint {
   collectedAt: string
 }
 
+/** バケット直下のディレクトリ1つぶんの、期間内で最新のsnapshotでの容量。 */
+export interface CapacityPrefixSummary {
+  /** 末尾に `/` が付いたS3のprefix (例: `ja/`)。 */
+  prefix: string
+  totalBytes: number
+  objectCount: number
+  /** 1つ前のsnapshotでの値。前回は上位50件に入っていなかった、または内訳の無いsnapshotならnull。 */
+  previous: { totalBytes: number; objectCount: number } | null
+}
+
 export interface CapacityBucketHistory {
   bucket: string
   lastSuccessAt: string | null
   lastStatus: CapacityStatus | null
   lastError: string | null
   points: CapacityPoint[]
+  /** 期間内で最新のsnapshotのディレクトリ別の内訳。容量の降順。 */
+  prefixes: CapacityPrefixSummary[]
 }
 
 export interface CapacityScanJob {
@@ -52,6 +64,16 @@ export interface LatestBucketCapacity {
   collectedAt: Date | null
 }
 
+/** targetごとの最新snapshotに含まれる、バケット直下のディレクトリ別の値。 */
+export interface LatestPrefixCapacity {
+  connectionId: string
+  bucket: string
+  prefix: string
+  /** BIGINTを10進文字列のまま返す。 */
+  totalBytes: string
+  objectCount: string
+}
+
 export interface ConnectionCapacityTracking {
   connectionId: string
   connectionName: string
@@ -76,6 +98,15 @@ interface TargetRow {
   last_success_at: Date | null
   last_status: CapacityStatus | null
   last_error: string | null
+}
+
+interface PrefixRow {
+  bucket: string
+  /** true = 期間内で最新のsnapshot、false = その1つ前。 */
+  is_latest: boolean
+  prefix: string
+  total_bytes: string
+  object_count: string
 }
 
 interface ScanJobRow {
@@ -127,7 +158,9 @@ export interface CapacityStore {
     scan: CapacityScanActivity
   }>
   scanActivity(connectionId: string): Promise<CapacityScanActivity>
+  prefixHistory(input: { connectionId: string; bucket: string; prefix: string; days: number }): Promise<CapacityPoint[]>
   listLatestBucketCapacity(): Promise<LatestBucketCapacity[]>
+  listLatestPrefixCapacity(): Promise<LatestPrefixCapacity[]>
   listConnectionTracking(): Promise<ConnectionCapacityTracking[]>
   reserveDueConnections(limit: number): Promise<string[]>
   syncBuckets(connectionId: string, buckets: string[]): Promise<void>
@@ -139,7 +172,7 @@ export interface CapacityStore {
     jobId: number
     connectionId: string
     bucket: string
-    result: Pick<ScanResult, 'totalBytes' | 'objectCount'>
+    result: Pick<ScanResult, 'totalBytes' | 'objectCount' | 'children'>
   }): Promise<void>
   recordPartial(connectionId: string, bucket: string): Promise<void>
   recordError(connectionId: string, bucket: string, error: unknown): Promise<void>
@@ -164,6 +197,34 @@ function toScanActivity(rows: ScanJobRow[]): CapacityScanActivity {
   }
 }
 
+/** 最新とその1つ前のsnapshotの行から、bucketごとに容量降順の内訳を組み立てる。 */
+function toPrefixSummaries(rows: PrefixRow[]): Map<string, CapacityPrefixSummary[]> {
+  const bucketPrefixKey = (row: PrefixRow) => `${row.bucket}\0${row.prefix}`
+  const previous = new Map<string, { totalBytes: number; objectCount: number }>()
+  for (const row of rows) {
+    if (row.is_latest) continue
+    previous.set(bucketPrefixKey(row), {
+      totalBytes: safeNumber(row.total_bytes), objectCount: safeNumber(row.object_count),
+    })
+  }
+  const summaries = new Map<string, CapacityPrefixSummary[]>()
+  for (const row of rows) {
+    if (!row.is_latest) continue
+    const list = summaries.get(row.bucket) ?? []
+    list.push({
+      prefix: row.prefix,
+      totalBytes: safeNumber(row.total_bytes),
+      objectCount: safeNumber(row.object_count),
+      previous: previous.get(bucketPrefixKey(row)) ?? null,
+    })
+    summaries.set(row.bucket, list)
+  }
+  for (const list of summaries.values()) {
+    list.sort((a, b) => b.totalBytes - a.totalBytes || a.prefix.localeCompare(b.prefix))
+  }
+  return summaries
+}
+
 async function loadScanActivity(pools: Pools, connectionId: string): Promise<CapacityScanActivity> {
   const result = await pools.ro.query<ScanJobRow>(
     `SELECT id, payload->>'bucket' AS bucket, status, progress, created_at, started_at
@@ -182,7 +243,7 @@ export function createCapacityStore(pools: Pools): CapacityStore {
   return {
     async overview(connectionId, bucketNames, days) {
       const buckets = [...new Set(bucketNames)]
-      const [settingResult, targetResult, pointResult, scan] = await Promise.all([
+      const [settingResult, targetResult, pointResult, prefixResult, scan] = await Promise.all([
         pools.ro.query<SettingsRow>(
           `SELECT connection_id, enabled, interval_seconds, next_run_at, last_attempt_at,
                   last_status, last_error, consecutive_failures
@@ -197,9 +258,23 @@ export function createCapacityStore(pools: Pools): CapacityStore {
             WHERE connection_id = $1 AND bucket = ANY($2::text[])
               AND collected_at >= now() - ($3::text || ' days')::interval
             ORDER BY bucket, collected_at`, [connectionId, buckets, days]),
+        pools.ro.query<PrefixRow>(
+          `WITH ranked AS (
+             SELECT id, bucket,
+                    row_number() OVER (PARTITION BY bucket ORDER BY collected_at DESC, id DESC) AS snapshot_rank
+               FROM storage_capacity_snapshots
+              WHERE connection_id = $1 AND bucket = ANY($2::text[])
+                AND collected_at >= now() - ($3::text || ' days')::interval
+           )
+           SELECT ranked.bucket, ranked.snapshot_rank = 1 AS is_latest,
+                  prefix_snapshot.prefix, prefix_snapshot.total_bytes, prefix_snapshot.object_count
+             FROM ranked
+             JOIN storage_capacity_prefix_snapshots prefix_snapshot ON prefix_snapshot.snapshot_id = ranked.id
+            WHERE ranked.snapshot_rank <= 2`, [connectionId, buckets, days]),
         loadScanActivity(pools, connectionId),
       ])
       const targets = new Map(targetResult.rows.map(row => [row.bucket, row]))
+      const prefixes = toPrefixSummaries(prefixResult.rows)
       const points = new Map<string, CapacityPoint[]>()
       for (const row of pointResult.rows) {
         const list = points.get(row.bucket) ?? []
@@ -218,6 +293,7 @@ export function createCapacityStore(pools: Pools): CapacityStore {
             bucket, lastSuccessAt: iso(status?.last_success_at ?? null),
             lastStatus: status?.last_status ?? null, lastError: status?.last_error ?? null,
             points: points.get(bucket) ?? [],
+            prefixes: prefixes.get(bucket) ?? [],
           }
         }),
       }
@@ -225,6 +301,20 @@ export function createCapacityStore(pools: Pools): CapacityStore {
 
     async scanActivity(connectionId) {
       return loadScanActivity(pools, connectionId)
+    },
+
+    async prefixHistory({ connectionId, bucket, prefix, days }) {
+      const result = await pools.ro.query<{ total_bytes: string; object_count: string; collected_at: Date }>(
+        `SELECT prefix_snapshot.total_bytes, prefix_snapshot.object_count, snapshot.collected_at
+           FROM storage_capacity_snapshots snapshot
+           JOIN storage_capacity_prefix_snapshots prefix_snapshot ON prefix_snapshot.snapshot_id = snapshot.id
+          WHERE snapshot.connection_id = $1 AND snapshot.bucket = $2 AND prefix_snapshot.prefix = $3
+            AND snapshot.collected_at >= now() - ($4::text || ' days')::interval
+          ORDER BY snapshot.collected_at, snapshot.id`, [connectionId, bucket, prefix, days])
+      return result.rows.map(row => ({
+        totalBytes: safeNumber(row.total_bytes), objectCount: safeNumber(row.object_count),
+        collectedAt: row.collected_at.toISOString(),
+      }))
     },
 
     async listLatestBucketCapacity() {
@@ -255,6 +345,34 @@ export function createCapacityStore(pools: Pools): CapacityStore {
         totalBytes: row.total_bytes,
         objectCount: row.object_count,
         collectedAt: row.collected_at,
+      }))
+    },
+
+    async listLatestPrefixCapacity() {
+      const result = await pools.ro.query<{
+        connection_id: string
+        bucket: string
+        prefix: string
+        total_bytes: string
+        object_count: string
+      }>(
+        `SELECT target.connection_id, target.bucket,
+                prefix_snapshot.prefix, prefix_snapshot.total_bytes, prefix_snapshot.object_count
+           FROM storage_capacity_targets target
+           JOIN LATERAL (
+             SELECT id FROM storage_capacity_snapshots
+              WHERE connection_id = target.connection_id AND bucket = target.bucket
+              ORDER BY collected_at DESC, id DESC LIMIT 1
+           ) latest ON true
+           JOIN storage_capacity_prefix_snapshots prefix_snapshot ON prefix_snapshot.snapshot_id = latest.id
+          ORDER BY target.connection_id, target.bucket, prefix_snapshot.prefix`,
+      )
+      return result.rows.map(row => ({
+        connectionId: row.connection_id,
+        bucket: row.bucket,
+        prefix: row.prefix,
+        totalBytes: row.total_bytes,
+        objectCount: row.object_count,
       }))
     },
 
@@ -351,12 +469,26 @@ export function createCapacityStore(pools: Pools): CapacityStore {
       const client = await pools.rw.connect()
       try {
         await client.query('BEGIN')
-        await client.query(
+        const snapshot = await client.query<{ id: string }>(
           `INSERT INTO storage_capacity_snapshots
              (connection_id, bucket, total_bytes, object_count, job_id)
            VALUES ($1, $2, $3, $4, $5)
-           ON CONFLICT (job_id) WHERE job_id IS NOT NULL DO NOTHING`,
+           ON CONFLICT (job_id) WHERE job_id IS NOT NULL DO NOTHING
+           RETURNING id`,
           [connectionId, bucket, result.totalBytes, result.objectCount, jobId])
+        // 同じjobの再実行でsnapshotが既にあるときは、内訳も既に保存されている。
+        const snapshotId = snapshot.rows[0]?.id
+        if (snapshotId !== undefined && result.children.length > 0) {
+          await client.query(
+            `INSERT INTO storage_capacity_prefix_snapshots (snapshot_id, prefix, total_bytes, object_count)
+             SELECT $1, child.prefix, child.total_bytes, child.object_count
+               FROM unnest($2::text[], $3::bigint[], $4::bigint[])
+                 AS child(prefix, total_bytes, object_count)`,
+            [snapshotId,
+              result.children.map(child => child.name),
+              result.children.map(child => child.totalBytes),
+              result.children.map(child => child.objectCount)])
+        }
         await client.query(
           `INSERT INTO storage_capacity_targets
              (connection_id, bucket, enabled, interval_seconds, next_run_at, last_job_id,

@@ -38,8 +38,8 @@ describe('createCapacityStore', () => {
       },
       scan: { jobs: [] },
       buckets: [
-        { bucket: 'archive', lastSuccessAt: null, lastStatus: null, lastError: null, points: [] },
-        { bucket: 'data', lastSuccessAt: null, lastStatus: null, lastError: null, points: [] },
+        { bucket: 'archive', lastSuccessAt: null, lastStatus: null, lastError: null, points: [], prefixes: [] },
+        { bucket: 'data', lastSuccessAt: null, lastStatus: null, lastError: null, points: [], prefixes: [] },
       ],
     })
   })
@@ -64,11 +64,79 @@ describe('createCapacityStore', () => {
       `INSERT INTO jobs (kind, dedup_key, payload, status)
        VALUES ('capacity.test', 'one', '{}', 'done') RETURNING id`,
     )
-    await store.recordSuccess({ jobId: job.rows[0].id, connectionId: CONNECTION_ID, bucket: 'data', result: { totalBytes: 1234, objectCount: 7 } })
-    await store.recordSuccess({ jobId: job.rows[0].id, connectionId: CONNECTION_ID, bucket: 'data', result: { totalBytes: 9999, objectCount: 9 } })
+    await store.recordSuccess({
+      jobId: job.rows[0].id, connectionId: CONNECTION_ID, bucket: 'data',
+      result: { totalBytes: 1234, objectCount: 7, children: [{ name: 'ja/', totalBytes: 1000, objectCount: 5 }] },
+    })
+    await store.recordSuccess({
+      jobId: job.rows[0].id, connectionId: CONNECTION_ID, bucket: 'data',
+      result: { totalBytes: 9999, objectCount: 9, children: [{ name: 'ja/', totalBytes: 9000, objectCount: 8 }] },
+    })
     const result = await store.overview(CONNECTION_ID, ['data'], 30)
     expect(result.buckets[0].points).toHaveLength(1)
     expect(result.buckets[0].points[0]).toMatchObject({ totalBytes: 1234, objectCount: 7 })
+    expect(result.buckets[0].prefixes).toEqual([
+      { prefix: 'ja/', totalBytes: 1000, objectCount: 5, previous: null },
+    ])
+  })
+
+  it('直下のディレクトリ別の内訳を容量の降順で返し、前回のsnapshotの値を添える', async () => {
+    const jobs = await pools.rw.query<{ id: number }>(
+      `INSERT INTO jobs (kind, dedup_key, payload, status)
+       VALUES ('capacity.test', 'first', '{}', 'done'), ('capacity.test', 'second', '{}', 'done')
+       RETURNING id`,
+    )
+    await store.recordSuccess({
+      jobId: jobs.rows[0].id, connectionId: CONNECTION_ID, bucket: 'data',
+      result: { totalBytes: 300, objectCount: 3, children: [
+        { name: 'ja/', totalBytes: 200, objectCount: 2 },
+        { name: 'old/', totalBytes: 100, objectCount: 1 },
+      ] },
+    })
+    await pools.rw.query(
+      `UPDATE storage_capacity_snapshots SET collected_at = now() - interval '1 day' WHERE job_id = $1`,
+      [jobs.rows[0].id])
+    await store.recordSuccess({
+      jobId: jobs.rows[1].id, connectionId: CONNECTION_ID, bucket: 'data',
+      result: { totalBytes: 900, objectCount: 9, children: [
+        { name: 'en/', totalBytes: 400, objectCount: 4 },
+        { name: 'ja/', totalBytes: 500, objectCount: 5 },
+      ] },
+    })
+
+    const result = await store.overview(CONNECTION_ID, ['data'], 30)
+    expect(result.buckets[0].prefixes).toEqual([
+      { prefix: 'ja/', totalBytes: 500, objectCount: 5, previous: { totalBytes: 200, objectCount: 2 } },
+      { prefix: 'en/', totalBytes: 400, objectCount: 4, previous: null },
+    ])
+    expect(await store.prefixHistory({ connectionId: CONNECTION_ID, bucket: 'data', prefix: 'ja/', days: 30 }))
+      .toMatchObject([{ totalBytes: 200, objectCount: 2 }, { totalBytes: 500, objectCount: 5 }])
+    expect(await store.prefixHistory({ connectionId: CONNECTION_ID, bucket: 'data', prefix: 'old/', days: 30 }))
+      .toHaveLength(1)
+  })
+
+  it('snapshotを期間外として消すとディレクトリ別の内訳も消える', async () => {
+    const job = await pools.rw.query<{ id: number }>(
+      `INSERT INTO jobs (kind, dedup_key, payload, status)
+       VALUES ('capacity.test', 'prune', '{}', 'done') RETURNING id`,
+    )
+    await store.recordSuccess({
+      jobId: job.rows[0].id, connectionId: CONNECTION_ID, bucket: 'data',
+      result: { totalBytes: 10, objectCount: 1, children: [{ name: 'ja/', totalBytes: 10, objectCount: 1 }] },
+    })
+    await pools.rw.query(
+      `UPDATE storage_capacity_snapshots SET collected_at = now() - interval '500 days' WHERE job_id = $1`,
+      [job.rows[0].id])
+    await store.prune(400)
+    const remaining = await pools.ro.query(
+      `SELECT 1 FROM storage_capacity_prefix_snapshots prefix
+         JOIN storage_capacity_snapshots snapshot ON snapshot.id = prefix.snapshot_id
+        WHERE snapshot.job_id = $1`, [job.rows[0].id])
+    const orphaned = await pools.ro.query(
+      `SELECT 1 FROM storage_capacity_prefix_snapshots prefix
+        WHERE NOT EXISTS (SELECT 1 FROM storage_capacity_snapshots snapshot WHERE snapshot.id = prefix.snapshot_id)`)
+    expect(remaining.rowCount).toBe(0)
+    expect(orphaned.rowCount).toBe(0)
   })
 
   it('期限を迎えたconnectionを一度だけ予約する', async () => {
@@ -131,6 +199,28 @@ describe('createCapacityStore', () => {
         totalBytes: null, objectCount: null, collectedAt: null,
       },
     ])
+  })
+
+  it('metrics用にtargetごとの最新snapshotのディレクトリ別の値だけを返す', async () => {
+    await pools.rw.query(
+      `INSERT INTO storage_capacity_targets
+         (connection_id, bucket, enabled, interval_seconds, next_run_at, last_status)
+       VALUES ($1, 'data', true, 86400, now(), 'success')`, [CONNECTION_ID])
+    const snapshots = await pools.rw.query<{ id: string }>(
+      `INSERT INTO storage_capacity_snapshots (connection_id, bucket, total_bytes, object_count, collected_at)
+       VALUES ($1, 'data', 1, 1, '2026-09-20T00:00:00Z'),
+              ($1, 'data', 9007199254740993, 547259, '2026-09-23T00:00:00Z')
+       RETURNING id`, [CONNECTION_ID])
+    await pools.rw.query(
+      `INSERT INTO storage_capacity_prefix_snapshots (snapshot_id, prefix, total_bytes, object_count)
+       VALUES ($1, 'old/', 1, 1), ($2, 'ja/', 9007199254740993, 547259)`,
+      [snapshots.rows[0].id, snapshots.rows[1].id])
+
+    const rows = (await store.listLatestPrefixCapacity()).filter(row => row.connectionId === CONNECTION_ID)
+    expect(rows).toEqual([{
+      connectionId: CONNECTION_ID, bucket: 'data', prefix: 'ja/',
+      totalBytes: '9007199254740993', objectCount: '547259',
+    }])
   })
 
   it('metrics用にconnection名と定期計測の設定を返し、未設定なら無効・周期なしにする', async () => {

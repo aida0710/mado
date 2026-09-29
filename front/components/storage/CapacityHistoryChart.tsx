@@ -2,17 +2,12 @@ import {
   CartesianGrid, Line, LineChart, ReferenceLine, ResponsiveContainer,
   Tooltip, XAxis, YAxis,
 } from 'recharts'
-import type { CapacityBucketHistory } from '../../lib/api/types'
+import type { CapacityPoint } from '../../lib/api/types'
 import { capacityChartData, type CapacityChartPoint } from '../../lib/capacityChart'
+import { fmtCapacityBytes } from '../../lib/format'
 
-type Point = CapacityBucketHistory['points'][number]
-
-const formatBytes = (bytes: number): string => {
-  if (bytes === 0) return '0 B'
-  const units = ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB']
-  const unit = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1)
-  return `${(bytes / 1024 ** unit).toLocaleString('ja-JP', { maximumFractionDigits: 1 })} ${units[unit]}`
-}
+// 軸と tooltip は幅が狭いので、表や見出しより 1 桁少なく丸める。
+const CHART_FRACTION_DIGITS = 1
 
 function CapacityTooltip({ active, payload, label }: {
   active?: boolean
@@ -24,23 +19,24 @@ function CapacityTooltip({ active, payload, label }: {
   return (
     <div className="border border-rule-strong bg-paper px-3 py-2 text-[12px] shadow-sm">
       <p className="text-ink-7">{new Date(Number(label)).toLocaleString('ja-JP')}</p>
-      <p className="mt-1 font-semibold">{formatBytes(point.totalBytes)}</p>
+      <p className="mt-1 font-semibold">{fmtCapacityBytes(point.totalBytes, CHART_FRACTION_DIGITS)}</p>
       <p className="text-ink-7">{point.objectCount?.toLocaleString('ja-JP')} objects</p>
     </div>
   )
 }
 
-export default function BucketCapacityChart({ points, intervalSeconds, capacityBytes, label }: {
-  points: Point[]
+/** バケット、またはバケット直下のディレクトリの容量推移。label は読み上げと表の見出しに使う。 */
+export default function CapacityHistoryChart({ points, intervalSeconds, capacityBytes, label }: {
+  points: CapacityPoint[]
   intervalSeconds: number
   capacityBytes: number | null
-  label?: string
+  label: string
 }) {
   const data = capacityChartData(points, intervalSeconds)
   const latest = points.at(-1)?.totalBytes
   return (
     <div>
-      <div className="h-[120px] w-full" role="img" aria-label={`${label ?? 'バケット'}の容量推移グラフ`}>
+      <div className="h-[120px] w-full" role="img" aria-label={`${label}の容量推移グラフ`}>
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={data} margin={{ top: 8, right: 12, bottom: 2, left: 2 }} accessibilityLayer>
             <CartesianGrid stroke="var(--rule)" vertical={false} />
@@ -52,7 +48,7 @@ export default function BucketCapacityChart({ points, intervalSeconds, capacityB
               axisLine={{ stroke: 'var(--rule-strong)' }} tickLine={false}
             />
             <YAxis
-              tickFormatter={value => formatBytes(Number(value))}
+              tickFormatter={value => fmtCapacityBytes(Number(value), CHART_FRACTION_DIGITS)}
               width={70} tick={{ fontSize: 10, fill: 'var(--ink-7)' }}
               axisLine={false} tickLine={false}
             />
@@ -68,12 +64,12 @@ export default function BucketCapacityChart({ points, intervalSeconds, capacityB
         </ResponsiveContainer>
       </div>
       <table className="sr-only">
-        <caption>バケット容量の履歴</caption>
+        <caption>{label}の容量の履歴</caption>
         <thead><tr><th>取得日時</th><th>容量</th><th>オブジェクト数</th></tr></thead>
         <tbody>{points.map(point => (
           <tr key={point.collectedAt}>
             <td>{new Date(point.collectedAt).toLocaleString('ja-JP')}</td>
-            <td>{formatBytes(point.totalBytes)}</td>
+            <td>{fmtCapacityBytes(point.totalBytes, CHART_FRACTION_DIGITS)}</td>
             <td>{point.objectCount.toLocaleString('ja-JP')}</td>
           </tr>
         ))}</tbody>

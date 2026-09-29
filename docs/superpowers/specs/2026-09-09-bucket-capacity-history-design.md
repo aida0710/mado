@@ -9,6 +9,13 @@
 > `GET /api/mado/metrics/capacity`に置き、`metrics:read` scopeのService Account keyで認証する。
 > 専用portをDockerでpublishするとDNATでUFWを迂回し、bind先を現地で書き換えても次の同期で消えるため。
 > Service Account keyでMado自身のデータを読む入口は`/api/mado/`にまとめ、読み取り専用とする。
+>
+> **2026-09-29 改訂:** bucket root の完全走査が既に数えている「直下のディレクトリ別の内訳」
+> (サイズ上位50件) を、snapshot と同じ transaction で `storage_capacity_prefix_snapshots` に保存する。
+> S3 への request は増えない。容量画面の各 bucket card に内訳 (容量・割合・前回差分) を出し、
+> 行を開いたときだけ `GET /api/internal/storage/:connId/capacity/prefix` で推移を読む。
+> Prometheus には `mado_storage_prefix_bytes` / `mado_storage_prefix_objects` を足す。
+> 2 階層目以降や任意 prefix の追跡は引き続きスコープ外。
 
 ## 背景
 
@@ -54,7 +61,7 @@ Mado が保存した最新値を Prometheus 形式で公開し、Grafana から�
 ## スコープ外
 
 - object 本文の取得、tar 展開、音声時間や schema の解析
-- prefix / Dataset 単位の履歴。第 1 弾は bucket root のみ
+- 2 階層目以降・任意 prefix / Dataset 単位の履歴。bucket 直下のディレクトリ (上位50件) だけを保存する
 - リアルタイム容量。最短でも 6 時間間隔とする
 - 使用量の予測、異常検知、通知
 - provider 固有の CloudWatch、S3 Inventory、MinIO 管理 API
@@ -228,7 +235,20 @@ CREATE UNIQUE INDEX storage_capacity_snapshots_job
 
 CREATE INDEX storage_capacity_snapshots_history
   ON storage_capacity_snapshots(connection_id, bucket, collected_at DESC);
+
+-- bucket 直下のディレクトリ別の内訳。走査の children (サイズ上位50件) をそのまま保存する。
+CREATE TABLE storage_capacity_prefix_snapshots (
+  snapshot_id   BIGINT NOT NULL REFERENCES storage_capacity_snapshots(id) ON DELETE CASCADE,
+  prefix        TEXT   NOT NULL,   -- 末尾に / が付いた S3 prefix (例: ja/)
+  total_bytes   BIGINT NOT NULL CHECK (total_bytes >= 0),
+  object_count  BIGINT NOT NULL CHECK (object_count >= 0),
+  PRIMARY KEY (snapshot_id, prefix)
+);
 ```
+
+直下のファイルと上位50件に入らないディレクトリは保存しない。bucket の値との差として画面に出す。
+既存 snapshot は migration で、対応する走査 job の結果 (`jobs.result.children`) が残っていれば埋める。
+終了した job は 7 日で消えるので、それより古い snapshot には内訳が付かない。
 
 PostgreSQL driver は `BIGINT` を文字列で返すため、API 境界で `Number.isSafeInteger` を検証して
 number へ変換する。安全整数を超えた場合に丸めて表示せず、API を 422 として provider 固有の
@@ -459,6 +479,8 @@ scrape で走査は始めない。
 ```text
 mado_storage_bucket_bytes{connection_id="...",bucket="dataset"} 992000000000000
 mado_storage_bucket_objects{connection_id="...",bucket="dataset"} 547259
+mado_storage_prefix_bytes{connection_id="...",bucket="dataset",prefix="ja/"} 412000000000000
+mado_storage_prefix_objects{connection_id="...",bucket="dataset",prefix="ja/"} 312440
 mado_storage_capacity_collection_age_seconds{connection_id="...",bucket="dataset"} 412
 mado_storage_capacity_collection_failures{connection_id="...",bucket="dataset"} 0
 mado_storage_connection_info{connection_id="...",connection_name="mdx s3"} 1
@@ -478,7 +500,9 @@ mado_storage_capacity_tracking_interval_seconds{connection_id="..."} 21600
   領域名は画面・コードで既に使っている言葉 (容量メトリクス → `capacity`) にする
 - 値を読めなかった領域は 503 を返し、Prometheus の `up` で失敗を知らせる
 - Grafana は Prometheus の retention を使い、Mado DB の正本履歴とは独立した運用 cache とみなす
-- bucket 数が大きくなったら label cardinality と scrape payload を再評価する
+- bucket 数が大きくなったら label cardinality と scrape payload を再評価する。
+  prefix の series は bucket あたり最大50本
+- prefix は bucket 内の名前 (object key の先頭) を label に出す。object key 全体は出さない
 
 ## migration と rollout
 

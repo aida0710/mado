@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { capacityChartData } from '../../lib/capacityChart'
+import { capacityChartData } from './capacityChart'
 
 describe('capacityChartData', () => {
   it('計測間隔の2.5倍を超える欠測区間はnullで線を切る', () => {

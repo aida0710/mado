@@ -11,6 +11,24 @@ export function fmtSize(n: number): string {
   return `${(n / 1024 ** 5).toFixed(1)} PB`
 }
 
+// 容量メトリクスの値。fmtSize と違い 2 進接頭辞 (KiB) で、桁区切りを付ける。
+// 走査が数えた正確なバイト数を、グラフの軸と同じ単位で読めるようにするため。
+export function fmtCapacityBytes(bytes: number, maximumFractionDigits = 2): string {
+  if (bytes === 0) return '0 B'
+  const units = ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB']
+  const unit = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1)
+  return `${(bytes / 1024 ** unit).toLocaleString('ja-JP', { maximumFractionDigits })} ${units[unit]}`
+}
+
+// 前回の計測からの増減。「+1.5 GiB (+3.2%)」。前回が 0 バイトなら率は出さない。
+export function fmtCapacityDelta({ current, previous }: { current: number; previous: number }): string {
+  const delta = current - previous
+  const sign = delta >= 0 ? '+' : '−'
+  const rate = previous > 0 ? delta / previous * 100 : null
+  const rateText = rate == null ? '' : ` (${rate >= 0 ? '+' : ''}${rate.toFixed(1)}%)`
+  return `${sign}${fmtCapacityBytes(Math.abs(delta))}${rateText}`
+}
+
 // 見積もりの金額 (spec: 2026-08-22-transfer-estimate-design.md)。
 //
 // 桁を合わせるのが目的の数字なので、大きい額ほど小数を落とす。
