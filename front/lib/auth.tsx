@@ -9,6 +9,8 @@ interface AuthConfig {
   oidc: { enabled: boolean; id?: string; label?: string }
 }
 
+const LOGOUT_FAILED_FOLLOW_UP = 'ログイン状態のままです。時間をおいてもう一度お試しください。'
+
 /** 今の session の User。session が無い・切れていれば null。 */
 async function fetchCurrentUser(): Promise<AuthUser | null> {
   const response = await fetch('/api/auth/me', { headers: { Accept: 'application/json' } })
@@ -95,14 +97,27 @@ export function AuthGate({ children }: { children: ReactNode }) {
     return () => { current = false }
   }, [reload])
 
+  // サーバーが session を消せたときだけ画面をログアウト状態にする。失敗したら
+  // ログイン状態を保ったまま、利用者に見せる文言の Error で reject する。
   const logout = useCallback(async () => {
-    const response = await fetch('/api/auth/logout', { method: 'POST' })
-    const body = response.ok
-      ? await response.json() as { logoutUrl?: string | null }
-      : null
-    setUser(null)
+    let response: Response
+    try {
+      response = await fetch('/api/auth/logout', { method: 'POST' })
+    } catch {
+      throw new Error(`サインアウトできませんでした（サーバーに接続できません）。${LOGOUT_FAILED_FOLLOW_UP}`)
+    }
+    // /logout は sessionGuard の後ろにあるので、401 は session がもう無いことを表す。
+    if (response.status === 401) {
+      signOutLocally()
+      return
+    }
+    if (!response.ok) {
+      throw new Error(`サインアウトできませんでした（HTTP ${response.status}）。${LOGOUT_FAILED_FOLLOW_UP}`)
+    }
+    const body = await response.json().catch(() => null) as { logoutUrl?: string | null } | null
+    signOutLocally()
     if (body?.logoutUrl) window.location.assign(body.logoutUrl)
-  }, [])
+  }, [signOutLocally])
   const value = useMemo(() => ({ enabled: !disabled, user, logout, reload }), [disabled, user, logout, reload])
 
   if (loading) return <div className="auth-splash">mado.</div>

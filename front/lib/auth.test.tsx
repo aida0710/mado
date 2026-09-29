@@ -1,6 +1,7 @@
 import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { SignatureSettings } from '../components/SignatureSettings'
 import { fetchOk } from './api/http'
 import { AuthGate } from './auth'
 import type { AuthUser } from './auth-context'
@@ -36,6 +37,7 @@ function renderGate() {
   return render(
     <AuthGate>
       <p>ログイン後の画面</p>
+      <SignatureSettings />
     </AuthGate>,
   )
 }
@@ -152,5 +154,76 @@ describe('AuthGate — API の 401', () => {
     expect(server.callsTo('/api/auth/me')).toBe(1)
     // 起動時の未ログインは「切れた」のではないので、理由は出さない。
     expect(screen.queryByText('セッションが切れました。もう一度ログインしてください。')).not.toBeInTheDocument()
+  })
+})
+
+describe('AuthGate — サインアウト', () => {
+  it('サインアウトに成功すると、キャッシュを消してログイン画面へ切り替える', async () => {
+    stubServer({
+      '/api/auth/config': () => json(200, LOCAL_LOGIN_CONFIG),
+      '/api/auth/me': () => json(200, { user: signedInUser }),
+      '/api/auth/logout': () => json(200, { ok: true, logoutUrl: null }),
+    })
+    const user = userEvent.setup()
+    renderGate()
+    await screen.findByText('ログイン後の画面')
+
+    await user.click(screen.getByRole('button', { name: 'サインアウト' }))
+
+    expect(await screen.findByRole('heading', { name: 'ログイン' })).toBeInTheDocument()
+    expect(localStorage.getItem(CACHED_LIST_KEY)).toBeNull()
+  })
+
+  it('サインアウトがサーバーの失敗（500）で終わると、ログイン状態とキャッシュを保ち、失敗を伝える', async () => {
+    stubServer({
+      '/api/auth/config': () => json(200, LOCAL_LOGIN_CONFIG),
+      '/api/auth/me': () => json(200, { user: signedInUser }),
+      '/api/auth/logout': () => json(500, { error: 'internal error' }),
+    })
+    const user = userEvent.setup()
+    renderGate()
+    await screen.findByText('ログイン後の画面')
+
+    await user.click(screen.getByRole('button', { name: 'サインアウト' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'サインアウトできませんでした（HTTP 500）。ログイン状態のままです。時間をおいてもう一度お試しください。',
+    )
+    expect(screen.getByText('ログイン後の画面')).toBeInTheDocument()
+    expect(localStorage.getItem(CACHED_LIST_KEY)).not.toBeNull()
+  })
+
+  it('サーバーに接続できずサインアウトできないときも、ログイン状態を保ち、失敗を伝える', async () => {
+    stubServer({
+      '/api/auth/config': () => json(200, LOCAL_LOGIN_CONFIG),
+      '/api/auth/me': () => json(200, { user: signedInUser }),
+      '/api/auth/logout': () => { throw new TypeError('Failed to fetch') },
+    })
+    const user = userEvent.setup()
+    renderGate()
+    await screen.findByText('ログイン後の画面')
+
+    await user.click(screen.getByRole('button', { name: 'サインアウト' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'サインアウトできませんでした（サーバーに接続できません）。ログイン状態のままです。時間をおいてもう一度お試しください。',
+    )
+    expect(screen.getByText('ログイン後の画面')).toBeInTheDocument()
+  })
+
+  it('サインアウトの応答が 401（session がもう無い）なら、ログイン画面へ切り替える', async () => {
+    stubServer({
+      '/api/auth/config': () => json(200, LOCAL_LOGIN_CONFIG),
+      '/api/auth/me': () => json(200, { user: signedInUser }),
+      '/api/auth/logout': () => json(401, { error: 'unauthorized' }),
+    })
+    const user = userEvent.setup()
+    renderGate()
+    await screen.findByText('ログイン後の画面')
+
+    await user.click(screen.getByRole('button', { name: 'サインアウト' }))
+
+    expect(await screen.findByRole('heading', { name: 'ログイン' })).toBeInTheDocument()
+    expect(localStorage.getItem(CACHED_LIST_KEY)).toBeNull()
   })
 })
