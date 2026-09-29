@@ -1,4 +1,4 @@
-import { useEffect, useRef, type KeyboardEvent, type ReactNode } from 'react'
+import { useLayoutEffect, useRef, type KeyboardEvent, type ReactNode } from 'react'
 
 interface Props {
   /** 見出し要素の id。dialog の aria-labelledby に使う。 */
@@ -19,8 +19,9 @@ const keepKeyInOverlay = (event: KeyboardEvent) => event.stopPropagation()
 export function AuthOverlay({ titleId, children }: Props) {
   const dialogRef = useRef<HTMLDivElement>(null)
 
-  // 背後の画面は inert で focus を受け取れないので、focus をこちらへ移す。
-  useEffect(() => { dialogRef.current?.focus() }, [])
+  // 背後の画面は inert で focus を受け取れないので、focus をこちらへ移す。見えた時点で
+  // focus が中にあるよう、描画と同じタイミング（layout effect）で移す。
+  useLayoutEffect(() => { dialogRef.current?.focus() }, [])
 
   return (
     <div

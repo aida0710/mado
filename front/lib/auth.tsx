@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState, type ReactNode } from 'react'
 import { AuthOverlay } from '../components/AuthOverlay'
 import { AUTH_TITLE_ID, ChangePasswordPage, LoginPage } from '../pages/LoginPage'
 import { clearAllCaches } from './api/cache'
@@ -84,16 +84,19 @@ export function AuthGate({ children }: { children: ReactNode }) {
 
   // ログイン中だけ 401 を受け取る。認証が無効ならログイン画面が無いので受け取らない。
   // ログイン画面の表示中も受け取らない（パスワード誤りの 401 などで確認を繰り返さないため）。
+  // 画面が DOM に出た時点で受け取れるよう、layout effect で張る。通常の effect は DOM に
+  // 出たあと（子の画面の effect のあと）に走るので、その間に届いた 401 を取りこぼす。
   const signedIn = session.user !== null
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (disabled || !signedIn) return
     return subscribeUnauthorized(() => { void confirmSessionAfterUnauthorized() })
   }, [disabled, signedIn, confirmSessionAfterUnauthorized])
 
   // session が切れて画面を残している間は、このタブへ戻ってきたときに session を確かめ直す。
   // SSO は新しいタブでログインする（LoginPage の overlay）ので、済ませて戻るだけで画面に戻れる。
+  // ログイン画面が見えた時点で受け取れるよう、これも layout effect で張る。
   const keepingExpiredScreen = session.user === null && session.screenUser !== null
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!keepingExpiredScreen) return
     // /api/auth/me に届かないときは、ログイン画面を重ねたまま待つ。
     const recheck = () => { void reload().catch(() => {}) }

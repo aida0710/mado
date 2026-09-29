@@ -83,14 +83,36 @@ function noteRoute(hasSession: () => boolean, savedBodies: string[] = []): Route
   }
 }
 
-// 編集画面で本文を書き換え、session が切れた状態で保存を押す。ログイン画面が重なるまで待つ。
+// 要素が DOM に出た直後に戻る。findBy* は見つけたあと setTimeout(0) を待ってから戻り、
+// その間に React の effect が走り終わる。それでは「画面が見えた時点で 401 や focus の
+// 受け取りが済んでいるか」を確かめられないので、MutationObserver で待つ。
+function waitUntilInDocument(find: () => HTMLElement | null, description: string): Promise<HTMLElement> {
+  return new Promise((resolve, reject) => {
+    const observer = new MutationObserver(() => check())
+    const timer = setTimeout(() => {
+      observer.disconnect()
+      reject(new Error(`${description}が出ませんでした`))
+    }, SESSION_CHECK_TIMEOUT_MS)
+    function check() {
+      const element = find()
+      if (!element) return
+      clearTimeout(timer)
+      observer.disconnect()
+      resolve(element)
+    }
+    observer.observe(document.body, { childList: true, subtree: true })
+    check()
+  })
+}
+
+// 編集画面で本文を書き換え、session が切れた状態で保存を押す。ログイン画面が重なった直後に戻る。
 async function saveDraftAfterSessionExpired(user: UserEvent, expireSession: () => void) {
   const editor = await screen.findByLabelText(NOTE_BODY_LABEL)
   await user.clear(editor)
   await user.type(editor, DRAFT)
   expireSession()
   await user.click(screen.getByRole('button', { name: '保存' }))
-  return screen.findByRole('dialog', { name: 'ログイン' }, { timeout: SESSION_CHECK_TIMEOUT_MS })
+  return waitUntilInDocument(() => screen.queryByRole('dialog', { name: 'ログイン' }), 'ログイン画面')
 }
 
 async function logInLocally(user: UserEvent) {
@@ -125,6 +147,22 @@ describe('AuthGate — API の 401', () => {
     expect(await screen.findByRole('heading', { name: 'ログイン' }, { timeout: SESSION_CHECK_TIMEOUT_MS })).toBeInTheDocument()
     expect(screen.getByText('セッションが切れました。もう一度ログインしてください。')).toBeInTheDocument()
     expect(screen.getByText('ログイン後の画面').closest('[inert]')).not.toBeNull()
+  })
+
+  it('画面が出た直後に API が 401 を返しても取りこぼさず、ログイン画面を重ねる', async () => {
+    let sessionAlive = true
+    stubServer({
+      '/api/auth/config': () => json(200, LOCAL_LOGIN_CONFIG),
+      '/api/auth/me': () => sessionAlive ? json(200, { user: signedInUser }) : json(401, { error: 'unauthorized' }),
+      '/api/internal/notes/home': () => json(401, { error: 'unauthorized' }),
+    })
+    renderGate()
+    await waitUntilInDocument(() => screen.queryByText('ログイン後の画面'), 'ログイン後の画面')
+
+    sessionAlive = false
+    await act(async () => { await fetchOk('/api/internal/notes/home').catch(() => {}) })
+
+    expect(await screen.findByRole('dialog', { name: 'ログイン' }, { timeout: SESSION_CHECK_TIMEOUT_MS })).toBeInTheDocument()
   })
 
   it('401 でログイン画面へ切り替えるとき、前の User のキャッシュを消す', async () => {
