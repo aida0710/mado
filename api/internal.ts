@@ -215,6 +215,7 @@ mountJobRoutes(api, {
   canAccessConnection: authEnabled
     ? (c, connectionId) => canAccessConnection(pools.ro, c, connectionId)
     : undefined,
+  getConnectionConfig: storageFactory.getConnectionConfig,
 })
 mountStorageScanRoutes(api, { store: jobStore, getConnectionConfig: storageFactory.getConnectionConfig })
 mountStorageCapacityRoutes(api, {

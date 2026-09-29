@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import { describe, expect, it, vi } from 'vitest'
 import type { JobStore } from '../lib/jobs.js'
+import type { ConnectionConfig } from '../storage.js'
 import { mountJobRoutes } from './jobs.js'
 
 function job(id: number, connectionId = 'restricted1') {
@@ -22,7 +23,7 @@ function job(id: number, connectionId = 'restricted1') {
   }
 }
 
-function fixture(canAccess: boolean) {
+function fixture(canAccess: boolean, { listEnabled = true }: { listEnabled?: boolean } = {}) {
   const row = job(7)
   const store = {
     activeOrLatest: vi.fn().mockResolvedValue(row),
@@ -33,6 +34,7 @@ function fixture(canAccess: boolean) {
   mountJobRoutes(app, {
     store,
     canAccessConnection: vi.fn().mockResolvedValue(canAccess),
+    getConnectionConfig: vi.fn().mockResolvedValue({ capabilities: { list: listEnabled } } as ConnectionConfig),
   })
   return { app, store }
 }
@@ -55,5 +57,11 @@ describe('job routeの接続ホワイトリスト', () => {
     const res = await app.request('/jobs/7')
     expect(res.status).toBe(200)
     expect((await res.json() as { id: number }).id).toBe(7)
+  })
+
+  it('「一覧」を無効にした接続の走査結果は、サブディレクトリ名が入るので見せない', async () => {
+    const { app } = fixture(true, { listEnabled: false })
+    expect((await app.request('/jobs/latest?kind=storage.scan&dedupKey=key')).status).toBe(404)
+    expect((await app.request('/jobs/7')).status).toBe(404)
   })
 })
