@@ -5,11 +5,10 @@ import { Agent as HttpsAgent } from 'node:https'
 import type { Pools } from './db.js'
 import type { CryptoModule } from './crypto.js'
 
-// すべての S3Client で共有する keep-alive 付き agent。
-// AWS SDK v3 はバージョンによってデフォルトの keep-alive 挙動が違うため、
-// 明示的に設定して LAN MinIO / 一部の S3 互換実装の TLS ハンドシェイク往復を抑える。
-const httpAgent  = new HttpAgent({  keepAlive: true, maxSockets: 50 })
-const httpsAgent = new HttpsAgent({ keepAlive: true, maxSockets: 50 })
+// worker は api-internal の invalidate を受け取れないので、接続設定の変更
+// (scan_page_size、endpoint、認証情報など) を worker でも最長この時間で拾えるよう
+// キャッシュに期限を付ける。1 接続あたり 1 分に 1 回の主キー検索なので負荷は無視できる。
+export const CONNECTION_CACHE_TTL_MS = 60_000
 
 export type ListObjectsVersion = 'v1' | 'v2'
 
@@ -79,9 +78,10 @@ export interface StorageFactory {
   getStorage(connectionId: string): Promise<S3Client>
   /** 指定した connectionId の API 設定 (list_objects_version 等) を返す。 */
   getConnectionConfig(connectionId: string): Promise<ConnectionConfig>
-  /** connectionId のキャッシュを破棄する (UPDATE/DELETE 後に呼び出す)。 */
+  /** connectionId のキャッシュを破棄する (UPDATE/DELETE 後に呼び出す)。
+   *  実行中のリクエストは切らない。 */
   invalidate(connectionId: string): void
-  /** シャットダウン時にすべてのキャッシュ済みクライアントを破棄する。 */
+  /** シャットダウン時にキャッシュを捨て、keep-alive の socket を閉じる。 */
   close(): Promise<void>
 }
 
@@ -100,6 +100,7 @@ export class ConnectionNotFoundError extends Error {
 interface CachedEntry {
   client: S3Client
   config: ConnectionConfig
+  loadedAt: number
 }
 
 interface DbRow {
@@ -163,15 +164,41 @@ export const CONNECTION_SETTINGS_SUBQUERY = `
              WHERE s.connection_id = c.id), '{}'::jsonb) AS settings`
 
 export function createStorageFactory(deps: StorageFactoryDeps): StorageFactory {
+  // この factory が作る S3Client はすべて同じ keep-alive agent を使う。
+  // AWS SDK v3 はバージョンによってデフォルトの keep-alive 挙動が違うため、
+  // 明示的に設定して LAN MinIO / 一部の S3 互換実装の TLS ハンドシェイク往復を抑える。
+  // S3Client.destroy() はこの共有 agent ごと破棄し、ほかの接続の実行中リクエストまで
+  // 切ってしまうので、client は destroy せず、agent は close() でだけ閉じる。
+  const httpAgent  = new HttpAgent({  keepAlive: true, maxSockets: 50 })
+  const httpsAgent = new HttpsAgent({ keepAlive: true, maxSockets: 50 })
+
   // client と connection 設定 (list_objects_version 等) を 1 entry にまとめて
   // キャッシュする。getStorage と getConnectionConfig は同じ DB row から派生
   // する値を共有するので、別々にキャッシュすると 2 度引きや invalidate ズレが起きる。
   const cache = new Map<string, CachedEntry>()
+  // 同じ接続を同時に読み込むときは 1 つの読み込みを共有する。invalidate はここからも
+  // 消すので、invalidate より前に始まった読み込みの結果はキャッシュに戻らない。
+  const loading = new Map<string, Promise<CachedEntry>>()
 
-  async function load(connectionId: string): Promise<CachedEntry> {
+  function load(connectionId: string): Promise<CachedEntry> {
     const cached = cache.get(connectionId)
-    if (cached) return cached
+    if (cached && Date.now() - cached.loadedAt < CONNECTION_CACHE_TTL_MS) return Promise.resolve(cached)
+    const pending = loading.get(connectionId)
+    if (pending) return pending
 
+    const loaded: Promise<CachedEntry> = readEntry(connectionId)
+      .then(entry => {
+        if (loading.get(connectionId) === loaded) cache.set(connectionId, entry)
+        return entry
+      })
+      .finally(() => {
+        if (loading.get(connectionId) === loaded) loading.delete(connectionId)
+      })
+    loading.set(connectionId, loaded)
+    return loaded
+  }
+
+  async function readEntry(connectionId: string): Promise<CachedEntry> {
     const r = await deps.pools.ro.query<DbRow>(
       `SELECT c.endpoint, c.region, c.access_key_id_enc, c.secret_access_key_enc,
               c.force_path_style, c.list_objects_version,
@@ -209,8 +236,9 @@ export function createStorageFactory(deps: StorageFactoryDeps): StorageFactory {
         socketTimeout:    90_000,
       }),
     })
-    const entry: CachedEntry = {
+    return {
       client,
+      loadedAt: Date.now(),
       config: {
         listObjectsVersion: row.list_objects_version,
         capabilities: settingsToCapabilities(row.settings),
@@ -220,8 +248,6 @@ export function createStorageFactory(deps: StorageFactoryDeps): StorageFactory {
         listCacheTtlSec: settingsToListCacheTtlSec(row.settings),
       },
     }
-    cache.set(connectionId, entry)
-    return entry
   }
 
   async function getStorage(connectionId: string): Promise<S3Client> {
@@ -232,17 +258,17 @@ export function createStorageFactory(deps: StorageFactoryDeps): StorageFactory {
     return (await load(connectionId)).config
   }
 
+  // 捨てた client は GC に任せる。socket は共有 agent が持っているので漏れない。
   function invalidate(connectionId: string): void {
-    const entry = cache.get(connectionId)
-    if (entry) {
-      entry.client.destroy()
-      cache.delete(connectionId)
-    }
+    cache.delete(connectionId)
+    loading.delete(connectionId)
   }
 
   async function close(): Promise<void> {
-    for (const entry of cache.values()) entry.client.destroy()
     cache.clear()
+    loading.clear()
+    httpAgent.destroy()
+    httpsAgent.destroy()
   }
 
   return { getStorage, getConnectionConfig, invalidate, close }

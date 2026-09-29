@@ -1,7 +1,10 @@
-import { afterAll, beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { createServer, type Server, type ServerResponse } from 'node:http'
+import type { AddressInfo } from 'node:net'
+import { ListBucketsCommand } from '@aws-sdk/client-s3'
 import { createPools, closePools } from './db.js'
 import { createCrypto } from './crypto.js'
-import { createStorageFactory } from './storage.js'
+import { CONNECTION_CACHE_TTL_MS, createStorageFactory } from './storage.js'
 
 const RW = process.env.DATABASE_URL_RW_TEST
   ?? 'postgres://dashboard_rw:CHANGEME@localhost:5432/dashboard_test'
@@ -12,12 +15,12 @@ const crypto = createCrypto('a'.repeat(64))
 beforeEach(() => pools.rw.query('TRUNCATE storage_connections CASCADE'))
 afterAll(() => closePools(pools))
 
-async function insertConnection(id: string): Promise<void> {
+async function insertConnection(id: string, endpoint = 'https://s3.example.com/'): Promise<void> {
   await pools.rw.query(
     `INSERT INTO storage_connections
-       (id, name, endpoint, region, access_key_id_enc, secret_access_key_enc, access_key_id_masked)
-     VALUES ($1, $1, 'https://s3.example.com/', 'auto', $2, $3, 'AKIA…0000')`,
-    [id, crypto.encrypt('AKIAEXAMPLE12345'), crypto.encrypt('secret-value')],
+       (id, name, endpoint, region, access_key_id_enc, secret_access_key_enc, access_key_id_masked, force_path_style)
+     VALUES ($1, $1, $4, 'auto', $2, $3, 'AKIA…0000', true)`,
+    [id, crypto.encrypt('AKIAEXAMPLE12345'), crypto.encrypt('secret-value'), endpoint],
   )
 }
 
@@ -170,5 +173,97 @@ describe('接続ごとの走査可否とキャッシュ TTL', () => {
     } finally {
       await f.close()
     }
+  })
+})
+
+describe('S3Client のキャッシュ', () => {
+  afterEach(() => vi.useRealTimers())
+
+  it('同じ接続を同時に要求しても S3Client は 1 つだけ作る', async () => {
+    await insertConnection('conn000020')
+    const f = createStorageFactory({ pools, crypto })
+    try {
+      const [a, b] = await Promise.all([f.getStorage('conn000020'), f.getStorage('conn000020')])
+      expect(a).toBe(b)
+    } finally {
+      await f.close()
+    }
+  })
+
+  it('読み込み中に invalidate すると、その読み込みの結果はキャッシュに残らない', async () => {
+    await insertConnection('conn000021')
+    const f = createStorageFactory({ pools, crypto })
+    try {
+      const loadingBeforeInvalidate = f.getStorage('conn000021')
+      f.invalidate('conn000021')
+      const stale = await loadingBeforeInvalidate
+      expect(await f.getStorage('conn000021')).not.toBe(stale)
+    } finally {
+      await f.close()
+    }
+  })
+
+  it('期限を過ぎると接続設定を読み直す (invalidate を受け取れない worker でも変更を拾う)', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    await insertConnection('conn000022')
+    const f = createStorageFactory({ pools, crypto })
+    try {
+      expect((await f.getConnectionConfig('conn000022')).scanPageSize).toBe(1000)
+      await pools.rw.query(
+        `INSERT INTO connection_settings (connection_id, key, value) VALUES ('conn000022', 'scan_page_size', '100')`,
+      )
+      vi.advanceTimersByTime(CONNECTION_CACHE_TTL_MS - 1)
+      expect((await f.getConnectionConfig('conn000022')).scanPageSize).toBe(1000)
+      vi.advanceTimersByTime(1)
+      expect((await f.getConnectionConfig('conn000022')).scanPageSize).toBe(100)
+    } finally {
+      await f.close()
+    }
+  })
+
+  describe('別の接続を invalidate しても', () => {
+    const LIST_BUCKETS_XML =
+      '<?xml version="1.0" encoding="UTF-8"?><ListAllMyBucketsResult><Buckets></Buckets></ListAllMyBucketsResult>'
+    const replyListBuckets = (res: ServerResponse) => {
+      res.writeHead(200, { 'content-type': 'application/xml' })
+      res.end(LIST_BUCKETS_XML)
+    }
+    let fastServer: Server
+    let slowServer: Server
+    let heldResponse: Promise<ServerResponse>
+
+    beforeEach(async () => {
+      fastServer = createServer((_req, res) => replyListBuckets(res))
+      let holdResponse: (res: ServerResponse) => void = () => {}
+      heldResponse = new Promise(resolve => { holdResponse = resolve })
+      slowServer = createServer((_req, res) => holdResponse(res))
+      await Promise.all([fastServer, slowServer].map(server =>
+        new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))))
+    })
+    afterEach(async () => {
+      await Promise.all([fastServer, slowServer].map(server => {
+        server.closeAllConnections()
+        return new Promise<void>(resolve => server.close(() => resolve()))
+      }))
+    })
+
+    it('実行中の S3 リクエストは切れない', async () => {
+      const endpointOf = (server: Server) => `http://127.0.0.1:${(server.address() as AddressInfo).port}/`
+      await insertConnection('conn000023', endpointOf(slowServer))
+      await insertConnection('conn000024', endpointOf(fastServer))
+      const f = createStorageFactory({ pools, crypto })
+      try {
+        // invalidate する側の client にも一度通信させ、共有 agent を握らせておく。
+        await (await f.getStorage('conn000024')).send(new ListBucketsCommand({}))
+        const inFlight = (await f.getStorage('conn000023')).send(new ListBucketsCommand({}))
+        const response = await heldResponse
+
+        f.invalidate('conn000024')
+        replyListBuckets(response)
+        await expect(inFlight).resolves.toMatchObject({ Buckets: [] })
+      } finally {
+        await f.close()
+      }
+    })
   })
 })
