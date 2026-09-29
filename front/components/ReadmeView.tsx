@@ -8,7 +8,9 @@ import type { z } from 'zod'
 import { Readme } from '../lib/api/types'
 import { encPath } from '../lib/route'
 import { CacheBanner } from './storage/CacheBanner'
+import { LoadFailedNotice } from './LoadFailedNotice'
 import { useCapabilities } from '../lib/useCapabilities'
+import { failedLoad, type LoadState } from '../lib/useRetryableLoad'
 
 // 履歴ビューワは「ボタンを押した後にだけ」マウントされる。
 // React.lazy() で別チャンクに分け、初回ロード時の JS / CSS 量を絞る。
@@ -26,7 +28,9 @@ interface Props {
 
 export function ReadmeView({ connectionId, bucket, prefix }: Props) {
   const caps = useCapabilities(connectionId)
-  const [data, setData] = useState<ReadmeData | null>(null)
+  // 取得の失敗は「README なし」と分けて持つ。失敗を「なし」と見せると「作成」から
+  // 書き始めて、既存の README を保存で上書きしてしまうため。
+  const [readmeState, setReadmeState] = useState<LoadState<ReadmeData>>({ status: 'loading' })
   // 期限切れキャッシュを表示したまま裏で再取得中か (stale-while-revalidate)。
   const [revalidating, setRevalidating] = useState(false)
   // 遅い応答が prefix 切替をまたいで届いたときに別ディレクトリの README を
@@ -58,12 +62,12 @@ export function ReadmeView({ connectionId, bucket, prefix }: Props) {
         if (!current()) return
         setRevalidating(true)
         fresh
-          .then(r => { if (current()) { setData(r); setRevalidating(false) } })
+          .then(r => { if (current()) { setReadmeState({ status: 'loaded', value: r }); setRevalidating(false) } })
           .catch(() => { if (current()) setRevalidating(false) })
       },
     })
-      .then(r => { if (current()) setData(r) })
-      .catch(() => { if (current()) setData({ exists: false }) })
+      .then(r => { if (current()) setReadmeState({ status: 'loaded', value: r }) })
+      .catch((error: unknown) => { if (current()) setReadmeState(failedLoad(error)) })
   }, [connectionId, bucket, prefix, caps.readmeRead])
 
   const forceRefresh = useCallback(() => {
@@ -71,10 +75,17 @@ export function ReadmeView({ connectionId, bucket, prefix }: Props) {
     refresh()
   }, [connectionId, bucket, prefix, refresh])
 
+  // 取得に失敗したあとの再試行。初回の読み込みと同じく、届くまでは何も出さない。
+  const retryAfterFailure = useCallback(() => {
+    setReadmeState({ status: 'loading' })
+    refresh()
+  }, [refresh])
+
   useEffect(() => { refresh() }, [refresh])
 
   // 折りたたみ中に「内容が 15 行を超えているか」を判定。展開中は再測定しない
   // (overflow が消えてもボタンを出し続けるため)。ResizeObserver で画面幅変化にも追従。
+  const data = readmeState.status === 'loaded' ? readmeState.value : null
   const currentBody = data?.exists ? data.body : ''
   useLayoutEffect(() => {
     const el = bodyRef.current
@@ -91,7 +102,7 @@ export function ReadmeView({ connectionId, bucket, prefix }: Props) {
 
   // 読み込みが無効なら README セクションごと出さない。
   if (!caps.readmeRead) return null
-  if (!data) return null
+  if (readmeState.status === 'loading') return null
 
   // 編集ページへの URL — bucket は単一セグメントなので encodeURIComponent で十分。
   // prefix は `/` を含み得るので encPath で path segment ごとに encode。
@@ -106,7 +117,7 @@ export function ReadmeView({ connectionId, bucket, prefix }: Props) {
       <header className="flex flex-wrap items-baseline gap-x-4 gap-y-2 mb-3">
         <p className="kicker m-0">S3 README</p>
         <span className="ml-auto flex items-center gap-2">
-          {caps.readmeWrite && (
+          {caps.readmeWrite && data && (
             <Link className="ghost" to={editHref}>
               <span aria-hidden>✎</span>
               {data.exists ? '編集' : '作成'}
@@ -126,14 +137,16 @@ export function ReadmeView({ connectionId, bucket, prefix }: Props) {
             onRefresh={forceRefresh}
             compact
           />
-          {data.exists && data.last_editor && (
+          {data?.exists && data.last_editor && (
             <span className="text-[12px] text-ink-7">
               last by <span className="font-medium text-ink-11">{data.last_editor}</span>
             </span>
           )}
         </span>
       </header>
-      {data.exists ? (
+      {readmeState.status === 'failed' ? (
+        <LoadFailedNotice subject="README" reason={readmeState.reason} onRetry={retryAfterFailure} />
+      ) : data?.exists ? (
         <article className="article mt-1">
           <div
             ref={bodyRef}
@@ -170,7 +183,7 @@ export function ReadmeView({ connectionId, bucket, prefix }: Props) {
             connectionId={connectionId}
             bucket={bucket}
             prefix={prefix}
-            currentBody={data.exists ? data.body : null}
+            currentBody={data?.exists ? data.body : null}
             onClose={() => setHistoryOpen(false)}
           />
         </Suspense>

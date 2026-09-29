@@ -4,21 +4,19 @@
 //
 // 保存後は元の StorageBucket ページに戻る。
 
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import type { z } from 'zod'
 import { api } from '../lib/api/client'
 import { encPath } from '../lib/route'
-import type { Readme } from '../lib/api/types'
 import { useCapabilities } from '../lib/useCapabilities'
+import { useRetryableLoad } from '../lib/useRetryableLoad'
 import { EditorShell } from '../components/EditorShell'
 import { InsertableFileList, type InsertableEntry } from '../components/InsertableFileList'
+import { LoadFailedNotice } from '../components/LoadFailedNotice'
 import {
   MonacoMarkdownEditor,
   type MonacoMarkdownEditorHandle,
 } from '../components/MonacoMarkdownEditor'
-
-type ReadmeData = z.infer<typeof Readme>
 
 interface Props { connectionId: string }
 
@@ -32,17 +30,15 @@ export default function ReadmeEditPage({ connectionId }: Props) {
 
   const navigate = useNavigate()
   const caps = useCapabilities(connectionId)
-  const [data, setData] = useState<ReadmeData | null>(null)
   const editorRef = useRef<MonacoMarkdownEditorHandle>(null)
 
-  useEffect(() => {
-    if (!bucket || !caps.readmeWrite) return
-    let cancelled = false
-    api.readme({ connectionId, bucket, prefix })
-      .then(r => { if (!cancelled) setData(r) })
-      .catch(() => { if (!cancelled) setData({ exists: false }) })
-    return () => { cancelled = true }
-  }, [connectionId, bucket, prefix, caps.readmeWrite])
+  const loadLatestReadme = useCallback(() => {
+    // キャッシュ（最大 6 時間前）の本文から編集を始めると、その間にほかの人が保存した
+    // 更新を、保存で黙って上書きしてしまう。編集の元は必ずサーバーから取り直す。
+    api.invalidateReadme(connectionId, bucket, prefix)
+    return api.readme({ connectionId, bucket, prefix })
+  }, [connectionId, bucket, prefix])
+  const { state, retry } = useRetryableLoad(bucket && caps.readmeWrite ? loadLatestReadme : null)
 
   if (!bucket) {
     return <p className="text-[13px] text-ink-7">bucket がありません</p>
@@ -52,9 +48,17 @@ export default function ReadmeEditPage({ connectionId }: Props) {
   if (!caps.readmeWrite) {
     return <p className="text-[13px] text-ink-7">この接続では README の編集が無効になっています。</p>
   }
-  if (!data) {
+  if (state.status === 'loading') {
     return <p className="text-[13px] text-ink-7">読み込み中…</p>
   }
+  if (state.status === 'failed') {
+    return (
+      <LoadFailedNotice subject="README" reason={state.reason} onRetry={retry}>
+        既存の本文を上書きしないよう、読み込めるまで編集できません。
+      </LoadFailedNotice>
+    )
+  }
+  const data = state.value
 
   const handleInsert = (entry: InsertableEntry) => {
     // 表示テキスト: ディレクトリには末尾 / を付ける。

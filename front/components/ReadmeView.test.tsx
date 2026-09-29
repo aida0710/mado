@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ReadmeView } from './ReadmeView'
@@ -64,5 +65,31 @@ describe('ReadmeView - 折りたたみのフェード', () => {
     await screen.findByRole('heading', { name: 'long' })
     const body = container.querySelector('.markdown-body')!
     await waitFor(() => expect(body.className).toContain('is-faded'))
+  })
+})
+
+describe('ReadmeView - 取得の失敗', () => {
+  it('README を読み込めないと、「README なし」や作成の導線を出さず、理由と再試行を出す', async () => {
+    readmeMock.mockRejectedValue(new Error('upstream timeout'))
+    renderView()
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('READMEを読み込めませんでした（upstream timeout）')
+    expect(screen.getByRole('button', { name: '再試行' })).toBeInTheDocument()
+    expect(screen.queryByText('README なし')).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /作成|編集/ })).not.toBeInTheDocument()
+  })
+
+  it('再試行して読み込めれば、本文と編集の導線を出す', async () => {
+    readmeMock
+      .mockRejectedValueOnce(new Error('upstream timeout'))
+      .mockResolvedValueOnce({ exists: true, body: '# docs' })
+    const user = userEvent.setup()
+    renderView()
+
+    await user.click(await screen.findByRole('button', { name: '再試行' }))
+
+    expect(await screen.findByRole('heading', { name: 'docs' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /編集/ })).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 })

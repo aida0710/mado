@@ -1,18 +1,18 @@
-import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
+import { lazy, Suspense, useState } from 'react'
 import { Link } from 'react-router-dom'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeSanitize from 'rehype-sanitize'
-import type { z } from 'zod'
 import { api } from '../lib/api/client'
-import { Note } from '../lib/api/types'
+import { useRetryableLoad } from '../lib/useRetryableLoad'
+import { LoadFailedNotice } from '../components/LoadFailedNotice'
 
 // 履歴モーダルはボタンを押した後にだけ描画する。React.lazy() で別チャンクへ。
 const NoteHistoryModal = lazy(() =>
   import('../components/NoteHistoryModal').then(m => ({ default: m.NoteHistoryModal })),
 )
 
-type NoteData = z.infer<typeof Note>
+const loadHomeNote = () => api.note('home')
 
 function formatByline(iso: string): string {
   const d = new Date(iso)
@@ -27,24 +27,31 @@ function formatByline(iso: string): string {
 }
 
 export default function HomePage() {
-  const [data, setData] = useState<NoteData | null>(null)
+  const { state, retry } = useRetryableLoad(loadHomeNote)
   const [historyOpen, setHistoryOpen] = useState(false)
 
-  const refresh = useCallback(() => {
-    api.note('home').then(setData).catch(() => setData({ exists: false }))
-  }, [])
-
-  useEffect(() => { refresh() }, [refresh])
+  if (state.status === 'loading') return null
+  if (state.status === 'failed') {
+    // 読み込めないときは「まだ何も書かれていません」や作成の導線を出さない。
+    // 既存のノートがあるのに作成から書き始めると、保存で上書きしてしまうため。
+    return (
+      <div data-color-mode="light">
+        <header className="page-head">
+          <h2>Team note</h2>
+        </header>
+        <LoadFailedNotice subject="Team note" reason={state.reason} onRetry={retry} />
+      </div>
+    )
+  }
+  const data = state.value
 
   // 軽量な派生値 — useMemo の deps 比較コストの方が高くつくので
   // 素直にレンダ中に派生させる。byline は editor / when の 2 つの片を
   // .byline クラスの構造 (各 <span> に飾り罫 + 中点) に渡したいので
   // 単一文字列ではなくフィールドのまま保持する。
-  const bylineEditor = data?.exists ? (data.last_editor || null) : null
-  const bylineWhen   = data?.exists && data.last_edited_at ? formatByline(data.last_edited_at) : null
+  const bylineEditor = data.exists ? (data.last_editor || null) : null
+  const bylineWhen   = data.exists && data.last_edited_at ? formatByline(data.last_edited_at) : null
   const hasByline    = bylineEditor || bylineWhen
-
-  if (!data) return null
 
   const isPresent = data.exists && data.body.trim().length > 0
 
