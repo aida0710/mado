@@ -10,7 +10,7 @@ import { encPath } from '../lib/route'
 import { CacheBanner } from './storage/CacheBanner'
 import { LoadFailedNotice } from './LoadFailedNotice'
 import { useCapabilities } from '../lib/useCapabilities'
-import { failedLoad, type LoadState } from '../lib/useRetryableLoad'
+import { failedLoad, LOADING, type LoadState } from '../lib/loadState'
 
 // 履歴ビューワは「ボタンを押した後にだけ」マウントされる。
 // React.lazy() で別チャンクに分け、初回ロード時の JS / CSS 量を絞る。
@@ -30,7 +30,7 @@ export function ReadmeView({ connectionId, bucket, prefix }: Props) {
   const caps = useCapabilities(connectionId)
   // 取得の失敗は「README なし」と分けて持つ。失敗を「なし」と見せると「作成」から
   // 書き始めて、既存の README を保存で上書きしてしまうため。
-  const [readmeState, setReadmeState] = useState<LoadState<ReadmeData>>({ status: 'loading' })
+  const [readmeState, setReadmeState] = useState<LoadState<ReadmeData>>(LOADING)
   // 期限切れキャッシュを表示したまま裏で再取得中か (stale-while-revalidate)。
   const [revalidating, setRevalidating] = useState(false)
   // 遅い応答が prefix 切替をまたいで届いたときに別ディレクトリの README を
@@ -77,7 +77,7 @@ export function ReadmeView({ connectionId, bucket, prefix }: Props) {
 
   // 取得に失敗したあとの再試行。初回の読み込みと同じく、届くまでは何も出さない。
   const retryAfterFailure = useCallback(() => {
-    setReadmeState({ status: 'loading' })
+    setReadmeState(LOADING)
     refresh()
   }, [refresh])
 
