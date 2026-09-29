@@ -31,6 +31,38 @@ interface PersistedEntry<V> {
   expiresAt: number
 }
 
+// localStorage に永続化するキャッシュの persistKey は、すべてこの接頭辞で始める。
+// clearAllCaches が、今のビルドが読まなくなった旧形式のキー（mado.cache.list: や
+// mado.cache.tar:）も含めてまとめて消せるようにするため。
+const PERSISTED_CACHE_KEY_PREFIX = 'mado.cache.'
+
+// これまでに作ったキャッシュ。clearAllCaches がメモリ上の値も消せるように持っておく。
+// どれもモジュールの読み込み時に 1 つずつ作るだけなので、持ち続けても増えない。
+const createdCaches = new Set<{ clear(): void }>()
+
+/** localStorage から、キーが prefix で始まる値をすべて消す。失敗は無視する。 */
+export function removePersistedKeysStartingWith(prefix: string): void {
+  if (typeof localStorage === 'undefined') return
+  try {
+    const victims: string[] = []
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i)
+      if (key && key.startsWith(prefix)) victims.push(key)
+    }
+    for (const key of victims) localStorage.removeItem(key)
+  } catch { /* localStorage 不可 — silent */ }
+}
+
+/**
+ * すべてのキャッシュを、メモリと localStorage の両方から消す。
+ * サインアウトしたときと、session が切れてログイン画面へ戻すときに呼ぶ。
+ * 同じブラウザを次に使う人へ、前の User が見た一覧や README を残さないため。
+ */
+export function clearAllCaches(): void {
+  for (const cache of createdCaches) cache.clear()
+  removePersistedKeysStartingWith(PERSISTED_CACHE_KEY_PREFIX)
+}
+
 export interface TTLCacheOptions<V = unknown> {
   /**
    * 指定すると localStorage に値を書き出す。namespace 兼識別子で、
@@ -53,6 +85,7 @@ export class TTLCache<V> {
     this.ttlMs = ttlMs
     this.persistKey = opts.persistKey ?? null
     this.valueExpiresAt = opts.expiresAt ?? null
+    createdCaches.add(this)
   }
 
   /**
@@ -172,32 +205,12 @@ export class TTLCache<V> {
     for (const k of this.store.keys()) {
       if (k.startsWith(prefix)) this.store.delete(k)
     }
-    if (this.persistKey && typeof localStorage !== 'undefined') {
-      const storagePrefix = `${this.persistKey}:${prefix}`
-      try {
-        const victims: string[] = []
-        for (let i = 0; i < localStorage.length; i++) {
-          const k = localStorage.key(i)
-          if (k && k.startsWith(storagePrefix)) victims.push(k)
-        }
-        for (const k of victims) localStorage.removeItem(k)
-      } catch { /* localStorage 不可 — silent */ }
-    }
+    if (this.persistKey) removePersistedKeysStartingWith(`${this.persistKey}:${prefix}`)
   }
 
   clear(): void {
     this.store.clear()
-    if (this.persistKey && typeof localStorage !== 'undefined') {
-      const storagePrefix = `${this.persistKey}:`
-      try {
-        const victims: string[] = []
-        for (let i = 0; i < localStorage.length; i++) {
-          const k = localStorage.key(i)
-          if (k && k.startsWith(storagePrefix)) victims.push(k)
-        }
-        for (const k of victims) localStorage.removeItem(k)
-      } catch { /* silent */ }
-    }
+    if (this.persistKey) removePersistedKeysStartingWith(`${this.persistKey}:`)
   }
 
   // ─── localStorage 永続化 ──────────────────────────────────────────

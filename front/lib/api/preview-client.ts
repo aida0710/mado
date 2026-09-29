@@ -1,23 +1,14 @@
 import type { z } from 'zod'
 import { TarPreview } from './types'
-import { SHORT_CACHE_TTL_MS, TTLCache } from './cache'
+import { removePersistedKeysStartingWith, SHORT_CACHE_TTL_MS, TTLCache } from './cache'
 import { buildUrl, cacheKey, fetchOk, storagePath } from './http'
 
 const tarCache = new TTLCache<z.infer<typeof TarPreview>>(SHORT_CACHE_TTL_MS)
 
 // 以前 tar も localStorage に永続化していたので、その残骸を起動時に一度だけ
 // 掃除する。今のビルドはこのキーを読み書きしないため、放置しても害は無いが
-// 容量を食うので消しておく。失敗しても無害なので silent。
-if (typeof localStorage !== 'undefined') {
-  try {
-    const victims: string[] = []
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i)
-      if (key && key.startsWith('mado.cache.tar:')) victims.push(key)
-    }
-    for (const key of victims) localStorage.removeItem(key)
-  } catch { /* silent */ }
-}
+// 容量を食うので消しておく。
+removePersistedKeysStartingWith('mado.cache.tar:')
 
 export type TarEntry = z.infer<typeof TarPreview>['entries'][number]
 

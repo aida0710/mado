@@ -5,10 +5,12 @@ interface Props {
     localEnabled: boolean
     oidc: { enabled: boolean; label?: string }
   }
+  /** ログイン中に session が切れて、この画面へ戻されたか。 */
+  sessionExpired?: boolean
   onLoggedIn(): Promise<void>
 }
 
-export function LoginPage({ config, onLoggedIn }: Props) {
+export function LoginPage({ config, sessionExpired = false, onLoggedIn }: Props) {
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
@@ -41,6 +43,9 @@ export function LoginPage({ config, onLoggedIn }: Props) {
         <div className="auth-card__mark">mado<span>.</span></div>
         <p className="auth-card__eyebrow">DATA CATALOG</p>
         <h1 id="auth-title">ログイン</h1>
+        {sessionExpired && (
+          <p className="auth-card__lead" role="status">セッションが切れました。もう一度ログインしてください。</p>
+        )}
 
         {config.oidc.enabled && (
           <a className="auth-card__sso" href={oidcUrl}>{config.oidc.label ?? 'SSO'}で続行</a>

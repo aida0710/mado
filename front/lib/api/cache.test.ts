@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { TTLCache } from './cache'
+import { clearAllCaches, TTLCache } from './cache'
 
 describe('TTLCache', () => {
   beforeEach(() => { vi.useFakeTimers() })
@@ -327,5 +327,38 @@ describe('TTLCache', () => {
       cache.invalidate('k')
       expect(cache.getFetchedAt('k')).toBeNull()
     })
+  })
+})
+
+describe('clearAllCaches', () => {
+  beforeEach(() => { localStorage.clear() })
+
+  it('呼ぶと、すべてのキャッシュの値がメモリと localStorage の両方から消える', async () => {
+    const persisted = new TTLCache<number>(60_000, { persistKey: 'mado.cache.clear-test' })
+    const memoryOnly = new TTLCache<number>(60_000)
+    await persisted.get('k', async () => 1)
+    await memoryOnly.get('k', async () => 2)
+
+    clearAllCaches()
+
+    expect(localStorage.getItem('mado.cache.clear-test:k')).toBeNull()
+    const loader = vi.fn(async () => 3)
+    expect(await persisted.get('k', loader)).toBe(3)
+    expect(await memoryOnly.get('k', loader)).toBe(3)
+    expect(loader).toHaveBeenCalledTimes(2)
+  })
+
+  it('今のビルドが読まない旧形式のキャッシュも消し、キャッシュ以外の保存値は残す', () => {
+    localStorage.setItem('mado.cache.list:readme|c|b|p/', '{}')
+    localStorage.setItem('mado.cache.tar:c|b|a.tar', '{}')
+    localStorage.setItem('dashboard.lastEditor', 'tanaka')
+    localStorage.setItem('mado.ui.drawerWidth', '480')
+
+    clearAllCaches()
+
+    expect(localStorage.getItem('mado.cache.list:readme|c|b|p/')).toBeNull()
+    expect(localStorage.getItem('mado.cache.tar:c|b|a.tar')).toBeNull()
+    expect(localStorage.getItem('dashboard.lastEditor')).toBe('tanaka')
+    expect(localStorage.getItem('mado.ui.drawerWidth')).toBe('480')
   })
 })

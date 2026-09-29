@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { Navigate, NavLink, Route, Routes } from 'react-router-dom'
+import { fetchApi } from '../lib/api/http'
 import { useAuth } from '../lib/auth-context'
 
 interface UserRow {
@@ -135,7 +136,7 @@ function formatAuditValue(value: unknown): string {
 }
 
 async function jsonRequest<T>(url: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(url, init)
+  const response = await fetchApi(url, init)
   if (!response.ok) {
     const body = await response.json().catch(() => null) as { error?: string } | null
     throw new Error(body?.error ?? response.statusText)

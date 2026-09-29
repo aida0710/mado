@@ -1,4 +1,5 @@
 import type { z } from 'zod'
+import { notifyUnauthorized } from './unauthorized-events'
 
 export const API_BASE = '/api/internal'
 
@@ -27,9 +28,20 @@ export async function errorFromResponse(res: Response): Promise<Error> {
   return new Error(message)
 }
 
-/** fetch して、非 2xx ならサーバーのエラー文言で throw する。 */
-export async function fetchOk(url: string, init?: RequestInit): Promise<Response> {
+/**
+ * API を fetch する。401（session が無い・切れた）なら AuthGate へ知らせ、画面を
+ * ログイン画面へ戻せるようにする。ログイン・/api/auth/me・ログアウトは AuthGate と
+ * ログイン画面が自分で 401 を扱うので、ここを通さない。
+ */
+export async function fetchApi(url: string, init?: RequestInit): Promise<Response> {
   const res = await fetch(url, init)
+  if (res.status === 401) notifyUnauthorized()
+  return res
+}
+
+/** API を fetch して、非 2xx ならサーバーのエラー文言で throw する。 */
+export async function fetchOk(url: string, init?: RequestInit): Promise<Response> {
+  const res = await fetchApi(url, init)
   if (!res.ok) throw await errorFromResponse(res)
   return res
 }
