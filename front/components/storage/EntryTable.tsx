@@ -24,6 +24,9 @@ const fileRowClass =
 const dirRowClass =
   'transition-colors hover:bg-ink-0 focus-within:bg-ink-1'
 const hairline = { borderBottom: '1px solid var(--rule)' } as const
+// ヘッダ下の罫線。一覧の取得から時間が経つと、App.css の .entry-listing が
+// --entry-table-head-rule-color を経過時間の色にする。
+const entryTableHeadRule = '1px solid var(--entry-table-head-rule-color, var(--color-rule-strong))'
 
 interface DirectoryEntryProps extends EntryTagProps {
   directory: string
@@ -199,8 +202,8 @@ export function EntryTable({
   if (isCompact) {
     return (
       <ul
-        className="m-0 list-none p-0"
-        style={{ borderTop: '1px solid var(--color-rule-strong)' }}
+        className="entry-table m-0 list-none p-0"
+        style={{ borderTop: entryTableHeadRule }}
       >
         {dirs.map(d => (
           <DirectoryCard key={d} directory={d} tagIds={tagsByPath[d] ?? []} {...shared} />
@@ -212,10 +215,10 @@ export function EntryTable({
     )
   }
   return (
-    <div className="overflow-x-auto">
+    <div className="entry-table overflow-x-auto">
       <table className="w-full border-collapse text-[13px]">
         <thead>
-          <tr style={{ borderBottom: '1px solid var(--color-rule-strong)' }}>
+          <tr style={{ borderBottom: entryTableHeadRule }}>
             <th className={headThClass}>Name</th>
             <th className={`${headThClass} text-right`}>Size</th>
             <th className={`${headThClass} text-right`}>Modified</th>

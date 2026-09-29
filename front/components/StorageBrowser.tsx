@@ -368,7 +368,7 @@ export function StorageBrowser({ connectionId, bucket, prefix, onSelectFile }: P
           応答を破棄する。薄さは「更新中である」ことの合図として残す。 */}
       <div
         aria-busy={loading}
-        className={loading ? 'opacity-60 transition-opacity' : 'transition-opacity'}
+        className={`entry-listing ${loading ? 'opacity-60 transition-opacity' : 'transition-opacity'}`}
       >
         {tagsEnabled && (
           <TagFilterBar

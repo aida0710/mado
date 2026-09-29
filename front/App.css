@@ -35,10 +35,10 @@
   --color-rule:   rgba(10, 9, 4, 0.10);   /* hairline 罫線 */
   --color-rule-strong: rgba(10, 9, 4, 0.18);
 
-  /* ── 取得からの経過時間 (CacheBanner) ───────────────────────────── */
-  /* 緑 → 黄 → 橙 → 赤。24 時間以上は地色を塗る。淡い地色の上でも
-     文字のコントラスト比が 4.5 以上になる濃さにしている。           */
-  --color-cache-age-within-1h:  #16693a;
+  /* ── 取得からの経過時間 (CacheBanner と一覧) ───────────────────── */
+  /* 取得から 1 時間未満は色を付けない。そこから黄緑 → 黄 → 橙 → 赤で、
+     24 時間以上は地色を塗る。淡い地色の上でも文字のコントラスト比が
+     4.5 以上になる濃さにしている。                                   */
   --color-cache-age-within-3h:  #456a10;
   --color-cache-age-within-6h:  #7a5900;
   --color-cache-age-within-12h: #a3440b;
@@ -1129,15 +1129,20 @@ pre { font-size: 12px; }
 }
 
 /* 取得からの経過時間で色を変える (段階は front/lib/cacheAgeLevel.ts)。
-   相対時刻 ("6時間前") も併記しているので、色は一目で気づくための補助。 */
+   相対時刻 ("6時間前") も併記しているので、色は一目で気づくための補助。
+   取得から 1 時間未満は色を付けない (2026-09-29 利用者と決定)。
+   段階ごとの指定はここより後ろに同じ詳細度で書き、上書きで効かせる。 */
 .cache-banner__at[data-age] {
-  --cache-age-color: var(--ink-11);
   padding: 0 6px;
   border-radius: var(--radius-2);
   color: var(--cache-age-color);
   background: color-mix(in srgb, var(--cache-age-color) 12%, transparent);
 }
-.cache-banner__at[data-age="within-1h"]  { --cache-age-color: var(--color-cache-age-within-1h); }
+.cache-banner__at[data-age="within-1h"] {
+  padding: 0;
+  color: var(--ink-11);
+  background: none;
+}
 .cache-banner__at[data-age="within-3h"]  { --cache-age-color: var(--color-cache-age-within-3h); }
 .cache-banner__at[data-age="within-6h"]  { --cache-age-color: var(--color-cache-age-within-6h); }
 .cache-banner__at[data-age="within-12h"] { --cache-age-color: var(--color-cache-age-within-12h); }
@@ -1146,6 +1151,37 @@ pre { font-size: 12px; }
   --cache-age-color: var(--color-cache-age-over-24h);
   color: var(--paper);
   background: var(--cache-age-color);
+}
+
+/* 一覧 (StorageBrowser) では、表の上の CacheBanner の段階を :has で拾い、帯・
+   ファイル一覧の左端の縦線・一覧の地を同じ色にする。表の上の時刻は下へ
+   スクロールすると見えなくなるが、縦線と地の色はどの行を見ていても目に入る。 */
+.entry-listing:has(> .cache-banner .cache-banner__at[data-age="within-3h"])  { --listing-age-color: var(--color-cache-age-within-3h); }
+.entry-listing:has(> .cache-banner .cache-banner__at[data-age="within-6h"])  { --listing-age-color: var(--color-cache-age-within-6h); }
+.entry-listing:has(> .cache-banner .cache-banner__at[data-age="within-12h"]) { --listing-age-color: var(--color-cache-age-within-12h); }
+.entry-listing:has(> .cache-banner .cache-banner__at[data-age="within-24h"]) { --listing-age-color: var(--color-cache-age-within-24h); }
+.entry-listing:has(> .cache-banner .cache-banner__at[data-age="over-24h"])   { --listing-age-color: var(--color-cache-age-over-24h); }
+
+.entry-listing:has(> .cache-banner .cache-banner__at[data-age]:not([data-age="within-1h"])) {
+  --entry-table-head-rule-color: var(--listing-age-color);
+}
+.entry-listing:has(> .cache-banner .cache-banner__at[data-age]:not([data-age="within-1h"])) > .cache-banner {
+  border-left: 4px solid var(--listing-age-color);
+  background: color-mix(in srgb, var(--listing-age-color) 10%, var(--paper));
+}
+.entry-listing:has(> .cache-banner .cache-banner__at[data-age]:not([data-age="within-1h"])) > .cache-banner .cache-banner__body {
+  padding-left: var(--space-3);
+  color: var(--listing-age-color);
+}
+/* 帯そのものが地色を持つので、時刻の地色は重ねない。24 時間以上だけは塗りを残す。 */
+.entry-listing:has(> .cache-banner .cache-banner__at[data-age]:not([data-age="within-1h"])) > .cache-banner
+  .cache-banner__at[data-age]:not([data-age="over-24h"]) {
+  padding: 0;
+  background: none;
+}
+.entry-listing:has(> .cache-banner .cache-banner__at[data-age]:not([data-age="within-1h"])) > .entry-table {
+  border-left: 4px solid var(--listing-age-color);
+  background: color-mix(in srgb, var(--listing-age-color) 5%, var(--paper));
 }
 
 /* 右端に寄せる状態表示。狭い画面では折り返して左揃えに戻す。 */
