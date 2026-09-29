@@ -447,7 +447,7 @@ describe('AuthGate — サインアウト', () => {
 
   it('Mado からはサインアウトできたが SSO 側のサインアウトができなかったときは、ログイン画面でそれを伝える', async () => {
     stubServer({
-      '/api/auth/config': () => json(200, LOCAL_LOGIN_CONFIG),
+      '/api/auth/config': () => json(200, SSO_ONLY_CONFIG),
       '/api/auth/me': () => json(200, { user: signedInUser }),
       '/api/auth/logout': () => json(200, { ok: true, logoutUrl: null, idpLogoutUnavailable: true }),
     })
@@ -458,7 +458,9 @@ describe('AuthGate — サインアウト', () => {
     await user.click(screen.getByRole('button', { name: 'サインアウト' }))
 
     expect(await screen.findByRole('heading', { name: 'ログイン' }, { timeout: SESSION_CHECK_TIMEOUT_MS })).toBeInTheDocument()
-    expect(screen.getByText(/SSO側のサインアウトはできていません/)).toBeInTheDocument()
+    expect(screen.getByText(
+      'Madoからはサインアウトしました。Authentik側のサインアウトはできていません。共用のパソコンでは、ブラウザを閉じてください。',
+    )).toBeInTheDocument()
   })
 
   it('サインアウトがサーバーの失敗（500）で終わると、ログイン状態とキャッシュを保ち、失敗を伝える', async () => {

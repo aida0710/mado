@@ -63,8 +63,7 @@ export function LoginPage({
             {sessionExpired && <p role="status">セッションが切れました。もう一度ログインしてください。</p>}
             {idpLogoutIncomplete && (
               <p role="status">
-                Madoからはサインアウトしました。SSO側のサインアウトはできていません。
-                共用のパソコンでは、ブラウザを閉じてください。
+                {`Madoからはサインアウトしました。${config.oidc.label ?? 'SSO'}側のサインアウトはできていません。共用のパソコンでは、ブラウザを閉じてください。`}
               </p>
             )}
             {overlay && <p>同じアカウントでログインすると、開いていた画面に戻ります。</p>}
