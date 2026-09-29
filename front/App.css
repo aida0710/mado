@@ -36,14 +36,20 @@
   --color-rule-strong: rgba(10, 9, 4, 0.18);
 
   /* ── 取得からの経過時間 (CacheBanner と一覧) ───────────────────── */
-  /* 取得から 1 時間未満は色を付けない。そこから黄緑 → 黄 → 橙 → 赤で、
-     24 時間以上は地色を塗る。淡い地色の上でも文字のコントラスト比が
-     4.5 以上になる濃さにしている。                                   */
-  --color-cache-age-within-3h:  #456a10;
-  --color-cache-age-within-6h:  #7a5900;
-  --color-cache-age-within-12h: #a3440b;
-  --color-cache-age-within-24h: #b3261e;
-  --color-cache-age-over-24h:   #8a1c1c;
+  /* 取得から 1 時間未満は色を付けない。そこから緑 → 黄 → 橙 → 赤 → 暗い赤。
+     落ち着いた色だと淡く敷いたときに段階の区別が付かなかったので、線と地には
+     彩度の高い色 (無印) を、文字には同じ系統の濃い色 (-text) を使う。
+     淡い地の上でも文字のコントラスト比が 5.5 以上になる組み合わせにしている。 */
+  --color-cache-age-within-3h:       #22c55e;
+  --color-cache-age-within-3h-text:  #166534;
+  --color-cache-age-within-6h:       #eab308;
+  --color-cache-age-within-6h-text:  #854d0e;
+  --color-cache-age-within-12h:      #f97316;
+  --color-cache-age-within-12h-text: #9a3412;
+  --color-cache-age-within-24h:      #ef4444;
+  --color-cache-age-within-24h-text: #991b1b;
+  --color-cache-age-over-24h:        #b91c1c;
+  --color-cache-age-over-24h-text:   #7f1d1d;
 
   /* ── Radii — editorial では極小に (印刷物の角の鋭さを尊重)  ───── */
   --radius-1: 2px;
@@ -1135,43 +1141,71 @@ pre { font-size: 12px; }
 .cache-banner__at[data-age] {
   padding: 0 6px;
   border-radius: var(--radius-2);
-  color: var(--cache-age-color);
-  background: color-mix(in srgb, var(--cache-age-color) 12%, transparent);
+  color: var(--cache-age-text);
+  background: color-mix(in srgb, var(--cache-age-accent) 18%, transparent);
 }
 .cache-banner__at[data-age="within-1h"] {
   padding: 0;
   color: var(--ink-11);
   background: none;
 }
-.cache-banner__at[data-age="within-3h"]  { --cache-age-color: var(--color-cache-age-within-3h); }
-.cache-banner__at[data-age="within-6h"]  { --cache-age-color: var(--color-cache-age-within-6h); }
-.cache-banner__at[data-age="within-12h"] { --cache-age-color: var(--color-cache-age-within-12h); }
-.cache-banner__at[data-age="within-24h"] { --cache-age-color: var(--color-cache-age-within-24h); }
+.cache-banner__at[data-age="within-3h"] {
+  --cache-age-accent: var(--color-cache-age-within-3h);
+  --cache-age-text: var(--color-cache-age-within-3h-text);
+}
+.cache-banner__at[data-age="within-6h"] {
+  --cache-age-accent: var(--color-cache-age-within-6h);
+  --cache-age-text: var(--color-cache-age-within-6h-text);
+}
+.cache-banner__at[data-age="within-12h"] {
+  --cache-age-accent: var(--color-cache-age-within-12h);
+  --cache-age-text: var(--color-cache-age-within-12h-text);
+}
+.cache-banner__at[data-age="within-24h"] {
+  --cache-age-accent: var(--color-cache-age-within-24h);
+  --cache-age-text: var(--color-cache-age-within-24h-text);
+}
 .cache-banner__at[data-age="over-24h"] {
-  --cache-age-color: var(--color-cache-age-over-24h);
   color: var(--paper);
-  background: var(--cache-age-color);
+  background: var(--color-cache-age-over-24h-text);
 }
 
 /* 一覧 (StorageBrowser) では、表の上の CacheBanner の段階を :has で拾い、帯・
    ファイル一覧の左端の縦線・一覧の地を同じ色にする。表の上の時刻は下へ
    スクロールすると見えなくなるが、縦線と地の色はどの行を見ていても目に入る。 */
-.entry-listing:has(> .cache-banner .cache-banner__at[data-age="within-3h"])  { --listing-age-color: var(--color-cache-age-within-3h); }
-.entry-listing:has(> .cache-banner .cache-banner__at[data-age="within-6h"])  { --listing-age-color: var(--color-cache-age-within-6h); }
-.entry-listing:has(> .cache-banner .cache-banner__at[data-age="within-12h"]) { --listing-age-color: var(--color-cache-age-within-12h); }
-.entry-listing:has(> .cache-banner .cache-banner__at[data-age="within-24h"]) { --listing-age-color: var(--color-cache-age-within-24h); }
-.entry-listing:has(> .cache-banner .cache-banner__at[data-age="over-24h"])   { --listing-age-color: var(--color-cache-age-over-24h); }
+.entry-listing:has(> .cache-banner .cache-banner__at[data-age="within-3h"]) {
+  --listing-age-accent: var(--color-cache-age-within-3h);
+  --listing-age-text: var(--color-cache-age-within-3h-text);
+}
+.entry-listing:has(> .cache-banner .cache-banner__at[data-age="within-6h"]) {
+  --listing-age-accent: var(--color-cache-age-within-6h);
+  --listing-age-text: var(--color-cache-age-within-6h-text);
+}
+.entry-listing:has(> .cache-banner .cache-banner__at[data-age="within-12h"]) {
+  --listing-age-accent: var(--color-cache-age-within-12h);
+  --listing-age-text: var(--color-cache-age-within-12h-text);
+}
+.entry-listing:has(> .cache-banner .cache-banner__at[data-age="within-24h"]) {
+  --listing-age-accent: var(--color-cache-age-within-24h);
+  --listing-age-text: var(--color-cache-age-within-24h-text);
+}
+/* 暗い赤は淡く敷くと灰色がかって 12〜24 時間より弱く見えるので、地だけ濃くする。 */
+.entry-listing:has(> .cache-banner .cache-banner__at[data-age="over-24h"]) {
+  --listing-age-accent: var(--color-cache-age-over-24h);
+  --listing-age-text: var(--color-cache-age-over-24h-text);
+  --listing-age-tint: 12%;
+}
 
 .entry-listing:has(> .cache-banner .cache-banner__at[data-age]:not([data-age="within-1h"])) {
-  --entry-table-head-rule-color: var(--listing-age-color);
+  --entry-table-head-rule-color: var(--listing-age-accent);
 }
 .entry-listing:has(> .cache-banner .cache-banner__at[data-age]:not([data-age="within-1h"])) > .cache-banner {
-  border-left: 4px solid var(--listing-age-color);
-  background: color-mix(in srgb, var(--listing-age-color) 10%, var(--paper));
+  border-left: 4px solid var(--listing-age-accent);
+  background: color-mix(in srgb, var(--listing-age-accent) 16%, var(--paper));
 }
 .entry-listing:has(> .cache-banner .cache-banner__at[data-age]:not([data-age="within-1h"])) > .cache-banner .cache-banner__body {
   padding-left: var(--space-3);
-  color: var(--listing-age-color);
+  color: var(--listing-age-text);
 }
 /* 帯そのものが地色を持つので、時刻の地色は重ねない。24 時間以上だけは塗りを残す。 */
 .entry-listing:has(> .cache-banner .cache-banner__at[data-age]:not([data-age="within-1h"])) > .cache-banner
@@ -1180,8 +1214,8 @@ pre { font-size: 12px; }
   background: none;
 }
 .entry-listing:has(> .cache-banner .cache-banner__at[data-age]:not([data-age="within-1h"])) > .entry-table {
-  border-left: 4px solid var(--listing-age-color);
-  background: color-mix(in srgb, var(--listing-age-color) 5%, var(--paper));
+  border-left: 4px solid var(--listing-age-accent);
+  background: color-mix(in srgb, var(--listing-age-accent) var(--listing-age-tint, 8%), var(--paper));
 }
 
 /* 右端に寄せる状態表示。狭い画面では折り返して左揃えに戻す。 */
