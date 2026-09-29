@@ -1,5 +1,8 @@
 import { useState, type FormEvent } from 'react'
 
+/** ログイン画面とパスワード変更画面の見出しの id。重ねて出すときの dialog の名前にも使う。 */
+export const AUTH_TITLE_ID = 'auth-title'
+
 interface Props {
   config: {
     localEnabled: boolean
@@ -7,10 +10,15 @@ interface Props {
   }
   /** ログイン中に session が切れて、この画面へ戻されたか。 */
   sessionExpired?: boolean
+  /**
+   * 開いていた画面を残したまま、その上に重ねて出しているか。SSO はページを開き直すので、
+   * 同じタブで進むと残した画面が消える。重ねているときは SSO を新しいタブで開く。
+   */
+  overlay?: boolean
   onLoggedIn(): Promise<void>
 }
 
-export function LoginPage({ config, sessionExpired = false, onLoggedIn }: Props) {
+export function LoginPage({ config, sessionExpired = false, overlay = false, onLoggedIn }: Props) {
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
@@ -34,21 +42,38 @@ export function LoginPage({ config, sessionExpired = false, onLoggedIn }: Props)
     }
   }
 
-  const returnTo = `${location.pathname}${location.search}${location.hash}`
+  // 重ねているときの SSO は新しいタブで開く。そのタブで同じ編集画面を開くと、同じ本文を
+  // 2 つのエディタで書き換えかねないので、ログインのあとはホームを開く。
+  const returnTo = overlay ? '/' : `${location.pathname}${location.search}${location.hash}`
   const oidcUrl = `/api/auth/oidc/start?returnTo=${encodeURIComponent(returnTo)}`
 
   return (
     <main className="auth-page">
-      <section className="auth-card auth-card--login" aria-labelledby="auth-title">
+      <section className="auth-card auth-card--login" aria-labelledby={AUTH_TITLE_ID}>
         <div className="auth-card__mark">mado<span>.</span></div>
         <p className="auth-card__eyebrow">DATA CATALOG</p>
-        <h1 id="auth-title">ログイン</h1>
-        {sessionExpired && (
-          <p className="auth-card__lead" role="status">セッションが切れました。もう一度ログインしてください。</p>
+        <h1 id={AUTH_TITLE_ID}>ログイン</h1>
+        {(sessionExpired || overlay) && (
+          <div className="auth-card__lead">
+            {sessionExpired && <p role="status">セッションが切れました。もう一度ログインしてください。</p>}
+            {overlay && <p>同じアカウントでログインすると、開いていた画面に戻ります。</p>}
+          </div>
         )}
 
         {config.oidc.enabled && (
-          <a className="auth-card__sso" href={oidcUrl}>{config.oidc.label ?? 'SSO'}で続行</a>
+          <>
+            <a
+              className="auth-card__sso"
+              href={oidcUrl}
+              target={overlay ? '_blank' : undefined}
+              rel={overlay ? 'noopener' : undefined}
+            >
+              {config.oidc.label ?? 'SSO'}で続行
+            </a>
+            {overlay && (
+              <p className="auth-card__note">新しいタブでログインします。ログインが済んだら、このタブに戻ってください。</p>
+            )}
+          </>
         )}
         {config.oidc.enabled && config.localEnabled && <div className="auth-card__or"><span>または</span></div>}
 
@@ -96,10 +121,10 @@ export function ChangePasswordPage({ onChanged }: { onChanged(): Promise<void> }
   }
   return (
     <main className="auth-page">
-      <section className="auth-card">
+      <section className="auth-card" aria-labelledby={AUTH_TITLE_ID}>
         <div className="auth-card__mark">mado<span>.</span></div>
         <p className="auth-card__eyebrow">FIRST SIGN-IN</p>
-        <h1>パスワードを変更</h1>
+        <h1 id={AUTH_TITLE_ID}>パスワードを変更</h1>
         <p className="auth-card__lead">初回ログイン用パスワードはこの画面で更新してください。</p>
         <form onSubmit={submit} className="auth-form">
           <label><span>現在のパスワード</span><input name="currentPassword" type="password" autoComplete="current-password" required /></label>

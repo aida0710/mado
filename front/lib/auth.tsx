@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { ChangePasswordPage, LoginPage } from '../pages/LoginPage'
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from 'react'
+import { AuthOverlay } from '../components/AuthOverlay'
+import { AUTH_TITLE_ID, ChangePasswordPage, LoginPage } from '../pages/LoginPage'
 import { clearAllCaches } from './api/cache'
 import { subscribeUnauthorized } from './api/unauthorized-events'
 import { AuthContext, type AuthUser } from './auth-context'
+import { nextAuthSession, SIGNED_OUT, type AuthSessionState } from './auth-session-state'
 
 interface AuthConfig {
   localEnabled: boolean
@@ -18,32 +20,50 @@ async function fetchCurrentUser(): Promise<AuthUser | null> {
   return body.user
 }
 
+/** session が無ければログイン画面、パスワードを変える必要があれば変更画面。どちらも要らなければ null。 */
+function authPageFor({ config, session, onSessionChanged }: {
+  config: AuthConfig
+  session: AuthSessionState
+  onSessionChanged(): Promise<void>
+}): ReactNode {
+  if (!session.user) {
+    return (
+      <LoginPage
+        config={config}
+        sessionExpired={session.sessionExpired}
+        overlay={session.screenUser !== null}
+        onLoggedIn={onSessionChanged}
+      />
+    )
+  }
+  if (session.user.mustChangePassword) return <ChangePasswordPage onChanged={onSessionChanged} />
+  return null
+}
+
 export function AuthGate({ children }: { children: ReactNode }) {
   const [config, setConfig] = useState<AuthConfig | null>(null)
   const [disabled, setDisabled] = useState(false)
-  const [user, setUser] = useState<AuthUser | null>(null)
+  const [session, dispatchSession] = useReducer(nextAuthSession, SIGNED_OUT)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  // ログイン中に session が切れてログイン画面へ戻したか。ログイン画面で理由を伝えるのに使う。
-  const [sessionExpired, setSessionExpired] = useState(false)
   const confirmingSessionRef = useRef(false)
 
-  // 画面をログアウト状態にする。同じブラウザを次に使う人へ前の User の一覧や README を
-  // 残さないよう、キャッシュも消す。
+  // /api/auth/me で確かめた User を反映する。session が無ければ、同じブラウザを次に使う人へ
+  // 前の User の一覧や README を残さないよう、キャッシュも消す。
+  const applyCurrentUser = useCallback((currentUser: AuthUser | null) => {
+    if (!currentUser) clearAllCaches()
+    dispatchSession({ type: 'checked', user: currentUser })
+  }, [])
+
+  // 画面をログアウト状態にする。キャッシュも消す（理由は applyCurrentUser と同じ）。
   const logoutLocally = useCallback(() => {
     clearAllCaches()
-    setUser(null)
+    dispatchSession({ type: 'loggedOut' })
   }, [])
 
   const reload = useCallback(async () => {
-    const currentUser = await fetchCurrentUser()
-    if (!currentUser) {
-      logoutLocally()
-      return
-    }
-    setSessionExpired(false)
-    setUser(currentUser)
-  }, [logoutLocally])
+    applyCurrentUser(await fetchCurrentUser())
+  }, [applyCurrentUser])
 
   // API が 401 を返したときに、session が本当に切れたかを確かめる。
   const confirmSessionAfterUnauthorized = useCallback(async () => {
@@ -51,25 +71,35 @@ export function AuthGate({ children }: { children: ReactNode }) {
     if (confirmingSessionRef.current) return
     confirmingSessionRef.current = true
     try {
-      // session が有効なら画面はそのまま残す。setUser し直すと画面全体が描き直され、
+      // session が有効なら画面はそのまま残す。User を入れ直すと画面全体が描き直され、
       // 同じ API を呼び直して 401 を繰り返すおそれがある。
       if (await fetchCurrentUser()) return
-      setSessionExpired(true)
-      logoutLocally()
+      applyCurrentUser(null)
     } catch {
       // /api/auth/me にも届かないときは session の状態が分からないので、画面を残す。
     } finally {
       confirmingSessionRef.current = false
     }
-  }, [logoutLocally])
+  }, [applyCurrentUser])
 
   // ログイン中だけ 401 を受け取る。認証が無効ならログイン画面が無いので受け取らない。
   // ログイン画面の表示中も受け取らない（パスワード誤りの 401 などで確認を繰り返さないため）。
-  const signedIn = user !== null
+  const signedIn = session.user !== null
   useEffect(() => {
     if (disabled || !signedIn) return
     return subscribeUnauthorized(() => { void confirmSessionAfterUnauthorized() })
   }, [disabled, signedIn, confirmSessionAfterUnauthorized])
+
+  // session が切れて画面を残している間は、このタブへ戻ってきたときに session を確かめ直す。
+  // SSO は新しいタブでログインする（LoginPage の overlay）ので、済ませて戻るだけで画面に戻れる。
+  const keepingExpiredScreen = session.user === null && session.screenUser !== null
+  useEffect(() => {
+    if (!keepingExpiredScreen) return
+    // /api/auth/me に届かないときは、ログイン画面を重ねたまま待つ。
+    const recheck = () => { void reload().catch(() => {}) }
+    window.addEventListener('focus', recheck)
+    return () => window.removeEventListener('focus', recheck)
+  }, [keepingExpiredScreen, reload])
 
   useEffect(() => {
     let current = true
@@ -120,13 +150,26 @@ export function AuthGate({ children }: { children: ReactNode }) {
     logoutLocally()
     if (body?.logoutUrl) window.location.assign(body.logoutUrl)
   }, [logoutLocally])
-  const value = useMemo(() => ({ enabled: !disabled, user, logout, reload }), [disabled, user, logout, reload])
+  // 画面には、描いている User を渡す。session が切れてログイン画面を重ねている間も、
+  // 残した画面は同じ User のまま描く。
+  const screenUser = session.screenUser
+  const value = useMemo(() => ({ enabled: !disabled, user: screenUser, logout, reload }), [disabled, screenUser, logout, reload])
 
   if (loading) return <div className="auth-splash">mado.</div>
   if (error) return <div className="auth-splash auth-splash--error">{error}</div>
-  if (!disabled && config && !user) {
-    return <LoginPage config={config} sessionExpired={sessionExpired} onLoggedIn={reload} />
-  }
-  if (!disabled && user?.mustChangePassword) return <ChangePasswordPage onChanged={reload} />
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
+  const authPage = !disabled && config ? authPageFor({ config, session, onSessionChanged: reload }) : null
+  // 残す画面が無ければ（起動時やサインアウトのあと）、ログイン画面だけを出す。
+  if (authPage && !screenUser) return authPage
+  return (
+    <AuthContext.Provider value={value}>
+      {/* key: 別の User で入り直したら、前の User の画面（書きかけの本文など）を作り直す。 */}
+      <div key={screenUser?.id} inert={authPage !== null}>{children}</div>
+      {authPage && (
+        // key: ログイン画面とパスワード変更画面を切り替えたら、focus を移し直す。
+        <AuthOverlay key={session.user ? 'change-password' : 'login'} titleId={AUTH_TITLE_ID}>
+          {authPage}
+        </AuthOverlay>
+      )}
+    </AuthContext.Provider>
+  )
 }
