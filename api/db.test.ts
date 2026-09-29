@@ -1,5 +1,5 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest'
-import { createPools, closePools } from './db.js'
+import { createPools, closePools, withTransaction } from './db.js'
 
 const RW = process.env.DATABASE_URL_RW_TEST
   ?? 'postgres://dashboard_rw:CHANGEME@localhost:5432/dashboard_test'
@@ -37,5 +37,23 @@ describe('createPools', () => {
     await expect(
       pools.ro.query('CREATE TABLE t (id int)')
     ).rejects.toThrow(/permission denied/i)
+  })
+})
+
+describe('withTransaction', () => {
+  it('最後まで進めば commit する', async () => {
+    await withTransaction(pools.rw, client =>
+      client.query(`INSERT INTO notes(slug, body, last_editor) VALUES ('tx-commit', 'a', 't')`))
+    const r = await pools.ro.query(`SELECT slug FROM notes WHERE slug = 'tx-commit'`)
+    expect(r.rows).toHaveLength(1)
+  })
+
+  it('途中で投げたら rollback し、元の例外を投げ直す', async () => {
+    await expect(withTransaction(pools.rw, async client => {
+      await client.query(`INSERT INTO notes(slug, body, last_editor) VALUES ('tx-rollback', 'a', 't')`)
+      throw new Error('途中で失敗')
+    })).rejects.toThrow('途中で失敗')
+    const r = await pools.ro.query(`SELECT slug FROM notes WHERE slug = 'tx-rollback'`)
+    expect(r.rows).toHaveLength(0)
   })
 })
