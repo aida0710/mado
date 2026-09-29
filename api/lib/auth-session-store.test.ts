@@ -1,5 +1,6 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import { closePools, createPools } from '../db.js'
+import { createAuditWriter } from './audit.js'
 import { createSessionStore } from './auth-session-store.js'
 import { createUserStore } from './auth-user-store.js'
 
@@ -7,7 +8,7 @@ const RW = process.env.DATABASE_URL_RW_TEST
   ?? 'postgres://dashboard_rw:CHANGEME@localhost:5432/dashboard_test'
 const pools = createPools({ rw: RW, ro: RW.replace('dashboard_rw', 'dashboard_ro') })
 const users = createUserStore(pools.rw)
-const sessions = createSessionStore(pools.rw)
+const sessions = createSessionStore(pools.rw, createAuditWriter(pools.rw))
 const lifetime = { idleSeconds: 3600, absoluteSeconds: 7200 }
 
 beforeEach(async () => {
@@ -55,5 +56,32 @@ describe('SessionStore', () => {
     expect(await sessions.applyOidcBackchannelLogout({
       issuer: 'https://auth.example', subject: 'sub-1', jti: 'jti-1', expiresAt: expiry,
     })).toEqual({ accepted: false, revoked: 0 })
+  })
+
+  it('IdP からの logout で失効させたら、失効と同じ transaction で監査に残す', async () => {
+    const user = await users.createUser({ displayName: 'SSO', roles: ['viewer'] })
+    await sessions.createSession({
+      userId: user.id, lifetime, oidc: { issuer: 'https://auth.example', subject: 'sub-1', sid: 'sid-a' },
+    })
+    await sessions.createSession({
+      userId: user.id, lifetime, oidc: { issuer: 'https://auth.example', subject: 'sub-1', sid: 'sid-b' },
+    })
+    await sessions.revokeOidcSessions({ issuer: 'https://auth.example', sid: 'sid-a' }, { ipAddress: '10.0.0.1' })
+    await sessions.applyOidcBackchannelLogout({
+      issuer: 'https://auth.example', subject: 'sub-1', jti: 'jti-2', expiresAt: new Date(Date.now() + 60_000),
+    })
+    const events = await pools.rw.query<{ resource_type: string; details: { channel: string; revoked: number } }>(
+      `SELECT resource_type, details FROM audit_events WHERE action = 'auth.oidc.session_revoke' ORDER BY id`,
+    )
+    expect(events.rows).toEqual([
+      expect.objectContaining({ resource_type: 'oidc_session', details: { channel: 'front', revoked: 1 } }),
+      expect.objectContaining({ resource_type: 'oidc_identity', details: { channel: 'back', revoked: 1 } }),
+    ])
+  })
+
+  it('失効させた session が無ければ、監査は残さない', async () => {
+    await sessions.revokeOidcSessions({ issuer: 'https://auth.example', sid: 'unknown-sid' })
+    const events = await pools.rw.query(`SELECT id FROM audit_events WHERE action = 'auth.oidc.session_revoke'`)
+    expect(events.rows).toEqual([])
   })
 })

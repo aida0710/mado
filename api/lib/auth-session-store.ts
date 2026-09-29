@@ -1,5 +1,6 @@
-import type { Pool } from 'pg'
+import type { Pool, PoolClient } from 'pg'
 import { withTransaction, type Queryable } from '../db.js'
+import type { AuditWriter } from './audit.js'
 import type { RequestMetadata, SessionPrincipal } from './auth-types.js'
 import { newId, randomToken, sha256 } from './auth-crypto.js'
 import { AUTH_USER_FIELDS, AUTH_USER_FROM, toUser, type AuthUserRow } from './auth-user-query.js'
@@ -39,6 +40,14 @@ export interface OidcBackchannelLogout {
   expiresAt: Date
 }
 
+/** 無効化・削除された User には session を作らない。 */
+export class SessionUserUnavailableError extends Error {
+  constructor() {
+    super('user is disabled or deleted')
+    this.name = 'SessionUserUnavailableError'
+  }
+}
+
 export interface NewSession {
   userId: string
   lifetime: SessionLifetime
@@ -51,8 +60,10 @@ export interface SessionStore {
   authenticateSession(token: string, idleSeconds: number, touchIntervalSeconds?: number): Promise<SessionPrincipal | null>
   revokeSession(token: string): Promise<boolean>
   getSessionOidcContext(token: string): Promise<OidcSessionContext | null>
-  revokeOidcSessions(target: OidcSessionTarget): Promise<number>
-  applyOidcBackchannelLogout(input: OidcBackchannelLogout): Promise<{ accepted: boolean; revoked: number }>
+  /** IdP の front-channel logout。失効した session があれば、同じ transaction で監査に残す。 */
+  revokeOidcSessions(target: OidcSessionTarget, metadata?: RequestMetadata): Promise<number>
+  /** IdP の back-channel logout。同じ logout token は 1 度だけ受け付け、失効を同じ transaction で監査に残す。 */
+  applyOidcBackchannelLogout(input: OidcBackchannelLogout, metadata?: RequestMetadata): Promise<{ accepted: boolean; revoked: number }>
   deleteExpiredSessions(): Promise<number>
 }
 
@@ -67,27 +78,36 @@ function isPlausibleToken(token: string): boolean {
   return token.length >= SESSION_TOKEN_MIN_LENGTH && token.length <= SESSION_TOKEN_MAX_LENGTH
 }
 
-/** session を 1 行作る。資格の変更と同じ transaction で発行したいときは client を渡す。 */
+/**
+ * session を 1 行作る。パスワードの変更と同じ transaction で発行したいときは client を渡す。
+ * User が有効なときだけ作る。user 行を FOR KEY SHARE で読むので、同時に進んでいる無効化とは
+ * 待ち合い、無効化が先に確定していれば作らない（無効化のあとに session が残らない）。
+ */
 export async function insertSession(db: Queryable, { userId, lifetime, metadata = {}, oidc }: NewSession): Promise<CreatedSession> {
   const id = newId()
   const token = randomToken(32)
   const absolute = new Date(Date.now() + lifetime.absoluteSeconds * 1000)
   const idle = new Date(Math.min(Date.now() + lifetime.idleSeconds * 1000, absolute.getTime()))
-  await db.query(
+  const r = await db.query(
     `INSERT INTO auth_sessions
       (id, user_id, token_hash, idle_expires_at, absolute_expires_at, ip_address, user_agent,
        oidc_issuer, oidc_subject, oidc_sid)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+     SELECT $1::uuid, u.id, $3::bytea, $4::timestamptz, $5::timestamptz, $6::inet, $7::text,
+            $8::text, $9::text, $10::text
+       FROM auth_users u
+      WHERE u.id = $2 AND u.status = 'active' AND u.deleted_at IS NULL
+      FOR KEY SHARE`,
     [
       id, userId, sha256(token), idle, absolute, metadata.ipAddress ?? null,
       metadata.userAgent?.slice(0, 1024) ?? null,
       oidc?.issuer ?? null, oidc?.subject ?? null, oidc?.sid ?? null,
     ],
   )
+  if (r.rowCount === 0) throw new SessionUserUnavailableError()
   return { id, token, expiresAt: absolute }
 }
 
-/** User の有効な session をすべて失効させる。資格が変わる操作と同じ transaction で呼ぶ。 */
+/** User の有効な session をすべて失効させる。無効化・Role 変更・削除・パスワードの変更と同じ transaction で呼ぶ。 */
 export async function revokeUserSessionRows(db: Queryable, userId: string): Promise<number> {
   const r = await db.query(
     `UPDATE auth_sessions SET revoked_at = COALESCE(revoked_at, now())
@@ -108,7 +128,25 @@ async function revokeOidcSessionRows(db: Queryable, target: OidcSessionTarget): 
   return r.rowCount ?? 0
 }
 
-export function createSessionStore(pool: Pool): SessionStore {
+export function createSessionStore(pool: Pool, audit: AuditWriter): SessionStore {
+  /** IdP からの logout で session を失効させたことを残す。失効と同じ transaction で書く。 */
+  async function auditOidcRevocation(
+    client: PoolClient,
+    { channel, resourceType, resourceId, revoked, metadata }: {
+      channel: 'front' | 'back'
+      resourceType: 'oidc_session' | 'oidc_identity'
+      resourceId: string | null | undefined
+      revoked: number
+      metadata?: RequestMetadata
+    },
+  ): Promise<void> {
+    if (revoked === 0) return
+    await audit.write({
+      actor: { type: 'system' }, action: 'auth.oidc.session_revoke', outcome: 'success',
+      resourceType, resourceId: resourceId ?? null, details: { channel, revoked }, ...metadata,
+    }, client)
+  }
+
   return {
     createSession: input => insertSession(pool, input),
 
@@ -158,9 +196,15 @@ export function createSessionStore(pool: Pool): SessionStore {
       return row ? { issuer: row.oidc_issuer, subject: row.oidc_subject, sid: row.oidc_sid } : null
     },
 
-    revokeOidcSessions: target => revokeOidcSessionRows(pool, target),
+    revokeOidcSessions: (target, metadata) => withTransaction(pool, async client => {
+      const revoked = await revokeOidcSessionRows(client, target)
+      await auditOidcRevocation(client, {
+        channel: 'front', resourceType: 'oidc_session', resourceId: target.sid, revoked, metadata,
+      })
+      return revoked
+    }),
 
-    applyOidcBackchannelLogout: input => withTransaction(pool, async client => {
+    applyOidcBackchannelLogout: (input, metadata) => withTransaction(pool, async client => {
       // 同じ logout token (jti) を 2 度受け付けない。
       const event = await client.query(
         `INSERT INTO auth_oidc_logout_events (issuer, jti, expires_at)
@@ -168,7 +212,11 @@ export function createSessionStore(pool: Pool): SessionStore {
         [input.issuer, input.jti, input.expiresAt],
       )
       if ((event.rowCount ?? 0) === 0) return { accepted: false, revoked: 0 }
-      return { accepted: true, revoked: await revokeOidcSessionRows(client, input) }
+      const revoked = await revokeOidcSessionRows(client, input)
+      await auditOidcRevocation(client, {
+        channel: 'back', resourceType: 'oidc_identity', resourceId: input.subject ?? input.sid, revoked, metadata,
+      })
+      return { accepted: true, revoked }
     }),
 
     async deleteExpiredSessions() {

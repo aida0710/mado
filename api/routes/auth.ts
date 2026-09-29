@@ -3,7 +3,7 @@ import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
 import { z } from 'zod'
 import type { AuditWriter } from '../lib/audit.js'
 import type { CredentialStore } from '../lib/auth-credential-store.js'
-import type { SessionLifetime, SessionStore } from '../lib/auth-session-store.js'
+import { SessionUserUnavailableError, type SessionLifetime, type SessionStore } from '../lib/auth-session-store.js'
 import type { UserStore } from '../lib/auth-user-store.js'
 import type { OidcProvider } from '../lib/auth-oidc.js'
 import { OIDC_TRANSACTION_TTL_SECONDS, OidcAttemptLimitError } from '../lib/auth-oidc.js'
@@ -47,6 +47,7 @@ export interface AuthRouteDeps {
 /** SSO の callback が失敗した理由を、秘密値を含めずに log へ出すための分類。 */
 function oidcFailureReason(error: unknown): string {
   if (error instanceof OidcLoginDeniedError) return error.reason
+  if (error instanceof SessionUserUnavailableError) return 'user_disabled'
   return error instanceof Error ? error.message : 'unknown'
 }
 
@@ -234,15 +235,8 @@ export function mountAuthRoutes(app: Hono, deps: AuthRouteDeps): void {
     if (!issuer || !sid || sid.length > 512 || !deps.config.oidc.matchesIssuer(issuer)) {
       return c.json({ error: 'invalid frontchannel logout' }, 400)
     }
-    const revoked = await deps.sessions.revokeOidcSessions({ issuer: deps.config.oidc.issuer, sid })
+    await deps.sessions.revokeOidcSessions({ issuer: deps.config.oidc.issuer, sid }, requestMetadata(c))
     deleteCookie(c, cookieName, { path: '/', secure: deps.config.session.secure })
-    if (revoked > 0) {
-      await deps.audit.write({
-        actor: { type: 'system' }, action: 'auth.oidc.session_revoke', outcome: 'success',
-        resourceType: 'oidc_session', resourceId: sid, details: { channel: 'front', revoked },
-        ...requestMetadata(c),
-      })
-    }
     c.header('Cache-Control', 'no-store')
     return c.body(null, 204)
   })
@@ -257,16 +251,9 @@ export function mountAuthRoutes(app: Hono, deps: AuthRouteDeps): void {
       const logoutToken = new URLSearchParams(body).get('logout_token')
       if (!logoutToken) return c.json({ error: 'logout_token missing' }, 400)
       const claims = await deps.config.oidc.verifyBackchannelLogoutToken(logoutToken)
-      const result = await deps.sessions.applyOidcBackchannelLogout(claims)
+      const result = await deps.sessions.applyOidcBackchannelLogout(claims, requestMetadata(c))
       if (!result.accepted) {
         return c.json({ error: 'logout_token already used' }, 400)
-      }
-      if (result.revoked > 0) {
-        await deps.audit.write({
-          actor: { type: 'system' }, action: 'auth.oidc.session_revoke', outcome: 'success',
-          resourceType: 'oidc_identity', resourceId: claims.subject ?? claims.sid,
-          details: { channel: 'back', revoked: result.revoked }, ...requestMetadata(c),
-        })
       }
       c.header('Cache-Control', 'no-store')
       return c.body(null, 204)
@@ -322,16 +309,27 @@ export function mountAuthRoutes(app: Hono, deps: AuthRouteDeps): void {
     return c.json({ user: publicUser(result.user) })
   })
 
+  /**
+   * SSO の session なら、IdP 側もサインアウトさせる URL を返す。Mado の session はもう失効しているので、
+   * IdP に届かず URL を作れなくても失敗にはせず null を返す（IdP 側の session は残る）。
+   */
+  async function idpLogoutUrl(oidcContext: { issuer: string } | null): Promise<string | null> {
+    if (!oidcContext || !deps.config.oidc?.matchesIssuer(oidcContext.issuer)) return null
+    try {
+      return (await deps.config.oidc.logoutUrl()).href
+    } catch (error) {
+      console.warn('oidc logout url unavailable', { reason: oidcFailureReason(error) })
+      return null
+    }
+  }
+
   app.use('/logout', sessionGuard)
   app.post('/logout', async c => {
     const token = getCookie(c, cookieName)
     const oidcContext = token ? await deps.sessions.getSessionOidcContext(token) : null
     if (token) await deps.sessions.revokeSession(token)
     deleteCookie(c, cookieName, { path: '/', secure: deps.config.session.secure })
-    const logoutUrl = oidcContext && deps.config.oidc?.matchesIssuer(oidcContext.issuer)
-      ? (await deps.config.oidc.logoutUrl()).href
-      : null
-    return c.json({ ok: true, logoutUrl })
+    return c.json({ ok: true, logoutUrl: await idpLogoutUrl(oidcContext) })
   })
 
   app.use('/change-password', sessionGuard)

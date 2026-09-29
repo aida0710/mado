@@ -4,9 +4,11 @@ import type { AuthUser } from './auth-types.js'
 import { AUTH_USER_FIELDS, AUTH_USER_FROM, toUser, type AuthUserRow } from './auth-user-query.js'
 import { insertSession, revokeUserSessionRows, type CreatedSession, type NewSession } from './auth-session-store.js'
 
-// Local User のパスワードと、それを使う login。
+// Local User のパスワード（資格情報）と、それを使う login。
 // パスワードが変わる操作は、session の失効まで同じ transaction で行う。途中で失敗して
 // 「パスワードは変わったのに古い session が残る」状態を作らないため。
+// ロックは user 行 → 資格情報の行 → session の順に取る。無効化・Role 変更・削除も
+// user 行 → session の順なので、同じ User への操作が逆の順で待ち合って deadlock しない。
 
 export interface LocalCredential extends AuthUser {
   passwordHash: string
@@ -66,16 +68,20 @@ export async function upsertLocalCredential(
 }
 
 export function createCredentialStore(pool: Pool): CredentialStore {
-  /** 検証に使った hash がまだ保存されているかを、行をロックして確かめる。 */
+  /**
+   * User が有効で、検証に使った hash がまだ保存されているかを、user 行と資格情報の行を
+   * ロックして確かめる。user 行は FOR NO KEY UPDATE にする。管理者の無効化とは待ち合い、
+   * 自分が session を作るときの外部キーの検査（FOR KEY SHARE）とはぶつからない強さ。
+   */
   async function lockIfPasswordUnchanged(
     db: Queryable,
     { userId, verifiedPasswordHash }: { userId: string; verifiedPasswordHash: string },
   ): Promise<boolean> {
     const r = await db.query<{ password_hash: string }>(
       `SELECT lc.password_hash
-         FROM auth_local_credentials lc JOIN auth_users u ON u.id = lc.user_id
-        WHERE lc.user_id = $1 AND u.status = 'active' AND u.deleted_at IS NULL
-        FOR UPDATE OF lc`,
+         FROM auth_users u JOIN auth_local_credentials lc ON lc.user_id = u.id
+        WHERE u.id = $1 AND u.status = 'active' AND u.deleted_at IS NULL
+        FOR NO KEY UPDATE OF u FOR UPDATE OF lc`,
       [userId],
     )
     return r.rows[0]?.password_hash === verifiedPasswordHash
@@ -117,12 +123,16 @@ export function createCredentialStore(pool: Pool): CredentialStore {
     changeLocalPassword: ({ userId, verifiedPasswordHash, newPasswordHash, session }) =>
       withTransaction(pool, async client => {
         if (!await lockIfPasswordUnchanged(client, { userId, verifiedPasswordHash })) return null
-        await upsertLocalCredential(client, { userId, passwordHash: newPasswordHash, mustChange: false })
+        if (!await upsertLocalCredential(client, { userId, passwordHash: newPasswordHash, mustChange: false })) return null
         await revokeUserSessionRows(client, userId)
         return insertSession(client, { userId, ...session })
       }),
 
     resetLocalPassword: (userId, passwordHash) => withTransaction(pool, async client => {
+      const user = await client.query(
+        `SELECT id FROM auth_users WHERE id = $1 AND deleted_at IS NULL FOR NO KEY UPDATE`, [userId],
+      )
+      if (user.rowCount === 0) return false
       if (!await upsertLocalCredential(client, { userId, passwordHash, mustChange: true })) return false
       await revokeUserSessionRows(client, userId)
       return true

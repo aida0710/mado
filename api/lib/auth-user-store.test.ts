@@ -1,6 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import { closePools, createPools } from '../db.js'
 import { createCredentialStore } from './auth-credential-store.js'
+import { createAuditWriter } from './audit.js'
 import { createSessionStore } from './auth-session-store.js'
 import { createUserStore } from './auth-user-store.js'
 import { hashPassword } from './password.js'
@@ -10,7 +11,7 @@ const RW = process.env.DATABASE_URL_RW_TEST
 const pools = createPools({ rw: RW, ro: RW.replace('dashboard_rw', 'dashboard_ro') })
 const users = createUserStore(pools.rw)
 const credentials = createCredentialStore(pools.rw)
-const sessions = createSessionStore(pools.rw)
+const sessions = createSessionStore(pools.rw, createAuditWriter(pools.rw))
 const lifetime = { idleSeconds: 3600, absoluteSeconds: 7200 }
 
 beforeEach(async () => {

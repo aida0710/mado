@@ -122,4 +122,24 @@ describe('OidcProvisioning', () => {
     expect(await credentials.findLocalCredentialByLogin('unaudited')).toBeNull()
     expect((await users.listUsers()).map(user => user.username)).not.toContain('unaudited')
   })
+
+  it('無効にした User は、SSO の identity が結び付いていても入れない', async () => {
+    const input: OidcProvisionInput = {
+      issuer, subject: 'disabled-subject', email: null, emailVerified: false, username: 'disabled',
+      displayName: 'Disabled', groups: ['mado-users'], autoLinkVerifiedEmail: false, defaultRole: 'viewer',
+    }
+    const provisioned = await provisioning.provisionOidcUser(input)
+    await users.updateUser(provisioned.user.id, { status: 'disabled' })
+    await expect(provisioning.provisionOidcUser(input)).rejects.toMatchObject({ reason: 'user_disabled' })
+  })
+
+  it('削除した User の検証済み email には、SSO を自動で連携しない', async () => {
+    await users.createUser({ email: 'admin@example.com', displayName: 'Admin', roles: ['admin'] })
+    const deleted = await users.createUser({ email: 'gone@example.com', displayName: 'Gone', roles: ['viewer'] })
+    await users.deleteUser(deleted.id)
+    await expect(provisioning.provisionOidcUser({
+      issuer, subject: 'reuse-subject', email: 'gone@example.com', emailVerified: true, username: 'gone',
+      displayName: 'Gone', groups: ['mado-users'], autoLinkVerifiedEmail: true, defaultRole: 'viewer',
+    })).rejects.toMatchObject({ reason: 'deleted_user_email' })
+  })
 })

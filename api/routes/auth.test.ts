@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import { afterAll, beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { closePools, createPools } from '../db.js'
 import { createAuditWriter, type AuditWriter } from '../lib/audit.js'
 import { createUserStore } from '../lib/auth-user-store.js'
@@ -16,8 +16,8 @@ const RW = process.env.DATABASE_URL_RW_TEST
 const pools = createPools({ rw: RW, ro: RW.replace('dashboard_rw', 'dashboard_ro') })
 const users = createUserStore(pools.rw)
 const credentials = createCredentialStore(pools.rw)
-const sessions = createSessionStore(pools.rw)
 const audit = createAuditWriter(pools.rw)
+const sessions = createSessionStore(pools.rw, audit)
 const stores = { users, credentials, sessions, oidcProvisioning: createOidcProvisioning(pools.rw, audit) }
 const app = new Hono()
 mountAuthRoutes(app, {
@@ -311,6 +311,75 @@ describe('認証 route', () => {
         expect((await changePassword(target, cookie, `wrong-${attempt}`)).status).toBe(400)
       }
       expect((await changePassword(target, cookie, 'correct-password-123')).status).toBe(429)
+    })
+  })
+
+  describe('SSO', () => {
+    const issuer = 'https://auth.example/application/o/mado'
+    function oidcProvider(overrides: Partial<OidcProvider> = {}): OidcProvider {
+      return {
+        id: 'primary', label: 'Authentik', issuer,
+        start: async () => new URL('https://auth.example/authorize'),
+        finish: async () => ({
+          issuer, subject: 'subject-1', email: null, emailVerified: false, username: null,
+          displayName: 'SSO User', groups: ['others'], sid: 'sid-1', returnTo: '/',
+        }),
+        logoutUrl: async () => new URL('https://auth.example/end-session'),
+        matchesIssuer: () => true,
+        verifyBackchannelLogoutToken: async () => { throw new Error('not used') },
+        deleteExpiredAttempts: async () => 0,
+        ...overrides,
+      }
+    }
+    function oidcApp(oidc: OidcProvider): Hono {
+      const target = new Hono()
+      mountAuthRoutes(target, {
+        ...stores, audit,
+        config: {
+          localEnabled: false,
+          session: { idleSeconds: 3600, absoluteSeconds: 7200, secure: false },
+          oidc,
+          oidcLoginPolicy: {
+            autoLinkVerifiedEmail: false, allowedGroups: ['mado-users'], roleMapping: {}, defaultRole: 'viewer',
+          },
+        },
+      })
+      return target
+    }
+
+    it('callback で断った理由を、秘密値を含めずに log へ残す', async () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      try {
+        const target = oidcApp(oidcProvider())
+        const started = await target.request('/oidc/start')
+        const bindingCookie = started.headers.get('set-cookie')!.split(';')[0]
+        const response = await target.request('/oidc/callback?code=secret-code&state=s', { headers: { Cookie: bindingCookie } })
+        expect(response.status).toBe(401)
+        expect(warn).toHaveBeenCalledWith('oidc login failed', expect.objectContaining({ reason: 'group_not_allowed' }))
+        expect(JSON.stringify(warn.mock.calls)).not.toContain('secret-code')
+      } finally {
+        warn.mockRestore()
+      }
+    })
+
+    it('IdP の logout URL を作れなくても、Mado の session を失効させて成功を返す', async () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      try {
+        const user = (await credentials.findLocalCredentialByLogin('local-user'))!
+        const session = await sessions.createSession({
+          userId: user.id, lifetime: { idleSeconds: 3600, absoluteSeconds: 7200 },
+          oidc: { issuer, subject: 'subject-1', sid: 'sid-1' },
+        })
+        const target = oidcApp(oidcProvider({ logoutUrl: async () => { throw new Error('connect ECONNREFUSED') } }))
+        const response = await target.request('/logout', {
+          method: 'POST', headers: { Cookie: `mado_session=${session.token}` },
+        })
+        expect(response.status).toBe(200)
+        expect(await response.json()).toEqual({ ok: true, logoutUrl: null })
+        expect(await sessions.authenticateSession(session.token, 3600)).toBeNull()
+      } finally {
+        warn.mockRestore()
+      }
     })
   })
 })

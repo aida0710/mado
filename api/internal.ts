@@ -67,7 +67,7 @@ const authEnabled = env.AUTH_MODE !== 'disabled'
 const audit = createAuditWriter(pools.rw)
 const users = createUserStore(pools.rw)
 const credentials = createCredentialStore(pools.rw)
-const sessions = createSessionStore(pools.rw)
+const sessions = createSessionStore(pools.rw, audit)
 const serviceAccounts = createServiceAccountStore(pools.rw)
 const sessionCookie = sessionCookieName(env.AUTH_COOKIE_SECURE)
 const oidcEnabled = authEnabled && (env.AUTH_MODE === 'oidc' || env.AUTH_MODE === 'hybrid')

@@ -2,7 +2,7 @@ import type { PoolClient } from 'pg'
 import type { UserStatus } from './auth-types.js'
 
 // 「active な Admin を 0 人にしない」という不変条件。無効化・削除・Role 変更・SSO の Role 同期の
-// すべてがここを通る。
+// すべてがここを通る。ロックの順は advisory lock → user 行 → (資格情報の行) → session にそろえる。
 
 export const ADMIN_ROLE = 'admin'
 
