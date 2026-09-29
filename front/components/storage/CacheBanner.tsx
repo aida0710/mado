@@ -15,6 +15,7 @@
 // CSS の animation-delay で伏せている (JS タイマーを持たない = 後始末も不要)。
 
 import { useEffect, useState, type ReactNode } from 'react'
+import { cacheAgeLevel } from '../../lib/cacheAgeLevel'
 import { fmtCacheAge } from '../../lib/format'
 
 interface Props {
@@ -32,8 +33,8 @@ interface Props {
   trailing?: ReactNode
 }
 
-// 相対時刻 ("2時間前") は時間が経つと嘘になる。タブを開きっぱなしにしても
-// 表示が追従するよう 1 分ごとに再描画する。絶対時刻も併記しているので
+// 相対時刻 ("2時間前") と経過時間の色は時間が経つと嘘になる。タブを開きっぱなしに
+// しても表示が追従するよう 1 分ごとに再描画する。絶対時刻も併記しているので
 // 実害は小さいが、見出しの情報が古いままなのは避ける。
 function useMinuteTick(): void {
   const [, setTick] = useState(0)
@@ -45,6 +46,8 @@ function useMinuteTick(): void {
 
 export function CacheBanner({ fetchedAt, revalidating, onRefresh, compact, trailing }: Props) {
   useMinuteTick()
+  const now = new Date()
+  const age = fetchedAt ? cacheAgeLevel(fetchedAt, now) : null
 
   return (
     <div className={
@@ -63,10 +66,15 @@ export function CacheBanner({ fetchedAt, revalidating, onRefresh, compact, trail
         </button>
         {/* fetchedAt が無いのは初回ロード中や invalidate 直後。日時は出せないが
             ボタンは残す — ここで更新手段が消えると詰まったときに何もできない。 */}
-        {fetchedAt && (
+        {fetchedAt && age && (
           <span>
-            <time dateTime={fetchedAt.toISOString()} className="cache-banner__at">
-              {fmtCacheAge(fetchedAt, new Date(), { compact })}
+            <time
+              dateTime={fetchedAt.toISOString()}
+              className="cache-banner__at"
+              data-age={age.level}
+              title={age.label}
+            >
+              {fmtCacheAge(fetchedAt, now, { compact })}
             </time>
             {!compact && 'に取得した情報です'}
           </span>

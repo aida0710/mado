@@ -35,6 +35,16 @@
   --color-rule:   rgba(10, 9, 4, 0.10);   /* hairline 罫線 */
   --color-rule-strong: rgba(10, 9, 4, 0.18);
 
+  /* ── 取得からの経過時間 (CacheBanner) ───────────────────────────── */
+  /* 緑 → 黄 → 橙 → 赤。24 時間以上は地色を塗る。淡い地色の上でも
+     文字のコントラスト比が 4.5 以上になる濃さにしている。           */
+  --color-cache-age-within-1h:  #16693a;
+  --color-cache-age-within-3h:  #456a10;
+  --color-cache-age-within-6h:  #7a5900;
+  --color-cache-age-within-12h: #a3440b;
+  --color-cache-age-within-24h: #b3261e;
+  --color-cache-age-over-24h:   #8a1c1c;
+
   /* ── Radii — editorial では極小に (印刷物の角の鋭さを尊重)  ───── */
   --radius-1: 2px;
   --radius-2: 4px;
@@ -1116,6 +1126,26 @@ pre { font-size: 12px; }
   font-variant-numeric: tabular-nums;
   font-weight: 500;
   color: var(--ink-11);
+}
+
+/* 取得からの経過時間で色を変える (段階は front/lib/cacheAgeLevel.ts)。
+   相対時刻 ("6時間前") も併記しているので、色は一目で気づくための補助。 */
+.cache-banner__at[data-age] {
+  --cache-age-color: var(--ink-11);
+  padding: 0 6px;
+  border-radius: var(--radius-2);
+  color: var(--cache-age-color);
+  background: color-mix(in srgb, var(--cache-age-color) 12%, transparent);
+}
+.cache-banner__at[data-age="within-1h"]  { --cache-age-color: var(--color-cache-age-within-1h); }
+.cache-banner__at[data-age="within-3h"]  { --cache-age-color: var(--color-cache-age-within-3h); }
+.cache-banner__at[data-age="within-6h"]  { --cache-age-color: var(--color-cache-age-within-6h); }
+.cache-banner__at[data-age="within-12h"] { --cache-age-color: var(--color-cache-age-within-12h); }
+.cache-banner__at[data-age="within-24h"] { --cache-age-color: var(--color-cache-age-within-24h); }
+.cache-banner__at[data-age="over-24h"] {
+  --cache-age-color: var(--color-cache-age-over-24h);
+  color: var(--paper);
+  background: var(--cache-age-color);
 }
 
 /* 右端に寄せる状態表示。狭い画面では折り返して左揃えに戻す。 */
