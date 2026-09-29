@@ -1,8 +1,11 @@
 import { Hono } from 'hono'
 import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import { closePools, createPools } from '../db.js'
-import { createAuditWriter } from '../lib/audit.js'
-import { createAuthStore } from '../lib/auth-store.js'
+import { createAuditWriter, type AuditWriter } from '../lib/audit.js'
+import { createUserStore } from '../lib/auth-user-store.js'
+import { createCredentialStore } from '../lib/auth-credential-store.js'
+import { createSessionStore } from '../lib/auth-session-store.js'
+import { createOidcProvisioning } from '../lib/auth-oidc-provisioning.js'
 import type { OidcProvider } from '../lib/auth-oidc.js'
 import { AuthRateLimiter } from '../lib/auth-rate-limit.js'
 import { hashPassword } from '../lib/password.js'
@@ -11,22 +14,27 @@ import { mountAuthRoutes } from './auth.js'
 const RW = process.env.DATABASE_URL_RW_TEST
   ?? 'postgres://dashboard_rw:CHANGEME@localhost:5432/dashboard_test'
 const pools = createPools({ rw: RW, ro: RW.replace('dashboard_rw', 'dashboard_ro') })
-const store = createAuthStore(pools.rw)
+const users = createUserStore(pools.rw)
+const credentials = createCredentialStore(pools.rw)
+const sessions = createSessionStore(pools.rw)
 const audit = createAuditWriter(pools.rw)
+const stores = { users, credentials, sessions, oidcProvisioning: createOidcProvisioning(pools.rw, audit) }
 const app = new Hono()
 mountAuthRoutes(app, {
-  store,
+  ...stores,
   audit,
   config: {
     localEnabled: true,
-    session: { idleSeconds: 3600, absoluteSeconds: 7200, secure: false, cookieName: 'mado_session' },
+    session: { idleSeconds: 3600, absoluteSeconds: 7200, secure: false },
   },
 })
 
 beforeEach(async () => {
   await pools.rw.query('TRUNCATE auth_oidc_logout_events, audit_events, service_accounts, auth_users CASCADE')
-  const user = await store.createUser({ username: 'local-user', email: 'user@example.com', displayName: 'User', roles: ['viewer'] })
-  await store.setLocalPassword(user.id, await hashPassword('correct-password-123'), false)
+  await users.createUser({
+    username: 'local-user', email: 'user@example.com', displayName: 'User', roles: ['viewer'],
+    localPassword: { hash: await hashPassword('correct-password-123'), mustChange: false },
+  })
 })
 afterAll(() => closePools(pools))
 
@@ -97,11 +105,11 @@ describe('認証 route', () => {
   it('password失敗をUser単位で拒否せず正しいpasswordは通す', async () => {
     const isolated = new Hono()
     mountAuthRoutes(isolated, {
-      store,
+      ...stores,
       audit,
       config: {
         localEnabled: true,
-        session: { idleSeconds: 3600, absoluteSeconds: 7200, secure: false, cookieName: 'mado_session' },
+        session: { idleSeconds: 3600, absoluteSeconds: 7200, secure: false },
         rateLimiter: new AuthRateLimiter(),
       },
     })
@@ -126,8 +134,8 @@ describe('認証 route', () => {
   })
 
   it('一時passwordのsessionは変更完了までprofileを拒否する', async () => {
-    const user = (await store.getLocalCredential('local-user'))!
-    await store.setLocalPassword(user.id, await hashPassword('temporary-password-123'), true)
+    const user = (await credentials.findLocalCredentialByLogin('local-user'))!
+    await credentials.resetLocalPassword(user.id, await hashPassword('temporary-password-123'))
     const login = await app.request('/local/login', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ identifier: 'local-user', password: 'temporary-password-123' }),
@@ -167,12 +175,12 @@ describe('認証 route', () => {
     }
     const oidcApp = new Hono()
     mountAuthRoutes(oidcApp, {
-      store, audit,
+      ...stores, audit,
       config: {
         localEnabled: true,
-        session: { idleSeconds: 3600, absoluteSeconds: 7200, secure: false, cookieName: 'mado_session' },
+        session: { idleSeconds: 3600, absoluteSeconds: 7200, secure: false },
         oidc,
-        oidcProvisioning: {
+        oidcLoginPolicy: {
           autoLinkVerifiedEmail: true, allowedGroups: ['mado-admins'],
           roleMapping: { 'mado-admins': 'admin' }, defaultRole: 'viewer',
         },
@@ -185,9 +193,11 @@ describe('認証 route', () => {
     })
     expect(response.status).toBe(303)
     expect(response.headers.get('location')).toBe('/lineage')
-    const linked = await store.getLocalCredential('local-user')
+    const linked = await credentials.findLocalCredentialByLogin('local-user')
     expect(linked).toMatchObject({ displayName: 'SSO User', roles: ['admin'] })
     expect(linked?.authMethods).toEqual(['local', 'sso'])
+    const synced = await pools.rw.query(`SELECT outcome FROM audit_events WHERE action = 'auth.oidc.sync'`)
+    expect(synced.rows).toEqual([{ outcome: 'success' }])
   })
 
   it('OIDC callbackは開始browser cookieなしでは拒否する', async () => {
@@ -206,12 +216,12 @@ describe('認証 route', () => {
     }
     const oidcApp = new Hono()
     mountAuthRoutes(oidcApp, {
-      store, audit,
+      ...stores, audit,
       config: {
         localEnabled: false,
-        session: { idleSeconds: 3600, absoluteSeconds: 7200, secure: false, cookieName: 'mado_session' },
+        session: { idleSeconds: 3600, absoluteSeconds: 7200, secure: false },
         oidc,
-        oidcProvisioning: {
+        oidcLoginPolicy: {
           autoLinkVerifiedEmail: false, allowedGroups: ['mado-users'], roleMapping: {}, defaultRole: 'viewer',
         },
       },
@@ -220,8 +230,8 @@ describe('認証 route', () => {
   })
 
   it('Back-channel logoutを一度だけ受理して該当sessionを失効する', async () => {
-    const user = (await store.getLocalCredential('local-user'))!
-    const session = await store.createSession({
+    const user = (await credentials.findLocalCredentialByLogin('local-user'))!
+    const session = await sessions.createSession({
       userId: user.id,
       lifetime: { idleSeconds: 3600, absoluteSeconds: 7200 },
       oidc: { issuer: 'https://auth.example/application/o/mado', subject: 'subject-1', sid: 'sid-1' },
@@ -240,10 +250,10 @@ describe('認証 route', () => {
     }
     const oidcApp = new Hono()
     mountAuthRoutes(oidcApp, {
-      store, audit,
+      ...stores, audit,
       config: {
         localEnabled: false,
-        session: { idleSeconds: 3600, absoluteSeconds: 7200, secure: false, cookieName: 'mado_session' },
+        session: { idleSeconds: 3600, absoluteSeconds: 7200, secure: false },
         oidc,
       },
     })
@@ -252,7 +262,55 @@ describe('認証 route', () => {
       body: 'logout_token=signed-token-placeholder',
     })
     expect((await request()).status).toBe(204)
-    expect(await store.authenticateSession(session.token, 3600)).toBeNull()
+    expect(await sessions.authenticateSession(session.token, 3600)).toBeNull()
     expect((await request()).status).toBe(400)
+  })
+
+  describe('パスワード変更', () => {
+    async function loginCookie(target: Hono): Promise<string> {
+      const login = await target.request('/local/login', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ identifier: 'local-user', password: 'correct-password-123' }),
+      })
+      return login.headers.get('set-cookie')!.split(';')[0]
+    }
+    const changePassword = (target: Hono, cookie: string, currentPassword: string) => target.request('/change-password', {
+      method: 'POST', headers: { Cookie: cookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ currentPassword, newPassword: 'changed-password-123' }),
+    })
+
+    it('監査の書き込みに失敗しても変更は成功として返し、変更前に残した記録を成功で確定する', async () => {
+      const failingWrite = { ...audit, write: () => Promise.reject(new Error('audit unavailable')) } as AuditWriter
+      const target = new Hono()
+      mountAuthRoutes(target, {
+        ...stores, audit: failingWrite,
+        config: { localEnabled: true, session: { idleSeconds: 3600, absoluteSeconds: 7200, secure: false } },
+      })
+      const changed = await changePassword(target, await loginCookie(target), 'correct-password-123')
+      expect(changed.status).toBe(200)
+      expect(changed.headers.get('set-cookie')).toContain('mado_session=')
+      const events = await pools.rw.query<{ outcome: string; details: Record<string, unknown> }>(
+        `SELECT outcome, details FROM audit_events WHERE action = 'auth.password.change'`,
+      )
+      expect(events.rows).toEqual([expect.objectContaining({
+        outcome: 'success', details: expect.objectContaining({ state: 'committed', dedicatedAuditMissing: true }),
+      })])
+    })
+
+    it('現在のパスワードの確認は User ごとに回数を制限する', async () => {
+      const target = new Hono()
+      mountAuthRoutes(target, {
+        ...stores, audit,
+        config: {
+          localEnabled: true, rateLimiter: new AuthRateLimiter(),
+          session: { idleSeconds: 3600, absoluteSeconds: 7200, secure: false },
+        },
+      })
+      const cookie = await loginCookie(target)
+      for (let attempt = 0; attempt < 10; attempt += 1) {
+        expect((await changePassword(target, cookie, `wrong-${attempt}`)).status).toBe(400)
+      }
+      expect((await changePassword(target, cookie, 'correct-password-123')).status).toBe(429)
+    })
   })
 })

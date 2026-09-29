@@ -9,24 +9,32 @@ export const PASSWORD_HASH_OPTIONS = {
   parallelism: 1,
 } as const
 
+// パスワードの長さは UTF-8 の byte で数える。日本語 1 文字は 3 byte になるので、
+// 入力検証も文字数ではなくこの関数で見る (文字数で見ると、検証を通ったのに hash で失敗する)。
+export const PASSWORD_MIN_BYTES = 12
+// Argon2 に極端に長い入力を渡させない上限。
+export const PASSWORD_MAX_BYTES = 1024
+// bootstrap は対話入力で、初回 login で変更を必須にするので短めを許す。
+const BOOTSTRAP_PASSWORD_MIN_BYTES = 8
+
+export function isAcceptablePasswordLength(password: string, minimumBytes = PASSWORD_MIN_BYTES): boolean {
+  const bytes = Buffer.byteLength(password, 'utf8')
+  return bytes >= minimumBytes && bytes <= PASSWORD_MAX_BYTES
+}
+
 async function hashWithMinimum(password: string, minimumBytes: number): Promise<string> {
-  if (Buffer.byteLength(password, 'utf8') < minimumBytes) {
-    throw new Error(`password must be at least ${minimumBytes} bytes`)
-  }
-  if (Buffer.byteLength(password, 'utf8') > 1024) {
-    throw new Error('password must be at most 1024 bytes')
+  if (!isAcceptablePasswordLength(password, minimumBytes)) {
+    throw new Error(`password must be ${minimumBytes}-${PASSWORD_MAX_BYTES} bytes`)
   }
   return argon2.hash(password, PASSWORD_HASH_OPTIONS)
 }
 
 export async function hashPassword(password: string): Promise<string> {
-  return hashWithMinimum(password, 12)
+  return hashWithMinimum(password, PASSWORD_MIN_BYTES)
 }
 
-// A known bootstrap credential is allowed to be shorter only because the
-// account is forced through password change before the application is usable.
 export async function hashBootstrapPassword(password: string): Promise<string> {
-  return hashWithMinimum(password, 8)
+  return hashWithMinimum(password, BOOTSTRAP_PASSWORD_MIN_BYTES)
 }
 
 export async function verifyPassword(hash: string, password: string): Promise<boolean> {

@@ -2,17 +2,23 @@ import type { Hono } from 'hono'
 import { z } from 'zod'
 import type { AuditWriter } from '../lib/audit.js'
 import { randomToken } from '../lib/auth-crypto.js'
-import { LastActiveAdminError, type AuthStore } from '../lib/auth-store.js'
+import { LastActiveAdminError } from '../lib/auth-admin-invariant.js'
+import type { CredentialStore } from '../lib/auth-credential-store.js'
+import type { UserStore } from '../lib/auth-user-store.js'
 import { requirePermission, getSessionPrincipal } from '../lib/rbac.js'
 import { requestMetadata } from '../lib/request-metadata.js'
-import { hashPassword } from '../lib/password.js'
-import { markAuditChangeCommitted } from '../lib/audit-activity.js'
+import { hashPassword, isAcceptablePasswordLength } from '../lib/password.js'
+import { markAuditChangeCommitted, writeDedicatedAudit } from '../lib/audit-activity.js'
 
 export interface AdminUsersDeps {
-  store: AuthStore
+  users: UserStore
+  credentials: Pick<CredentialStore, 'resetLocalPassword'>
   audit: AuditWriter
   ssoRoleMapping: Record<string, string>
 }
+
+// 長さは文字数ではなく UTF-8 の byte で見る (password.ts と同じ基準)。
+const Password = z.string().refine(password => isAcceptablePasswordLength(password))
 
 const Role = z.string().regex(/^[a-z][a-z0-9_.:-]{0,63}$/)
 const CreateBody = z.object({
@@ -20,7 +26,7 @@ const CreateBody = z.object({
   email: z.string().email().max(320).nullable().optional(),
   displayName: z.string().trim().min(1).max(128),
   roles: z.array(Role).max(16).default(['viewer']),
-  password: z.string().min(12).max(1024).optional(),
+  password: Password.optional(),
 })
 const PatchBody = z.object({
   username: z.string().trim().regex(/^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,63}$/).nullable().optional(),
@@ -28,14 +34,14 @@ const PatchBody = z.object({
   status: z.enum(['active', 'disabled']).optional(),
 }).strict()
 const RolesBody = z.object({ roles: z.array(Role).max(16) })
-const ResetBody = z.object({ password: z.string().min(12).max(1024).optional() })
+const ResetBody = z.object({ password: Password.optional() })
 
 export function mountAdminUsersRoutes(app: Hono, deps: AdminUsersDeps): void {
   app.use('/users', requirePermission('users:manage'))
   app.use('/users/*', requirePermission('users:manage'))
 
   app.get('/users', async c => c.json({
-    users: await deps.store.listUsers(),
+    users: await deps.users.listUsers(),
     ssoRoleMapping: deps.ssoRoleMapping,
   }))
 
@@ -43,20 +49,21 @@ export function mountAdminUsersRoutes(app: Hono, deps: AdminUsersDeps): void {
     const principal = getSessionPrincipal(c)!
     const parsed = CreateBody.safeParse(await c.req.json().catch(() => null))
     if (!parsed.success) return c.json({ error: 'invalid body' }, 400)
-    if (!await deps.store.rolesExist(parsed.data.roles)) return c.json({ error: 'unknown role' }, 400)
+    if (!await deps.users.rolesExist(parsed.data.roles)) return c.json({ error: 'unknown role' }, 400)
+    const initialPassword = parsed.data.password
     try {
-      const user = await deps.store.createUser({
+      const user = await deps.users.createUser({
         username: parsed.data.username,
         email: parsed.data.email,
         displayName: parsed.data.displayName,
         roles: parsed.data.roles,
         createdBy: principal.user.id,
+        localPassword: initialPassword
+          ? { hash: await hashPassword(initialPassword), mustChange: true }
+          : undefined,
       })
       markAuditChangeCommitted(c)
-      if (parsed.data.password) {
-        await deps.store.setLocalPassword(user.id, await hashPassword(parsed.data.password), true)
-      }
-      await deps.audit.write({
+      await writeDedicatedAudit(c, deps.audit, {
         actor: { type: 'user', userId: principal.user.id }, action: 'user.create', outcome: 'success',
         resourceType: 'user', resourceId: user.id,
         details: {
@@ -82,7 +89,7 @@ export function mountAdminUsersRoutes(app: Hono, deps: AdminUsersDeps): void {
     if (!parsed.success) return c.json({ error: 'invalid body' }, 400)
     let result
     try {
-      result = await deps.store.updateUserIfChanged(id, parsed.data)
+      result = await deps.users.updateUser(id, parsed.data)
     } catch (e) {
       if (e instanceof LastActiveAdminError) {
         return c.json({ error: 'cannot disable the last active admin' }, 409)
@@ -102,10 +109,7 @@ export function mountAdminUsersRoutes(app: Hono, deps: AdminUsersDeps): void {
       before: result.before[field as keyof typeof result.before],
       after: result.user[field as keyof typeof result.user],
     }))
-    if (result.changedFields.includes('status') && result.user.status === 'disabled') {
-      await deps.store.revokeUserSessions(id)
-    }
-    await deps.audit.write({
+    await writeDedicatedAudit(c, deps.audit, {
       actor: { type: 'user', userId: principal.user.id }, action: 'user.update', outcome: 'success',
       resourceType: 'user', resourceId: id,
       details: {
@@ -123,11 +127,10 @@ export function mountAdminUsersRoutes(app: Hono, deps: AdminUsersDeps): void {
     if (!z.string().uuid().safeParse(id).success) return c.json({ error: 'invalid user id' }, 400)
     const parsed = RolesBody.safeParse(await c.req.json().catch(() => null))
     if (!parsed.success) return c.json({ error: 'invalid body' }, 400)
-    if (!await deps.store.rolesExist(parsed.data.roles)) return c.json({ error: 'unknown role' }, 400)
-    const nextRoles = [...new Set(parsed.data.roles)].sort()
+    if (!await deps.users.rolesExist(parsed.data.roles)) return c.json({ error: 'unknown role' }, 400)
     let result
     try {
-      result = await deps.store.setUserRolesIfChanged(id, nextRoles, principal.user.id)
+      result = await deps.users.replaceUserRoles(id, parsed.data.roles, principal.user.id)
     } catch (error) {
       if (error instanceof LastActiveAdminError) {
         return c.json({ error: 'cannot remove the last active admin role' }, 409)
@@ -137,8 +140,7 @@ export function mountAdminUsersRoutes(app: Hono, deps: AdminUsersDeps): void {
     if (!result) return c.json({ error: 'user not found' }, 404)
     if (result.changedFields.length === 0) return c.json({ user: result.user })
     markAuditChangeCommitted(c)
-    await deps.store.revokeUserSessions(id)
-    await deps.audit.write({
+    await writeDedicatedAudit(c, deps.audit, {
       actor: { type: 'user', userId: principal.user.id }, action: 'user.roles.update', outcome: 'success',
       resourceType: 'user', resourceId: id,
       details: {
@@ -156,16 +158,17 @@ export function mountAdminUsersRoutes(app: Hono, deps: AdminUsersDeps): void {
     if (!z.string().uuid().safeParse(id).success) return c.json({ error: 'invalid user id' }, 400)
     const parsed = ResetBody.safeParse(await c.req.json().catch(() => ({})))
     if (!parsed.success) return c.json({ error: 'invalid body' }, 400)
-    const current = await deps.store.getUser(id)
+    const current = await deps.users.getUser(id)
     if (!current) return c.json({ error: 'user not found' }, 404)
     if (current.authMethods.includes('sso') && !current.authMethods.includes('local')) {
       return c.json({ error: 'SSO user password is managed by the identity provider' }, 409)
     }
     const temporaryPassword = parsed.data.password ?? `Mado-${randomToken(18)}`
-    await deps.store.setLocalPassword(id, await hashPassword(temporaryPassword), true)
+    if (!await deps.credentials.resetLocalPassword(id, await hashPassword(temporaryPassword))) {
+      return c.json({ error: 'user not found' }, 404)
+    }
     markAuditChangeCommitted(c)
-    await deps.store.revokeUserSessions(id)
-    await deps.audit.write({
+    await writeDedicatedAudit(c, deps.audit, {
       actor: { type: 'user', userId: principal.user.id }, action: 'user.password.reset', outcome: 'success',
       resourceType: 'user', resourceId: id,
       details: {
@@ -183,10 +186,10 @@ export function mountAdminUsersRoutes(app: Hono, deps: AdminUsersDeps): void {
     const id = c.req.param('id')
     if (!z.string().uuid().safeParse(id).success) return c.json({ error: 'invalid user id' }, 400)
     if (id === principal.user.id) return c.json({ error: 'cannot delete your own account' }, 409)
-    const current = await deps.store.getUser(id)
+    const current = await deps.users.getUser(id)
     if (!current) return c.json({ error: 'user not found' }, 404)
     try {
-      if (!await deps.store.deleteUser(id)) return c.json({ error: 'user not found' }, 404)
+      if (!await deps.users.deleteUser(id)) return c.json({ error: 'user not found' }, 404)
       markAuditChangeCommitted(c)
     } catch (error) {
       if (error instanceof LastActiveAdminError) {
@@ -194,7 +197,7 @@ export function mountAdminUsersRoutes(app: Hono, deps: AdminUsersDeps): void {
       }
       throw error
     }
-    await deps.audit.write({
+    await writeDedicatedAudit(c, deps.audit, {
       actor: { type: 'user', userId: principal.user.id }, action: 'user.delete', outcome: 'success',
       resourceType: 'user', resourceId: id,
       details: {

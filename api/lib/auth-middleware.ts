@@ -1,13 +1,11 @@
-import type { Context, MiddlewareHandler } from 'hono'
+import type { MiddlewareHandler } from 'hono'
 import { getCookie } from 'hono/cookie'
-import type { AuthStore } from './auth-store.js'
-import { SESSION_COOKIE } from './auth-types.js'
+import type { SessionStore } from './auth-session-store.js'
 import { getSessionPrincipal, setSessionPrincipal } from './rbac.js'
 
 export interface SessionMiddlewareConfig {
   idleSeconds: number
-  cookieName?: string
-  onDenied?: (c: Context, reason: 'missing' | 'invalid') => Promise<void>
+  cookieName: string
 }
 
 /** 初期・一時passwordの変更前は、認証済みでも通常APIを利用させない。 */
@@ -23,20 +21,14 @@ export function requirePasswordChangeComplete(): MiddlewareHandler {
 }
 
 export function requireSession(
-  store: AuthStore,
+  sessions: Pick<SessionStore, 'authenticateSession'>,
   config: SessionMiddlewareConfig,
 ): MiddlewareHandler {
   return async (c, next) => {
-    const token = getCookie(c, config.cookieName ?? SESSION_COOKIE)
-    if (!token) {
-      await config.onDenied?.(c, 'missing').catch(error => console.error('session denial audit failed', error))
-      return c.json({ error: 'unauthorized' }, 401)
-    }
-    const principal = await store.authenticateSession(token, config.idleSeconds)
-    if (!principal) {
-      await config.onDenied?.(c, 'invalid').catch(error => console.error('session denial audit failed', error))
-      return c.json({ error: 'unauthorized' }, 401)
-    }
+    const token = getCookie(c, config.cookieName)
+    if (!token) return c.json({ error: 'unauthorized' }, 401)
+    const principal = await sessions.authenticateSession(token, config.idleSeconds)
+    if (!principal) return c.json({ error: 'unauthorized' }, 401)
     setSessionPrincipal(c, principal)
     await next()
   }

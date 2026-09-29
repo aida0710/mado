@@ -1,7 +1,8 @@
 import { stdin, stdout } from 'node:process'
 import { createPools, closePools } from '../db.js'
 import { createAuditWriter } from '../lib/audit.js'
-import { createAuthStore } from '../lib/auth-store.js'
+import { createUserStore } from '../lib/auth-user-store.js'
+import { createCredentialStore } from '../lib/auth-credential-store.js'
 import { hashBootstrapPassword } from '../lib/password.js'
 
 function option(name: string): string | undefined {
@@ -65,21 +66,22 @@ if (first !== second) throw new Error('passwords do not match')
 const passwordHash = await hashBootstrapPassword(first)
 
 const pools = createPools({ rw: databaseUrl, ro: process.env.DATABASE_URL_RO ?? databaseUrl })
-const store = createAuthStore(pools.rw)
+const users = createUserStore(pools.rw)
+const credentials = createCredentialStore(pools.rw)
 const audit = createAuditWriter(pools.rw)
 try {
-  const credential = await store.getLocalCredential(username)
-  let user = credential ?? (await store.listUsers()).find(u => u.username?.toLowerCase() === username)
+  const credential = await credentials.findLocalCredentialByLogin(username)
+  let user = credential ?? (await users.listUsers()).find(u => u.username?.toLowerCase() === username)
   if (!user) {
-    user = await store.createUser({ username, email, displayName, roles: ['admin'] })
+    user = await users.createUser({ username, email, displayName, roles: ['admin'] })
   } else if (!user.roles.includes('admin')) {
-    user = await store.setUserRoles(user.id, [...user.roles, 'admin'], user.id) ?? user
+    user = (await users.replaceUserRoles(user.id, [...user.roles, 'admin'], user.id))?.user ?? user
   }
   if (user.status !== 'active') {
-    user = await store.updateUser(user.id, { status: 'active' }) ?? user
+    user = (await users.updateUser(user.id, { status: 'active' }))?.user ?? user
   }
-  await store.setLocalPassword(user.id, passwordHash, true)
-  await store.revokeUserSessions(user.id)
+  // 次回の login でパスワードの変更を必須にし、既存の session はすべて失効させる。
+  await credentials.resetLocalPassword(user.id, passwordHash)
   await audit.write({
     actor: { type: 'system' }, action: 'auth.bootstrap_admin', outcome: 'success',
     resourceType: 'user', resourceId: user.id, details: { username, email },

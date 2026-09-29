@@ -27,7 +27,11 @@ import { mountConnectionsRoutes } from './routes/connections.js'
 import { mountNotesRoutes } from './routes/notes.js'
 import { mountStorageTagsRoutes } from './routes/storage-tags.js'
 import { mountSettingsRoutes } from './routes/settings.js'
-import { createAuthStore } from './lib/auth-store.js'
+import { createUserStore } from './lib/auth-user-store.js'
+import { createCredentialStore } from './lib/auth-credential-store.js'
+import { createSessionStore } from './lib/auth-session-store.js'
+import { createOidcProvisioning } from './lib/auth-oidc-provisioning.js'
+import { sessionCookieName } from './lib/auth-types.js'
 import { createAuditWriter } from './lib/audit.js'
 import { auditActivity } from './lib/audit-activity.js'
 import { createServiceAccountStore } from './lib/auth-api-keys.js'
@@ -60,19 +64,33 @@ const pools = createPools({ rw: env.DATABASE_URL_RW, ro: env.DATABASE_URL_RO })
 const crypto = createCrypto(env.ENCRYPTION_KEY)
 const storageFactory = createStorageFactory({ pools, crypto })
 const authEnabled = env.AUTH_MODE !== 'disabled'
-const authStore = createAuthStore(pools.rw)
 const audit = createAuditWriter(pools.rw)
+const users = createUserStore(pools.rw)
+const credentials = createCredentialStore(pools.rw)
+const sessions = createSessionStore(pools.rw)
 const serviceAccounts = createServiceAccountStore(pools.rw)
+const sessionCookie = sessionCookieName(env.AUTH_COOKIE_SECURE)
+const oidcEnabled = authEnabled && (env.AUTH_MODE === 'oidc' || env.AUTH_MODE === 'hybrid')
+if (oidcEnabled && (!env.OIDC_ISSUER_URL || !env.OIDC_CLIENT_ID
+    || !env.OIDC_CLIENT_SECRET || !env.OIDC_REDIRECT_URI)) {
+  throw new Error('AUTH_MODE enables OIDC but OIDC_ISSUER_URL/CLIENT_ID/CLIENT_SECRET/REDIRECT_URI is incomplete')
+}
+const oidc = oidcEnabled ? createOidcProvider(pools.rw, crypto, {
+  id: 'primary',
+  label: env.OIDC_LABEL,
+  issuerUrl: env.OIDC_ISSUER_URL!,
+  clientId: env.OIDC_CLIENT_ID!,
+  clientSecret: env.OIDC_CLIENT_SECRET!,
+  redirectUri: env.OIDC_REDIRECT_URI!,
+  scopes: env.OIDC_SCOPES,
+  postLogoutRedirectUri: env.OIDC_POST_LOGOUT_REDIRECT_URI,
+}) : undefined
 // 期限切れ session と OIDC attempt の掃除。attempt の有効期限は分単位なので 1 時間おきで十分。
 const AUTH_CLEANUP_INTERVAL_MS = 60 * 60 * 1000
 const authCleanupTimer = authEnabled ? setInterval(() => {
   void Promise.all([
-    authStore.deleteExpiredSessions(),
-    pools.rw.query(
-      `DELETE FROM auth_oidc_attempts
-        WHERE expires_at < now() - interval '1 hour'
-           OR used_at < now() - interval '1 hour'`,
-    ),
+    sessions.deleteExpiredSessions(),
+    oidc?.deleteExpiredAttempts(),
   ]).catch(error => console.error('failed to clean expired auth records', error))
 }, AUTH_CLEANUP_INTERVAL_MS) : null
 authCleanupTimer?.unref()
@@ -101,23 +119,11 @@ if (authEnabled) {
     if (c.req.path.endsWith('/oidc/backchannel-logout')) return next()
     return safeOrigin(c, next)
   })
-  const oidcEnabled = env.AUTH_MODE === 'oidc' || env.AUTH_MODE === 'hybrid'
-  if (oidcEnabled && (!env.OIDC_ISSUER_URL || !env.OIDC_CLIENT_ID
-      || !env.OIDC_CLIENT_SECRET || !env.OIDC_REDIRECT_URI)) {
-    throw new Error('AUTH_MODE enables OIDC but OIDC_ISSUER_URL/CLIENT_ID/CLIENT_SECRET/REDIRECT_URI is incomplete')
-  }
-  const oidc = oidcEnabled ? createOidcProvider(pools.rw, crypto, {
-    id: 'primary',
-    label: env.OIDC_LABEL,
-    issuerUrl: env.OIDC_ISSUER_URL!,
-    clientId: env.OIDC_CLIENT_ID!,
-    clientSecret: env.OIDC_CLIENT_SECRET!,
-    redirectUri: env.OIDC_REDIRECT_URI!,
-    scopes: env.OIDC_SCOPES,
-    postLogoutRedirectUri: env.OIDC_POST_LOGOUT_REDIRECT_URI,
-  }) : undefined
   mountAuthRoutes(authApi, {
-    store: authStore,
+    users,
+    credentials,
+    sessions,
+    oidcProvisioning: createOidcProvisioning(pools.rw, audit),
     audit,
     config: {
       localEnabled: env.AUTH_MODE === 'local' || env.AUTH_MODE === 'hybrid',
@@ -125,10 +131,9 @@ if (authEnabled) {
         idleSeconds: env.AUTH_SESSION_IDLE_SECONDS,
         absoluteSeconds: env.AUTH_SESSION_ABSOLUTE_SECONDS,
         secure: env.AUTH_COOKIE_SECURE,
-        cookieName: env.AUTH_COOKIE_SECURE ? '__Host-mado_session' : 'mado_session',
       },
       oidc,
-      oidcProvisioning: {
+      oidcLoginPolicy: {
         autoLinkVerifiedEmail: env.OIDC_AUTO_LINK_VERIFIED_EMAIL,
         allowedGroups: env.OIDC_ALLOWED_GROUPS,
         roleMapping: env.OIDC_ROLE_MAPPING_JSON,
@@ -142,9 +147,9 @@ if (authEnabled) {
 const api = new Hono()
 api.use('*', requireSafeOrigin(env.ALLOWED_ORIGINS))
 if (authEnabled) {
-  api.use('*', requireSession(authStore, {
+  api.use('*', requireSession(sessions, {
     idleSeconds: env.AUTH_SESSION_IDLE_SECONDS,
-    cookieName: env.AUTH_COOKIE_SECURE ? '__Host-mado_session' : 'mado_session',
+    cookieName: sessionCookie,
   }))
   // 成功した変更だけを残せるよう、権限checkより先に変更intentを開始する。
   api.use('*', auditActivity(audit))
@@ -275,7 +280,8 @@ if (env.DATASET_REGISTRY_URL && env.DATASET_REGISTRY_TOKEN && env.MARQUEZ_URL) {
 
 if (authEnabled) {
   mountAdminUsersRoutes(api, {
-    store: authStore,
+    users,
+    credentials,
     audit,
     ssoRoleMapping: env.OIDC_ROLE_MAPPING_JSON,
   })

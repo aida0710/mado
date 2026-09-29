@@ -35,24 +35,22 @@ export interface ServicePrincipal {
   namespaces: string[]
 }
 
-export type AuthPrincipal = SessionPrincipal | ServicePrincipal
-
 export interface RequestMetadata {
   ipAddress?: string | null
   userAgent?: string | null
   requestId?: string | null
 }
 
-export const SESSION_COOKIE = '__Host-mado_session'
+// HTTPS のときだけ __Host- を付ける。__Host- の cookie は Secure が必須で、HTTP では送られないため。
+export function sessionCookieName(secure: boolean): string {
+  return secure ? '__Host-mado_session' : 'mado_session'
+}
+
+/** SSO の login を開始した browser と callback を結ぶ cookie。 */
+export function oidcTransactionCookieName(secure: boolean): string {
+  return secure ? '__Host-mado_oidc_tx' : 'mado_oidc_tx'
+}
 
 export function hasPermission(principal: SessionPrincipal, permission: string): boolean {
   return principal.user.permissions.includes(permission)
-}
-
-export function hasScope(principal: ServicePrincipal, scope: string): boolean {
-  return principal.scopes.includes(scope)
-}
-
-export function allowsNamespace(principal: ServicePrincipal, namespace: string): boolean {
-  return principal.namespaces.includes('*') || principal.namespaces.includes(namespace)
 }

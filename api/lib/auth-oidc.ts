@@ -7,6 +7,11 @@ import { sha256 } from './auth-crypto.js'
 // back-channel logout token の jti を覚えておく期間。同じ token の再送 (replay) を弾くためで、
 // OIDC の logout token は短命なので 1 日で十分。
 const LOGOUT_TOKEN_JTI_KEEP_MS = 24 * 60 * 60 * 1000
+/** IdP の login 画面から戻るまでの猶予。attempt の期限と、開始 browser を結ぶ cookie の寿命の両方に使う。 */
+export const OIDC_TRANSACTION_TTL_SECONDS = 300
+// 未認証で作れる attempt 行の上限。1 つの browser で開ける SSO の login 画面の数と、全体の数。
+const MAX_PENDING_ATTEMPTS_PER_BROWSER = 3
+const MAX_PENDING_ATTEMPTS_TOTAL = 10_000
 
 export interface OidcProviderConfig {
   id: string
@@ -137,16 +142,17 @@ export function createOidcProvider(
           WHERE used_at IS NULL AND expires_at > now()`,
         [bindingHash],
       )
-      if (Number(pending.rows[0]?.own ?? 0) >= 3 || Number(pending.rows[0]?.total ?? 0) >= 10_000) {
+      if (Number(pending.rows[0]?.own ?? 0) >= MAX_PENDING_ATTEMPTS_PER_BROWSER
+          || Number(pending.rows[0]?.total ?? 0) >= MAX_PENDING_ATTEMPTS_TOTAL) {
         throw new OidcAttemptLimitError()
       }
       await pool.query(
         `INSERT INTO auth_oidc_attempts
           (state_hash, provider_id, nonce_enc, code_verifier_enc, return_to,
            browser_binding_hash, expires_at)
-         VALUES ($1, $2, $3, $4, $5, $6, now() + interval '5 minutes')`,
+         VALUES ($1, $2, $3, $4, $5, $6, now() + ($7 * interval '1 second'))`,
         [sha256(state), provider.id, crypto.encrypt(nonce), crypto.encrypt(verifier),
-          safeReturnTo(returnTo), bindingHash],
+          safeReturnTo(returnTo), bindingHash, OIDC_TRANSACTION_TTL_SECONDS],
       )
       return oidc.buildAuthorizationUrl(config, {
         redirect_uri: redirectUri.href,

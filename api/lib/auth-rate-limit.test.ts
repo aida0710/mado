@@ -2,13 +2,12 @@ import { describe, expect, it } from 'vitest'
 import { AuthRateLimiter } from './auth-rate-limit.js'
 
 describe('AuthRateLimiter', () => {
-  it('window内の上限とresetを適用する', () => {
+  it('window内は上限で止め、windowが明けたら通す', () => {
     const limiter = new AuthRateLimiter()
     expect(limiter.consume('ip:1', 2, 1_000, 100)).toBe(true)
     expect(limiter.consume('ip:1', 2, 1_000, 101)).toBe(true)
     expect(limiter.consume('ip:1', 2, 1_000, 102)).toBe(false)
-    limiter.reset('ip:1')
-    expect(limiter.consume('ip:1', 2, 1_000, 103)).toBe(true)
+    expect(limiter.consume('ip:1', 2, 1_000, 1_100)).toBe(true)
   })
 
   it('同時password検証数を制限する', async () => {

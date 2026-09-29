@@ -30,10 +30,6 @@ export class AuthRateLimiter {
     return true
   }
 
-  reset(...keys: string[]): void {
-    for (const key of keys) this.buckets.delete(key)
-  }
-
   async passwordCheck<T>(task: () => Promise<T>): Promise<{ accepted: true; value: T } | { accepted: false }> {
     if (this.activePasswordChecks >= this.maxConcurrentPasswordChecks) return { accepted: false }
     this.activePasswordChecks += 1

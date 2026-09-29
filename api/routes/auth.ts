@@ -2,38 +2,52 @@ import type { Hono } from 'hono'
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
 import { z } from 'zod'
 import type { AuditWriter } from '../lib/audit.js'
-import type { AuthStore, SessionLifetime } from '../lib/auth-store.js'
+import type { CredentialStore } from '../lib/auth-credential-store.js'
+import type { SessionLifetime, SessionStore } from '../lib/auth-session-store.js'
+import type { UserStore } from '../lib/auth-user-store.js'
 import type { OidcProvider } from '../lib/auth-oidc.js'
-import { OidcAttemptLimitError } from '../lib/auth-oidc.js'
+import { OIDC_TRANSACTION_TTL_SECONDS, OidcAttemptLimitError } from '../lib/auth-oidc.js'
+import {
+  OidcLoginDeniedError, resolveOidcRoles, type OidcProvisioning, type OidcRolePolicy,
+} from '../lib/auth-oidc-provisioning.js'
 import { randomToken } from '../lib/auth-crypto.js'
 import { AuthRateLimiter } from '../lib/auth-rate-limit.js'
 import { requirePasswordChangeComplete, requireSession } from '../lib/auth-middleware.js'
-import { SESSION_COOKIE } from '../lib/auth-types.js'
+import { oidcTransactionCookieName, sessionCookieName } from '../lib/auth-types.js'
 import { getSessionPrincipal } from '../lib/rbac.js'
 import { requestMetadata } from '../lib/request-metadata.js'
-import { markAuditChangeCommitted } from '../lib/audit-activity.js'
-import { hashPassword, passwordNeedsRehash, verifyPassword } from '../lib/password.js'
+import { auditActivity, markAuditChangeCommitted, writeDedicatedAudit } from '../lib/audit-activity.js'
+import {
+  PASSWORD_MAX_BYTES, hashPassword, isAcceptablePasswordLength, passwordNeedsRehash, verifyPassword,
+} from '../lib/password.js'
+
+// 送信元 IP ごとの試行回数の上限。人が打ち直すには十分で、総当たりには遅い回数にする。
+const LOCAL_LOGIN_LIMIT = { attempts: 30, windowMs: 60_000 }
+const OIDC_START_LIMIT = { attempts: 20, windowMs: 60_000 }
+// 本人の現在のパスワードの確認は User ごとに数える。盗まれた session からの総当たりを遅くするため。
+const CHANGE_PASSWORD_LIMIT = { attempts: 10, windowMs: 15 * 60_000 }
 
 export interface AuthRouteConfig {
   localEnabled: boolean
-  session: SessionLifetime & {
-    cookieName?: string
-    secure: boolean
-  }
+  session: SessionLifetime & { secure: boolean }
   rateLimiter?: AuthRateLimiter
   oidc?: OidcProvider
-  oidcProvisioning?: {
-    autoLinkVerifiedEmail: boolean
-    allowedGroups: string[]
-    roleMapping: Record<string, 'viewer' | 'curator' | 'operator' | 'admin'>
-    defaultRole: 'viewer' | 'curator' | 'operator' | 'admin'
-  }
+  oidcLoginPolicy?: OidcRolePolicy & { autoLinkVerifiedEmail: boolean }
 }
 
 export interface AuthRouteDeps {
-  store: AuthStore
+  users: Pick<UserStore, 'updateProfile'>
+  credentials: CredentialStore
+  sessions: SessionStore
+  oidcProvisioning: OidcProvisioning
   audit: AuditWriter
   config: AuthRouteConfig
+}
+
+/** SSO の callback が失敗した理由を、秘密値を含めずに log へ出すための分類。 */
+function oidcFailureReason(error: unknown): string {
+  if (error instanceof OidcLoginDeniedError) return error.reason
+  return error instanceof Error ? error.message : 'unknown'
 }
 
 const LoginBody = z.object({
@@ -43,8 +57,8 @@ const LoginBody = z.object({
 }).refine(value => Boolean(value.identifier || value.email))
 
 const ChangePasswordBody = z.object({
-  currentPassword: z.string().min(1).max(1024),
-  newPassword: z.string().min(12).max(1024),
+  currentPassword: z.string().min(1).max(PASSWORD_MAX_BYTES),
+  newPassword: z.string().refine(password => isAcceptablePasswordLength(password)),
 })
 const ProfileBody = z.object({
   signatureName: z.string().trim().min(1).max(128),
@@ -81,7 +95,7 @@ function setSessionCookie(
   token: string,
   session: AuthRouteConfig['session'],
 ): void {
-  setCookie(c, session.cookieName ?? SESSION_COOKIE, token, {
+  setCookie(c, sessionCookieName(session.secure), token, {
     httpOnly: true,
     secure: session.secure,
     sameSite: 'Lax',
@@ -91,13 +105,15 @@ function setSessionCookie(
 }
 
 export function mountAuthRoutes(app: Hono, deps: AuthRouteDeps): void {
-  const cookieName = deps.config.session.cookieName ?? SESSION_COOKIE
+  const cookieName = sessionCookieName(deps.config.session.secure)
   const limiter = deps.config.rateLimiter ?? new AuthRateLimiter()
-  const oidcCookieName = deps.config.session.secure ? '__Host-mado_oidc_tx' : 'mado_oidc_tx'
-  const sessionGuard = requireSession(deps.store, {
+  const oidcCookieName = oidcTransactionCookieName(deps.config.session.secure)
+  const sessionGuard = requireSession(deps.sessions, {
     idleSeconds: deps.config.session.idleSeconds,
     cookieName,
   })
+  // 本人による変更も、/api/internal と同じく変更の前に監査の intent を残す。
+  const auditChanges = auditActivity(deps.audit)
   // 存在しないuserでもArgon2を1回計算し、email列挙のtiming差を小さくする。
   const dummyHash = hashPassword(`not-a-real-password-${randomToken(16)}`)
 
@@ -115,11 +131,11 @@ export function mountAuthRoutes(app: Hono, deps: AuthRouteDeps): void {
     const identifier = parsed.data.identifier ?? parsed.data.email!
     const metadata = requestMetadata(c)
     const ipKey = `login:ip:${metadata.ipAddress ?? 'unknown'}`
-    if (!limiter.consume(ipKey, 30, 60_000)) {
-      c.header('Retry-After', '60')
+    if (!limiter.consume(ipKey, LOCAL_LOGIN_LIMIT.attempts, LOCAL_LOGIN_LIMIT.windowMs)) {
+      c.header('Retry-After', String(LOCAL_LOGIN_LIMIT.windowMs / 1000))
       return c.json({ error: 'too many login attempts' }, 429)
     }
-    const credential = await deps.store.getLocalCredential(identifier)
+    const credential = await deps.credentials.findLocalCredentialByLogin(identifier)
     const checked = await limiter.passwordCheck(async () =>
       verifyPassword(credential?.passwordHash ?? await dummyHash, parsed.data.password))
     if (!checked.accepted) {
@@ -130,15 +146,15 @@ export function mountAuthRoutes(app: Hono, deps: AuthRouteDeps): void {
       return c.json({ error: 'invalid identifier or password' }, 401)
     }
 
-    if (passwordNeedsRehash(credential.passwordHash)) {
-      await deps.store.setLocalPassword(
-        credential.id,
-        await hashPassword(parsed.data.password),
-        credential.mustChangePassword,
-      )
-    }
-    await deps.store.recordSuccessfulLogin(credential.id)
-    const session = await deps.store.createSession({ userId: credential.id, lifetime: deps.config.session, metadata })
+    // 検証の間にパスワードが変わっていたら、古いパスワードで session を作らない。
+    const session = await deps.credentials.openLocalSession({
+      userId: credential.id,
+      verifiedPasswordHash: credential.passwordHash,
+      rehashedPasswordHash: passwordNeedsRehash(credential.passwordHash)
+        ? await hashPassword(parsed.data.password) : undefined,
+      session: { lifetime: deps.config.session, metadata },
+    })
+    if (!session) return c.json({ error: 'invalid identifier or password' }, 401)
     setSessionCookie(c, session.token, deps.config.session)
     return c.json({ user: publicUser(credential) })
   })
@@ -146,8 +162,8 @@ export function mountAuthRoutes(app: Hono, deps: AuthRouteDeps): void {
   app.get('/oidc/start', async c => {
     if (!deps.config.oidc) return c.json({ error: 'oidc disabled' }, 404)
     const metadata = requestMetadata(c)
-    if (!limiter.consume(`oidc:start:${metadata.ipAddress ?? 'unknown'}`, 20, 60_000)) {
-      c.header('Retry-After', '60')
+    if (!limiter.consume(`oidc:start:${metadata.ipAddress ?? 'unknown'}`, OIDC_START_LIMIT.attempts, OIDC_START_LIMIT.windowMs)) {
+      c.header('Retry-After', String(OIDC_START_LIMIT.windowMs / 1000))
       return c.json({ error: 'too many oidc attempts' }, 429)
     }
     const existing = getCookie(c, oidcCookieName)
@@ -156,12 +172,13 @@ export function mountAuthRoutes(app: Hono, deps: AuthRouteDeps): void {
     try {
       const url = await deps.config.oidc.start(c.req.query('returnTo'), browserBinding)
       setCookie(c, oidcCookieName, browserBinding, {
-        httpOnly: true, secure: deps.config.session.secure, sameSite: 'Lax', path: '/', maxAge: 300,
+        httpOnly: true, secure: deps.config.session.secure, sameSite: 'Lax', path: '/',
+        maxAge: OIDC_TRANSACTION_TTL_SECONDS,
       })
       return c.redirect(url.href, 302)
     } catch (error) {
       if (error instanceof OidcAttemptLimitError) {
-        c.header('Retry-After', '300')
+        c.header('Retry-After', String(OIDC_TRANSACTION_TTL_SECONDS))
         return c.json({ error: 'too many oidc attempts' }, 429)
       }
       throw error
@@ -176,16 +193,12 @@ export function mountAuthRoutes(app: Hono, deps: AuthRouteDeps): void {
     try {
       if (!browserBinding) throw new Error('oidc browser binding missing')
       const profile = await deps.config.oidc.finish(new URL(c.req.url), browserBinding)
-      const policy = deps.config.oidcProvisioning ?? {
+      const policy = deps.config.oidcLoginPolicy ?? {
         autoLinkVerifiedEmail: false, allowedGroups: [], roleMapping: {}, defaultRole: 'viewer' as const,
       }
-      if (policy.allowedGroups.length === 0
-          || !profile.groups.some(group => policy.allowedGroups.includes(group))) {
-        throw new Error('oidc group not allowed')
-      }
-      const mappedRoles = [...new Set(profile.groups.map(group => policy.roleMapping[group]).filter(Boolean))]
-      const roleMappingEnabled = Object.keys(policy.roleMapping).length > 0
-      const provisioned = await deps.store.provisionOidcUser({
+      const roles = resolveOidcRoles(policy, profile.groups)
+      if (!roles.allowed) throw new OidcLoginDeniedError('group_not_allowed')
+      const provisioned = await deps.oidcProvisioning.provisionOidcUser({
         issuer: profile.issuer,
         subject: profile.subject,
         email: profile.email,
@@ -195,34 +208,21 @@ export function mountAuthRoutes(app: Hono, deps: AuthRouteDeps): void {
         groups: profile.groups,
         autoLinkVerifiedEmail: policy.autoLinkVerifiedEmail,
         defaultRole: policy.defaultRole,
-        managedRoles: roleMappingEnabled
-          ? (mappedRoles.length > 0 ? mappedRoles : [policy.defaultRole])
-          : undefined,
+        managedRoles: roles.managedRoles,
+        metadata,
       })
-      const user = provisioned.user
-      if (user.status !== 'active') throw new Error('user disabled')
-      const session = await deps.store.createSession({
-        userId: user.id,
+      const session = await deps.sessions.createSession({
+        userId: provisioned.user.id,
         lifetime: deps.config.session,
         metadata,
         oidc: { issuer: profile.issuer, subject: profile.subject, sid: profile.sid },
       })
       setSessionCookie(c, session.token, deps.config.session)
-      if (provisioned.created || provisioned.linkedExisting || provisioned.profileChanged) {
-        await deps.audit.write({
-          actor: { type: 'user', userId: user.id }, action: 'auth.oidc.sync', outcome: 'success',
-          resourceType: 'user', resourceId: user.id,
-          details: {
-            created: provisioned.created,
-            linkedExisting: provisioned.linkedExisting,
-            rolesBefore: provisioned.rolesBefore,
-            rolesAfter: user.roles,
-          },
-          ...metadata,
-        })
-      }
       return c.redirect(profile.returnTo, 303)
-    } catch {
+    } catch (error) {
+      // 利用者には理由を区別せず返す。「SSO で入れない」と言われたときに運用者が切り分けられるよう、
+      // 理由だけを log に残す (token や code は含めない)。
+      console.warn('oidc login failed', { reason: oidcFailureReason(error), requestId: metadata.requestId })
       return c.json({ error: 'oidc login failed' }, 401)
     }
   })
@@ -234,7 +234,7 @@ export function mountAuthRoutes(app: Hono, deps: AuthRouteDeps): void {
     if (!issuer || !sid || sid.length > 512 || !deps.config.oidc.matchesIssuer(issuer)) {
       return c.json({ error: 'invalid frontchannel logout' }, 400)
     }
-    const revoked = await deps.store.revokeOidcSessions({ issuer: deps.config.oidc.issuer, sid })
+    const revoked = await deps.sessions.revokeOidcSessions({ issuer: deps.config.oidc.issuer, sid })
     deleteCookie(c, cookieName, { path: '/', secure: deps.config.session.secure })
     if (revoked > 0) {
       await deps.audit.write({
@@ -257,7 +257,7 @@ export function mountAuthRoutes(app: Hono, deps: AuthRouteDeps): void {
       const logoutToken = new URLSearchParams(body).get('logout_token')
       if (!logoutToken) return c.json({ error: 'logout_token missing' }, 400)
       const claims = await deps.config.oidc.verifyBackchannelLogoutToken(logoutToken)
-      const result = await deps.store.applyOidcBackchannelLogout(claims)
+      const result = await deps.sessions.applyOidcBackchannelLogout(claims)
       if (!result.accepted) {
         return c.json({ error: 'logout_token already used' }, 400)
       }
@@ -284,6 +284,7 @@ export function mountAuthRoutes(app: Hono, deps: AuthRouteDeps): void {
 
   app.use('/profile', sessionGuard)
   app.use('/profile', requirePasswordChangeComplete())
+  app.use('/profile', auditChanges)
   app.put('/profile', async c => {
     const principal = getSessionPrincipal(c)
     if (!principal) return c.json({ error: 'unauthorized' }, 401)
@@ -291,7 +292,7 @@ export function mountAuthRoutes(app: Hono, deps: AuthRouteDeps): void {
     if (!parsed.success) return c.json({ error: 'invalid profile' }, 400)
     let result
     try {
-      result = await deps.store.updateProfileIfChanged(principal.user.id, {
+      result = await deps.users.updateProfile(principal.user.id, {
         displayName: parsed.data.displayName,
         username: parsed.data.username,
         signatureName: parsed.data.signatureName,
@@ -312,7 +313,7 @@ export function mountAuthRoutes(app: Hono, deps: AuthRouteDeps): void {
       before: result.before[field as keyof typeof result.before],
       after: result.user[field as keyof typeof result.user],
     }))
-    await deps.audit.write({
+    await writeDedicatedAudit(c, deps.audit, {
       actor: { type: 'user', userId: principal.user.id },
       action: 'auth.profile.update', outcome: 'success',
       resourceType: 'user', resourceId: principal.user.id,
@@ -324,8 +325,8 @@ export function mountAuthRoutes(app: Hono, deps: AuthRouteDeps): void {
   app.use('/logout', sessionGuard)
   app.post('/logout', async c => {
     const token = getCookie(c, cookieName)
-    const oidcContext = token ? await deps.store.getSessionOidcContext(token) : null
-    if (token) await deps.store.revokeSession(token)
+    const oidcContext = token ? await deps.sessions.getSessionOidcContext(token) : null
+    if (token) await deps.sessions.revokeSession(token)
     deleteCookie(c, cookieName, { path: '/', secure: deps.config.session.secure })
     const logoutUrl = oidcContext && deps.config.oidc?.matchesIssuer(oidcContext.issuer)
       ? (await deps.config.oidc.logoutUrl()).href
@@ -334,28 +335,42 @@ export function mountAuthRoutes(app: Hono, deps: AuthRouteDeps): void {
   })
 
   app.use('/change-password', sessionGuard)
+  app.use('/change-password', auditChanges)
   app.post('/change-password', async c => {
     const principal = getSessionPrincipal(c)
-    if (!principal) return c.json({ error: 'local credential not available' }, 400)
+    if (!principal) return c.json({ error: 'unauthorized' }, 401)
     const parsed = ChangePasswordBody.safeParse(await c.req.json().catch(() => null))
     if (!parsed.success) return c.json({ error: 'invalid password' }, 400)
-    const identifier = principal.user.username ?? principal.user.email
-    if (!identifier) return c.json({ error: 'local credential not available' }, 400)
-    const credential = await deps.store.getLocalCredential(identifier)
-    if (!credential || !await verifyPassword(credential.passwordHash, parsed.data.currentPassword)) {
-      return c.json({ error: 'current password is incorrect' }, 400)
+    const userId = principal.user.id
+    if (!limiter.consume(`change-password:user:${userId}`, CHANGE_PASSWORD_LIMIT.attempts, CHANGE_PASSWORD_LIMIT.windowMs)) {
+      c.header('Retry-After', String(CHANGE_PASSWORD_LIMIT.windowMs / 1000))
+      return c.json({ error: 'too many password change attempts' }, 429)
     }
-    const hash = await hashPassword(parsed.data.newPassword).catch(() => null)
-    if (!hash) return c.json({ error: 'invalid new password' }, 400)
-    await deps.store.setLocalPassword(principal.user.id, hash, false)
-    markAuditChangeCommitted(c)
-    await deps.store.revokeUserSessions(principal.user.id)
+    const credential = await deps.credentials.getLocalCredential(userId)
+    if (!credential) return c.json({ error: 'local credential not available' }, 400)
+    const checked = await limiter.passwordCheck(async () =>
+      await verifyPassword(credential.passwordHash, parsed.data.currentPassword)
+        ? hashPassword(parsed.data.newPassword)
+        : null)
+    if (!checked.accepted) {
+      c.header('Retry-After', '1')
+      return c.json({ error: 'authentication busy' }, 429)
+    }
+    if (!checked.value) return c.json({ error: 'current password is incorrect' }, 400)
+
     const metadata = requestMetadata(c)
-    const session = await deps.store.createSession({ userId: principal.user.id, lifetime: deps.config.session, metadata })
+    const session = await deps.credentials.changeLocalPassword({
+      userId,
+      verifiedPasswordHash: credential.passwordHash,
+      newPasswordHash: checked.value,
+      session: { lifetime: deps.config.session, metadata },
+    })
+    if (!session) return c.json({ error: 'password was changed by another request' }, 409)
+    markAuditChangeCommitted(c)
     setSessionCookie(c, session.token, deps.config.session)
-    await deps.audit.write({
-      actor: { type: 'user', userId: principal.user.id }, action: 'auth.password.change', outcome: 'success',
-      resourceType: 'user', resourceId: principal.user.id, ...metadata,
+    await writeDedicatedAudit(c, deps.audit, {
+      actor: { type: 'user', userId }, action: 'auth.password.change', outcome: 'success',
+      resourceType: 'user', resourceId: userId, ...metadata,
     })
     return c.json({ ok: true })
   })

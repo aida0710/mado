@@ -3,14 +3,14 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import { closePools, createPools } from '../db.js'
 import { createAuditWriter } from '../lib/audit.js'
 import { createServiceAccountStore } from '../lib/auth-api-keys.js'
-import { createAuthStore } from '../lib/auth-store.js'
+import { createUserStore } from '../lib/auth-user-store.js'
 import { setSessionPrincipal } from '../lib/rbac.js'
 import { mountServiceAccountRoutes } from './service-accounts.js'
 
 const RW = process.env.DATABASE_URL_RW_TEST
   ?? 'postgres://dashboard_rw:CHANGEME@localhost:5432/dashboard_test'
 const pools = createPools({ rw: RW, ro: RW.replace('dashboard_rw', 'dashboard_ro') })
-const auth = createAuthStore(pools.rw)
+const auth = createUserStore(pools.rw)
 const keys = createServiceAccountStore(pools.rw)
 const audit = createAuditWriter(pools.rw)
 let app: Hono

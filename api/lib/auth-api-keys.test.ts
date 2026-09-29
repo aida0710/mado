@@ -1,12 +1,12 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import { closePools, createPools } from '../db.js'
-import { createAuthStore } from './auth-store.js'
+import { createUserStore } from './auth-user-store.js'
 import { createServiceAccountStore } from './auth-api-keys.js'
 
 const RW = process.env.DATABASE_URL_RW_TEST
   ?? 'postgres://dashboard_rw:CHANGEME@localhost:5432/dashboard_test'
 const pools = createPools({ rw: RW, ro: RW.replace('dashboard_rw', 'dashboard_ro') })
-const auth = createAuthStore(pools.rw)
+const auth = createUserStore(pools.rw)
 const store = createServiceAccountStore(pools.rw)
 
 beforeEach(async () => {
