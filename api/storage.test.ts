@@ -1,10 +1,28 @@
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createServer, type Server, type ServerResponse } from 'node:http'
 import type { AddressInfo } from 'node:net'
+import { networkInterfaces } from 'node:os'
+import { lookup as dnsLookup, type LookupAddress } from 'node:dns'
 import { ListBucketsCommand } from '@aws-sdk/client-s3'
 import { createPools, closePools } from './db.js'
 import { createCrypto } from './crypto.js'
 import { CONNECTION_CACHE_TTL_MS, createStorageFactory } from './storage.js'
+import { BlockedEndpointError, isBlockedAddress } from './lib/endpoint-policy.js'
+
+// 接続先の名前解決だけを差し替える (pg など node_modules 側の名前解決には効かない)。
+vi.mock('node:dns', async importOriginal => {
+  const actual = await importOriginal<typeof import('node:dns')>()
+  return { ...actual, lookup: vi.fn(actual.lookup) }
+})
+
+/** loopback は接続先として拒否するので、テスト用の S3 もどきはこのマシンの別のアドレスで待ち受ける。 */
+function reachableTestHost(): string {
+  for (const addresses of Object.values(networkInterfaces())) {
+    const usable = addresses?.find(address => address.family === 'IPv4' && !address.internal && !isBlockedAddress(address.address))
+    if (usable) return usable.address
+  }
+  throw new Error('no non-loopback IPv4 address to run the local S3 stand-in on')
+}
 
 const RW = process.env.DATABASE_URL_RW_TEST
   ?? 'postgres://dashboard_rw:CHANGEME@localhost:5432/dashboard_test'
@@ -238,7 +256,7 @@ describe('S3Client のキャッシュ', () => {
       heldResponse = new Promise(resolve => { holdResponse = resolve })
       slowServer = createServer((_req, res) => holdResponse(res))
       await Promise.all([fastServer, slowServer].map(server =>
-        new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))))
+        new Promise<void>(resolve => server.listen(0, reachableTestHost(), resolve))))
     })
     afterEach(async () => {
       await Promise.all([fastServer, slowServer].map(server => {
@@ -247,20 +265,11 @@ describe('S3Client のキャッシュ', () => {
       }))
     })
 
-    it('DNS 名が loopback を指すエンドポイントには接続しない (DNS rebinding 対策)', async () => {
-      const port = (fastServer.address() as AddressInfo).port
-      await insertConnection('conn000025', `http://localhost:${port}/`)
-      const f = createStorageFactory({ pools, crypto })
-      try {
-        const request = (await f.getStorage('conn000025')).send(new ListBucketsCommand({}))
-        await expect(request).rejects.toMatchObject({ code: 'EADDRNOTALLOWED' })
-      } finally {
-        await f.close()
-      }
-    })
-
     it('実行中の S3 リクエストは切れない', async () => {
-      const endpointOf = (server: Server) => `http://127.0.0.1:${(server.address() as AddressInfo).port}/`
+      const endpointOf = (server: Server) => {
+        const { address, port } = server.address() as AddressInfo
+        return `http://${address}:${port}/`
+      }
       await insertConnection('conn000023', endpointOf(slowServer))
       await insertConnection('conn000024', endpointOf(fastServer))
       const f = createStorageFactory({ pools, crypto })
@@ -277,5 +286,32 @@ describe('S3Client のキャッシュ', () => {
         await f.close()
       }
     })
+  })
+})
+
+describe('S3 の接続先の検査', () => {
+  it('DNS 名が loopback を指すエンドポイントには接続しない (DNS rebinding 対策)', async () => {
+    // 保存時は普通の DNS 名だったものが、あとから loopback を指すようになった場合。
+    vi.mocked(dnsLookup).mockImplementationOnce(((_hostname: string, _options: unknown, callback: (
+      error: NodeJS.ErrnoException | null, addresses: LookupAddress[],
+    ) => void) => callback(null, [{ address: '127.0.0.1', family: 4 }])) as unknown as typeof dnsLookup)
+    await insertConnection('conn000030', 'http://rebind.example:9/')
+    const f = createStorageFactory({ pools, crypto })
+    try {
+      const request = (await f.getStorage('conn000030')).send(new ListBucketsCommand({}))
+      await expect(request).rejects.toMatchObject({ code: 'EADDRNOTALLOWED' })
+    } finally {
+      await f.close()
+    }
+  })
+
+  it('検査を強める前に保存された、拒否するアドレスの接続先は使わない', async () => {
+    await insertConnection('conn000031', 'http://[::ffff:127.0.0.1]:9000/')
+    const f = createStorageFactory({ pools, crypto })
+    try {
+      await expect(f.getStorage('conn000031')).rejects.toBeInstanceOf(BlockedEndpointError)
+    } finally {
+      await f.close()
+    }
   })
 })

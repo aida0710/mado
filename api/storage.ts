@@ -4,7 +4,7 @@ import { Agent as HttpAgent } from 'node:http'
 import { Agent as HttpsAgent } from 'node:https'
 import type { Pools } from './db.js'
 import type { CryptoModule } from './crypto.js'
-import { lookupAllowedAddress } from './lib/endpoint-policy.js'
+import { BlockedEndpointError, isAllowedEndpoint, lookupAllowedAddress } from './lib/endpoint-policy.js'
 
 // worker は api-internal の invalidate を受け取れないので、接続設定の変更
 // (scan_page_size、endpoint、認証情報など) を worker でも最長この時間で拾えるよう
@@ -210,6 +210,8 @@ export function createStorageFactory(deps: StorageFactoryDeps): StorageFactory {
     )
     const row = r.rows[0]
     if (!row) throw new ConnectionNotFoundError(connectionId)
+    // 保存時の検査が今より緩かった頃の行も、IP を直接書いた接続先は名前解決を通らないのでここで止める。
+    if (!isAllowedEndpoint(row.endpoint)) throw new BlockedEndpointError(connectionId)
 
     const client = new S3Client({
       endpoint: row.endpoint,

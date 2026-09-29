@@ -13,6 +13,14 @@ BLOCKED_ADDRESSES.addSubnet('::', 96, 'ipv6')            // unspecified・loopba
 BLOCKED_ADDRESSES.addSubnet('fe80::', 10, 'ipv6')        // link-local
 BLOCKED_ADDRESSES.addAddress('fd00:ec2::254', 'ipv6')    // AWS の IPv6 metadata (ULA の中にある)
 
+/** 保存されている接続先が、検査で拒否するアドレスを指している。検査を強める前に保存された接続で起きる。 */
+export class BlockedEndpointError extends Error {
+  constructor(readonly connectionId: string) {
+    super(`endpoint of connection ${connectionId} points to a blocked address`)
+    this.name = 'BlockedEndpointError'
+  }
+}
+
 export function isBlockedAddress(address: string): boolean {
   const family = isIP(address)
   if (family === 0) return false
