@@ -26,6 +26,7 @@ import {
 } from '../lib/connection-settings-store.js'
 import { PricingPatch, splitPricingPatch } from '../lib/connection-pricing-patch.js'
 import { CAPACITY_INTERVALS } from '../lib/capacity-store.js'
+import { isAllowedEndpoint } from '../lib/endpoint-policy.js'
 
 // ルート単位のRBACは internal.ts で適用する。接続一覧はさらにここでユーザー別に
 // 絞り込み、非許可の接続は存在自体を返さない。
@@ -35,26 +36,6 @@ export interface ConnectionsDeps {
   pools: Pools
   crypto: CryptoModule
   invalidate: (id: string) => void
-}
-
-// SSRF 緩和: cloud metadata (169.254.169.254) や同一ホスト内サービスへの
-// 到達経路を断つ。RFC1918 (10/172.16/192.168) は LAN 内 MinIO 等の正当な
-// ユースケースがあるため敢えて許可する。本リスト外の uri を反転検知する
-// ホワイトリスト方式は LAN 信頼モデル下では過剰なので採用しない。
-function isAllowedEndpoint(value: string): boolean {
-  let parsed: URL
-  try {
-    parsed = new URL(value)
-  } catch {
-    return false
-  }
-  const host = parsed.hostname.replace(/^\[|\]$/g, '').toLowerCase()
-  if (host === '' || host === 'localhost' || host === '0.0.0.0' || host === '::' || host === '::1') return false
-  if (/^127\./.test(host)) return false                    // IPv4 loopback
-  if (/^169\.254\./.test(host)) return false               // IPv4 link-local (cloud metadata 含む)
-  if (/^fe[89ab][0-9a-f]?:/i.test(host)) return false      // IPv6 link-local
-  if (/^0\.0\.0\.0/.test(host)) return false               // unspecified
-  return true
 }
 
 const endpointSchema = z.string().url().max(512).refine(isAllowedEndpoint, {

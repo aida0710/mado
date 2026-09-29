@@ -247,6 +247,18 @@ describe('S3Client のキャッシュ', () => {
       }))
     })
 
+    it('DNS 名が loopback を指すエンドポイントには接続しない (DNS rebinding 対策)', async () => {
+      const port = (fastServer.address() as AddressInfo).port
+      await insertConnection('conn000025', `http://localhost:${port}/`)
+      const f = createStorageFactory({ pools, crypto })
+      try {
+        const request = (await f.getStorage('conn000025')).send(new ListBucketsCommand({}))
+        await expect(request).rejects.toMatchObject({ code: 'EADDRNOTALLOWED' })
+      } finally {
+        await f.close()
+      }
+    })
+
     it('実行中の S3 リクエストは切れない', async () => {
       const endpointOf = (server: Server) => `http://127.0.0.1:${(server.address() as AddressInfo).port}/`
       await insertConnection('conn000023', endpointOf(slowServer))

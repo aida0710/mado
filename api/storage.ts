@@ -4,6 +4,7 @@ import { Agent as HttpAgent } from 'node:http'
 import { Agent as HttpsAgent } from 'node:https'
 import type { Pools } from './db.js'
 import type { CryptoModule } from './crypto.js'
+import { lookupAllowedAddress } from './lib/endpoint-policy.js'
 
 // worker は api-internal の invalidate を受け取れないので、接続設定の変更
 // (scan_page_size、endpoint、認証情報など) を worker でも最長この時間で拾えるよう
@@ -169,8 +170,9 @@ export function createStorageFactory(deps: StorageFactoryDeps): StorageFactory {
   // 明示的に設定して LAN MinIO / 一部の S3 互換実装の TLS ハンドシェイク往復を抑える。
   // S3Client.destroy() はこの共有 agent ごと破棄し、ほかの接続の実行中リクエストまで
   // 切ってしまうので、client は destroy せず、agent は close() でだけ閉じる。
-  const httpAgent  = new HttpAgent({  keepAlive: true, maxSockets: 50 })
-  const httpsAgent = new HttpsAgent({ keepAlive: true, maxSockets: 50 })
+  // 名前解決は lookupAllowedAddress を通し、DNS 名が loopback や metadata を指したら接続しない。
+  const httpAgent  = new HttpAgent({  keepAlive: true, maxSockets: 50, lookup: lookupAllowedAddress })
+  const httpsAgent = new HttpsAgent({ keepAlive: true, maxSockets: 50, lookup: lookupAllowedAddress })
 
   // client と connection 設定 (list_objects_version 等) を 1 entry にまとめて
   // キャッシュする。getStorage と getConnectionConfig は同じ DB row から派生

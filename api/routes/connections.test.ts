@@ -261,6 +261,8 @@ describe('POST /connections', () => {
     ['unspecified IPv4', 'http://0.0.0.0/'],
     ['IPv6 loopback',    'http://[::1]:9000/'],
     ['IPv6 link-local',  'http://[fe80::1]:9000/'],
+    ['IPv4-mapped IPv6 の loopback', 'http://[::ffff:127.0.0.1]:9000/'],
+    ['末尾ドット付きの localhost',     'http://localhost./'],
   ])('%s へ向くエンドポイントは 400 (SSRF 対策)', async (_label, endpoint) => {
     const res = await app.request('/connections', {
       method: 'POST',
