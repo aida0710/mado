@@ -333,7 +333,7 @@ OSS releaseと社内環境へのdeployは独立しています。release workflo
 - **CSRF 防御**: write 系 (POST/PUT/DELETE) は `ALLOWED_ORIGINS` と Origin/Referer を照合し、不一致なら 403。
 - **PG ロール分離**: ブラウザ由来の経路は `dashboard_rw` / `dashboard_ro` を使い分け、Postgres レベルで `DROP TABLE` 等を防ぐ。
 - **接続ごとのcapability**はRBACとは別層です。Adminであっても接続側で無効なdownload等は実行できません。
-- **接続ホワイトリスト**は通常接続を全員公開のまま保ち、例外の接続だけUser単位で隠します。非許可時は一覧・Storage API・DataLineage解決・関連job・転送候補を404相当で隠します。
+- **接続ホワイトリスト**は通常接続を全員公開のまま保ち、例外の接続だけUser単位で隠します。非許可時は一覧・Storage API・DataLineage解決・関連job・転送候補を404相当で隠します。DataLineageの手動登録では許可されていない接続を保存場所に使えず（Registryへ紐付けていない接続と同じ`422`）、Dataset・Versionの詳細でも見えない接続のIDは出しません。
 
 Authentikとの接続、JIT User、group RBAC、Front/Back-channel logoutの登録値は
 [`docs/authentik.md`](docs/authentik.md)にまとめています。

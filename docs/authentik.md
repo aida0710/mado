@@ -58,8 +58,31 @@ OIDC_DEFAULT_ROLE=viewer
 Role同期を使う環境では、SSO UserのRoleをMado画面から一時的に変えても次回ログインで
 Authentik側の状態へ戻ります。恒久変更はAuthentik groupで行います。
 
+groupの判定とRoleの同期はログインのときにだけ行います。Authentik側でgroupから外しても、
+Madoにログイン中のsessionは期限（`AUTH_SESSION_ABSOLUTE_SECONDS`、既定7日）まで元の権限のままです。
+すぐに止めたいときは、MadoのSettings > Access > UsersでそのUserを無効にしてください。
+無効にするとsessionはその場で失効します。
+
 ## Login transactionの防御
 
 MadoはAuthorization Code Flowの`state`とPKCEに加え、OIDC開始時に短命のHttpOnly cookieを発行します。callbackは同じbrowser cookieを提示した場合だけ受理するため、別browserで開始した認証transactionや古いtransactionを流用できません。`returnTo`もMado内の相対pathだけを許可します。
 
-Local loginとOIDC開始には送信元・identifier・同時Argon2処理数の制限があります。上限時は`429`を返すため、reverse proxyで追加制限する場合もこの応答を維持してください。
+Local loginとOIDC開始には、送信元IPごとの回数と、同時に行うArgon2の処理数の制限があります。
+パスワード変更の「現在のパスワード」の確認には、User単位の回数制限（15分に10回）もあります。
+上限時は`429`を返すため、reverse proxyで追加制限する場合もこの応答を維持してください。
+
+## SSOで入れないときの切り分け
+
+callbackで断ったときは、利用者には理由を区別せず`401`を返し、api-internalのlogに
+`oidc login failed`と理由（`reason`）を残します。tokenやcodeは出しません。
+
+| `reason` | 意味 | 直し方 |
+| --- | --- | --- |
+| `group_not_allowed` | `OIDC_ALLOWED_GROUPS`のどのgroupにも入っていない | Authentikでgroupに入れる |
+| `user_disabled` | MadoでそのUserが無効になっている | Settings > Access > Usersで有効にする |
+| `last_admin` | groupの同期で、最後のactiveなAdminを降格しようとした | 別のAdminを先に用意する |
+| `privileged_link_required` | 検証済みemailが、特権を持つLocal Userと一致した | 自動では連携しない。管理者が明示的に連携する |
+| `deleted_user_email` | 検証済みemailが、削除したUserと一致した | 別のemailにするか、管理者が対応する |
+
+これ以外の`reason`（IdPに届かない、stateが古い、開始したbrowserと違う、など）は、
+IdPとの通信やbrowser側の問題です。
