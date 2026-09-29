@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react'
+import { fetchApi } from '../lib/api/http'
 import { getEditorName, setEditorName } from '../lib/editorName'
 import { useAuth } from '../lib/auth-context'
 import { SettingsSectionHeader } from './SettingsSectionHeader'
@@ -25,7 +26,7 @@ export function SignatureSettings() {
     setError(null)
     try {
       if (auth.enabled) {
-        const response = await fetch('/api/auth/profile', {
+        const response = await fetchApi('/api/auth/profile', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -66,7 +67,7 @@ export function SignatureSettings() {
     setPasswordNotice(null)
     setError(null)
     try {
-      const response = await fetch('/api/auth/change-password', {
+      const response = await fetchApi('/api/auth/change-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ currentPassword, newPassword }),

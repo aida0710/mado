@@ -30,8 +30,14 @@ export async function errorFromResponse(res: Response): Promise<Error> {
 
 /**
  * API を fetch する。401（session が無い・切れた）なら AuthGate へ知らせ、画面を
- * ログイン画面へ戻せるようにする。ログイン・/api/auth/me・ログアウトは AuthGate と
- * ログイン画面が自分で 401 を扱うので、ここを通さない。
+ * ログイン画面へ戻せるようにする。session の後ろにある API を fetch するときは、ここを通す。
+ *
+ * 次の 4 つはここを通さない。ログインより前に呼ぶか、401 を AuthGate やログイン画面が
+ * 自分で扱うため。
+ * - /api/auth/config: ログインより前に呼ぶ。404 は認証が無効なことを表す
+ * - /api/auth/me: AuthGate が session の有無を確かめる本体。401 は「ログインしていない」
+ * - /api/auth/local/login: 401 はパスワードの誤り
+ * - /api/auth/logout: AuthGate が 401 を「session はもう無い」として扱う
  */
 export async function fetchApi(url: string, init?: RequestInit): Promise<Response> {
   const res = await fetch(url, init)

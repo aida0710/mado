@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { errorFromResponse, fetchApi } from './api/http'
 
 export interface MediaSrcState {
   src: string | null
@@ -25,16 +26,9 @@ export function useMediaSrc(
     if (!archiveEntryUrl) return
     let objectUrl: string | null = null
     const ctl = new AbortController()
-    fetch(archiveEntryUrl, { signal: ctl.signal })
+    fetchApi(archiveEntryUrl, { signal: ctl.signal })
       .then(async res => {
-        if (!res.ok) {
-          let msg = res.statusText
-          try {
-            const body = (await res.json()) as { error?: string }
-            if (body.error) msg = body.error
-          } catch { /* statusTextをそのまま使う */ }
-          throw new Error(msg)
-        }
+        if (!res.ok) throw await errorFromResponse(res)
         return res.blob()
       })
       .then(blob => {

@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react'
+import { fetchApi } from '../lib/api/http'
 
 /** ログイン画面とパスワード変更画面の見出しの id。重ねて出すときの dialog の名前にも使う。 */
 export const AUTH_TITLE_ID = 'auth-title'
@@ -106,7 +107,9 @@ export function ChangePasswordPage({ onChanged }: { onChanged(): Promise<void> }
     setBusy(true)
     setError(null)
     try {
-      const response = await fetch('/api/auth/change-password', {
+      // ログイン済み（session がある）なので、401 は session が切れたことを表す。fetchApi で
+      // AuthGate へ知らせ、ログイン画面へ戻す。現在のパスワードの誤りは 400 なので知らせない。
+      const response = await fetchApi('/api/auth/change-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ currentPassword, newPassword }),

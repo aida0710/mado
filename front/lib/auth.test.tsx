@@ -326,6 +326,69 @@ describe('AuthGate — 編集中に session が切れたとき', () => {
   })
 })
 
+describe('AuthGate — 設定画面と初回のパスワード変更での 401', () => {
+  it('アカウントの保存で 401 を受け、session も切れていれば、ログイン画面を重ねる', async () => {
+    let sessionAlive = true
+    stubServer({
+      '/api/auth/config': () => json(200, LOCAL_LOGIN_CONFIG),
+      '/api/auth/me': () => sessionAlive ? json(200, { user: signedInUser }) : json(401, { error: 'unauthorized' }),
+      '/api/auth/profile': () => json(401, { error: 'unauthorized' }),
+    })
+    const user = userEvent.setup()
+    renderGate()
+    await screen.findByText('ログイン後の画面')
+
+    sessionAlive = false
+    await user.click(screen.getByRole('button', { name: '保存' }))
+
+    expect(await screen.findByRole('dialog', { name: 'ログイン' }, { timeout: SESSION_CHECK_TIMEOUT_MS })).toBeInTheDocument()
+  })
+
+  it('パスワードの変更で 401 を受け、session も切れていれば、ログイン画面を重ねる', async () => {
+    let sessionAlive = true
+    stubServer({
+      '/api/auth/config': () => json(200, LOCAL_LOGIN_CONFIG),
+      '/api/auth/me': () => sessionAlive ? json(200, { user: signedInUser }) : json(401, { error: 'unauthorized' }),
+      '/api/auth/change-password': () => json(401, { error: 'unauthorized' }),
+    })
+    const user = userEvent.setup()
+    renderGate()
+    await screen.findByText('ログイン後の画面')
+
+    await user.click(screen.getByText('パスワードを変更'))
+    await user.type(screen.getByLabelText('現在のパスワード'), 'current-password')
+    await user.type(screen.getByLabelText('新しいパスワード（12文字以上）'), 'new-password-123')
+    await user.type(screen.getByLabelText('新しいパスワード（確認）'), 'new-password-123')
+    sessionAlive = false
+    await user.click(screen.getByRole('button', { name: '変更' }))
+
+    expect(await screen.findByRole('dialog', { name: 'ログイン' }, { timeout: SESSION_CHECK_TIMEOUT_MS })).toBeInTheDocument()
+  })
+
+  it('初回のパスワード変更で 401 を受け、session も切れていれば、理由を添えてログイン画面へ戻す', async () => {
+    let sessionAlive = true
+    stubServer({
+      '/api/auth/config': () => json(200, LOCAL_LOGIN_CONFIG),
+      '/api/auth/me': () => sessionAlive
+        ? json(200, { user: { ...signedInUser, mustChangePassword: true } })
+        : json(401, { error: 'unauthorized' }),
+      '/api/auth/change-password': () => json(401, { error: 'unauthorized' }),
+    })
+    const user = userEvent.setup()
+    renderGate()
+    await screen.findByRole('heading', { name: 'パスワードを変更' }, { timeout: SESSION_CHECK_TIMEOUT_MS })
+
+    await user.type(screen.getByLabelText('現在のパスワード'), 'initial-password')
+    await user.type(screen.getByLabelText('新しいパスワード（12文字以上）'), 'new-password-123')
+    await user.type(screen.getByLabelText('新しいパスワード（確認）'), 'new-password-123')
+    sessionAlive = false
+    await user.click(screen.getByRole('button', { name: '変更して続行' }))
+
+    expect(await screen.findByRole('heading', { name: 'ログイン' }, { timeout: SESSION_CHECK_TIMEOUT_MS })).toBeInTheDocument()
+    expect(screen.getByText('セッションが切れました。もう一度ログインしてください。')).toBeInTheDocument()
+  })
+})
+
 describe('AuthGate — サインアウト', () => {
   it('サインアウトに成功すると、キャッシュと前の画面を消してログイン画面へ切り替える', async () => {
     stubServer({
