@@ -42,8 +42,10 @@ export interface LineageService {
     key: string
     limit: number
   }): Promise<StorageLineageResolution>
-  dataset(id: string): Promise<DatasetDetail>
-  version(id: string): Promise<DatasetVersionDetail>
+  /** visibleConnectionIds は利用者に見える接続。null は全接続 (接続の管理者か認証無効)。
+   *  見えない接続は、保存場所の madoConnectionId に出さない。 */
+  dataset(id: string, visibleConnectionIds: ReadonlySet<string> | null): Promise<DatasetDetail>
+  version(id: string, visibleConnectionIds: ReadonlySet<string> | null): Promise<DatasetVersionDetail>
   run(id: string): Promise<LineageRunDetail>
   jobRuns(namespace: string, name: string, limit: number): Promise<Record<string, unknown>>
   projectionStatus(): Promise<LineageProjectionStatus>
@@ -297,6 +299,7 @@ export function createLineageService(deps: {
 
   const bindVersionLocations = async (
     version: DatasetVersionDetail,
+    visibleConnectionIds: ReadonlySet<string> | null,
   ): Promise<DatasetVersionDetail> => {
     if (!deps.bindings) return version
     const keys = [...new Set(version.locations
@@ -304,22 +307,29 @@ export function createLineageService(deps: {
       .filter((key): key is string => key !== null))]
     if (keys.length === 0) return version
     const bindings = await deps.bindings.resolve(keys)
+    const visibleConnectionOf = (storageSystemKey: string | null): string | null => {
+      const connectionId = storageSystemKey ? bindings.get(storageSystemKey) ?? null : null
+      if (connectionId === null) return null
+      return visibleConnectionIds === null || visibleConnectionIds.has(connectionId) ? connectionId : null
+    }
     return {
       ...version,
       locations: version.locations.map(location => ({
         ...location,
-        madoConnectionId: location.storageSystemKey
-          ? bindings.get(location.storageSystemKey) ?? null
-          : null,
+        madoConnectionId: visibleConnectionOf(location.storageSystemKey),
       })),
     }
   }
 
-  const dataset = async (id: string): Promise<DatasetDetail> => {
+  const dataset = async (
+    id: string,
+    visibleConnectionIds: ReadonlySet<string> | null,
+  ): Promise<DatasetDetail> => {
     const detail = await deps.registry.getDataset(id)
     return {
       ...detail,
-      versions: await Promise.all(detail.versions.map(bindVersionLocations)),
+      versions: await Promise.all(detail.versions.map(version =>
+        bindVersionLocations(version, visibleConnectionIds))),
     }
   }
 
@@ -332,7 +342,8 @@ export function createLineageService(deps: {
     catalog,
     resolveLocation,
     dataset,
-    version: async id => bindVersionLocations(await deps.registry.getVersion(id)),
+    version: async (id, visibleConnectionIds) =>
+      bindVersionLocations(await deps.registry.getVersion(id), visibleConnectionIds),
     run: id => deps.registry.getRun(id),
     jobRuns: (namespace, name, limit) => deps.marquez.getJobRuns(namespace, name, limit),
     projectionStatus,

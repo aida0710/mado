@@ -12,7 +12,10 @@ const user = {
   mustChangePassword: false, authMethods: ['local' as const],
 }
 
-function appWith(registryOverrides: Partial<RegistryClient> = {}) {
+function appWith(
+  registryOverrides: Partial<RegistryClient> = {},
+  { accessibleConnectionIds }: { accessibleConnectionIds?: string[] } = {},
+) {
   const registry = {
     getDataset: vi.fn().mockResolvedValue({
       datasetId: '00000000-0000-4000-8000-000000000010',
@@ -43,7 +46,9 @@ function appWith(registryOverrides: Partial<RegistryClient> = {}) {
     setSessionPrincipal(c, { kind: 'user', sessionId: 'session', user })
     await next()
   })
-  mountLineageCurationRoutes(app, { registry, pool: pool as never, audit })
+  const canAccessConnection = async (_c: unknown, connectionId: string) =>
+    accessibleConnectionIds?.includes(connectionId) ?? true
+  mountLineageCurationRoutes(app, { registry, pool: pool as never, audit, canAccessConnection })
   return { app, registry, pool, audit }
 }
 
@@ -134,6 +139,21 @@ describe('lineage 手動登録 route', () => {
         evidenceRefs: [],
       }),
     })
+    expect(res.status).toBe(422)
+    expect(registry.registerManualLocation).not.toHaveBeenCalled()
+  })
+
+  it('利用を許可されていない接続は、bindingがあっても保存場所に使わせない', async () => {
+    const { app, registry } = appWith({}, { accessibleConnectionIds: ['public0001'] })
+    const res = await app.request('/lineage/curation/locations', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        versionId: '00000000-0000-4000-8000-000000000011',
+        location: { connectionId: 'hidden0001', bucket: 'dataset', key: 'raw/', isPrimary: false, status: 'available' },
+        evidenceRefs: [],
+      }),
+    })
+    // 存在を明かさないよう、紐付けの無い接続と同じ応答にする。
     expect(res.status).toBe(422)
     expect(registry.registerManualLocation).not.toHaveBeenCalled()
   })

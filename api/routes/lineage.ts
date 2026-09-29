@@ -9,6 +9,8 @@ const Uuid = z.string().uuid()
 
 export interface LineageRoutesDeps {
   service: LineageService
+  /** 利用者に見える接続。null は全接続。ホワイトリスト接続のIDを詳細に出さないために使う。 */
+  visibleConnectionIds: (c: Context) => Promise<ReadonlySet<string> | null>
 }
 
 function boundedInt(value: string | undefined, { fallback, min, max }: { fallback: number; min: number; max: number }): number {
@@ -119,7 +121,7 @@ export function mountLineageRoutes(app: Hono, deps: LineageRoutesDeps): void {
     const id = Uuid.safeParse(c.req.param('id'))
     if (!id.success) return c.json({ error: 'invalid dataset id' }, 400)
     try {
-      return c.json(await deps.service.dataset(id.data))
+      return c.json(await deps.service.dataset(id.data, await deps.visibleConnectionIds(c)))
     } catch (error) {
       return backendError(c, error)
     }
@@ -129,7 +131,7 @@ export function mountLineageRoutes(app: Hono, deps: LineageRoutesDeps): void {
     const id = Uuid.safeParse(c.req.param('id'))
     if (!id.success) return c.json({ error: 'invalid version id' }, 400)
     try {
-      return c.json(await deps.service.version(id.data))
+      return c.json(await deps.service.version(id.data, await deps.visibleConnectionIds(c)))
     } catch (error) {
       return backendError(c, error)
     }

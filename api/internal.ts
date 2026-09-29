@@ -8,7 +8,7 @@ import { createStorageFactory } from './storage.js'
 import { requireSafeOrigin } from './lib/originCheck.js'
 import { mountStorageCapabilityGuards } from './lib/storage-capability-routes.js'
 import {
-  canAccessConnection, requireConnectionAccess, requireConnectionQueryAccess,
+  canAccessConnection, requireConnectionAccess, requireConnectionQueryAccess, visibleConnectionIds,
 } from './lib/connection-access.js'
 import { explainStorageError } from './lib/storageError.js'
 import { mountStorageListRoutes } from './routes/storage-list.js'
@@ -257,9 +257,17 @@ if (env.DATASET_REGISTRY_URL && env.DATASET_REGISTRY_TOKEN && env.MARQUEZ_URL) {
       return result.rows[0]?.registry_storage_system_key ?? null
     },
   }
-  mountLineageRoutes(api, { service: createLineageService({ registry, marquez, bindings }) })
+  mountLineageRoutes(api, {
+    service: createLineageService({ registry, marquez, bindings }),
+    visibleConnectionIds: c => visibleConnectionIds(pools.ro, c),
+  })
   if (authEnabled) {
-    mountLineageCurationRoutes(api, { registry, pool: pools.ro, audit })
+    mountLineageCurationRoutes(api, {
+      registry,
+      pool: pools.ro,
+      audit,
+      canAccessConnection: (c, connectionId) => canAccessConnection(pools.ro, c, connectionId),
+    })
   }
 } else {
   api.all('/lineage/*', c => c.json({ error: 'lineage integration is not configured' }, 503))

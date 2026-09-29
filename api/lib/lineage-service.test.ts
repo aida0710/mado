@@ -142,7 +142,34 @@ describe('lineage service', () => {
         keyForConnection: vi.fn().mockResolvedValue('mdx-s3'),
       },
     })
-    expect((await service.version('v1')).locations[0].madoConnectionId).toBe('conn123456')
+    expect((await service.version('v1', null)).locations[0].madoConnectionId).toBe('conn123456')
+    expect((await service.version('v1', new Set(['conn123456']))).locations[0].madoConnectionId).toBe('conn123456')
+  })
+
+  it('利用を許可されていない接続のIDは、保存場所に付けない', async () => {
+    const reg = registry({
+      getVersion: vi.fn().mockResolvedValue({
+        id: 'v1', datasetId: 'd1', version: '1', contentHash: null,
+        manifestUri: null, manifestHash: null, schemaUri: null,
+        createdAt: '2026-08-26T00:00:00Z', metadata: {},
+        locations: [{
+          id: 'l1', uri: 's3://raw/a', storageKind: 's3', storageSystemKey: 'mdx-s3',
+          region: null, bucket: 'raw', status: 'available', isPrimary: true,
+          observedAt: '2026-08-26T00:00:00Z', madoConnectionId: null, metadata: {},
+        }],
+      }),
+    })
+    const service = createLineageService({
+      registry: reg,
+      marquez: marquez(),
+      bindings: {
+        resolve: vi.fn().mockResolvedValue(new Map([['mdx-s3', 'hidden0001']])),
+        keyForConnection: vi.fn().mockResolvedValue('mdx-s3'),
+      },
+    })
+    const location = (await service.version('v1', new Set(['public0001']))).locations[0]
+    expect(location.madoConnectionId).toBeNull()
+    expect(location.uri).toBe('s3://raw/a')
   })
 
   it('Mado接続とS3 pathを登録済みDataset Versionへ逆引きする', async () => {

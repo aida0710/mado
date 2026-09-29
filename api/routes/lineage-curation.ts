@@ -142,6 +142,8 @@ export interface LineageCurationDeps {
   registry: RegistryClient
   pool: Pool
   audit: AuditWriter
+  /** 保存場所に使う接続を、利用者が使えるか。ホワイトリスト接続を body の ID で指定させないため。 */
+  canAccessConnection: (c: Context, connectionId: string) => Promise<boolean>
 }
 
 const datasetMutationTails = new Map<string, Promise<void>>()
@@ -246,6 +248,13 @@ function mutationError(c: Context, error: unknown): Response {
 export function mountLineageCurationRoutes(app: Hono, deps: LineageCurationDeps): void {
   app.use('/lineage/curation/*', requirePermission('lineage:curate'))
 
+  // 利用を許可されていない接続は、存在を明かさないよう「Registryへ紐付けられていない」と同じ扱いにする。
+  const accessibleLocationInput = async (
+    c: Context,
+    location: z.infer<typeof StorageLocation>,
+  ): Promise<RegistryManualLocationInput | null> =>
+    await deps.canAccessConnection(c, location.connectionId) ? locationInput(deps.pool, location) : null
+
   app.patch('/lineage/curation/datasets/:datasetId', async c => {
     const principal = getSessionPrincipal(c)!
     const datasetId = c.req.param('datasetId')
@@ -283,7 +292,7 @@ export function mountLineageCurationRoutes(app: Hono, deps: LineageCurationDeps)
     const parsed = DatasetRegistration.safeParse(await c.req.json().catch(() => null))
     if (!parsed.success) return c.json({ error: '入力内容を確認してください。' }, 400)
     const location = parsed.data.location
-      ? await locationInput(deps.pool, parsed.data.location) : undefined
+      ? await accessibleLocationInput(c, parsed.data.location) : undefined
     if (parsed.data.location && !location) {
       return c.json({ error: 'この接続はDataset Registryへ紐付けられていません。' }, 422)
     }
@@ -346,7 +355,7 @@ export function mountLineageCurationRoutes(app: Hono, deps: LineageCurationDeps)
     const principal = getSessionPrincipal(c)!
     const parsed = LocationRegistration.safeParse(await c.req.json().catch(() => null))
     if (!parsed.success) return c.json({ error: '入力内容を確認してください。' }, 400)
-    const location = await locationInput(deps.pool, parsed.data.location)
+    const location = await accessibleLocationInput(c, parsed.data.location)
     if (!location) return c.json({ error: 'この接続はDataset Registryへ紐付けられていません。' }, 422)
     try {
       const result = await deps.registry.registerManualLocation({
