@@ -20,8 +20,8 @@ export const CAPABILITY_LABELS: Record<Capability, string> = {
 /**
  * `:connectionId` の接続で `cap` が有効かを確認する Hono ミドルウェア。
  *
- * ルート側のハンドラには一切手を入れず、internal.ts でパスごとに mount する
- * — 「どのエンドポイントがどの権限に属するか」を 1 箇所で読めるようにするため。
+ * ルート側のハンドラには一切手を入れず、lib/storage-capability-routes.ts の対応表で
+ * パスごとに mount する — 「どのエンドポイントがどの権限に属するか」を 1 箇所で読めるようにするため。
  * mount はルート登録より **前** に行うこと (Hono は登録順に実行する)。
  *
  * 接続設定は storage factory のキャッシュ (S3Client と同じ 1 行) から読むので、

@@ -2,15 +2,13 @@ import type { Pool, PoolClient } from 'pg'
 import { withTransaction } from '../db.js'
 import type { AuthUser, UserStatus } from './auth-types.js'
 import { newId } from './auth-crypto.js'
-import {
-  AUTH_USER_SELECT, loadUser, normalizeLoginName, replaceRoleRows, sameRoleSet, toUser, type AuthUserRow,
-} from './auth-user-query.js'
+import { AUTH_USER_SELECT, loadUser, normalizeLoginName, toUser, type AuthUserRow } from './auth-user-query.js'
 import { ADMIN_ROLE, assertAdminRemovalAllowed } from './auth-admin-invariant.js'
 import { revokeUserSessionRows } from './auth-session-store.js'
 import { upsertLocalCredential } from './auth-credential-store.js'
 
 // 管理画面・本人の Account 画面・bootstrap が使う、User と Role の読み書き。
-// 資格が変わる操作 (無効化・Role の変更・削除) は、session の失効まで同じ transaction で行う。
+// 権限や状態が変わる操作 (無効化・Role の変更・削除) は、session の失効まで同じ transaction で行う。
 
 export interface CreateUserInput {
   username?: string | null
@@ -46,6 +44,24 @@ export interface UserStore {
   replaceUserRoles(id: string, roles: string[], grantedBy: string): Promise<AuthUserMutationResult | null>
   /** 過去の監査から辿れるよう行は残す論理削除。session も失効させる。 */
   deleteUser(id: string): Promise<boolean>
+}
+
+export function sameRoleSet(a: readonly string[], b: readonly string[]): boolean {
+  return [...new Set(a)].sort().join('\0') === [...new Set(b)].sort().join('\0')
+}
+
+/** User の Role を roles に置き換える。grantedBy が null なのは SSO の group から付けた Role。 */
+export async function replaceRoleRows(
+  client: PoolClient,
+  { userId, roles, grantedBy }: { userId: string; roles: readonly string[]; grantedBy: string | null },
+): Promise<void> {
+  await client.query(`DELETE FROM auth_user_roles WHERE user_id = $1`, [userId])
+  for (const role of new Set(roles)) {
+    await client.query(
+      `INSERT INTO auth_user_roles (user_id, role_id, granted_by) VALUES ($1, $2, $3)`,
+      [userId, role, grantedBy],
+    )
+  }
 }
 
 /** auth_users に 1 行と Role を入れる。SSO の JIT 作成も同じ形で使う。 */

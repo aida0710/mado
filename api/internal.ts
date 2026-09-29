@@ -90,6 +90,7 @@ const AUTH_CLEANUP_INTERVAL_MS = 60 * 60 * 1000
 const authCleanupTimer = authEnabled ? setInterval(() => {
   void Promise.all([
     sessions.deleteExpiredSessions(),
+    sessions.deleteExpiredLogoutEvents(),
     oidc?.deleteExpiredAttempts(),
   ]).catch(error => console.error('failed to clean expired auth records', error))
 }, AUTH_CLEANUP_INTERVAL_MS) : null

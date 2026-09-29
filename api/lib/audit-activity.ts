@@ -29,10 +29,12 @@ export function markAuditChangeCommitted(c: Context): void {
 /**
  * commit 後に、変更の詳細を載せた専用の監査を書く。書き込みに失敗しても投げない。
  * 変更はもう反映済みなので、ここで 500 を返すと利用者は失敗したと思って操作を繰り返し、
- * 一度しか見せない token なども失われる。失敗した場合は、共通 middleware が変更前に書いた
- * intent を成功として残すので、監査が 1 件も無い状態にはならない。
+ * 一度しか見せない token なども失われる。失敗した場合は、共通 middleware (auditActivity) が
+ * 変更前に書いた intent を成功として残すので、監査が 1 件も無い状態にはならない。
+ * そのため、この route に auditActivity が掛かっていて、classifyActivity が分類していることが前提。
  */
 export async function writeDedicatedAudit(c: Context, audit: AuditWriter, event: AuditEventInput): Promise<void> {
+  markAuditChangeCommitted(c)
   try {
     await audit.write(event)
     c.set(DEDICATED_AUDIT_WRITTEN_KEY, true)

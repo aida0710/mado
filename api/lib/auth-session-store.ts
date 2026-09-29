@@ -2,14 +2,11 @@ import type { Pool, PoolClient } from 'pg'
 import { withTransaction, type Queryable } from '../db.js'
 import type { AuditWriter } from './audit.js'
 import type { RequestMetadata, SessionPrincipal } from './auth-types.js'
-import { newId, randomToken, sha256 } from './auth-crypto.js'
+import { isPlausibleOpaqueToken, newId, randomToken, sha256 } from './auth-crypto.js'
 import { AUTH_USER_FIELDS, AUTH_USER_FROM, toUser, type AuthUserRow } from './auth-user-query.js'
 
 // browser session の発行・認証・失効。
 
-// session token は 32 byte の乱数 (base64url で 43 文字)。これを大きく外れる値は DB を引かずに捨てる。
-const SESSION_TOKEN_MIN_LENGTH = 32
-const SESSION_TOKEN_MAX_LENGTH = 256
 // last_seen_at と idle 期限の更新を、request ごとではなくこの間隔に間引いて書き込みを減らす。
 const SESSION_TOUCH_INTERVAL_SECONDS = 300
 // 失効・期限切れの session 行は、監査で追えるよう少し残してから消す。
@@ -65,6 +62,8 @@ export interface SessionStore {
   /** IdP の back-channel logout。同じ logout token は 1 度だけ受け付け、失効を同じ transaction で監査に残す。 */
   applyOidcBackchannelLogout(input: OidcBackchannelLogout, metadata?: RequestMetadata): Promise<{ accepted: boolean; revoked: number }>
   deleteExpiredSessions(): Promise<number>
+  /** 再送を弾くために覚えていた logout token のうち、期限が過ぎたものを消す。 */
+  deleteExpiredLogoutEvents(): Promise<number>
 }
 
 /** OIDC の sid があればその session だけ、無ければ subject の全 session を指す。 */
@@ -72,10 +71,6 @@ export interface OidcSessionTarget {
   issuer: string
   subject?: string | null
   sid?: string | null
-}
-
-function isPlausibleToken(token: string): boolean {
-  return token.length >= SESSION_TOKEN_MIN_LENGTH && token.length <= SESSION_TOKEN_MAX_LENGTH
 }
 
 /**
@@ -151,7 +146,7 @@ export function createSessionStore(pool: Pool, audit: AuditWriter): SessionStore
     createSession: input => insertSession(pool, input),
 
     async authenticateSession(token, idleSeconds, touchIntervalSeconds = SESSION_TOUCH_INTERVAL_SECONDS) {
-      if (!isPlausibleToken(token)) return null
+      if (!isPlausibleOpaqueToken(token)) return null
       const r = await pool.query<AuthUserRow & { session_id: string; last_seen_at: Date }>(
         `SELECT ${AUTH_USER_FIELDS}, s.id AS session_id, s.last_seen_at
            ${AUTH_USER_FROM}
@@ -185,7 +180,7 @@ export function createSessionStore(pool: Pool, audit: AuditWriter): SessionStore
     },
 
     async getSessionOidcContext(token) {
-      if (!isPlausibleToken(token)) return null
+      if (!isPlausibleOpaqueToken(token)) return null
       const r = await pool.query<{ oidc_issuer: string; oidc_subject: string; oidc_sid: string | null }>(
         `SELECT oidc_issuer, oidc_subject, oidc_sid
            FROM auth_sessions
@@ -225,7 +220,11 @@ export function createSessionStore(pool: Pool, audit: AuditWriter): SessionStore
           WHERE absolute_expires_at < now() - ${EXPIRED_SESSION_RETENTION}
              OR revoked_at < now() - ${EXPIRED_SESSION_RETENTION}`,
       )
-      await pool.query(`DELETE FROM auth_oidc_logout_events WHERE expires_at < now()`)
+      return r.rowCount ?? 0
+    },
+
+    async deleteExpiredLogoutEvents() {
+      const r = await pool.query(`DELETE FROM auth_oidc_logout_events WHERE expires_at < now()`)
       return r.rowCount ?? 0
     },
   }

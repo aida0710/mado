@@ -1,4 +1,4 @@
-import type { Hono } from 'hono'
+import type { Context, Hono } from 'hono'
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
 import { z } from 'zod'
 import type { AuditWriter } from '../lib/audit.js'
@@ -10,7 +10,7 @@ import { OIDC_TRANSACTION_TTL_SECONDS, OidcAttemptLimitError } from '../lib/auth
 import {
   OidcLoginDeniedError, resolveOidcRoles, type OidcProvisioning, type OidcRolePolicy,
 } from '../lib/auth-oidc-provisioning.js'
-import { randomToken } from '../lib/auth-crypto.js'
+import { isPlausibleOpaqueToken, randomToken } from '../lib/auth-crypto.js'
 import { AuthRateLimiter } from '../lib/auth-rate-limit.js'
 import { requirePasswordChangeComplete, requireSession } from '../lib/auth-middleware.js'
 import { oidcTransactionCookieName, sessionCookieName } from '../lib/auth-types.js'
@@ -44,6 +44,21 @@ export interface AuthRouteDeps {
   config: AuthRouteConfig
 }
 
+// Argon2 の同時実行が上限に達したときに、少し待ってから打ち直してもらう秒数。
+const PASSWORD_CHECK_BUSY_RETRY_SECONDS = 1
+
+/** 回数制限に当たったことを 429 で返す。Retry-After は window の長さ。 */
+function tooManyAttempts(c: Context, limit: { windowMs: number }, error: string): Response {
+  c.header('Retry-After', String(limit.windowMs / 1000))
+  return c.json({ error }, 429)
+}
+
+/** Argon2 の同時実行が上限に達しているので、少し待ってもらう。 */
+function passwordCheckBusy(c: Context): Response {
+  c.header('Retry-After', String(PASSWORD_CHECK_BUSY_RETRY_SECONDS))
+  return c.json({ error: 'authentication busy' }, 429)
+}
+
 /** SSO の callback が失敗した理由を、秘密値を含めずに log へ出すための分類。 */
 function oidcFailureReason(error: unknown): string {
   if (error instanceof OidcLoginDeniedError) return error.reason
@@ -51,14 +66,17 @@ function oidcFailureReason(error: unknown): string {
   return error instanceof Error ? error.message : 'unknown'
 }
 
+// 入力されたパスワードも、保存できる長さと同じ UTF-8 の byte 数で上限を見る。
+const EnteredPassword = z.string().min(1).refine(password => Buffer.byteLength(password, 'utf8') <= PASSWORD_MAX_BYTES)
+
 const LoginBody = z.object({
   identifier: z.string().trim().min(1).max(320).optional(),
   email: z.string().email().max(320).optional(),
-  password: z.string().min(1).max(1024),
+  password: EnteredPassword,
 }).refine(value => Boolean(value.identifier || value.email))
 
 const ChangePasswordBody = z.object({
-  currentPassword: z.string().min(1).max(PASSWORD_MAX_BYTES),
+  currentPassword: EnteredPassword,
   newPassword: z.string().refine(password => isAcceptablePasswordLength(password)),
 })
 const ProfileBody = z.object({
@@ -133,16 +151,12 @@ export function mountAuthRoutes(app: Hono, deps: AuthRouteDeps): void {
     const metadata = requestMetadata(c)
     const ipKey = `login:ip:${metadata.ipAddress ?? 'unknown'}`
     if (!limiter.consume(ipKey, LOCAL_LOGIN_LIMIT.attempts, LOCAL_LOGIN_LIMIT.windowMs)) {
-      c.header('Retry-After', String(LOCAL_LOGIN_LIMIT.windowMs / 1000))
-      return c.json({ error: 'too many login attempts' }, 429)
+      return tooManyAttempts(c, LOCAL_LOGIN_LIMIT, 'too many login attempts')
     }
     const credential = await deps.credentials.findLocalCredentialByLogin(identifier)
     const checked = await limiter.passwordCheck(async () =>
       verifyPassword(credential?.passwordHash ?? await dummyHash, parsed.data.password))
-    if (!checked.accepted) {
-      c.header('Retry-After', '1')
-      return c.json({ error: 'authentication busy' }, 429)
-    }
+    if (!checked.accepted) return passwordCheckBusy(c)
     if (!credential || credential.status !== 'active' || !checked.value) {
       return c.json({ error: 'invalid identifier or password' }, 401)
     }
@@ -164,12 +178,10 @@ export function mountAuthRoutes(app: Hono, deps: AuthRouteDeps): void {
     if (!deps.config.oidc) return c.json({ error: 'oidc disabled' }, 404)
     const metadata = requestMetadata(c)
     if (!limiter.consume(`oidc:start:${metadata.ipAddress ?? 'unknown'}`, OIDC_START_LIMIT.attempts, OIDC_START_LIMIT.windowMs)) {
-      c.header('Retry-After', String(OIDC_START_LIMIT.windowMs / 1000))
-      return c.json({ error: 'too many oidc attempts' }, 429)
+      return tooManyAttempts(c, OIDC_START_LIMIT, 'too many oidc attempts')
     }
     const existing = getCookie(c, oidcCookieName)
-    const browserBinding = existing && existing.length >= 32 && existing.length <= 256
-      ? existing : randomToken(32)
+    const browserBinding = existing && isPlausibleOpaqueToken(existing) ? existing : randomToken(32)
     try {
       const url = await deps.config.oidc.start(c.req.query('returnTo'), browserBinding)
       setCookie(c, oidcCookieName, browserBinding, {
@@ -332,6 +344,8 @@ export function mountAuthRoutes(app: Hono, deps: AuthRouteDeps): void {
     return c.json({ ok: true, logoutUrl: await idpLogoutUrl(oidcContext) })
   })
 
+  // Local login を無効にした (SSO 専用の) 運用でも残す。検証済み email で SSO へ連携した Local User や、
+  // 管理者がパスワードを再発行した User は、変更を必須にされたままだと通常の API を使えないため。
   app.use('/change-password', sessionGuard)
   app.use('/change-password', auditChanges)
   app.post('/change-password', async c => {
@@ -341,8 +355,7 @@ export function mountAuthRoutes(app: Hono, deps: AuthRouteDeps): void {
     if (!parsed.success) return c.json({ error: 'invalid password' }, 400)
     const userId = principal.user.id
     if (!limiter.consume(`change-password:user:${userId}`, CHANGE_PASSWORD_LIMIT.attempts, CHANGE_PASSWORD_LIMIT.windowMs)) {
-      c.header('Retry-After', String(CHANGE_PASSWORD_LIMIT.windowMs / 1000))
-      return c.json({ error: 'too many password change attempts' }, 429)
+      return tooManyAttempts(c, CHANGE_PASSWORD_LIMIT, 'too many password change attempts')
     }
     const credential = await deps.credentials.getLocalCredential(userId)
     if (!credential) return c.json({ error: 'local credential not available' }, 400)
@@ -350,10 +363,7 @@ export function mountAuthRoutes(app: Hono, deps: AuthRouteDeps): void {
       await verifyPassword(credential.passwordHash, parsed.data.currentPassword)
         ? hashPassword(parsed.data.newPassword)
         : null)
-    if (!checked.accepted) {
-      c.header('Retry-After', '1')
-      return c.json({ error: 'authentication busy' }, 429)
-    }
+    if (!checked.accepted) return passwordCheckBusy(c)
     if (!checked.value) return c.json({ error: 'current password is incorrect' }, 400)
 
     const metadata = requestMetadata(c)

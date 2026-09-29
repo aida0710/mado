@@ -17,7 +17,7 @@ import {
 // (spec: 2026-08-22-transfer-estimate-design.md)。
 //
 // S3 を一切叩かない。DB に残っている走査結果と接続設定だけから計算する。
-// そのため capabilityGuard も通さない (internal.ts の cap() 登録に無い) —
+// そのため接続ごとの権限ガードも通さない (lib/storage-capability-routes.ts の対応表に載せない) —
 // list 権限すら不要で、権限を全部落とした接続でも見積もりの候補にはなる。
 
 // 走査結果のうち見積もりが使うのは 2 つだけ。内訳 (children / extensions) は

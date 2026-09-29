@@ -105,7 +105,6 @@ function toKey(row: KeyRow): ServiceAccountKey {
 
 export interface ServiceAccountStore {
   listAccounts(): Promise<ServiceAccount[]>
-  getAccount(id: string): Promise<ServiceAccount | null>
   createAccount(input: { name: string; description?: string; createdBy: string }): Promise<ServiceAccount>
   /** 値が変わった項目だけ更新する。変わっていなければ changedFields は空で、DB は書かない。 */
   updateAccount(id: string, patch: { name?: string; description?: string; status?: 'active' | 'disabled' }): Promise<{
@@ -134,15 +133,6 @@ export function createServiceAccountStore(pool: Pool): ServiceAccountStore {
            FROM service_accounts ORDER BY name`,
       )
       return r.rows.map(toAccount)
-    },
-
-    async getAccount(id) {
-      const r = await pool.query<AccountRow>(
-        `SELECT id, name, description, status, created_at, updated_at
-           FROM service_accounts WHERE id = $1`,
-        [id],
-      )
-      return r.rows[0] ? toAccount(r.rows[0]) : null
     },
 
     async createAccount(input) {

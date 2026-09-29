@@ -1,8 +1,7 @@
-import type { PoolClient } from 'pg'
 import type { Queryable } from '../db.js'
 import type { AuthUser, UserStatus } from './auth-types.js'
 
-// AuthUser を 1 行で組み立てる SQL と変換。User・資格・session・OIDC の各 store が共有する。
+// AuthUser を 1 行で組み立てる SQL と変換、読み取り。User・パスワード・session・SSO の各 store が共有する。
 
 export interface AuthUserRow {
   id: string
@@ -69,22 +68,4 @@ export async function loadUserIncludingDeleted(db: Queryable, id: string): Promi
 /** username と email は大文字小文字を区別せずに一意なので、保存と検索の前にそろえる。空は null。 */
 export function normalizeLoginName(value: string | null | undefined): string | null {
   return value?.trim().toLowerCase() || null
-}
-
-export function sameRoleSet(a: readonly string[], b: readonly string[]): boolean {
-  return [...new Set(a)].sort().join('\0') === [...new Set(b)].sort().join('\0')
-}
-
-/** User の Role を roles に置き換える。grantedBy が null なのは SSO の group から付けた Role。 */
-export async function replaceRoleRows(
-  client: PoolClient,
-  { userId, roles, grantedBy }: { userId: string; roles: readonly string[]; grantedBy: string | null },
-): Promise<void> {
-  await client.query(`DELETE FROM auth_user_roles WHERE user_id = $1`, [userId])
-  for (const role of new Set(roles)) {
-    await client.query(
-      `INSERT INTO auth_user_roles (user_id, role_id, granted_by) VALUES ($1, $2, $3)`,
-      [userId, role, grantedBy],
-    )
-  }
 }

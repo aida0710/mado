@@ -2,7 +2,7 @@ import type { Pool } from 'pg'
 import * as oidc from 'openid-client'
 import { createRemoteJWKSet, jwtVerify } from 'jose'
 import type { CryptoModule } from '../crypto.js'
-import { sha256 } from './auth-crypto.js'
+import { isPlausibleOpaqueToken, sha256 } from './auth-crypto.js'
 
 // back-channel logout token の jti を覚えておく期間。同じ token の再送 (replay) を弾くためで、
 // OIDC の logout token は短命なので 1 日で十分。
@@ -128,7 +128,7 @@ export function createOidcProvider(
     issuer: issuerId,
 
     async start(returnTo, browserBinding) {
-      if (browserBinding.length < 32 || browserBinding.length > 256) throw new Error('invalid oidc browser binding')
+      if (!isPlausibleOpaqueToken(browserBinding)) throw new Error('invalid oidc browser binding')
       const config = await getConfiguration()
       const state = oidc.randomState()
       const nonce = oidc.randomNonce()
@@ -166,7 +166,7 @@ export function createOidcProvider(
     },
 
     async finish(callbackUrl, browserBinding) {
-      if (browserBinding.length < 32 || browserBinding.length > 256) throw new Error('invalid oidc browser binding')
+      if (!isPlausibleOpaqueToken(browserBinding)) throw new Error('invalid oidc browser binding')
       const state = callbackUrl.searchParams.get('state')
       if (!state || state.length > 512) throw new Error('invalid oidc state')
       const attempt = await pool.query<AttemptRow>(

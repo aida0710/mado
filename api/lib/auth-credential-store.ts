@@ -51,7 +51,7 @@ function toLocalCredential(row: AuthUserRow & { password_hash: string }): LocalC
   return { ...toUser(row), passwordHash: row.password_hash }
 }
 
-/** Local の資格を 1 行書く (無ければ作り、あれば置き換える)。User の作成と同じ transaction で使う。 */
+/** Local の資格情報を 1 行書く (無ければ作り、あれば置き換える)。User の作成と同じ transaction で使う。 */
 export async function upsertLocalCredential(
   db: Queryable,
   { userId, passwordHash, mustChange }: { userId: string; passwordHash: string; mustChange: boolean },

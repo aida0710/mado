@@ -23,14 +23,3 @@ export function requirePermission(permission: string): MiddlewareHandler {
     await next()
   }
 }
-
-export function requireAnyPermission(...permissions: string[]): MiddlewareHandler {
-  return async (c, next) => {
-    const principal = getSessionPrincipal(c)
-    if (!principal) return c.json({ error: 'unauthorized' }, 401)
-    if (!permissions.some(p => hasPermission(principal, p))) {
-      return c.json({ error: 'forbidden', permissions }, 403)
-    }
-    await next()
-  }
-}

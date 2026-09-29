@@ -29,7 +29,7 @@ describe('UserStore', () => {
     expect(user.authMethods).toEqual([])
   })
 
-  it('初期パスワードを渡すと、User と同じ transaction で Local の資格も作る', async () => {
+  it('初期パスワードを渡すと、User と同じ transaction で Local の資格情報も作る', async () => {
     const user = await users.createUser({
       username: 'new-user', displayName: 'New', roles: ['viewer'],
       localPassword: { hash: await hashPassword('initial-password-123'), mustChange: true },
