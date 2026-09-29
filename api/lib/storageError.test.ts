@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { explainStorageError } from './storageError.js'
+import { BlockedEndpointError } from './endpoint-policy.js'
 
 describe('explainStorageError', () => {
   it('NoSuchKeyを秘密を含まない404へ変換する', () => {
@@ -51,5 +52,11 @@ describe('explainStorageError', () => {
       message: 'x'.repeat(2000),
     })
     expect(r?.message).toBe('storage request failed')
+  })
+
+  it('拒否するアドレスを指す接続先は、内部エラーではなく直し方の分かる 409 にする', () => {
+    const explained = explainStorageError(new BlockedEndpointError('conn000001'))
+    expect(explained?.status).toBe(409)
+    expect(explained?.message).toContain('エンドポイント')
   })
 })

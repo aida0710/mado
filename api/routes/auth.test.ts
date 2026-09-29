@@ -375,7 +375,8 @@ describe('認証 route', () => {
           method: 'POST', headers: { Cookie: `mado_session=${session.token}` },
         })
         expect(response.status).toBe(200)
-        expect(await response.json()).toEqual({ ok: true, logoutUrl: null })
+        // IdP 側の session が残ったことを画面で伝えられるよう、Local の session と区別して返す。
+        expect(await response.json()).toEqual({ ok: true, logoutUrl: null, idpLogoutUnavailable: true })
         expect(await sessions.authenticateSession(session.token, 3600)).toBeNull()
       } finally {
         warn.mockRestore()

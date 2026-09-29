@@ -323,15 +323,16 @@ export function mountAuthRoutes(app: Hono, deps: AuthRouteDeps): void {
 
   /**
    * SSO の session なら、IdP 側もサインアウトさせる URL を返す。Mado の session はもう失効しているので、
-   * IdP に届かず URL を作れなくても失敗にはせず null を返す（IdP 側の session は残る）。
+   * IdP に届かず URL を作れなくても失敗にはしない。ただし IdP 側の session は残るので、
+   * 画面で伝えられるよう unavailable を返す。
    */
-  async function idpLogoutUrl(oidcContext: { issuer: string } | null): Promise<string | null> {
-    if (!oidcContext || !deps.config.oidc?.matchesIssuer(oidcContext.issuer)) return null
+  async function idpLogout(oidcContext: { issuer: string } | null): Promise<{ url: string | null; unavailable: boolean }> {
+    if (!oidcContext || !deps.config.oidc?.matchesIssuer(oidcContext.issuer)) return { url: null, unavailable: false }
     try {
-      return (await deps.config.oidc.logoutUrl()).href
+      return { url: (await deps.config.oidc.logoutUrl()).href, unavailable: false }
     } catch (error) {
       console.warn('oidc logout url unavailable', { reason: oidcFailureReason(error) })
-      return null
+      return { url: null, unavailable: true }
     }
   }
 
@@ -341,7 +342,8 @@ export function mountAuthRoutes(app: Hono, deps: AuthRouteDeps): void {
     const oidcContext = token ? await deps.sessions.getSessionOidcContext(token) : null
     if (token) await deps.sessions.revokeSession(token)
     deleteCookie(c, cookieName, { path: '/', secure: deps.config.session.secure })
-    return c.json({ ok: true, logoutUrl: await idpLogoutUrl(oidcContext) })
+    const idp = await idpLogout(oidcContext)
+    return c.json({ ok: true, logoutUrl: idp.url, idpLogoutUnavailable: idp.unavailable })
   })
 
   // Local login を無効にした (SSO 専用の) 運用でも残す。検証済み email で SSO へ連携した Local User や、

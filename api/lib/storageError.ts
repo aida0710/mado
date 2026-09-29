@@ -1,6 +1,8 @@
 // AWS SDK / S3 由来のエラーをHTTP statusへ翻訳する。upstreamの生message、
 // canonical request、request IDはcredentialや内部構成を含み得るため返さない。
 
+import { BlockedEndpointError } from './endpoint-policy.js'
+
 interface SdkErrorLike {
   name?: string
   message?: string
@@ -9,9 +11,14 @@ interface SdkErrorLike {
 }
 
 export interface ExplainedError {
-  status: 400 | 403 | 404 | 500 | 502
+  status: 400 | 403 | 404 | 409 | 500 | 502
   message: string
 }
+
+// 接続先が拒否するアドレスを指しているのは、Mado の接続設定の問題。直すのは管理者なので、
+// 何をすればよいかを伝える。
+const BLOCKED_ENDPOINT_MESSAGE =
+  'この接続のエンドポイントは、接続を許可していないアドレスを指しています。接続設定でエンドポイントを直してください。'
 
 // 我々が返す status。upstream の失敗は 502 に寄せる (404 だけは素通し) —
 // クライアントから見て「mado の不具合」と「ストレージ側の応答」を
@@ -24,6 +31,7 @@ function mapStatus(upstream: number | undefined): ExplainedError['status'] {
 }
 
 export function explainStorageError(e: unknown): ExplainedError | null {
+  if (e instanceof BlockedEndpointError) return { status: 409, message: BLOCKED_ENDPOINT_MESSAGE }
   const err = e as SdkErrorLike
   const upstream = err.$metadata?.httpStatusCode
   // XML パースに失敗した場合、SDK はパーサの例外文をそのまま message に

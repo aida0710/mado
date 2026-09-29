@@ -333,6 +333,7 @@ OSS releaseと社内環境へのdeployは独立しています。release workflo
 - **CSRF 防御**: write 系 (POST/PUT/DELETE) は `ALLOWED_ORIGINS` と Origin/Referer を照合し、不一致なら 403。
 - **PG ロール分離**: ブラウザ由来の経路は `dashboard_rw` / `dashboard_ro` を使い分け、Postgres レベルで `DROP TABLE` 等を防ぐ。
 - **接続ごとのcapability**はRBACとは別層です。Adminであっても接続側で無効なdownload等は実行できません。
+- **接続先の制限（SSRF対策）**: 接続のエンドポイントに、loopback・link-local（cloud metadataを含む）・IPv4-mapped IPv6でそれらを表したアドレスは使えません。RFC1918とIPv6 ULAは使えます。DNS名は接続のたびに名前解決の結果を確かめ、拒否するアドレスだけを指していれば接続しません。検査が今より緩かった頃に保存した接続も、使う時点で`409`になります。アップデートの前に、既存の接続のエンドポイントがloopbackなどを指していないかを確かめてください。
 - **接続ホワイトリスト**は通常接続を全員公開のまま保ち、例外の接続だけUser単位で隠します。非許可時は一覧・Storage API・DataLineage解決・関連job・転送候補を404相当で隠します。DataLineageの手動登録では許可されていない接続を保存場所に使えず（Registryへ紐付けていない接続と同じ`422`）、Dataset・Versionの詳細でも見えない接続のIDは出しません。
 
 Authentikとの接続、JIT User、group RBAC、Front/Back-channel logoutの登録値は

@@ -67,8 +67,9 @@ Madoにログイン中のsessionは期限（`AUTH_SESSION_ABSOLUTE_SECONDS`、�
 
 MadoはAuthorization Code Flowの`state`とPKCEに加え、OIDC開始時に短命のHttpOnly cookieを発行します。callbackは同じbrowser cookieを提示した場合だけ受理するため、別browserで開始した認証transactionや古いtransactionを流用できません。`returnTo`もMado内の相対pathだけを許可します。
 
-Local loginとOIDC開始には、送信元IPごとの回数と、同時に行うArgon2の処理数の制限があります。
-パスワード変更の「現在のパスワード」の確認には、User単位の回数制限（15分に10回）もあります。
+Local loginとOIDC開始には、送信元IPごとの回数制限があります。Local loginとパスワード変更には、
+同時に行うArgon2の処理数の制限もあります。パスワード変更の「現在のパスワード」の確認には、
+User単位の回数制限（15分に10回）もあります。
 上限時は`429`を返すため、reverse proxyで追加制限する場合もこの応答を維持してください。
 
 ## SSOで入れないときの切り分け
@@ -79,9 +80,9 @@ callbackで断ったときは、利用者には理由を区別せず`401`を返�
 | `reason` | 意味 | 直し方 |
 | --- | --- | --- |
 | `group_not_allowed` | `OIDC_ALLOWED_GROUPS`のどのgroupにも入っていない | Authentikでgroupに入れる |
-| `user_disabled` | MadoでそのUserが無効になっている | Settings > Access > Usersで有効にする |
+| `user_disabled` | MadoでそのUserが無効になっている、または削除されている | 無効ならSettings > Access > Usersで有効にする。削除したUserは有効に戻せず、そのSSOのUserは今は入れ直せない（SSOとの結び付きを外す機能は無い） |
 | `last_admin` | groupの同期で、最後のactiveなAdminを降格しようとした | 別のAdminを先に用意する |
-| `privileged_link_required` | 検証済みemailが、特権を持つLocal Userと一致した | 自動では連携しない。管理者が明示的に連携する |
+| `privileged_link_required` | 検証済みemailが、特権を持つLocal Userと一致した | 乗っ取りを防ぐため自動では連携しない。連携するなら、`OIDC_AUTO_LINK_VERIFIED_EMAIL`が有効な状態で、そのLocal UserのRoleを一時的にviewerだけにしてSSOで1度入ってもらい、Roleを戻す |
 | `deleted_user_email` | 検証済みemailが、削除したUserと一致した | 別のemailにするか、管理者が対応する |
 
 これ以外の`reason`（IdPに届かない、stateが古い、開始したbrowserと違う、など）は、
