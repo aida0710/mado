@@ -13,8 +13,8 @@ export function SignatureSettings() {
   const [error, setError] = useState<string | null>(null)
   const [passwordBusy, setPasswordBusy] = useState(false)
   const [passwordNotice, setPasswordNotice] = useState<string | null>(null)
-  const [signingOut, setSigningOut] = useState(false)
-  const [signOutError, setSignOutError] = useState<string | null>(null)
+  const [loggingOut, setLoggingOut] = useState(false)
+  const [logoutError, setLogoutError] = useState<string | null>(null)
 
   const commit = async () => {
     const nextDisplayName = displayName.trim()
@@ -82,15 +82,15 @@ export function SignatureSettings() {
     }
   }
 
-  const signOut = async () => {
-    setSigningOut(true)
-    setSignOutError(null)
+  const logout = async () => {
+    setLoggingOut(true)
+    setLogoutError(null)
     try {
       await auth.logout()
     } catch (cause) {
-      setSignOutError(cause instanceof Error ? cause.message : 'サインアウトできませんでした')
+      setLogoutError(cause instanceof Error ? cause.message : 'サインアウトできませんでした')
     } finally {
-      setSigningOut(false)
+      setLoggingOut(false)
     }
   }
 
@@ -130,10 +130,10 @@ export function SignatureSettings() {
             {passwordNotice && <p className="account-password__notice">{passwordNotice}</p>}
           </details>}
           <div className="account-signout">
-            <button type="button" className="ghost" onClick={() => void signOut()} disabled={signingOut}>
-              {signingOut ? 'サインアウト中…' : 'サインアウト'}
+            <button type="button" className="ghost" onClick={() => void logout()} disabled={loggingOut}>
+              {loggingOut ? 'サインアウト中…' : 'サインアウト'}
             </button>
-            {signOutError && <p className="error" role="alert">{signOutError}</p>}
+            {logoutError && <p className="error" role="alert">{logoutError}</p>}
           </div>
         </>
       )}

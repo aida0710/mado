@@ -32,7 +32,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
 
   // 画面をログアウト状態にする。同じブラウザを次に使う人へ前の User の一覧や README を
   // 残さないよう、キャッシュも消す。
-  const signOutLocally = useCallback(() => {
+  const logoutLocally = useCallback(() => {
     clearAllCaches()
     setUser(null)
   }, [])
@@ -40,12 +40,12 @@ export function AuthGate({ children }: { children: ReactNode }) {
   const reload = useCallback(async () => {
     const currentUser = await fetchCurrentUser()
     if (!currentUser) {
-      signOutLocally()
+      logoutLocally()
       return
     }
     setSessionExpired(false)
     setUser(currentUser)
-  }, [signOutLocally])
+  }, [logoutLocally])
 
   // API が 401 を返したときに、session が本当に切れたかを確かめる。
   const confirmSessionAfterUnauthorized = useCallback(async () => {
@@ -57,13 +57,13 @@ export function AuthGate({ children }: { children: ReactNode }) {
       // 同じ API を呼び直して 401 を繰り返すおそれがある。
       if (await fetchCurrentUser()) return
       setSessionExpired(true)
-      signOutLocally()
+      logoutLocally()
     } catch {
       // /api/auth/me にも届かないときは session の状態が分からないので、画面を残す。
     } finally {
       confirmingSessionRef.current = false
     }
-  }, [signOutLocally])
+  }, [logoutLocally])
 
   // ログイン中だけ 401 を受け取る。認証が無効ならログイン画面が無いので受け取らない。
   // ログイン画面の表示中も受け取らない（パスワード誤りの 401 などで確認を繰り返さないため）。
@@ -108,16 +108,16 @@ export function AuthGate({ children }: { children: ReactNode }) {
     }
     // /logout は sessionGuard の後ろにあるので、401 は session がもう無いことを表す。
     if (response.status === 401) {
-      signOutLocally()
+      logoutLocally()
       return
     }
     if (!response.ok) {
       throw new Error(`サインアウトできませんでした（HTTP ${response.status}）。${LOGOUT_FAILED_FOLLOW_UP}`)
     }
     const body = await response.json().catch(() => null) as { logoutUrl?: string | null } | null
-    signOutLocally()
+    logoutLocally()
     if (body?.logoutUrl) window.location.assign(body.logoutUrl)
-  }, [signOutLocally])
+  }, [logoutLocally])
   const value = useMemo(() => ({ enabled: !disabled, user, logout, reload }), [disabled, user, logout, reload])
 
   if (loading) return <div className="auth-splash">mado.</div>
