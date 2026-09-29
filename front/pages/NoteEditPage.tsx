@@ -1,7 +1,7 @@
 // `/edit-note` — ホームの Team note (slug='home') を Monaco で編集する 1-pane ページ。
 //
 // HomePage.tsx の「✎ 編集」 / 「✎ 作成」ボタンから <Link to="/edit-note"> で遷移してくる。
-// 保存後は navigate('/') でホームに戻る。HomePage 側の useEffect が再フェッチを行うので
+// 保存後は navigate('/') でホームに戻る。ホームを開き直すと useRetryableLoad が取り直すので、
 // 明示的な refresh コールは不要。
 
 import { useRef } from 'react'
