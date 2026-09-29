@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { api } from './client'
-import { fetchOk } from './http'
+import { SESSION_EXPIRED_MESSAGE, fetchOk } from './http'
 import { subscribeUnauthorized } from './unauthorized-events'
 
 function respondWith(status: number, body: unknown = { error: 'unauthorized' }) {
@@ -27,7 +27,7 @@ describe('API の 401 の通知', () => {
     respondWith(401)
     const listener = listenUnauthorized()
 
-    await expect(fetchOk('/api/internal/notes/home')).rejects.toThrow('unauthorized')
+    await expect(fetchOk('/api/internal/notes/home')).rejects.toThrow(SESSION_EXPIRED_MESSAGE)
 
     expect(listener).toHaveBeenCalledOnce()
   })
@@ -58,9 +58,14 @@ describe('API の 401 の通知', () => {
     respondWith(401)
     const listener = listenUnauthorized()
 
-    await expect(api.latestScan('c', 'b', 'p/')).rejects.toThrow('unauthorized')
-    await expect(api.estimate('c', 'b', 'p/')).rejects.toThrow('unauthorized')
+    await expect(api.latestScan('c', 'b', 'p/')).rejects.toThrow(SESSION_EXPIRED_MESSAGE)
+    await expect(api.estimate('c', 'b', 'p/')).rejects.toThrow(SESSION_EXPIRED_MESSAGE)
 
     expect(listener).toHaveBeenCalledTimes(2)
+  })
+
+  it('401 の理由は、サーバーの英語の文言ではなく日本語で返す', async () => {
+    respondWith(401)
+    await expect(fetchOk('/api/internal/notes/home')).rejects.toThrow('セッションが切れました')
   })
 })

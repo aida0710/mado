@@ -16,8 +16,15 @@ export interface Revalidatable<T> {
 export const cacheKey = (...parts: Array<string | number | null | undefined>): string =>
   parts.map(p => p ?? '').join('|')
 
-/** サーバーが `{ error }` を返していればその文言、無ければ statusText を Error にする。 */
+/** 401 のときに画面へ出す文言。サーバーの `unauthorized` は利用者に意味が伝わらないので置き換える。 */
+export const SESSION_EXPIRED_MESSAGE = 'セッションが切れました。ログインし直してから、もう一度お試しください。'
+
+/**
+ * サーバーが `{ error }` を返していればその文言、無ければ statusText を Error にする。
+ * 401 だけは、ログインし直せば直ることが分かるよう、決まった日本語にする。
+ */
 export async function errorFromResponse(res: Response): Promise<Error> {
+  if (res.status === 401) return new Error(SESSION_EXPIRED_MESSAGE)
   let message = res.statusText
   try {
     const body = (await res.json()) as { error?: string }
