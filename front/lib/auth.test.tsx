@@ -445,6 +445,22 @@ describe('AuthGate — サインアウト', () => {
     expect(screen.queryByText('ログイン後の画面')).not.toBeInTheDocument()
   })
 
+  it('Mado からはサインアウトできたが SSO 側のサインアウトができなかったときは、ログイン画面でそれを伝える', async () => {
+    stubServer({
+      '/api/auth/config': () => json(200, LOCAL_LOGIN_CONFIG),
+      '/api/auth/me': () => json(200, { user: signedInUser }),
+      '/api/auth/logout': () => json(200, { ok: true, logoutUrl: null, idpLogoutUnavailable: true }),
+    })
+    const user = userEvent.setup()
+    renderGate()
+    await screen.findByText('ログイン後の画面')
+
+    await user.click(screen.getByRole('button', { name: 'サインアウト' }))
+
+    expect(await screen.findByRole('heading', { name: 'ログイン' }, { timeout: SESSION_CHECK_TIMEOUT_MS })).toBeInTheDocument()
+    expect(screen.getByText(/SSO側のサインアウトはできていません/)).toBeInTheDocument()
+  })
+
   it('サインアウトがサーバーの失敗（500）で終わると、ログイン状態とキャッシュを保ち、失敗を伝える', async () => {
     stubServer({
       '/api/auth/config': () => json(200, LOCAL_LOGIN_CONFIG),

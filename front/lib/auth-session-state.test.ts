@@ -8,8 +8,12 @@ const aida: AuthUser = {
 }
 const sato: AuthUser = { ...aida, id: 'user-2', username: 'sato', displayName: '佐藤', signatureName: '佐藤' }
 
-const signedInAs = (user: AuthUser): AuthSessionState => ({ user, screenUser: user, sessionExpired: false })
-const expiredOn = (user: AuthUser): AuthSessionState => ({ user: null, screenUser: user, sessionExpired: true })
+const signedInAs = (user: AuthUser): AuthSessionState => ({
+  user, screenUser: user, sessionExpired: false, idpLogoutIncomplete: false,
+})
+const expiredOn = (user: AuthUser): AuthSessionState => ({
+  user: null, screenUser: user, sessionExpired: true, idpLogoutIncomplete: false,
+})
 
 describe('nextAuthSession', () => {
   it('起動時に session が無ければ、残す画面も「切れた」の理由も持たない', () => {
@@ -36,24 +40,31 @@ describe('nextAuthSession', () => {
   it('同じ User がパスワードの変更を求められたら、変更後に戻れるよう画面を残す', () => {
     const mustChange = { ...aida, mustChangePassword: true }
     expect(nextAuthSession(expiredOn(aida), { type: 'checked', user: mustChange }))
-      .toEqual({ user: mustChange, screenUser: aida, sessionExpired: false })
+      .toEqual({ user: mustChange, screenUser: aida, sessionExpired: false, idpLogoutIncomplete: false })
   })
 
   it('別の User がパスワードの変更を求められたら、前の User の画面を残さない', () => {
     const mustChange = { ...sato, mustChangePassword: true }
     expect(nextAuthSession(expiredOn(aida), { type: 'checked', user: mustChange }))
-      .toEqual({ user: mustChange, screenUser: null, sessionExpired: false })
+      .toEqual({ user: mustChange, screenUser: null, sessionExpired: false, idpLogoutIncomplete: false })
   })
 
   it('初回のパスワード変更の途中で session が切れると、残す画面は無いまま「切れた」とする', () => {
     const mustChange = { ...aida, mustChangePassword: true }
-    const changingPassword = { user: mustChange, screenUser: null, sessionExpired: false }
+    const changingPassword = { user: mustChange, screenUser: null, sessionExpired: false, idpLogoutIncomplete: false }
     expect(nextAuthSession(changingPassword, { type: 'checked', user: null }))
-      .toEqual({ user: null, screenUser: null, sessionExpired: true })
+      .toEqual({ user: null, screenUser: null, sessionExpired: true, idpLogoutIncomplete: false })
   })
 
   it('サインアウトすると、画面を残さない', () => {
     expect(nextAuthSession(signedInAs(aida), { type: 'loggedOut' })).toEqual(SIGNED_OUT)
     expect(nextAuthSession(expiredOn(aida), { type: 'loggedOut' })).toEqual(SIGNED_OUT)
+  })
+
+  it('SSO 側のサインアウトができなかったときは、それをログイン画面で伝えられるよう覚えておく', () => {
+    const afterLogout = nextAuthSession(signedInAs(aida), { type: 'loggedOut', idpLogoutUnavailable: true })
+    expect(afterLogout).toEqual({ ...SIGNED_OUT, idpLogoutIncomplete: true })
+    expect(nextAuthSession(afterLogout, { type: 'checked', user: null }).idpLogoutIncomplete).toBe(true)
+    expect(nextAuthSession(afterLogout, { type: 'checked', user: aida }).idpLogoutIncomplete).toBe(false)
   })
 })

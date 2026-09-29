@@ -12,17 +12,25 @@ export interface AuthSessionState {
   screenUser: AuthUser | null
   /** ログイン中に session が切れたか。ログイン画面で理由を伝える。 */
   sessionExpired: boolean
+  /**
+   * Mado からはサインアウトしたが、SSO（IdP）側のサインアウトができなかったか。
+   * IdP の session が残ると、同じブラウザで「SSO で続行」を押した人が前の User として入れるので、
+   * ログイン画面で伝える。
+   */
+  idpLogoutIncomplete: boolean
 }
 
 export type AuthSessionEvent =
   /** /api/auth/me で今の session の User を確かめた。null は session が無いこと。 */
   | { type: 'checked'; user: AuthUser | null }
-  | { type: 'loggedOut' }
+  | { type: 'loggedOut'; idpLogoutUnavailable?: boolean }
 
-export const SIGNED_OUT: AuthSessionState = { user: null, screenUser: null, sessionExpired: false }
+export const SIGNED_OUT: AuthSessionState = {
+  user: null, screenUser: null, sessionExpired: false, idpLogoutIncomplete: false,
+}
 
 export function nextAuthSession(state: AuthSessionState, event: AuthSessionEvent): AuthSessionState {
-  if (event.type === 'loggedOut') return SIGNED_OUT
+  if (event.type === 'loggedOut') return { ...SIGNED_OUT, idpLogoutIncomplete: event.idpLogoutUnavailable === true }
   const { user } = event
   if (!user) {
     // ログイン中（state.user がある）に session が無くなったら、切れたと伝える。
@@ -31,9 +39,12 @@ export function nextAuthSession(state: AuthSessionState, event: AuthSessionEvent
       user: null,
       screenUser: state.screenUser,
       sessionExpired: state.sessionExpired || state.user !== null,
+      idpLogoutIncomplete: state.idpLogoutIncomplete,
     }
   }
-  return { user, screenUser: screenUserAfterCheck(state.screenUser, user), sessionExpired: false }
+  return {
+    user, screenUser: screenUserAfterCheck(state.screenUser, user), sessionExpired: false, idpLogoutIncomplete: false,
+  }
 }
 
 // 入り直した User で、どの画面を描くかを決める。別の User の画面は、その User に見せない。

@@ -11,6 +11,8 @@ interface Props {
   }
   /** ログイン中に session が切れて、この画面へ戻されたか。 */
   sessionExpired?: boolean
+  /** サインアウトしたが、SSO 側のサインアウトができなかったか。 */
+  idpLogoutIncomplete?: boolean
   /**
    * 開いていた画面を残したまま、その上に重ねて出しているか。SSO はページを開き直すので、
    * 同じタブで進むと残した画面が消える。重ねているときは SSO を新しいタブで開く。
@@ -19,7 +21,9 @@ interface Props {
   onLoggedIn(): Promise<void>
 }
 
-export function LoginPage({ config, sessionExpired = false, overlay = false, onLoggedIn }: Props) {
+export function LoginPage({
+  config, sessionExpired = false, idpLogoutIncomplete = false, overlay = false, onLoggedIn,
+}: Props) {
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
@@ -54,9 +58,15 @@ export function LoginPage({ config, sessionExpired = false, overlay = false, onL
         <div className="auth-card__mark">mado<span>.</span></div>
         <p className="auth-card__eyebrow">DATA CATALOG</p>
         <h1 id={AUTH_TITLE_ID}>ログイン</h1>
-        {(sessionExpired || overlay) && (
+        {(sessionExpired || idpLogoutIncomplete || overlay) && (
           <div className="auth-card__lead">
             {sessionExpired && <p role="status">セッションが切れました。もう一度ログインしてください。</p>}
+            {idpLogoutIncomplete && (
+              <p role="status">
+                Madoからはサインアウトしました。SSO側のサインアウトはできていません。
+                共用のパソコンでは、ブラウザを閉じてください。
+              </p>
+            )}
             {overlay && <p>同じアカウントでログインすると、開いていた画面に戻ります。</p>}
           </div>
         )}

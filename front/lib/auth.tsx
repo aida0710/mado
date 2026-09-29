@@ -31,6 +31,7 @@ function authPageFor({ config, session, onSessionChanged }: {
       <LoginPage
         config={config}
         sessionExpired={session.sessionExpired}
+        idpLogoutIncomplete={session.idpLogoutIncomplete}
         overlay={session.screenUser !== null}
         onLoggedIn={onSessionChanged}
       />
@@ -56,9 +57,9 @@ export function AuthGate({ children }: { children: ReactNode }) {
   }, [])
 
   // 画面をログアウト状態にする。キャッシュも消す（理由は applyCurrentUser と同じ）。
-  const logoutLocally = useCallback(() => {
+  const logoutLocally = useCallback(({ idpLogoutUnavailable = false }: { idpLogoutUnavailable?: boolean } = {}) => {
     clearAllCaches()
-    dispatchSession({ type: 'loggedOut' })
+    dispatchSession({ type: 'loggedOut', idpLogoutUnavailable })
   }, [])
 
   const reload = useCallback(async () => {
@@ -149,8 +150,11 @@ export function AuthGate({ children }: { children: ReactNode }) {
     if (!response.ok) {
       throw new Error(`サインアウトできませんでした（HTTP ${response.status}）。ログイン状態のままです。時間をおいてもう一度お試しください。`)
     }
-    const body = await response.json().catch(() => null) as { logoutUrl?: string | null } | null
-    logoutLocally()
+    const body = await response.json().catch(() => null) as {
+      logoutUrl?: string | null
+      idpLogoutUnavailable?: boolean
+    } | null
+    logoutLocally({ idpLogoutUnavailable: body?.idpLogoutUnavailable === true })
     if (body?.logoutUrl) window.location.assign(body.logoutUrl)
   }, [logoutLocally])
   // 画面には、描いている User を渡す。session が切れてログイン画面を重ねている間も、
