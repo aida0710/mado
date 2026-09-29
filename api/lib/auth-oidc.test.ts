@@ -32,6 +32,7 @@ vi.mock('openid-client', () => ({
   }),
 }))
 
+import * as oidc from 'openid-client'
 import { createOidcProvider } from './auth-oidc.js'
 
 const RW = process.env.DATABASE_URL_RW_TEST
@@ -82,6 +83,16 @@ describe('OidcProvider', () => {
     })
     const url = await provider.logoutUrl()
     expect(url.href).toBe('https://auth.example/end-session?post_logout_redirect_uri=https%3A%2F%2Fmado.example%2F')
+  })
+
+  it('IdPへのdiscoveryが一度失敗しても、IdPが戻れば次の呼び出しで取り直す', async () => {
+    vi.mocked(oidc.discovery).mockRejectedValueOnce(new Error('connect ECONNREFUSED'))
+    const provider = createOidcProvider(pools.rw, crypto, {
+      id: 'authentik', label: 'Authentik', issuerUrl: 'https://auth.example/application/o/mado/',
+      clientId: 'client', clientSecret: 'secret', redirectUri: 'https://mado.example/api/auth/oidc/callback',
+    })
+    await expect(provider.logoutUrl()).rejects.toThrow('ECONNREFUSED')
+    await expect(provider.logoutUrl()).resolves.toBeInstanceOf(URL)
   })
 
   it('外部URLへのreturnToをrootへ正規化する', async () => {

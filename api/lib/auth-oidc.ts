@@ -106,8 +106,14 @@ export function createOidcProvider(
   let configuration: Promise<oidc.Configuration> | undefined
   let jwks: ReturnType<typeof createRemoteJWKSet> | undefined
 
+  // 失敗した Promise を残すと、IdP が戻っても再起動までログインできなくなる。
+  // 失敗したときだけ捨てて、次の呼び出しで取り直す。
   const getConfiguration = () => {
     configuration ??= oidc.discovery(issuer, provider.clientId, provider.clientSecret)
+      .catch((error: unknown) => {
+        configuration = undefined
+        throw error
+      })
     return configuration
   }
 
