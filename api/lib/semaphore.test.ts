@@ -1,7 +1,21 @@
 import { describe, expect, it } from 'vitest'
 import { createSemaphore } from './semaphore.js'
+import { RequestQueueFullError } from './shared-requests.js'
 
 describe('createSemaphore', () => {
+  it('中断した待機者を取り除き、次の要求へ枠を渡す', async () => {
+    const semaphore = createSemaphore(1, 1)
+    const release = await semaphore.acquire()
+    const controller = new AbortController()
+    const canceled = semaphore.acquire(controller.signal)
+    await expect(semaphore.acquire()).rejects.toThrow(RequestQueueFullError)
+    controller.abort(new Error('canceled'))
+    await expect(canceled).rejects.toThrow('canceled')
+    const next = semaphore.acquire()
+    release()
+    const releaseNext = await next
+    releaseNext()
+  })
   it('limit を超える実行は先行の release まで待つ (FIFO)', async () => {
     const sem = createSemaphore(2)
     const order: number[] = []

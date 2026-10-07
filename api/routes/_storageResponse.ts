@@ -2,8 +2,16 @@ import { GetObjectCommand, NoSuchKey } from '@aws-sdk/client-s3'
 import type { Context } from 'hono'
 import { Readable } from 'node:stream'
 import type { ObjectRequest } from './_storageRequest.js'
+import { TarScanPendingError } from '../lib/tar-scan-budget.js'
+import { RequestQueueFullError } from '../lib/shared-requests.js'
+import { TarIndexLimitError } from '../lib/tar-index-store.js'
 
 export function storageError(c: Context, error: unknown): Response {
+  if (error instanceof TarIndexLimitError) return c.json({ error: error.message }, 413)
+  if (error instanceof TarScanPendingError) {
+    return c.json({ error: error.message }, 202, { 'Retry-After': '1', 'X-Tar-Index-Pending': '1', 'Cache-Control': 'private, no-store' })
+  }
+  if (error instanceof RequestQueueFullError) return c.json({ error: error.message }, 503, { 'Retry-After': '1' })
   if (error instanceof NoSuchKey || (error as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode === 404) {
     return c.json({ error: 'not found' }, 404)
   }

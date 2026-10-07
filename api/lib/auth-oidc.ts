@@ -12,6 +12,8 @@ export const OIDC_TRANSACTION_TTL_SECONDS = 300
 // 未認証で作れる attempt 行の上限。1 つの browser で開ける SSO の login 画面の数と、全体の数。
 const MAX_PENDING_ATTEMPTS_PER_BROWSER = 3
 const MAX_PENDING_ATTEMPTS_TOTAL = 10_000
+// 再確認が一覧取得やRange要求を長時間止めないようにする。
+const SESSION_CHECK_TIMEOUT_SECONDS = 5
 
 export interface OidcProviderConfig {
   id: string
@@ -25,6 +27,7 @@ export interface OidcProviderConfig {
 }
 
 export interface OidcProfile {
+  tokens?: OidcSessionTokens
   issuer: string
   subject: string
   email: string | null
@@ -34,6 +37,16 @@ export interface OidcProfile {
   groups: string[]
   sid: string | null
   returnTo: string
+}
+
+export interface OidcSessionTokens {
+  accessToken: string
+  refreshToken?: string
+  expiresAt: Date
+}
+
+export class OidcSessionExpiredError extends Error {
+  constructor() { super('oidc session expired'); this.name = 'OidcSessionExpiredError' }
 }
 
 export interface OidcLogoutClaims {
@@ -58,6 +71,7 @@ export class OidcAttemptLimitError extends Error {
 }
 
 export interface OidcProvider {
+  checkSession?(tokens: OidcSessionTokens, subject: string): Promise<{ groups: string[]; tokens: OidcSessionTokens }>
   id: string
   label: string
   issuer: string
@@ -210,7 +224,31 @@ export function createOidcProvider(
         groups: stringArrayClaim(claims.groups),
         sid: typeof claims.sid === 'string' && claims.sid.length <= 512 ? claims.sid : null,
         returnTo: row.return_to,
+        ...(typeof tokens.access_token === 'string' ? { tokens: {
+          accessToken: tokens.access_token,
+          refreshToken: tokens.refresh_token,
+          expiresAt: new Date(Date.now() + (tokens.expires_in ?? OIDC_TRANSACTION_TTL_SECONDS) * 1000),
+        } } : {}),
       }
+    },
+
+    async checkSession(current, subject) {
+      const config = await getConfiguration()
+      // IdP停止時もDB poolや一覧を長時間待たせない。
+      config.timeout = SESSION_CHECK_TIMEOUT_SECONDS
+      let tokens = current
+      if (current.expiresAt.getTime() <= Date.now()) {
+        if (!current.refreshToken) throw new OidcSessionExpiredError()
+        const refreshed = await oidc.refreshTokenGrant(config, current.refreshToken)
+        tokens = {
+          accessToken: refreshed.access_token,
+          refreshToken: refreshed.refresh_token ?? current.refreshToken,
+          expiresAt: new Date(Date.now() + (refreshed.expires_in ?? OIDC_TRANSACTION_TTL_SECONDS) * 1000),
+        }
+      }
+      // ID tokenの古いclaimsではなく、UserInfoの現在のgroupを判定する。
+      const profile = await oidc.fetchUserInfo(config, tokens.accessToken, subject)
+      return { groups: stringArrayClaim(profile.groups), tokens }
     },
 
     async logoutUrl() {

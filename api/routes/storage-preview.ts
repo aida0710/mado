@@ -8,6 +8,7 @@ import {
   listTarEntries,
 } from '../lib/tar-stream.js'
 import { TarIndexCache } from '../lib/tar-index-cache.js'
+import { TarScanPendingError } from '../lib/tar-scan-budget.js'
 import { AUDIO_MIME, VIDEO_MIME, IMAGE_MIME, ext } from '../lib/preview-mime.js'
 import { openObject, streamObject } from './_storageResponse.js'
 import { mountStorageTarEntryRoute } from './storage-tar-entry.js'
@@ -172,27 +173,29 @@ export function mountStoragePreviewRoutes(app: Hono, deps: StoragePreviewDeps): 
           if (kind === 'tar') {
             write({ mode: 'range' })
             const archive = await tarIndexes.open({ storage, bucket, key, signal: rangeController.signal })
-            let bytes = 0
-            let requests = 0
-            const result = await archive.index.list(
-              {
-                entryLimit: limit, offset, signal: rangeController.signal,
-                onProgress: progress => {
-                  bytes += progress.bytes
-                  requests += progress.requests
-                  write({ progress: { bytes, requests } })
+            try {
+              let bytes = 0
+              let requests = 0
+              const result = await archive.index.list(
+                {
+                  entryLimit: limit, offset, signal: rangeController.signal,
+                  onProgress: progress => {
+                    bytes += progress.bytes
+                    requests += progress.requests
+                    write({ progress: { bytes, requests } })
+                  },
                 },
-              },
-              entry => write({ entry }),
-            )
-            write({
-              done: {
-                truncated: false,
-                hasMore: result.hasMore,
-                offset,
-                limit,
-              },
-            })
+                entry => write({ entry }),
+              )
+              write({
+                done: {
+                  truncated: false,
+                  hasMore: result.hasMore,
+                  offset,
+                  limit,
+                },
+              })
+            } finally { archive.release() }
           } else {
             write({ mode: 'stream' })
             // 圧縮: 全バイトを順次読む必要があるため、オブジェクト本体を
@@ -254,6 +257,7 @@ export function mountStoragePreviewRoutes(app: Hono, deps: StoragePreviewDeps): 
           }
         } catch (e) {
           if (closed) return
+          if (e instanceof TarScanPendingError) { write({ pending: true }); return }
           console.error('storage archive preview failed', {
             name: e instanceof Error ? e.name : 'unknown',
           })

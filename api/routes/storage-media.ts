@@ -73,7 +73,7 @@ export function mountStorageMediaRoutes(app: Hono, deps: StorageMediaDeps): void
   app.get('/storage/:connectionId/media/spectrogram', async c => {
     const cacheKey = c.req.query('cacheKey')
     if (!cacheKey) return c.json({ error: 'cacheKey required' }, 400)
-    const png = await getCachedSpectrogram(deps.pools.ro, cacheKey)
+    const png = await getCachedSpectrogram(deps.pools.ro, { cacheKey, connectionId: c.req.param('connectionId') })
     if (!png) return c.json({ error: 'not found' }, 404)
     const body = new Uint8Array(png.byteLength)
     body.set(png)

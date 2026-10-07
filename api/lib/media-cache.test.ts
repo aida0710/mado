@@ -27,7 +27,8 @@ describe('media-cache', () => {
   })
 
   it('upsert → get の round trip / spectrogram 有無 / meta', async () => {
-    const key = mediaCacheKey({ connectionId: 'c', bucket: 'b', key: 'k.wav', etag: 'e' })
+    const ref = { connectionId: 'c', bucket: 'b', key: 'k.wav', etag: 'e' }
+    const key = mediaCacheKey(ref)
     expect(await getCachedMedia(pools.ro, key)).toBeNull()
     const meta = {
       codec: 'pcm_s16le',
@@ -39,7 +40,7 @@ describe('media-cache', () => {
       peakDb: -0.1,
       rmsDb: -3.2,
     }
-    await upsertMediaCache(pools.rw, key, {
+    await upsertMediaCache(pools.rw, ref, {
       peaks: [[-0.5, 0.5]],
       durationSec: 1.5,
       sampleRate: 16000,
@@ -55,9 +56,9 @@ describe('media-cache', () => {
       hasSpectrogram: true,
       meta,
     })
-    expect(await getCachedSpectrogram(pools.ro, key)).toEqual(Buffer.from([1, 2, 3]))
+    expect(await getCachedSpectrogram(pools.ro, { cacheKey: key, connectionId: 'c' })).toEqual(Buffer.from([1, 2, 3]))
     // 再 upsert は上書き
-    await upsertMediaCache(pools.rw, key, {
+    await upsertMediaCache(pools.rw, ref, {
       peaks: [[0, 0]],
       durationSec: 2,
       sampleRate: null,

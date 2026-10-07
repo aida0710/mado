@@ -22,13 +22,15 @@ describe('PreviewVideo', () => {
     expect(fetch).not.toHaveBeenCalled()
   })
 
-  it('非圧縮tar内MP4は全量を取得せずRange対応URLを直接使う', () => {
+  it('非圧縮tar内MP4はHEADで準備した後にRange対応URLを直接使う', async () => {
+    vi.mocked(fetch).mockResolvedValue(new Response(null, { status: 200 }))
     render(<PreviewVideo connectionId="c" bucket="b" k="SHARD.TAR" entryPath="clip.mp4" />)
-    const video = screen.getByLabelText('clip.mp4 の動画プレビュー')
+    const video = await screen.findByLabelText('clip.mp4 の動画プレビュー')
     expect(video).toHaveAttribute('src', expect.stringContaining('/preview/tar-entry'))
     expect(video).toHaveAttribute('src', expect.stringContaining('entry=clip.mp4'))
     expect(video).toHaveAttribute('preload', 'metadata')
-    expect(fetch).not.toHaveBeenCalled()
+    expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/preview/tar-entry'), expect.objectContaining({ method: 'HEAD' }))
+    expect(fetch).toHaveBeenCalledOnce()
     expect(URL.createObjectURL).not.toHaveBeenCalled()
   })
 

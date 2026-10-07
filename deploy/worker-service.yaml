@@ -1,0 +1,14 @@
+services:
+  media-worker:
+    # APIの.env全体を渡さず、解析と容量計測に必要な値だけを共有する。
+    environment:
+      MADO_ENV: production
+      DATABASE_URL_RW: "postgres://mado_worker:${WORKER_DB_PASSWORD:-worker-dev-only}@postgres:5432/dashboard"
+      DATABASE_URL_RO: "postgres://mado_worker:${WORKER_DB_PASSWORD:-worker-dev-only}@postgres:5432/dashboard"
+      ENCRYPTION_KEY: "${ENCRYPTION_KEY:?ENCRYPTION_KEY is required}"
+      ALLOWED_ORIGINS: "${ALLOWED_ORIGINS:?ALLOWED_ORIGINS is required}"
+      MEDIA_CONCURRENCY: "${MEDIA_CONCURRENCY:-3}"
+      MEDIA_ANALYZE_TIMEOUT_SEC: "${MEDIA_ANALYZE_TIMEOUT_SEC:-300}"
+      MEDIA_CACHE_MAX_AGE_DAYS: "${MEDIA_CACHE_MAX_AGE_DAYS:-30}"
+      MEDIA_SPECTROGRAM_MAX_WIDTH: "${MEDIA_SPECTROGRAM_MAX_WIDTH:-4096}"
+      MEDIA_WORKER_PORT: "${MEDIA_WORKER_PORT:-3100}"

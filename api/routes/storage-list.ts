@@ -7,7 +7,8 @@ import {
 import type { Hono } from 'hono'
 import { resolveStorageOrFail, type GetStorage } from './_storageRequest.js'
 import type { ConnectionConfig } from '../storage.js'
-import type { CacheScope, ResponseCache } from '../lib/storage-cache.js'
+import { cacheKey, type CacheScope, type ResponseCache } from '../lib/storage-cache.js'
+import { SharedRequests } from '../lib/shared-requests.js'
 
 export interface StorageListDeps {
   getStorage: GetStorage
@@ -93,6 +94,7 @@ function listBodyFrom(
 }
 
 export function mountStorageListRoutes(app: Hono, deps: StorageListDeps): void {
+  const lists = new SharedRequests<ReturnType<typeof withCacheMeta>>()
   app.get('/storage/:connectionId/buckets', async c => {
     // フェーズごとに所要時間を JSON ログに出して、
     // 「buckets が遅い」ときに getStorage / S3 の ListBuckets / 全体の
@@ -148,62 +150,68 @@ export function mountStorageListRoutes(app: Hono, deps: StorageListDeps): void {
       kind: 'list', connectionId, bucket, prefix, recursive, continuation, startAfter,
     }
     const refresh = c.req.query('refresh') === '1'
-    if (!refresh) {
-      const hit = await deps.cache.get(scope)
-      if (hit) {
-        return c.json(withCacheMeta(
-          hit.payload as ListBody,
-          { fetchedAt: hit.fetchedAt, expiresAt: hit.expiresAt },
-          true,
-        ))
-      }
-    }
+    const body = await lists.run({
+      key: JSON.stringify([cacheKey(scope), refresh]), signal: c.req.raw.signal,
+      load: async signal => {
+        if (!refresh) {
+          const hit = await deps.cache.get(scope)
+          if (hit) {
+            return withCacheMeta(
+              hit.payload as ListBody,
+              { fetchedAt: hit.fetchedAt, expiresAt: hit.expiresAt },
+              true,
+            )
+          }
+        }
 
-    const config = await deps.getConnectionConfig(connectionId)
-    const isListObjectsV1 = config.listObjectsVersion === 'v1'
+        const config = await deps.getConnectionConfig(connectionId)
+        const isListObjectsV1 = config.listObjectsVersion === 'v1'
 
-    // V1 / V2 で送るパラメータも応答の cursor フィールドも違うので、ここで分岐する。
-    // V1 (?marker=…&prefix=…&delimiter=/): V1 only の S3 互換サーバ。
-    //   応答に <NextMarker> が入る (Delimiter 指定時)。Delimiter 無しでは
-    //   IsTruncated=true でも NextMarker 無しになることがあり、その場合は
-    //   最後のキーで marker フォールバックする (s3cmd と同じ手法)。
-    // V2 (?list-type=2&prefix=…&continuation-token=…): AWS / R2 / MinIO 推奨。
-    //   ContinuationToken (不透明文字列) で次ページを指す。互換実装で
-    //   NextContinuationToken が欠けている場合に最終キーを startAfter としてフォールバック。
-    if (isListObjectsV1) {
-      const marker = startAfter ?? continuation
-      const out = await storage.send(new ListObjectsCommand({
-        Bucket: bucket,
-        Prefix: prefix,
-        Delimiter: recursive ? undefined : '/',
-        Marker: marker,
-        MaxKeys: 100,
-      }))
-      // V1 には continuation token 概念が無い。pagination は marker (= startAfter) で。
-      const body = listBodyFrom(out, prefix, { continuation: null, startAfter: out.NextMarker ?? null })
-      return c.json(await storeFreshList({ cache: deps.cache, scope, body, ttlSec: config.listCacheTtlSec }))
-    }
+        // V1 / V2 で送るパラメータも応答の cursor フィールドも違うので、ここで分岐する。
+        // V1 (?marker=…&prefix=…&delimiter=/): V1 only の S3 互換サーバ。
+        //   応答に <NextMarker> が入る (Delimiter 指定時)。Delimiter 無しでは
+        //   IsTruncated=true でも NextMarker 無しになることがあり、その場合は
+        //   最後のキーで marker フォールバックする (s3cmd と同じ手法)。
+        // V2 (?list-type=2&prefix=…&continuation-token=…): AWS / R2 / MinIO 推奨。
+        //   ContinuationToken (不透明文字列) で次ページを指す。互換実装で
+        //   NextContinuationToken が欠けている場合に最終キーを startAfter としてフォールバック。
+        if (isListObjectsV1) {
+          const marker = startAfter ?? continuation
+          const out = await storage.send(new ListObjectsCommand({
+            Bucket: bucket,
+            Prefix: prefix,
+            Delimiter: recursive ? undefined : '/',
+            Marker: marker,
+            MaxKeys: 100,
+          }), { abortSignal: signal })
+          // V1 には continuation token 概念が無い。pagination は marker (= startAfter) で。
+          const body = listBodyFrom(out, prefix, { continuation: null, startAfter: out.NextMarker ?? null })
+          return storeFreshList({ cache: deps.cache, scope, body, ttlSec: config.listCacheTtlSec })
+        }
 
-    // V2 経路 (既定): 既存挙動を保持。
-    const out = await storage.send(new ListObjectsV2Command({
-      Bucket: bucket,
-      Prefix: prefix,
-      Delimiter: recursive ? undefined : '/',
-      // ContinuationToken 優先 (高速)。無いときだけ StartAfter で再開する。
-      // S3 仕様上 ContinuationToken を渡すと StartAfter は無視されるが、
-      // どちらか一方しか送らないほうが意図が明確。
-      ContinuationToken: continuation,
-      StartAfter: continuation ? undefined : startAfter,
-      MaxKeys: 100,
-    }))
-    // 一部の S3 互換実装は IsTruncated=true を返すのに
-    // NextContinuationToken を返さないことがある。その場合に最終キーで
-    // フォールバック。AWS 公式 S3 では NextContinuationToken が常に入る
-    // ので nextStartAfter は null のままになる。
-    // ★ ただしこの fallback は V2 自体を理解しないサーバには効かない
-    //   (start-after parameter を無視するため)。そういうサーバは接続設定で
-    //   list_objects_version='v1' を選んでもらう。
-    const body = listBodyFrom(out, prefix, { continuation: out.NextContinuationToken ?? null, startAfter: null })
-    return c.json(await storeFreshList({ cache: deps.cache, scope, body, ttlSec: config.listCacheTtlSec }))
+        // V2 経路 (既定): 既存挙動を保持。
+        const out = await storage.send(new ListObjectsV2Command({
+          Bucket: bucket,
+          Prefix: prefix,
+          Delimiter: recursive ? undefined : '/',
+          // ContinuationToken 優先 (高速)。無いときだけ StartAfter で再開する。
+          // S3 仕様上 ContinuationToken を渡すと StartAfter は無視されるが、
+          // どちらか一方しか送らないほうが意図が明確。
+          ContinuationToken: continuation,
+          StartAfter: continuation ? undefined : startAfter,
+          MaxKeys: 100,
+        }), { abortSignal: signal })
+        // 一部の S3 互換実装は IsTruncated=true を返すのに
+        // NextContinuationToken を返さないことがある。その場合に最終キーで
+        // フォールバック。AWS 公式 S3 では NextContinuationToken が常に入る
+        // ので nextStartAfter は null のままになる。
+        // ★ ただしこの fallback は V2 自体を理解しないサーバには効かない
+        //   (start-after parameter を無視するため)。そういうサーバは接続設定で
+        //   list_objects_version='v1' を選んでもらう。
+        const body = listBodyFrom(out, prefix, { continuation: out.NextContinuationToken ?? null, startAfter: null })
+        return storeFreshList({ cache: deps.cache, scope, body, ttlSec: config.listCacheTtlSec })
+      },
+    })
+    return c.json(body)
   })
 }

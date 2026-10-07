@@ -52,7 +52,7 @@ stage=$(mktemp -d)
 trap 'rm -rf "$stage"' EXIT HUP INT TERM
 bundle="mado-$tag"
 base="$stage/$bundle"
-mkdir -p "$base/db" "$output_dir"
+mkdir -p "$base/db" "$base/deploy" "$output_dir"
 
 sed \
   -e "s|@@MADO_API_IMAGE@@|$api_image|g" \
@@ -62,6 +62,7 @@ sed \
 
 cp "$root/deploy/release/README.md" "$base/README.md"
 cp "$root/deploy/release/.env.example" "$base/.env.example"
+cp "$root/deploy/worker-service.yaml" "$base/deploy/worker-service.yaml"
 cp "$root/docs/registry-api-contract.md" "$base/REGISTRY_API_CONTRACT.md"
 cp "$root/LICENSE" "$root/NOTICE" "$base/"
 cp -R "$root/db/init" "$root/db/migrations" "$base/db/"

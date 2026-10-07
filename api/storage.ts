@@ -100,6 +100,7 @@ export class ConnectionNotFoundError extends Error {
 
 interface CachedEntry {
   client: S3Client
+  clientSettings: Pick<DbRow, 'endpoint' | 'region' | 'access_key_id_enc' | 'secret_access_key_enc' | 'force_path_style'>
   config: ConnectionConfig
   loadedAt: number
 }
@@ -188,7 +189,7 @@ export function createStorageFactory(deps: StorageFactoryDeps): StorageFactory {
     const pending = loading.get(connectionId)
     if (pending) return pending
 
-    const loaded: Promise<CachedEntry> = readEntry(connectionId)
+    const loaded: Promise<CachedEntry> = readEntry(connectionId, cached)
       .then(entry => {
         if (loading.get(connectionId) === loaded) cache.set(connectionId, entry)
         return entry
@@ -200,7 +201,7 @@ export function createStorageFactory(deps: StorageFactoryDeps): StorageFactory {
     return loaded
   }
 
-  async function readEntry(connectionId: string): Promise<CachedEntry> {
+  async function readEntry(connectionId: string, previous?: CachedEntry): Promise<CachedEntry> {
     const r = await deps.pools.ro.query<DbRow>(
       `SELECT c.endpoint, c.region, c.access_key_id_enc, c.secret_access_key_enc,
               c.force_path_style, c.list_objects_version,
@@ -213,35 +214,44 @@ export function createStorageFactory(deps: StorageFactoryDeps): StorageFactory {
     // 保存時の検査が今より緩かった頃の行も、IP を直接書いた接続先は名前解決を通らないのでここで止める。
     if (!isAllowedEndpoint(row.endpoint)) throw new BlockedEndpointError(connectionId)
 
-    const client = new S3Client({
-      endpoint: row.endpoint,
-      region: row.region,
-      credentials: {
-        accessKeyId: deps.crypto.decrypt(row.access_key_id_enc),
-        secretAccessKey: deps.crypto.decrypt(row.secret_access_key_enc),
-      },
-      forcePathStyle: row.force_path_style,
-      // 明示的に keep-alive を効かせる。リトライは 1 回だけ (= 再試行なし)。
-      // ここで遅いのは「サーバが応答を作るのに時間がかかる」ケースであって、
-      // 投げ直せば速くなる類の失敗ではない。maxAttempts=2 だと socketTimeout を
-      // 2 回踏んで失敗までの時間がちょうど倍になるだけなので 1 に落とす。
-      maxAttempts: 1,
-      requestHandler: new NodeHttpHandler({
-        httpAgent,
-        httpsAgent,
-        connectionTimeout: 5_000,
-        // Delimiter 付き ListObjects は、実装によってはバケット全体を走査して
-        // CommonPrefixes を組み立てる。ある S3 互換ストレージの巨大なバケットでは
-        // prefix の絞り込みに関係なく毎回 28〜35 秒かかり、
-        // 30 秒では成否が運任せになっていた (28 秒なら成功、31 秒なら 500)。
-        // 実測に対して余裕を持たせる。nginx 側は proxy_read_timeout 300s なので
-        // ここが律速。待たされること自体はフロントの stale-while-revalidate が
-        // 隠すので、まず「成功させる」ことを優先する。
-        socketTimeout:    90_000,
-      }),
-    })
+    const clientSettings = {
+      endpoint: row.endpoint, region: row.region,
+      access_key_id_enc: row.access_key_id_enc, secret_access_key_enc: row.secret_access_key_enc,
+      force_path_style: row.force_path_style,
+    }
+    // 設定の再確認でクライアントを交換すると、再生中のtar索引まで失われる。
+    const client = previous && JSON.stringify(previous.clientSettings) === JSON.stringify(clientSettings)
+      ? previous.client
+      : new S3Client({
+        endpoint: row.endpoint,
+        region: row.region,
+        credentials: {
+          accessKeyId: deps.crypto.decrypt(row.access_key_id_enc),
+          secretAccessKey: deps.crypto.decrypt(row.secret_access_key_enc),
+        },
+        forcePathStyle: row.force_path_style,
+        // 明示的に keep-alive を効かせる。リトライは 1 回だけ (= 再試行なし)。
+        // ここで遅いのは「サーバが応答を作るのに時間がかかる」ケースであって、
+        // 投げ直せば速くなる類の失敗ではない。maxAttempts=2 だと socketTimeout を
+        // 2 回踏んで失敗までの時間がちょうど倍になるだけなので 1 に落とす。
+        maxAttempts: 1,
+        requestHandler: new NodeHttpHandler({
+          httpAgent,
+          httpsAgent,
+          connectionTimeout: 5_000,
+          // Delimiter 付き ListObjects は、実装によってはバケット全体を走査して
+          // CommonPrefixes を組み立てる。ある S3 互換ストレージの巨大なバケットでは
+          // prefix の絞り込みに関係なく毎回 28〜35 秒かかり、
+          // 30 秒では成否が運任せになっていた (28 秒なら成功、31 秒なら 500)。
+          // 実測に対して余裕を持たせる。nginx 側は proxy_read_timeout 300s なので
+          // ここが律速。待たされること自体はフロントの stale-while-revalidate が
+          // 隠すので、まず「成功させる」ことを優先する。
+          socketTimeout:    90_000,
+        }),
+      })
     return {
       client,
+      clientSettings,
       loadedAt: Date.now(),
       config: {
         listObjectsVersion: row.list_objects_version,

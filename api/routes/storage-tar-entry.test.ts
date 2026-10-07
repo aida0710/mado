@@ -2,7 +2,7 @@ import { GetObjectCommand, HeadObjectCommand, S3Client } from '@aws-sdk/client-s
 import { mockClient } from 'aws-sdk-client-mock'
 import { Readable } from 'node:stream'
 import { Hono } from 'hono'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createVirtualTar, type VirtualTar } from '../lib/test-fixtures/virtual-tar.js'
 import { mountStoragePreviewRoutes } from './storage-preview.js'
 
@@ -19,6 +19,7 @@ beforeEach(() => {
     env: { PREVIEW_TEXT_LIMIT: 64, PREVIEW_TAR_ENTRY_LIMIT: 10, PREVIEW_TARXZ_BYTE_LIMIT: 1024, PREVIEW_TAR_ENTRY_MAX_BYTES: 100 * 1024 * 1024 },
   })
 })
+afterEach(() => vi.restoreAllMocks())
 
 // 大容量本文は64KiBずつ生成し、全量バッファする実装になった場合は検知できる。
 const BODY_CHUNK_BYTES = 64 * 1024
@@ -29,7 +30,7 @@ function serveVirtualTar(tar: VirtualTar, etag = 'v1'): void {
     if (!match) throw new Error('tar body requested without a range')
     const start = Number(match[1])
     const end = Number(match[2])
-    if (input.IfMatch !== etag) throw new Error('tar request is missing its object identity')
+    if (input.IfMatch !== etag) throw Object.assign(new Error('object changed'), { $metadata: { httpStatusCode: 412 } })
     const chunks = async function* () {
       for (let position = start; position <= end; position += BODY_CHUNK_BYTES) {
         yield await tar.read(position, Math.min(BODY_CHUNK_BYTES, end - position + 1))
@@ -66,7 +67,7 @@ describe('大容量tar内動画の配信', () => {
     expect(await last.text()).toBe('VIDEO-END')
     expect(last.headers.get('Content-Range')).toBe(`bytes ${tar.videoSize - 9}-${tar.videoSize - 1}/${tar.videoSize}`)
     expect(storageMock.commandCalls(GetObjectCommand)).toHaveLength(3)
-    expect(storageMock.commandCalls(HeadObjectCommand)).toHaveLength(2)
+    expect(storageMock.commandCalls(HeadObjectCommand)).toHaveLength(1)
   })
 
   it('一覧で取得した位置を再生に使い、次のページも本文を読み飛ばす', async () => {
@@ -145,14 +146,21 @@ describe('大容量tar内動画の配信', () => {
   })
 
   it('オブジェクトが差し替わったら古い位置・サイズを使わない', async () => {
+    const now = Date.now()
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(now)
     serveVirtualTar(createVirtualTar(), 'v1')
     const first = await app.request(url, { headers: { Range: 'bytes=0-9' } })
     await first.arrayBuffer()
     const replacement = createVirtualTar(10)
     serveVirtualTar(replacement, 'v2')
     const second = await app.request(url, { headers: { Range: 'bytes=0-9' } })
-    await second.arrayBuffer()
-    expect(second.headers.get('Content-Range')).toBe(`bytes 0-9/${replacement.videoSize}`)
+    // HEADの短いcache中に変わってもIfMatchで止め、次のHEADで新しい位置を調べる。
+    expect(second.status).toBe(412)
+    clock.mockReturnValue(now + 1001)
+    const updated = await app.request(url, { headers: { Range: 'bytes=0-9' } })
+    await updated.arrayBuffer()
+    expect(updated.status).toBe(206)
+    expect(updated.headers.get('Content-Range')).toBe(`bytes 0-9/${replacement.videoSize}`)
     expect(storageMock.commandCalls(GetObjectCommand).filter(call => call.args[0].input.Range === 'bytes=0-262143')).toHaveLength(2)
   })
 

@@ -8,6 +8,7 @@ not build application source on the deployment host.
 1. Copy `.env.example` to `.env`.
 2. Replace every placeholder or empty secret in `.env`. Keep
    `DATABASE_URL_RW`, `DATABASE_URL_RO`, and `DASHBOARD_PASSWORD` consistent.
+   Generate a separate hex `WORKER_DB_PASSWORD` for the restricted media worker.
 3. Choose `AUTH_MODE=local`, `oidc`, or `hybrid`. Keep `MADO_ENV=production`;
    keep `AUTH_COOKIE_SECURE=true` whenever browser access uses TLS.
 4. Provide a compatible Dataset Registry API and token. It is an external
@@ -41,6 +42,11 @@ files through 027, start only the new `api-internal`, apply 028 then 029, enable
 the `mado_lineage` login with `LINEAGE_DB_PASSWORD`, and only then start
 `api-lineage` and the remaining services. Do not bring up the entire new
 Compose project before completing those steps.
+
+For a deployment already on the previous schema, apply 035–037 before the new
+services, then enable `mado_worker` with the generated `WORKER_DB_PASSWORD`.
+The worker receives only its dedicated environment from `deploy/worker-service.yaml`.
+Migration 037 requires existing SSO users to sign in once after the update.
 
 Internal/private deployments are downstream operations. Publishing an OSS
 release never connects to or changes a deployment environment.

@@ -111,6 +111,22 @@ describe('createStorageFactory の権限読み出し', () => {
 })
 
 describe('接続ごとの走査可否とキャッシュ TTL', () => {
+  it('設定更新の時刻が来ても接続情報が同じならS3Clientを再利用し、権限は読み直す', async () => {
+    await insertConnection('conn000017')
+    const factory = createStorageFactory({ pools, crypto })
+    const now = Date.now()
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(now)
+    try {
+      const client = await factory.getStorage('conn000017')
+      await pools.rw.query("INSERT INTO connection_settings (connection_id, key, value) VALUES ($1, 'cap.download', 'false')", ['conn000017'])
+      clock.mockReturnValue(now + CONNECTION_CACHE_TTL_MS + 1)
+      expect(await factory.getStorage('conn000017')).toBe(client)
+      expect((await factory.getConnectionConfig('conn000017')).capabilities.download).toBe(false)
+      await pools.rw.query("UPDATE storage_connections SET region = 'changed' WHERE id = $1", ['conn000017'])
+      clock.mockReturnValue(now + CONNECTION_CACHE_TTL_MS * 2 + 2)
+      expect(await factory.getStorage('conn000017')).not.toBe(client)
+    } finally { clock.mockRestore(); await factory.close() }
+  })
   it('設定が無ければ走査は許可、TTL は 24 時間', async () => {
     await insertConnection('conn000010')
     const f = createStorageFactory({ pools, crypto })

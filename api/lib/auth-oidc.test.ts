@@ -6,6 +6,8 @@ const oidcMocks = vi.hoisted(() => ({
   grant: vi.fn(),
   build: vi.fn(),
   endSession: vi.fn(),
+  refresh: vi.fn(),
+  userInfo: vi.fn(),
 }))
 
 vi.mock('openid-client', () => ({
@@ -30,6 +32,8 @@ vi.mock('openid-client', () => ({
       preferred_username: 'user', name: 'User', groups: ['mado-users', 'mado-admins'], sid: 'session-1',
     }),
   }),
+  refreshTokenGrant: oidcMocks.refresh,
+  fetchUserInfo: oidcMocks.userInfo,
 }))
 
 import * as oidc from 'openid-client'
@@ -42,11 +46,37 @@ const crypto = createCrypto('a'.repeat(64))
 
 beforeEach(async () => {
   oidcMocks.grant.mockClear()
+  oidcMocks.refresh.mockReset()
+  oidcMocks.userInfo.mockReset()
   await pools.rw.query('TRUNCATE auth_oidc_attempts')
 })
 afterAll(() => closePools(pools))
 
 describe('OidcProvider', () => {
+  it('現在のUserInfoのgroupを使い、期限切れtokenを更新してから確認する', async () => {
+    const provider = createOidcProvider(pools.rw, crypto, {
+      id: 'authentik', label: 'Authentik', issuerUrl: 'https://auth.example/application/o/mado/',
+      clientId: 'client', clientSecret: 'secret', redirectUri: 'https://mado.example/api/auth/oidc/callback',
+    })
+    oidcMocks.refresh.mockResolvedValue({ access_token: 'rotated', refresh_token: 'next-refresh', expires_in: 300 })
+    oidcMocks.userInfo.mockResolvedValue({ sub: 'subject', groups: ['mado-users'] })
+    const checked = await provider.checkSession!({ accessToken: 'expired', refreshToken: 'refresh', expiresAt: new Date(0) }, 'subject')
+    expect(checked.groups).toEqual(['mado-users'])
+    expect(checked.tokens.accessToken).toBe('rotated')
+    expect(checked.tokens.refreshToken).toBe('next-refresh')
+    expect(oidcMocks.refresh).toHaveBeenCalledWith(expect.anything(), 'refresh')
+    expect(oidcMocks.userInfo).toHaveBeenCalledWith(expect.anything(), 'rotated', 'subject')
+    expect(checked.tokens.expiresAt.getTime()).toBeGreaterThan(Date.now())
+  })
+
+  it('tokenの更新手段がなければ期限切れsessionを通さない', async () => {
+    const provider = createOidcProvider(pools.rw, crypto, {
+      id: 'authentik', label: 'Authentik', issuerUrl: 'https://auth.example/',
+      clientId: 'client', clientSecret: 'secret', redirectUri: 'https://mado.example/api/auth/oidc/callback',
+    })
+    await expect(provider.checkSession!({ accessToken: 'expired', expiresAt: new Date(0) }, 'subject')).rejects.toThrow('oidc session expired')
+    expect(oidcMocks.userInfo).not.toHaveBeenCalled()
+  })
   it('PKCE/state/nonceを保存し、callbackを一度だけ消費する', async () => {
     const provider = createOidcProvider(pools.rw, crypto, {
       id: 'authentik', label: 'Authentik', issuerUrl: 'https://auth.example/application/o/mado/',

@@ -104,6 +104,10 @@ Settings の接続一覧には、制限のかかっている接続に「制限: 
 
 単体の動画・音声と、非圧縮の`.tar`内の動画・音声は、再生に必要な部分を取得します。500MBや1GB以上のファイルも、全量の取得を待たずに再生・シークできます。`.tar`内のファイルの位置は一覧と再生で共有し、後ろのページも先頭から走査し直さずに取得します。オブジェクトが変わった場合は索引を作り直します。
 
+索引はprivateな一時SQLiteに保存し、10万件を超えてもメモリ上に全件を保持しません。1回の走査は1万ヘッダー・128回の部分取得・32MiB・10秒までで、準備中の一覧と再生は続きを自動で取得します。索引は15分未使用で破棄し、32アーカイブを保持し、合計2GiBを超えたら未使用の索引から削除します。1索引は512MiBの物理上限より早く容量を検査し、ファイル名は16KiBまでとし、超過時は省略した一覧を返さずエラーにします。ETag付きHEADは1秒だけ共有し、本文の`If-Match`で変更を検出します。
+
+音声解析は単体ファイルを一度だけ一時ファイルへ取得し、probe・波形・スペクトログラムで再利用します。非圧縮tarも対象の音声の範囲だけ取得します。解析用入力の上限は単体2GiB・tar内100MiBで、直接再生には適用しません。一時ファイルは解析完了・失敗・中断時に削除します。
+
 `.tar.gz`・`.tar.xz`内の本文は順次解凍して取得するため、引き続き`PREVIEW_TAR_ENTRY_MAX_BYTES`の上限が適用されます。ブラウザで再生できる動画・音声形式が対象です。
 
 <img width="720" height="302" alt="mosaic_20260524163953" src="https://github.com/user-attachments/assets/e5a41326-34b9-45a2-adaf-94b0e4ef4066" />
@@ -227,7 +231,7 @@ docker compose -f compose.dev.yaml exec api-internal \
 # 5. ブラウザで http://localhost:5173
 ```
 
-dev の DB パスワードは未設定なら開発用の既定値で動きます。初回起動時のみ `db/init/00-init.sh` が `dashboard_rw` / `dashboard_ro` / `mado_lineage` ロールと `dashboard_test` DB を作成します。作り直したいときは `down -v` で volume を消してから上げ直してください。
+dev の DB パスワードは未設定なら開発用の既定値で動きます。初回起動時のみ `db/init/00-init.sh` が `dashboard_rw` / `dashboard_ro` / `mado_lineage` / `mado_worker` ロールと `dashboard_test` DB を作成します。作り直したいときは `down -v` で volume を消してから上げ直してください。
 
 ### 環境変数
 
@@ -240,14 +244,16 @@ dev の DB パスワードは未設定なら開発用の既定値で動きます
 | `POSTGRES_PASSWORD` | prod:yes / dev:no | `postgres` スーパーユーザのパスワード。**prod は未設定だと起動失敗**、dev は既定 `postgres` |
 | `DASHBOARD_PASSWORD` | prod:yes / dev:no | `dashboard_rw` / `dashboard_ro` のパスワード。**`DATABASE_URL_*` のパスワードと一致必須**。dev 既定 `CHANGEME` |
 | `LINEAGE_DB_PASSWORD` | prod:yes / dev:no | Internet向け`api-lineage`専用の最小権限DB role。英数字hexの生成値を推奨 |
+| `WORKER_DB_PASSWORD` | prod:yes / dev:no | `media-worker`専用の`mado_worker` DB role。解析・走査の表だけを読み書きし、認証表は読めない |
 | `ENCRYPTION_KEY` | yes | `storage_connections` の S3 認証情報を AES-256-GCM で暗号化するキー (32 byte hex) |
 | `ALLOWED_ORIGINS` | yes | CSRF 防御。write 系で許容する Origin (カンマ区切り)。dev: `http://localhost:5173` / prod: ダッシュボードを開く URL |
 | `MADO_ENV` | no | `development` / `test` / `production`。本番composeは`production`を固定し、安全でない認証設定を起動時に拒否 |
 | `AUTH_MODE` | no | `disabled` / `local` / `oidc` / `hybrid`。`MADO_ENV=production`では未設定・`disabled`を起動時に拒否 |
 | `AUTH_COOKIE_SECURE` | no | HTTPS本番は`true`必須。`__Host-` session cookieを使う |
 | `OIDC_ISSUER_URL` / `OIDC_CLIENT_ID` / `OIDC_CLIENT_SECRET` / `OIDC_REDIRECT_URI` | oidc/hybrid | OIDC discovery issuer、client、callback URL |
+| `OIDC_SCOPES` | no | `openid email profile offline_access`を推奨。`offline_access`はIdP側のscope mappingも必要。設定手順は[Authentik連携](docs/authentik.md) |
 | `OIDC_ALLOWED_GROUPS` | oidc/hybrid | ログインを許可するAuthentik group（カンマ区切り）。空は起動時に拒否 |
-| `OIDC_ROLE_MAPPING_JSON` | no | Authentik groupから`viewer` / `curator` / `operator` / `admin`への対応。設定時はログインごとに同期 |
+| `OIDC_ROLE_MAPPING_JSON` | no | Authentik groupから`viewer` / `curator` / `operator` / `admin`への対応。ログイン時に同期し、既存sessionも1分ごとに現在のgroupを確認 |
 | `OIDC_AUTO_LINK_VERIFIED_EMAIL` | no | `email_verified=true`の既存Local Userを自動連携（default false）。特権Local Userは自動連携しない |
 | `OIDC_POST_LOGOUT_REDIRECT_URI` | no | Authentik logout後の戻り先。未指定時はcallbackと同じoriginの`/` |
 | `DATASET_REGISTRY_URL` | lineage | Dataset Registry API URL |
@@ -262,7 +268,7 @@ dev の DB パスワードは未設定なら開発用の既定値で動きます
 | `MEDIA_CACHE_MAX_AGE_DAYS` | no | 解析結果キャッシュ (`media_cache`) の保持日数 (default 30) |
 | `MEDIA_SPECTROGRAM_MAX_WIDTH` | no | スペクトログラム画像の最大幅 (px) (default 4096) |
 
-> ⚠️ `POSTGRES_PASSWORD` / `DASHBOARD_PASSWORD` / `LINEAGE_DB_PASSWORD` は **DB ボリュームの初回作成時のみ** 反映されます。既存 DB のパスワード変更は env ではなく `psql` の `ALTER ROLE` が必要です (詳細は [`db/README.md`](db/README.md))。生成例: `openssl rand -hex 24`
+> ⚠️ `POSTGRES_PASSWORD` / `DASHBOARD_PASSWORD` / `LINEAGE_DB_PASSWORD` / `WORKER_DB_PASSWORD` は **DB ボリュームの初回作成時のみ** 反映されます。既存 DB のパスワード変更は env ではなく `psql` の `ALTER ROLE` が必要です (詳細は [`db/README.md`](db/README.md))。生成例: `openssl rand -hex 24`
 
 ### 料金カタログの運用
 

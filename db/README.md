@@ -1,10 +1,12 @@
 # Database setup
 
-The dashboard uses Postgres with three distinct roles:
+The dashboard uses Postgres with four distinct roles:
 
 - `dashboard_rw` — owns and writes to the schema. Used by `/api/internal/*` write paths (connections, notes, readme, favorites).
 - `dashboard_ro` — read-only. Used by `/api/internal/*` read paths so a buggy front-end can never DROP TABLE.
 - `mado_lineage` — least-privilege login used only by the Internet-facing OpenLineage process. It can authenticate service-account keys, update their `last_used_at`, and append audit events, but cannot read browser or storage secrets.
+
+- `mado_worker` — reads storage connection settings and writes media, job, pricing, and capacity tables. It cannot read or write browser sessions, credentials, roles, or service-account keys.
 
 ## Local development (Docker — recommended)
 
@@ -14,7 +16,7 @@ docker compose -f compose.dev.yaml up -d
 
 This brings up Postgres 16 on `127.0.0.1:5432`. On first launch the init pipeline runs automatically:
 
-1. `db/init/00-init.sh` creates the three roles and the `dashboard_test` database.
+1. `db/init/00-init.sh` creates the four roles and the `dashboard_test` database.
 2. The same script applies every file in `db/migrations/` (mounted at `/migrations/` inside the container) to both DBs, in lexical order (`001_init.sql` → `002_...` → ...).
 3. It transfers ownership of the schema objects to `dashboard_rw` and grants `SELECT` to `dashboard_ro` (including `ALTER DEFAULT PRIVILEGES` so future tables created by `dashboard_rw` — e.g. via direct `psql` migrations — are also readable by ro).
 
@@ -33,7 +35,9 @@ DB passwords come from env vars, consumed **only when the `db_data` volume is fi
 - `DASHBOARD_PASSWORD` — the `dashboard_rw` / `dashboard_ro` roles. **Must match** the password embedded in `DATABASE_URL_RW` / `DATABASE_URL_RO`.
 - `LINEAGE_DB_PASSWORD` — the dedicated `mado_lineage` role. **Must match** both OpenLineage `DATABASE_URL_RW` and `DATABASE_URL_RO`.
 
-`compose.prod.yaml` requires all three (startup fails if unset) — set strong values in `.env` before the first `up` (`openssl rand -hex 24`). `compose.dev.yaml` has development-only defaults for zero-config local use.
+- `WORKER_DB_PASSWORD` — the dedicated `mado_worker` role. The worker Compose fragment uses it for both database URLs and does not inherit the API environment.
+
+`compose.prod.yaml` requires all four (startup fails if unset) — set strong values in `.env` before the first `up` (`openssl rand -hex 24`). `compose.dev.yaml` has development-only defaults for zero-config local use.
 
 Because they apply only at first init, **changing them later does not affect an existing volume**. To rotate on a running DB, use `ALTER ROLE`:
 
@@ -148,3 +152,24 @@ ALTER DEFAULT PRIVILEGES FOR ROLE dashboard_rw IN SCHEMA public
 SQL
 done
 ```
+
+## Updating media and SSO hardening on an existing volume
+
+Back up first. Migrations 035–037 add columns/grants and are compatible with the
+previous API, so apply them before recreating the app containers:
+
+```sh
+for migration in 035_media_cache_connection 036_worker_permissions 037_oidc_session_recheck; do
+  docker compose -f compose.prod.yaml exec -T postgres \
+    psql -v ON_ERROR_STOP=1 -U postgres -d dashboard -f /migrations/$migration.sql
+done
+```
+
+Set a new hex `WORKER_DB_PASSWORD` in the protected `.env`, then enable the
+`mado_worker` login with `ALTER ROLE mado_worker LOGIN PASSWORD '<generated value>'`.
+Send that SQL through protected stdin or a mode-600 file; do not include the
+password in shell history or logs. Recreate the media worker so its two database
+URLs switch from the API roles to `mado_worker`. Verify that the worker can access
+its job/capacity/media tables and cannot select `auth_sessions` or `service_account_keys`.
+Existing SSO sessions require one sign-in after migration 037; configure
+`offline_access` in both the provider and `OIDC_SCOPES` for token renewal.

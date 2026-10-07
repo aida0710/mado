@@ -17,6 +17,7 @@ services:
       POSTGRES_DB: dashboard
       DASHBOARD_PASSWORD: "${DASHBOARD_PASSWORD:-CHANGEME}"
       LINEAGE_DB_PASSWORD: "${LINEAGE_DB_PASSWORD:-lineage-dev-only}"
+      WORKER_DB_PASSWORD: "${WORKER_DB_PASSWORD:-worker-dev-only}"
     ports:
       - "127.0.0.1:5432:5432"
     volumes:
@@ -73,14 +74,15 @@ services:
         condition: service_healthy
 
   media-worker:
+    extends:
+      file: ./deploy/worker-service.yaml
+      service: media-worker
     build:
       context: ./api
       dockerfile: Dockerfile.worker
       target: development
     container_name: mado-dev-media-worker
     command: ["npx", "tsx", "watch", "worker.ts"]
-    env_file:
-      - .env
     volumes:
       - ./api:/app
       - /app/node_modules

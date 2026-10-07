@@ -1,10 +1,14 @@
-// FIFO セマフォ。media-worker の同期解析スロット制御に使う。
-// 上限超過のリクエストは 503 にせず順番待ちさせる (LAN 内前提)。
+import { RequestQueueFullError } from './shared-requests.js'
+
+// FIFO セマフォ。待機中の中断で空いた枠を次の要求に渡す。
 export interface Semaphore {
-  acquire(): Promise<() => void>
+  acquire(signal?: AbortSignal): Promise<() => void>
 }
 
-export function createSemaphore(limit: number): Semaphore {
+// 動画・解析の待ち行列がメモリだけで増え続けないよう制限する。
+const DEFAULT_MAX_WAITERS = 32
+
+export function createSemaphore(limit: number, maxWaiters = DEFAULT_MAX_WAITERS): Semaphore {
   let active = 0
   const waiters: Array<() => void> = []
   // acquire ごとに新しい release クロージャを返し、二重呼び出しを冪等化する。
@@ -20,16 +24,26 @@ export function createSemaphore(limit: number): Semaphore {
     }
   }
   return {
-    acquire(): Promise<() => void> {
+    acquire(signal?: AbortSignal): Promise<() => void> {
+      signal?.throwIfAborted()
       if (active < limit) {
         active++
         return Promise.resolve(makeRelease())
       }
-      return new Promise(resolve => {
-        waiters.push(() => {
+      if (waiters.length >= maxWaiters) return Promise.reject(new RequestQueueFullError())
+      return new Promise((resolve, reject) => {
+        const start = (): void => {
+          signal?.removeEventListener('abort', abort)
           active++
           resolve(makeRelease())
-        })
+        }
+        const abort = (): void => {
+          const index = waiters.indexOf(start)
+          if (index >= 0) waiters.splice(index, 1)
+          reject(signal?.reason)
+        }
+        waiters.push(start)
+        signal?.addEventListener('abort', abort, { once: true })
       })
     },
   }

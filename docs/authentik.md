@@ -15,9 +15,20 @@ login flowはAuthentikを正本とし、MadoはUser、Role、browser session、�
 | Back-channel logout URI | `https://mado.example/api/auth/oidc/backchannel-logout` |
 
 AuthentikではApplicationとOAuth2/OIDC Providerを作り、issuerにはapplication単位のURL
-（例: `https://auth.example/application/o/mado/`）を使います。Scopeは`openid email profile`です。
+（例: `https://auth.example/application/o/mado/`）を使います。Scopeは`openid email profile offline_access`です。
 `profile` scopeに`preferred_username`、`name`、`groups`を含め、emailを既存Userとの連携に
 使う場合は信頼できる`email_verified` claimも返します。
+
+Providerのscope mappingで`offline_access`を有効にし、Madoの`OIDC_SCOPES`にも含めます。
+Madoはaccess/refresh tokenを暗号化してsessionに保存し、UserInfoの現在のgroupを1分ごとに
+確認します。groupの除外やRoleの変更を検出したら同じidentityのsessionを失効させます。
+UserInfoには現在のgroupを返すmappingが必要です。IdP停止時は確認が必要な操作へ503を返し、
+未確認の権限を通しません。失効したtokenや更新手段のない期限切れtokenは再ログインが必要です。
+refresh tokenを発行しない構成ではaccess tokenの有効期限ごとに再ログインになります。
+Authentikの[OAuth2/OIDC Providerの手順](https://docs.goauthentik.io/add-secure-apps/providers/oauth2/)も参照してください。
+
+migration 037より前に作ったSSO sessionはtokenを保持していないため、更新後に一度だけ
+ログインし直します。Local sessionはそのまま使えます。
 
 Back-channel logoutを有効にすると、AuthentikでUserやsessionを無効化した時点でMadoの
 server-side sessionも失効します。Madoは署名、issuer、audience、発行時刻、event、jtiを検証し、

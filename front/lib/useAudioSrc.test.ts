@@ -22,11 +22,12 @@ describe('useAudioSrc', () => {
     expect(fetch).not.toHaveBeenCalled()
   })
 
-  it('非圧縮tarは即座にRange対応URLを返し、全量取得しない', () => {
+  it('非圧縮tarはHEADで準備してからRange対応URLを返し、全量取得しない', async () => {
+    vi.mocked(fetch).mockResolvedValue(new Response(null, { status: 200 }))
     const { result } = renderHook(() => useAudioSrc({ connectionId: 'c', bucket: 'b', key: 'shard.tar', entryPath: 'u1.wav' }))
-    expect(result.current.loading).toBe(false)
+    await waitFor(() => expect(result.current.loading).toBe(false))
     expect(result.current.src).toContain('/preview/tar-entry')
-    expect(fetch).not.toHaveBeenCalled()
+    expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/preview/tar-entry'), expect.objectContaining({ method: 'HEAD' }))
     expect(URL.createObjectURL).not.toHaveBeenCalled()
   })
 

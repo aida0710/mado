@@ -2,6 +2,7 @@ import type { Context, Hono } from 'hono'
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
 import { z } from 'zod'
 import type { AuditWriter } from '../lib/audit.js'
+import type { CryptoModule } from '../crypto.js'
 import type { CredentialStore } from '../lib/auth-credential-store.js'
 import { SessionUserUnavailableError, type SessionLifetime, type SessionStore } from '../lib/auth-session-store.js'
 import type { UserStore } from '../lib/auth-user-store.js'
@@ -36,6 +37,7 @@ export interface AuthRouteConfig {
 }
 
 export interface AuthRouteDeps {
+  crypto?: CryptoModule
   users: Pick<UserStore, 'updateProfile'>
   credentials: CredentialStore
   sessions: SessionStore
@@ -206,6 +208,7 @@ export function mountAuthRoutes(app: Hono, deps: AuthRouteDeps): void {
     try {
       if (!browserBinding) throw new Error('oidc browser binding missing')
       const profile = await deps.config.oidc.finish(new URL(c.req.url), browserBinding)
+      if (profile.tokens && !deps.crypto) throw new Error('OIDC token encryption is not configured')
       const policy = deps.config.oidcLoginPolicy ?? {
         autoLinkVerifiedEmail: false, allowedGroups: [], roleMapping: {}, defaultRole: 'viewer' as const,
       }
@@ -228,7 +231,14 @@ export function mountAuthRoutes(app: Hono, deps: AuthRouteDeps): void {
         userId: provisioned.user.id,
         lifetime: deps.config.session,
         metadata,
-        oidc: { issuer: profile.issuer, subject: profile.subject, sid: profile.sid },
+        oidc: {
+          issuer: profile.issuer, subject: profile.subject, sid: profile.sid,
+          ...(profile.tokens && deps.crypto ? { tokens: {
+            accessTokenEnc: deps.crypto.encrypt(profile.tokens.accessToken),
+            refreshTokenEnc: profile.tokens.refreshToken ? deps.crypto.encrypt(profile.tokens.refreshToken) : null,
+            expiresAt: profile.tokens.expiresAt,
+          } } : {}),
+        },
       })
       setSessionCookie(c, session.token, deps.config.session)
       return c.redirect(profile.returnTo, 303)

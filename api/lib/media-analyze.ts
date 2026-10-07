@@ -1,19 +1,10 @@
-// ffmpeg / ffprobe を子プロセスで叩いて音声を解析する。入力は常に stdin パイプ
-// (S3 ストリーム or Buffer) — ファイルには書かない。
-//
-// パス構成 (stdout が 1 本しかないため 2 パス。openStream はパスごとに呼ばれる):
-//   1. ffprobe (probeHead のみ) : sample_rate
-//   2. ffmpeg -f f32le          : ピーク集計 + 総サンプル数 → duration
-//   3. ffmpeg showspectrumpic   : スペクトログラム PNG (duration から幅を決める)
+// 一度取得したファイルからprobe・波形・スペクトログラムを作る。
+// ストリーム入力も、小さなメディアの解析・テスト向けに受け付ける。
 
-import { spawn } from 'node:child_process'
+import { MediaAnalyzeError } from './media-analyze-error.js'
+export { MediaAnalyzeError } from './media-analyze-error.js'
+import { runMediaProcess, type MediaProcessOutput } from './media-process.js'
 import { LoudnessAccumulator, PeakAccumulator } from './media-peaks.js'
-
-export class MediaAnalyzeError extends Error {
-  constructor(message: string, public stderrSummary: string) {
-    super(message)
-  }
-}
 
 // media_cache.meta にそのまま保存され、analyze レスポンスにも乗る。
 // 取れない項目は null (mp3 の bit 深度等)。
@@ -37,6 +28,8 @@ export interface AnalyzeResult {
 }
 
 export interface AnalyzeOpts {
+  /** S3から一度取得した一時ファイル。mov等の末尾メタデータにもseekできる。 */
+  inputPath?: string
   openStream: () => Promise<NodeJS.ReadableStream>
   probeHead: () => Promise<Buffer>
   timeoutMs: number
@@ -66,83 +59,11 @@ const SPECTROGRAM_HEIGHT = 256
 const SPECTROGRAM_PX_PER_SEC = 50
 const SPECTROGRAM_MIN_WIDTH = 640
 
-interface RunResult {
-  stdout: Buffer
-  stderr: string
-  code: number | null
-}
-
-// 子プロセスを起動し、input を stdin に流し、stdout を集める。
-// onStdout を渡すと stdout はバッファせずチャンクごとに渡す (ピークパス用)。
-function run(
-  cmd: string,
-  args: string[],
-  input: NodeJS.ReadableStream | Buffer,
-  opts: { timeoutMs: number; signal?: AbortSignal; onStdout?: (chunk: Buffer) => void },
-): Promise<RunResult> {
-  // 既に abort 済みの signal には addEventListener が反応しないため、spawn 前に確認する。
-  if (opts.signal?.aborted) {
-    return Promise.reject(new MediaAnalyzeError('aborted', ''))
-  }
-  return new Promise((resolve, reject) => {
-    const child = spawn(cmd, args, { stdio: ['pipe', 'pipe', 'pipe'] })
-    const stdoutChunks: Buffer[] = []
-    let stderr = ''
-    let settled = false
-
-    const timer = setTimeout(() => {
-      fail(new MediaAnalyzeError(`${cmd} timed out`, stderr.slice(-2000)))
-    }, opts.timeoutMs)
-
-    const onAbort = (): void => {
-      fail(new MediaAnalyzeError('aborted', ''))
-    }
-    opts.signal?.addEventListener('abort', onAbort, { once: true })
-
-    function cleanup(): void {
-      clearTimeout(timer)
-      opts.signal?.removeEventListener('abort', onAbort)
-      child.kill('SIGKILL')
-    }
-    function fail(err: Error): void {
-      if (settled) return
-      settled = true
-      cleanup()
-      reject(err)
-    }
-
-    child.on('error', e => fail(new MediaAnalyzeError(e.message, '')))
-    child.stderr.on('data', (c: Buffer) => { stderr += c.toString() })
-    child.stdout.on('data', (c: Buffer) => {
-      if (opts.onStdout) opts.onStdout(c)
-      else stdoutChunks.push(c)
-    })
-    child.on('close', code => {
-      if (settled) return
-      settled = true
-      clearTimeout(timer)
-      opts.signal?.removeEventListener('abort', onAbort)
-      resolve({ stdout: Buffer.concat(stdoutChunks), stderr, code })
-    })
-
-    // stdin へ流し込む。ffmpeg はヘッダを読んだ時点で stdin を閉じることがある
-    // (EPIPE) — 正常系なので無視する。
-    child.stdin.on('error', () => { /* EPIPE — ffmpeg 側が先に閉じた */ })
-    if (Buffer.isBuffer(input)) {
-      child.stdin.end(input)
-    } else {
-      input.pipe(child.stdin)
-      // 入力側 (S3 ストリーム等) のエラーは黙殺しない — 途中で切れた入力を
-      // ffmpeg が exit 0 で終えると「成功だが不完全」な結果になってしまう。
-      input.on('error', e => {
-        fail(new MediaAnalyzeError(
-          `${cmd} input stream error`,
-          e instanceof Error ? e.message : String(e),
-        ))
-      })
-    }
-  })
-}
+// 入力がplaylist/concatだった場合に、別のURLやworker上のfileを読ませない。
+const SAFE_INPUT_OPTIONS = [
+  '-protocol_whitelist', 'file,pipe',
+  '-format_whitelist', 'wav,mp3,flac,ogg,mov,matroska,webm,aac,aiff,asf,avi,ape,amr,au,ac3,eac3,mpeg,mpegts,wv,tta,dsf,dff',
+]
 
 interface ProbeMetadata {
   sampleRate: number | null
@@ -165,17 +86,18 @@ const EMPTY_PROBE: ProbeMetadata = {
 }
 
 async function probeMetadata(head: Buffer, opts: AnalyzeOpts): Promise<ProbeMetadata> {
-  let r: RunResult
+  let r: MediaProcessOutput
   try {
-    r = await run('ffprobe', [
+    r = await runMediaProcess({ command: 'ffprobe', args: [
       '-v', 'error',
+      ...SAFE_INPUT_OPTIONS,
       '-select_streams', 'a:0',
       '-show_entries',
       'stream=codec_name,channels,sample_rate,bits_per_raw_sample,bits_per_sample,bit_rate',
       '-show_entries', 'format=format_name,bit_rate',
       '-of', 'json',
-      'pipe:0',
-    ], head, { timeoutMs: opts.timeoutMs, signal: opts.signal })
+      opts.inputPath ?? 'pipe:0',
+    ], input: head, timeoutMs: opts.timeoutMs, signal: opts.signal })
   } catch (e) {
     // probe 失敗は致命ではない (メタは全項目 null で続行)。abort だけは伝播させる。
     if (opts.signal?.aborted) throw e
@@ -215,19 +137,20 @@ async function probeMetadata(head: Buffer, opts: AnalyzeOpts): Promise<ProbeMeta
 }
 
 export async function analyzeAudio(opts: AnalyzeOpts): Promise<AnalyzeResult> {
-  // パス 1: ffprobe (先頭バイトのみ)
+  // パス 1: ffprobe (一時ファイルがなければ先頭バイト)
   const probe = await probeMetadata(await opts.probeHead(), opts)
 
   // パス 2: ピーク + 音量 + duration
   const acc = new PeakAccumulator()
   const loudness = new LoudnessAccumulator()
   let carry: Buffer = Buffer.alloc(0)
-  const peakRun = await run('ffmpeg', [
+  const peakRun = await runMediaProcess({ command: 'ffmpeg', args: [
     '-hide_banner', '-loglevel', 'error',
-    '-i', 'pipe:0',
+    ...SAFE_INPUT_OPTIONS,
+    '-i', opts.inputPath ?? 'pipe:0',
     '-ac', '1', '-ar', String(PEAK_SAMPLE_RATE),
     '-f', 'f32le', 'pipe:1',
-  ], await opts.openStream(), {
+  ], input: opts.inputPath ? Buffer.alloc(0) : await opts.openStream(),
     timeoutMs: opts.timeoutMs,
     signal: opts.signal,
     onStdout: chunk => {
@@ -247,7 +170,7 @@ export async function analyzeAudio(opts: AnalyzeOpts): Promise<AnalyzeResult> {
   if (peakRun.code !== 0 || totalSamples === 0) {
     throw new MediaAnalyzeError(
       'ffmpeg failed to decode audio',
-      peakRun.stderr.slice(-2000),
+      peakRun.stderr,
     )
   }
   const durationSec = totalSamples / PEAK_SAMPLE_RATE
@@ -260,13 +183,14 @@ export async function analyzeAudio(opts: AnalyzeOpts): Promise<AnalyzeResult> {
   )
   let spectrogramPng: Buffer | null = null
   try {
-    const specRun = await run('ffmpeg', [
+    const specRun = await runMediaProcess({ command: 'ffmpeg', args: [
       '-hide_banner', '-loglevel', 'error',
-      '-i', 'pipe:0',
+      ...SAFE_INPUT_OPTIONS,
+      '-i', opts.inputPath ?? 'pipe:0',
       '-lavfi', `showspectrumpic=s=${width}x${SPECTROGRAM_HEIGHT}:legend=0`,
       '-frames:v', '1',
       '-f', 'image2pipe', '-vcodec', 'png', 'pipe:1',
-    ], await opts.openStream(), { timeoutMs: opts.timeoutMs, signal: opts.signal })
+    ], input: opts.inputPath ? Buffer.alloc(0) : await opts.openStream(), timeoutMs: opts.timeoutMs, signal: opts.signal })
     if (specRun.code === 0 && specRun.stdout.length > 0) {
       spectrogramPng = specRun.stdout
     }

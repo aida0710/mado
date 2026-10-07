@@ -250,6 +250,9 @@ jobs:
           POSTGRES_PASSWORD: release-validation-postgres
           DASHBOARD_PASSWORD: release-validation-dashboard
           LINEAGE_DB_PASSWORD: release-validation-lineage
+          WORKER_DB_PASSWORD: release-validation-worker
+          ENCRYPTION_KEY: "0000000000000000000000000000000000000000000000000000000000000000"
+          ALLOWED_ORIGINS: https://mado.invalid
           DATASET_REGISTRY_URL: http://registry.invalid
           DATASET_REGISTRY_TOKEN: release-validation-token
           GH_TOKEN: ${{ github.token }}

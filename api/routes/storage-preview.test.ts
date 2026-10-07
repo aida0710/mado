@@ -18,18 +18,27 @@ const storageMock = mockClient(S3Client)
 const storage = new S3Client({})
 const getStorage = async (): Promise<S3Client> => storage
 const TEST_CONN_ID = 'testconn01'
-const app = new Hono()
-mountStoragePreviewRoutes(app, {
-  getStorage,
-  env: {
-    PREVIEW_TEXT_LIMIT: 8,
-    PREVIEW_TAR_ENTRY_LIMIT: 200,
-    PREVIEW_TARXZ_BYTE_LIMIT: 1_000_000,
-    PREVIEW_TAR_ENTRY_MAX_BYTES: 100 * 1024 * 1024,
-  },
-})
+let app: Hono
+let entryApp: Hono
+const ENTRY_MAX = 1024
 
-beforeEach(() => storageMock.reset())
+function createPreviewApp(maxBytes: number): Hono {
+  const previewApp = new Hono()
+  mountStoragePreviewRoutes(previewApp, {
+    getStorage,
+    env: {
+      PREVIEW_TEXT_LIMIT: 8, PREVIEW_TAR_ENTRY_LIMIT: 200,
+      PREVIEW_TARXZ_BYTE_LIMIT: 1_000_000, PREVIEW_TAR_ENTRY_MAX_BYTES: maxBytes,
+    },
+  })
+  return previewApp
+}
+
+beforeEach(() => {
+  storageMock.reset()
+  app = createPreviewApp(100 * 1024 * 1024)
+  entryApp = createPreviewApp(ENTRY_MAX)
+})
 
 describe('GET /storage/:connectionId/preview/text', () => {
   it('先頭 PREVIEW_TEXT_LIMIT バイトを text/plain で返す', async () => {
@@ -472,18 +481,6 @@ describe('GET /storage/:connectionId/preview/tar', () => {
 // head モード (?maxBytes=N) を含む。テスト用の app は
 // PREVIEW_TAR_ENTRY_MAX_BYTES を小さくして 413 を到達可能にする。
 
-const entryApp = new Hono()
-const ENTRY_MAX = 1024
-mountStoragePreviewRoutes(entryApp, {
-  getStorage,
-  env: {
-    PREVIEW_TEXT_LIMIT: 8,
-    PREVIEW_TAR_ENTRY_LIMIT: 200,
-    PREVIEW_TARXZ_BYTE_LIMIT: 1_000_000,
-    PREVIEW_TAR_ENTRY_MAX_BYTES: ENTRY_MAX,
-  },
-})
-
 async function packOneEntryTar(name: string, bodySize: number): Promise<Buffer> {
   const p = tarPack()
   const chunks: Buffer[] = []
@@ -500,8 +497,10 @@ async function packOneEntryTar(name: string, bodySize: number): Promise<Buffer> 
 
 let fixtureVersion = 0
 function serveTar(tar: Buffer): void {
-  storageMock.on(HeadObjectCommand).resolves({ ContentLength: tar.length, ETag: `"fixture-${++fixtureVersion}"` })
+  const etag = `"fixture-${++fixtureVersion}"`
+  storageMock.on(HeadObjectCommand).resolves({ ContentLength: tar.length, ETag: etag })
   storageMock.on(GetObjectCommand).callsFake(input => {
+    if (input.IfMatch != null && input.IfMatch !== etag) throw Object.assign(new Error('object changed'), { $metadata: { httpStatusCode: 412 } })
     const range = input.Range as string | undefined
     const match = range && /^bytes=(\d+)-(\d+)$/.exec(range)
     const start = match ? Number(match[1]) : 0

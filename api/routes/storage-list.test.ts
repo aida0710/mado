@@ -66,6 +66,28 @@ beforeEach(() => {
   cache = passthroughCache()
 })
 
+describe('同時の一覧取得', () => {
+  it('同じフォルダのcold要求を一回のS3取得にまとめる', async () => {
+    storageMock.on(ListObjectsV2Command).callsFake(async () => {
+      await Promise.resolve()
+      return { Contents: [{ Key: 'folder/a.mp4', Size: 100 }], IsTruncated: false }
+    })
+    const responses = await Promise.all(Array.from({ length: 3 }, () => app.request(`/storage/${TEST_CONN_ID}/list?bucket=b&prefix=folder/`)))
+    expect(responses.every(response => response.status === 200)).toBe(true)
+    expect(storageMock.commandCalls(ListObjectsV2Command)).toHaveLength(1)
+  })
+
+  it('接続とページの異なる一覧は共有しない', async () => {
+    storageMock.on(ListObjectsV2Command).resolves({ Contents: [], IsTruncated: false })
+    await Promise.all([
+      app.request(`/storage/${TEST_CONN_ID}/list?bucket=b&prefix=folder/`),
+      app.request('/storage/other/list?bucket=b&prefix=folder/'),
+      app.request(`/storage/${TEST_CONN_ID}/list?bucket=b&prefix=folder/&continuation=next`),
+    ])
+    expect(storageMock.commandCalls(ListObjectsV2Command)).toHaveLength(3)
+  })
+})
+
 const FULL_KEY =
   'podcast-webdataset-v2_archive_2026_0505_022326_10_15_22_112-sidon-0000.tar.xz'
 

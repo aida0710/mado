@@ -30,6 +30,8 @@ import { mountSettingsRoutes } from './routes/settings.js'
 import { createUserStore } from './lib/auth-user-store.js'
 import { createCredentialStore } from './lib/auth-credential-store.js'
 import { createSessionStore } from './lib/auth-session-store.js'
+import { createOidcSessionVerifier, OidcSessionCheckUnavailableError } from './lib/auth-oidc-session.js'
+import { RequestQueueFullError } from './lib/shared-requests.js'
 import { createOidcProvisioning } from './lib/auth-oidc-provisioning.js'
 import { sessionCookieName } from './lib/auth-types.js'
 import { createAuditWriter } from './lib/audit.js'
@@ -67,7 +69,6 @@ const authEnabled = env.AUTH_MODE !== 'disabled'
 const audit = createAuditWriter(pools.rw)
 const users = createUserStore(pools.rw)
 const credentials = createCredentialStore(pools.rw)
-const sessions = createSessionStore(pools.rw, audit)
 const serviceAccounts = createServiceAccountStore(pools.rw)
 const sessionCookie = sessionCookieName(env.AUTH_COOKIE_SECURE)
 const oidcEnabled = authEnabled && (env.AUTH_MODE === 'oidc' || env.AUTH_MODE === 'hybrid')
@@ -85,6 +86,10 @@ const oidc = oidcEnabled ? createOidcProvider(pools.rw, crypto, {
   scopes: env.OIDC_SCOPES,
   postLogoutRedirectUri: env.OIDC_POST_LOGOUT_REDIRECT_URI,
 }) : undefined
+const sessions = createSessionStore(pools.rw, audit, oidc ? createOidcSessionVerifier({
+  pool: pools.rw, crypto, provider: oidc, audit,
+  policy: { allowedGroups: env.OIDC_ALLOWED_GROUPS, roleMapping: env.OIDC_ROLE_MAPPING_JSON, defaultRole: env.OIDC_DEFAULT_ROLE },
+}) : undefined)
 // 期限切れ session と OIDC attempt の掃除。attempt の有効期限は分単位なので 1 時間おきで十分。
 const AUTH_CLEANUP_INTERVAL_MS = 60 * 60 * 1000
 const authCleanupTimer = authEnabled ? setInterval(() => {
@@ -121,6 +126,7 @@ if (authEnabled) {
     return safeOrigin(c, next)
   })
   mountAuthRoutes(authApi, {
+    crypto,
     users,
     credentials,
     sessions,
@@ -307,6 +313,9 @@ app.route('/api/mado', madoApi)
 // それ以外は内部 error をログに出して 500 + "internal error" だけ返す
 // (raw error.message を漏らさない)。
 app.onError((err, c) => {
+  if (err instanceof OidcSessionCheckUnavailableError || err instanceof RequestQueueFullError) {
+    return c.json({ error: err.message }, 503, { 'Retry-After': '1' })
+  }
   const explained = explainStorageError(err)
   if (explained) {
     const storageError = err as { name?: string; $metadata?: { httpStatusCode?: number; requestId?: string } }

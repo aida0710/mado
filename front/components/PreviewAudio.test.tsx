@@ -99,12 +99,13 @@ describe('PreviewAudio', () => {
   })
 
   it('非圧縮tarは全量取得を待たず音声プレーヤーを表示する', async () => {
+    vi.mocked(fetch).mockResolvedValue(new Response(null, { status: 200 }))
     vi.mocked(api.mediaAnalyze).mockResolvedValue({
       cacheKey: 'ck', peaks: [], durationSec: null, sampleRate: null, hasSpectrogram: false, meta: null,
     })
     const { container } = render(<PreviewAudio connectionId="c" bucket="b" k="shard.tar" entryPath="u1.wav" />)
-    expect(container.querySelector('audio')).toHaveAttribute('src', expect.stringContaining('/preview/tar-entry'))
-    expect(fetch).not.toHaveBeenCalledWith(expect.stringContaining('/preview/tar-entry'), expect.anything())
+    await waitFor(() => expect(container.querySelector('audio')).toHaveAttribute('src', expect.stringContaining('/preview/tar-entry')))
+    expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/preview/tar-entry'), expect.objectContaining({ method: 'HEAD' }))
     await waitFor(() => expect(screen.queryByText('解析中…')).not.toBeInTheDocument())
   })
 

@@ -4,6 +4,8 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { listTarHeadersByRange, TarRangeIndex, type RangeReader } from './tar-range.js'
 import { createVirtualTar } from './test-fixtures/virtual-tar.js'
+import { createEmptyTar, createTarHeader } from './test-fixtures/empty-tar.js'
+import { TarScanPendingError } from './tar-scan-budget.js'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const fix = (name: string) => resolve(here, 'test-fixtures', name)
@@ -78,6 +80,44 @@ describe('listTarHeadersByRange', () => {
 })
 
 describe('tarの位置索引', () => {
+  it.each(['x', 'g'])('連続する%sヘッダーでもPAX属性のメモリ上限を超えない', async type => {
+    const records = ['first', 'second'].map(name => {
+      const property = `${name}=${'x'.repeat(700_000)}\n`
+      let length = property.length + 2
+      while (length !== property.length + String(length).length + 1) length = property.length + String(length).length + 1
+      const body = Buffer.from(`${length} ${property}`)
+      return Buffer.concat([
+        createTarHeader({ name: 'pax', size: body.length, type }), body,
+        Buffer.alloc((512 - body.length % 512) % 512),
+      ])
+    })
+    const index = new TarRangeIndex(bufferReader(Buffer.concat([...records, createEmptyTar(1)])))
+    try { await expect(index.find('file-0.mp4')).rejects.toThrow('metadata exceeds size limit') } finally { index.close() }
+  })
+  it('10万件を超えても処理量を区切り、再開後は最後のファイルまで一覧・本文を取得できる', async () => {
+    const archive = createEmptyTar(100_005)
+    const index = new TarRangeIndex(bufferReader(archive))
+    try {
+      await expect(index.find('missing')).rejects.toThrow(TarScanPendingError)
+      expect(index.entryCount).toBe(10_000)
+      // 不存在探索が途中でも、位置が分かったファイルは直ちに返す。
+      expect((await index.find('file-0.mp4'))?.bodyOffset).toBe(512)
+      let resumptions = 1
+      for (;;) {
+        try { expect(await index.find('missing')).toBeNull(); break } catch (error) {
+          expect(error).toBeInstanceOf(TarScanPendingError)
+          resumptions++
+        }
+      }
+      expect(resumptions).toBeGreaterThan(1)
+      expect(index.entryCount).toBe(100_005)
+      expect(index.diskBytes).toBeLessThan(20 * 1024 * 1024)
+      const last = await index.list({ offset: 100_000, entryLimit: 100 })
+      expect(last.entries.map(entry => entry.name)).toEqual(Array.from({ length: 5 }, (_, i) => `file-${100_000 + i}.mp4`))
+      expect(last.hasMore).toBe(false)
+      expect((await index.find('file-100004.mp4'))?.bodyOffset).toBe(100_005 * 512)
+    } finally { index.close() }
+  }, 20_000)
   it.each([1, 10] as const)('%iGiBの本文を飛ばして後ろのファイルを見つける', async gigabytes => {
     const tar = createVirtualTar(gigabytes)
     const read = vi.fn(tar.read)

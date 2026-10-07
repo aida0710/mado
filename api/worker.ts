@@ -1,14 +1,16 @@
 // api/worker.ts — media-worker コンテナのエントリポイント。
 //   ・内部 HTTP (compose ネットワーク内のみ): POST /analyze で同期解析
-// api-internal と同じコードベース / .env を共有し、compose で別サービスとして起動。
+// 共通のコードベースを、worker専用のDB権限と環境変数で起動する。
 import { serve } from '@hono/node-server'
 import { Hono } from 'hono'
+import { bodyLimit } from 'hono/body-limit'
+import { z } from 'zod'
 import { loadEnv } from './env.js'
 import { createPools, closePools } from './db.js'
 import { createCrypto } from './crypto.js'
 import { createStorageFactory } from './storage.js'
 import { MediaAnalyzeError } from './lib/media-analyze.js'
-import { createMediaService, type AnalyzeRequest } from './lib/media-service.js'
+import { createMediaService } from './lib/media-service.js'
 import { createJobStore } from './lib/jobs.js'
 import { createJobRunner } from './lib/job-runner.js'
 import { createScanHandler } from './lib/scan-handler.js'
@@ -19,6 +21,7 @@ import { PRICING_REFRESH_KIND } from './routes/pricing.js'
 import { requestLogger } from './lib/request-logger.js'
 import { createCapacityStore } from './lib/capacity-store.js'
 import { createCapacityScheduler } from './lib/capacity-scheduler.js'
+import { RequestQueueFullError } from './lib/shared-requests.js'
 import { listStorageBucketNames } from './lib/storage-buckets.js'
 
 // LAN ダッシュボード: 1 つのストリーム teardown 起因の未捕捉例外で全ユーザーの
@@ -60,14 +63,29 @@ const app = new Hono()
 app.use('*', requestLogger())
 app.get('/healthz', c => c.text('ok'))
 
+// 内部POSTでも無制限のJSONや異なる解析の待ち行列を作らせない。
+const MAX_ANALYZE_BODY_BYTES = 64 * 1024
+// 内部APIでも不正な長い識別子を解析・cacheのキーへ渡さない。
+const MAX_CONNECTION_ID_CHARS = 256
+const MAX_BUCKET_CHARS = 1024
+const MAX_OBJECT_KEY_CHARS = 4096
+const MAX_ARCHIVE_ENTRY_CHARS = 16384
+const MAX_ETAG_CHARS = 256
+app.use('/analyze', bodyLimit({ maxSize: MAX_ANALYZE_BODY_BYTES }))
+const analyzeRequest = z.object({
+  connectionId: z.string().min(1).max(MAX_CONNECTION_ID_CHARS), bucket: z.string().min(1).max(MAX_BUCKET_CHARS),
+  key: z.string().min(1).max(MAX_OBJECT_KEY_CHARS), entryPath: z.string().min(1).max(MAX_ARCHIVE_ENTRY_CHARS).optional(),
+  etag: z.string().min(1).max(MAX_ETAG_CHARS),
+})
+
 app.post('/analyze', async c => {
-  const req = (await c.req.json()) as AnalyzeRequest
-  if (!req.connectionId || !req.bucket || !req.key || !req.etag) {
+  const parsed = analyzeRequest.safeParse(await c.req.json())
+  if (!parsed.success) {
     return c.json({ error: 'connectionId, bucket, key, etag required' }, 400)
   }
   try {
     // クライアント (api 経由でブラウザ) が切断したら解析を中断して ffmpeg を kill
-    const result = await service.analyzeOne(req, c.req.raw.signal)
+    const result = await service.analyzeOne(parsed.data, c.req.raw.signal)
     return c.json(result)
   } catch (e) {
     if (e instanceof MediaAnalyzeError) {
@@ -78,6 +96,7 @@ app.post('/analyze', async c => {
 })
 
 app.onError((err, c) => {
+  if (err instanceof RequestQueueFullError) return c.json({ error: 'analysis queue is full' }, 503, { 'Retry-After': '1' })
   console.error('worker unhandled error', err)
   return c.json({ error: 'internal error' }, 500)
 })
@@ -162,6 +181,7 @@ const shutdown = async (): Promise<void> => {
   clearInterval(capacityTimer)
   setTimeout(() => process.exit(1), 10_000).unref()
   await new Promise<void>(resolve => server.close(() => resolve()))
+  service.close()
   await storageFactory.close()
   await closePools(pools)
   process.exit(0)

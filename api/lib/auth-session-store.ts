@@ -1,9 +1,10 @@
 import type { Pool, PoolClient } from 'pg'
 import { withTransaction, type Queryable } from '../db.js'
 import type { AuditWriter } from './audit.js'
-import type { RequestMetadata, SessionPrincipal } from './auth-types.js'
+import type { AuthUser, RequestMetadata, SessionPrincipal } from './auth-types.js'
 import { isPlausibleOpaqueToken, newId, randomToken, sha256 } from './auth-crypto.js'
 import { AUTH_USER_FIELDS, AUTH_USER_FROM, toUser, type AuthUserRow } from './auth-user-query.js'
+import type { OidcSessionRow } from './auth-oidc-session.js'
 
 // browser session の発行・認証・失効。
 
@@ -27,6 +28,7 @@ export interface OidcSessionContext {
   issuer: string
   subject: string
   sid?: string | null
+  tokens?: { accessTokenEnc: string; refreshTokenEnc: string | null; expiresAt: Date }
 }
 
 export interface OidcBackchannelLogout {
@@ -86,9 +88,11 @@ export async function insertSession(db: Queryable, { userId, lifetime, metadata 
   const r = await db.query(
     `INSERT INTO auth_sessions
       (id, user_id, token_hash, idle_expires_at, absolute_expires_at, ip_address, user_agent,
-       oidc_issuer, oidc_subject, oidc_sid)
+       oidc_issuer, oidc_subject, oidc_sid, oidc_access_token_enc, oidc_refresh_token_enc,
+       oidc_token_expires_at, oidc_checked_at)
      SELECT $1::uuid, u.id, $3::bytea, $4::timestamptz, $5::timestamptz, $6::inet, $7::text,
-            $8::text, $9::text, $10::text
+            $8::text, $9::text, $10::text, $11::text, $12::text, $13::timestamptz,
+            CASE WHEN $11::text IS NOT NULL THEN now() ELSE NULL END
        FROM auth_users u
       WHERE u.id = $2 AND u.status = 'active' AND u.deleted_at IS NULL
       FOR KEY SHARE`,
@@ -96,6 +100,7 @@ export async function insertSession(db: Queryable, { userId, lifetime, metadata 
       id, userId, sha256(token), idle, absolute, metadata.ipAddress ?? null,
       metadata.userAgent?.slice(0, 1024) ?? null,
       oidc?.issuer ?? null, oidc?.subject ?? null, oidc?.sid ?? null,
+      oidc?.tokens?.accessTokenEnc ?? null, oidc?.tokens?.refreshTokenEnc ?? null, oidc?.tokens?.expiresAt ?? null,
     ],
   )
   if (r.rowCount === 0) throw new SessionUserUnavailableError()
@@ -105,7 +110,7 @@ export async function insertSession(db: Queryable, { userId, lifetime, metadata 
 /** User の有効な session をすべて失効させる。無効化・Role 変更・削除・パスワードの変更と同じ transaction で呼ぶ。 */
 export async function revokeUserSessionRows(db: Queryable, userId: string): Promise<number> {
   const r = await db.query(
-    `UPDATE auth_sessions SET revoked_at = COALESCE(revoked_at, now())
+    `UPDATE auth_sessions SET revoked_at = COALESCE(revoked_at, now()), oidc_access_token_enc = NULL, oidc_refresh_token_enc = NULL
       WHERE user_id = $1 AND revoked_at IS NULL`,
     [userId],
   )
@@ -116,14 +121,16 @@ async function revokeOidcSessionRows(db: Queryable, target: OidcSessionTarget): 
   if (!target.sid && !target.subject) return 0
   const [column, value] = target.sid ? ['oidc_sid', target.sid] : ['oidc_subject', target.subject]
   const r = await db.query(
-    `UPDATE auth_sessions SET revoked_at = COALESCE(revoked_at, now())
+    `UPDATE auth_sessions SET revoked_at = COALESCE(revoked_at, now()), oidc_access_token_enc = NULL, oidc_refresh_token_enc = NULL
       WHERE oidc_issuer = $1 AND ${column} = $2 AND revoked_at IS NULL`,
     [target.issuer, value],
   )
   return r.rowCount ?? 0
 }
 
-export function createSessionStore(pool: Pool, audit: AuditWriter): SessionStore {
+export function createSessionStore(pool: Pool, audit: AuditWriter,
+  verifyOidc?: (row: OidcSessionRow, user: AuthUser) => Promise<boolean>,
+): SessionStore {
   /** IdP からの logout で session を失効させたことを残す。失効と同じ transaction で書く。 */
   async function auditOidcRevocation(
     client: PoolClient,
@@ -147,8 +154,10 @@ export function createSessionStore(pool: Pool, audit: AuditWriter): SessionStore
 
     async authenticateSession(token, idleSeconds, touchIntervalSeconds = SESSION_TOUCH_INTERVAL_SECONDS) {
       if (!isPlausibleOpaqueToken(token)) return null
-      const r = await pool.query<AuthUserRow & { session_id: string; last_seen_at: Date }>(
-        `SELECT ${AUTH_USER_FIELDS}, s.id AS session_id, s.last_seen_at
+      const r = await pool.query<AuthUserRow & OidcSessionRow & { last_seen_at: Date }>(
+        `SELECT ${AUTH_USER_FIELDS}, s.id AS session_id, s.last_seen_at,
+                s.oidc_issuer, s.oidc_subject, s.oidc_access_token_enc, s.oidc_refresh_token_enc,
+                s.oidc_token_expires_at, s.oidc_checked_at
            ${AUTH_USER_FROM}
            JOIN auth_sessions s ON s.user_id = u.id
           WHERE s.token_hash = $1 AND s.revoked_at IS NULL
@@ -158,6 +167,8 @@ export function createSessionStore(pool: Pool, audit: AuditWriter): SessionStore
       )
       const row = r.rows[0]
       if (!row) return null
+      const user = toUser(row)
+      if (verifyOidc && !await verifyOidc(row, user)) return null
       if (Date.now() - row.last_seen_at.getTime() >= touchIntervalSeconds * 1000) {
         await pool.query(
           `UPDATE auth_sessions
@@ -167,12 +178,12 @@ export function createSessionStore(pool: Pool, audit: AuditWriter): SessionStore
           [row.session_id, idleSeconds],
         )
       }
-      return { kind: 'user', sessionId: row.session_id, user: toUser(row) }
+      return { kind: 'user', sessionId: row.session_id, user }
     },
 
     async revokeSession(token) {
       const r = await pool.query(
-        `UPDATE auth_sessions SET revoked_at = COALESCE(revoked_at, now())
+        `UPDATE auth_sessions SET revoked_at = COALESCE(revoked_at, now()), oidc_access_token_enc = NULL, oidc_refresh_token_enc = NULL
           WHERE token_hash = $1 AND revoked_at IS NULL`,
         [sha256(token)],
       )

@@ -25,42 +25,44 @@ async function streamTarEntry(c: Context, object: ObjectRequest, options: {
 }): Promise<Response> {
   const signal = c.req.raw.signal
   const archive = await options.tarIndexes.open({ ...object, signal })
-  const entry = await archive.index.find(options.entryName, signal)
-  if (!entry) return c.json({ error: `entry not found: ${options.entryName}` }, 404)
-  if (entry.type !== 'file') return c.json({ error: 'entry is not a regular file' }, 400)
-  if (entry.bodyOffset + entry.size > archive.size) throw new Error('incomplete tar entry')
+  try {
+    const entry = await archive.index.find(options.entryName, signal)
+    if (!entry) return c.json({ error: `entry not found: ${options.entryName}` }, 404)
+    if (entry.type !== 'file') return c.json({ error: 'entry is not a regular file' }, 400)
+    if (entry.bodyOffset + entry.size > archive.size) throw new Error('incomplete tar entry')
 
-  const rangeHeader = options.headBytes == null && c.req.method === 'GET' ? c.req.header('Range') : undefined
-  const range = rangeHeader ? parseByteRange(rangeHeader, entry.size) : null
-  if (rangeHeader && !range) {
-    return new Response(null, { status: 416, headers: {
-      'Content-Range': `bytes */${entry.size}`, 'Accept-Ranges': 'bytes', 'Cache-Control': 'private, no-store',
-    } })
-  }
-  const start = range?.start ?? 0
-  const end = range?.end ?? Math.min(options.headBytes ?? entry.size, entry.size) - 1
-  const contentLength = Math.max(0, end - start + 1)
-  const headers: Record<string, string> = {
-    'Content-Type': entryContentType(entry.name),
-    'Content-Length': String(contentLength),
-    'Accept-Ranges': 'bytes',
-    'Cache-Control': 'private, no-store',
-  }
-  if (range) headers['Content-Range'] = `bytes ${start}-${end}/${entry.size}`
-  if (options.headBytes != null && end + 1 < entry.size) headers['X-Preview-Truncated'] = '1'
-  const status = range ? 206 : 200
-  if (c.req.method === 'HEAD' || contentLength === 0) return new Response(null, { status, headers })
+    const rangeHeader = options.headBytes == null && c.req.method === 'GET' ? c.req.header('Range') : undefined
+    const range = rangeHeader ? parseByteRange(rangeHeader, entry.size) : null
+    if (rangeHeader && !range) {
+      return new Response(null, { status: 416, headers: {
+        'Content-Range': `bytes */${entry.size}`, 'Accept-Ranges': 'bytes', 'Cache-Control': 'private, no-store',
+      } })
+    }
+    const start = range?.start ?? 0
+    const end = range?.end ?? Math.min(options.headBytes ?? entry.size, entry.size) - 1
+    const contentLength = Math.max(0, end - start + 1)
+    const headers: Record<string, string> = {
+      'Content-Type': entryContentType(entry.name),
+      'Content-Length': String(contentLength),
+      'Accept-Ranges': 'bytes',
+      'Cache-Control': 'private, no-store',
+    }
+    if (range) headers['Content-Range'] = `bytes ${start}-${end}/${entry.size}`
+    if (options.headBytes != null && end + 1 < entry.size) headers['X-Preview-Truncated'] = '1'
+    const status = range ? 206 : 200
+    if (c.req.method === 'HEAD' || contentLength === 0) return new Response(null, { status, headers })
 
-  const archiveStart = entry.bodyOffset + start
-  const archiveEnd = entry.bodyOffset + end
-  const opened = await openObject(c, object, { range: `bytes=${archiveStart}-${archiveEnd}`, etag: archive.etag, signal })
-  if (opened instanceof Response) return opened
-  // tar全体のContent-Rangeではなく、エントリ自身の範囲をブラウザへ返す。
-  if (opened.contentRange !== `bytes ${archiveStart}-${archiveEnd}/${archive.size}` || opened.contentLength !== contentLength) {
-    opened.body.destroy()
-    throw new Error('storage did not return the requested entry range')
-  }
-  return streamObject({ ...opened, contentRange: headers['Content-Range'] }, headers)
+    const archiveStart = entry.bodyOffset + start
+    const archiveEnd = entry.bodyOffset + end
+    const opened = await openObject(c, object, { range: `bytes=${archiveStart}-${archiveEnd}`, etag: archive.etag, signal })
+    if (opened instanceof Response) return opened
+    // tar全体のContent-Rangeではなく、エントリ自身の範囲をブラウザへ返す。
+    if (opened.contentRange !== `bytes ${archiveStart}-${archiveEnd}/${archive.size}` || opened.contentLength !== contentLength) {
+      opened.body.destroy()
+      throw new Error('storage did not return the requested entry range')
+    }
+    return streamObject({ ...opened, contentRange: headers['Content-Range'] }, headers)
+  } finally { archive.release() }
 }
 
 export function mountStorageTarEntryRoute(app: Hono, deps: TarEntryRouteDeps): void {

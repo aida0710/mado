@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { errorFromResponse, fetchApi } from './api/http'
+import { prepareTarEntry } from './prepareTarEntry'
 
 export interface MediaSrcState {
   src: string | null
@@ -16,7 +17,7 @@ export function useMediaSrc({ directUrl, archiveEntryUrl, archiveKey }: {
 }): MediaSrcState {
   const streamingUrl = directUrl ?? (archiveKey?.toLowerCase().endsWith('.tar') ? archiveEntryUrl : null)
   const [archive, setArchive] = useState<MediaSrcState>(() =>
-    archiveEntryUrl && !streamingUrl
+    archiveEntryUrl
       ? { src: null, loading: true, error: null }
       : { src: null, loading: false, error: null },
   )
@@ -24,29 +25,34 @@ export function useMediaSrc({ directUrl, archiveEntryUrl, archiveKey }: {
   // archiveEntryUrlの変更は呼び出し側がkeyで再mountする前提。ここでは取得・解放だけを
   // 担当し、effect内の同期setStateによる余分な再renderは避ける。
   useEffect(() => {
-    if (!archiveEntryUrl || streamingUrl) return
+    if (!archiveEntryUrl || directUrl) return
     let objectUrl: string | null = null
     const ctl = new AbortController()
-    fetchApi(archiveEntryUrl, { signal: ctl.signal })
-      .then(async res => {
-        if (!res.ok) throw await errorFromResponse(res)
-        return res.blob()
-      })
-      .then(blob => {
-        objectUrl = URL.createObjectURL(blob)
-        setArchive({ src: objectUrl, loading: false, error: null })
-      })
-      .catch((e: unknown) => {
-        if (!ctl.signal.aborted) {
-          setArchive({ src: null, loading: false, error: (e as Error).message })
-        }
-      })
+    const load = async (): Promise<void> => {
+      if (streamingUrl) {
+        await prepareTarEntry(archiveEntryUrl, ctl.signal)
+        ctl.signal.throwIfAborted()
+        setArchive({ src: streamingUrl, loading: false, error: null })
+        return
+      }
+      const response = await fetchApi(archiveEntryUrl, { signal: ctl.signal })
+      if (!response.ok) throw await errorFromResponse(response)
+      const blob = await response.blob()
+      ctl.signal.throwIfAborted()
+      objectUrl = URL.createObjectURL(blob)
+      setArchive({ src: objectUrl, loading: false, error: null })
+    }
+    load().catch((e: unknown) => {
+      if (!ctl.signal.aborted) {
+        setArchive({ src: null, loading: false, error: (e as Error).message })
+      }
+    })
     return () => {
       ctl.abort()
       if (objectUrl) URL.revokeObjectURL(objectUrl)
     }
-  }, [archiveEntryUrl, streamingUrl])
+  }, [archiveEntryUrl, streamingUrl, directUrl])
 
-  if (streamingUrl) return { src: streamingUrl, loading: false, error: null }
+  if (directUrl) return { src: directUrl, loading: false, error: null }
   return archive
 }

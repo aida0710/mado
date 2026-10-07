@@ -10,6 +10,7 @@ services:
       POSTGRES_DB: dashboard
       DASHBOARD_PASSWORD: "${DASHBOARD_PASSWORD:?.env に DASHBOARD_PASSWORD を設定してください}"
       LINEAGE_DB_PASSWORD: "${LINEAGE_DB_PASSWORD:?.env に LINEAGE_DB_PASSWORD を設定してください}"
+      WORKER_DB_PASSWORD: "${WORKER_DB_PASSWORD:?.env に WORKER_DB_PASSWORD を設定してください}"
     volumes:
       - db_data:/var/lib/postgresql/data
       - ./db/init:/docker-entrypoint-initdb.d:ro
@@ -52,11 +53,11 @@ services:
     restart: unless-stopped
 
   media-worker:
+    extends:
+      file: ./deploy/worker-service.yaml
+      service: media-worker
     image: "@@MADO_WORKER_IMAGE@@"
     command: ["node", "dist/worker.js"]
-    env_file: [.env]
-    environment:
-      MADO_ENV: production
     depends_on:
       postgres:
         condition: service_healthy

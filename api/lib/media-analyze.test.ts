@@ -1,8 +1,9 @@
 import { createReadStream } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { Readable } from 'node:stream'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { analyzeAudio, MediaAnalyzeError, resolveBitRate } from './media-analyze.js'
+import { spoolMediaInput } from './media-input.js'
 
 const FIXTURE = new URL('./test-fixtures/tone.wav', import.meta.url).pathname
 // tone.wav を libmp3lame 32kbps でエンコードしたもの。ffprobe が
@@ -36,6 +37,28 @@ describe.skipIf(!hasFfmpeg)('analyzeAudio', () => {
     expect(Math.max(...r.peaks.map(p => p[1]))).toBeGreaterThan(0.5)
     // PNG マジックナンバー
     expect(r.spectrogramPng?.subarray(0, 4)).toEqual(Buffer.from([0x89, 0x50, 0x4e, 0x47]))
+  }, 60_000)
+
+  it('取得済みファイルで3パスを解析し、元のストリームを再取得しない', async () => {
+    const input = await spoolMediaInput({ source: createReadStream(FIXTURE) })
+    const openStream = vi.fn(async (): Promise<Readable> => { throw new Error('upstream must not be reopened') })
+    try {
+      const analyzed = await analyzeAudio({ ...opts(), ...input, openStream })
+      expect(analyzed.durationSec).toBeCloseTo(1, 1)
+      expect(analyzed.meta.codec).toBe('pcm_s16le')
+      expect(analyzed.meta.sizeBytes).toBe((await readFile(FIXTURE)).length)
+      expect(analyzed.spectrogramPng?.subarray(0, 4)).toEqual(Buffer.from([0x89, 0x50, 0x4e, 0x47]))
+      expect(openStream).not.toHaveBeenCalled()
+    } finally { await input.cleanup() }
+  }, 60_000)
+
+  it('音声に見せかけたconcat一覧からworker上の別ファイルを読ませない', async () => {
+    const input = await spoolMediaInput({ source: Readable.from(Buffer.from(`ffconcat version 1.0\nfile '${FIXTURE}'\n`)) })
+    try {
+      const error = await analyzeAudio({ ...opts(), ...input }).then(() => null, error => error as MediaAnalyzeError)
+      expect(error).toBeInstanceOf(MediaAnalyzeError)
+      expect(error?.stderrSummary).toContain('not on whitelist')
+    } finally { await input.cleanup() }
   }, 60_000)
 
   it('meta にコーデック/チャンネル/ビット深度/サイズ/音量が乗る (fixture: pcm_s16le/mono/16000Hz)', async () => {

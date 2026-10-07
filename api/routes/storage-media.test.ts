@@ -62,7 +62,7 @@ const META = {
 describe('GET /media/analyze', () => {
   it('キャッシュ命中なら worker を呼ばず 200、meta も乗る', async () => {
     const cacheKey = mediaCacheKey(REF)
-    await upsertMediaCache(pools.rw, cacheKey, {
+    await upsertMediaCache(pools.rw, REF, {
       peaks: [[-1, 1]],
       durationSec: 3,
       sampleRate: 16000,
@@ -134,9 +134,20 @@ describe('GET /media/analyze', () => {
 })
 
 describe('GET /media/spectrogram', () => {
+  it('別の接続のcacheKeyを渡してもPNGを返さない', async () => {
+    await upsertMediaCache(pools.rw, { ...REF, connectionId: 'private' }, {
+      peaks: [], durationSec: 1, sampleRate: null, spectrogramPng: Buffer.from('private png'), meta: META,
+    })
+    const cacheKey = mediaCacheKey({ ...REF, connectionId: 'private' })
+    const crossed = await makeApp().request(`/storage/c1/media/spectrogram?cacheKey=${cacheKey}`)
+    expect(crossed.status).toBe(404)
+    expect(await crossed.text()).not.toContain('private png')
+    const own = await makeApp().request(`/storage/private/media/spectrogram?cacheKey=${cacheKey}`)
+    expect(own.status).toBe(200)
+  })
   it('PNG をprivate no-storeで返す / 無ければ 404', async () => {
     const cacheKey = mediaCacheKey(REF)
-    await upsertMediaCache(pools.rw, cacheKey, {
+    await upsertMediaCache(pools.rw, REF, {
       peaks: [], durationSec: 1, sampleRate: null, spectrogramPng: Buffer.from([0x89, 0x50]), meta: META,
     })
     const res = await makeApp().request(`/storage/c1/media/spectrogram?cacheKey=${cacheKey}`)

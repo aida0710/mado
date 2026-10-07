@@ -36,7 +36,7 @@ export async function getCachedMedia(pool: Pool, cacheKey: string): Promise<Cach
     meta: MediaMeta | null
   }>(
     `SELECT peaks, duration_sec, sample_rate, meta, (spectrogram IS NOT NULL) AS has_spec
-       FROM media_cache WHERE cache_key = $1 AND meta IS NOT NULL`,
+       FROM media_cache WHERE cache_key = $1 AND meta IS NOT NULL AND connection_id IS NOT NULL`,
     [cacheKey],
   )
   const row = r.rows[0]
@@ -51,36 +51,38 @@ export async function getCachedMedia(pool: Pool, cacheKey: string): Promise<Cach
   }
 }
 
-export async function getCachedSpectrogram(pool: Pool, cacheKey: string): Promise<Buffer | null> {
+export async function getCachedSpectrogram(pool: Pool, options: { cacheKey: string; connectionId: string }): Promise<Buffer | null> {
   const r = await pool.query<{ spectrogram: Buffer | null }>(
-    'SELECT spectrogram FROM media_cache WHERE cache_key = $1',
-    [cacheKey],
+    'SELECT spectrogram FROM media_cache WHERE cache_key = $1 AND connection_id = $2',
+    [options.cacheKey, options.connectionId],
   )
   return r.rows[0]?.spectrogram ?? null
 }
 
 export async function upsertMediaCache(
   pool: Pool,
-  cacheKey: string,
+  ref: MediaRef,
   result: AnalyzeResult & { durationSec: number | null },
 ): Promise<void> {
   await pool.query(
-    `INSERT INTO media_cache (cache_key, peaks, spectrogram, duration_sec, sample_rate, meta)
-     VALUES ($1, $2, $3, $4, $5, $6)
+    `INSERT INTO media_cache (cache_key, peaks, spectrogram, duration_sec, sample_rate, meta, connection_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
      ON CONFLICT (cache_key) DO UPDATE SET
        peaks = EXCLUDED.peaks,
        spectrogram = EXCLUDED.spectrogram,
        duration_sec = EXCLUDED.duration_sec,
        sample_rate = EXCLUDED.sample_rate,
        meta = EXCLUDED.meta,
+       connection_id = EXCLUDED.connection_id,
        created_at = now()`,
     [
-      cacheKey,
+      mediaCacheKey(ref),
       JSON.stringify(result.peaks),
       result.spectrogramPng,
       result.durationSec,
       result.sampleRate,
       JSON.stringify(result.meta),
+      ref.connectionId,
     ],
   )
 }
