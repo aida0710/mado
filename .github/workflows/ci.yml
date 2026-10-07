@@ -164,6 +164,12 @@ jobs:
                   if(Date.now()>=deadline) process.exit(1);
                   await new Promise(resolve=>setTimeout(resolve,POLL_MS));
                 }
+                for(const [body,expected] of [[{},400],[{connectionId:"x".repeat(70000)},413]]) {
+                  const response=await fetch("http://127.0.0.1:3100/analyze",{
+                    method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body),
+                  });
+                  if(response.status!==expected) process.exit(1);
+                }
               ' || { docker logs "$container"; exit 1; }
               ;;
             web)

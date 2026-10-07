@@ -71,7 +71,10 @@ const MAX_BUCKET_CHARS = 1024
 const MAX_OBJECT_KEY_CHARS = 4096
 const MAX_ARCHIVE_ENTRY_CHARS = 16384
 const MAX_ETAG_CHARS = 256
-app.use('/analyze', bodyLimit({ maxSize: MAX_ANALYZE_BODY_BYTES }))
+app.use('/analyze', bodyLimit({
+  maxSize: MAX_ANALYZE_BODY_BYTES,
+  onError: c => c.json({ error: 'request body is too large' }, 413),
+}))
 const analyzeRequest = z.object({
   connectionId: z.string().min(1).max(MAX_CONNECTION_ID_CHARS), bucket: z.string().min(1).max(MAX_BUCKET_CHARS),
   key: z.string().min(1).max(MAX_OBJECT_KEY_CHARS), entryPath: z.string().min(1).max(MAX_ARCHIVE_ENTRY_CHARS).optional(),
