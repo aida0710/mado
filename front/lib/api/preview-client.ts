@@ -91,11 +91,11 @@ export const previewClient = {
   downloadUrl: (connectionId: string, bucket: string, key: string): string =>
     buildUrl(storagePath(connectionId, '/preview/raw'), { bucket, key }),
 
-  // `<img src>` / media blob / download用のtarエントリ本体へのURL形式。
+  // `<img src>` / audio・video / download用のtarエントリ本体へのURL形式。
   //
   // maxBytes を渡すと、サーバーはエントリの先頭 maxBytes だけを抽出して返す
   // (head モード)。テキストかどうか見るだけの用途で 100MB のエントリを丸ごと
-  // 解凍させないために使う。**<img src> / audio・video blob / downloadでは付けないこと**
+  // 取得させないために使う。**<img src> / audio・video / downloadでは付けないこと**
   // — 本体が途中で切れる。
   tarEntryUrl: ({ connectionId, bucket, key, entry, maxBytes }: {
     connectionId: string; bucket: string; key: string; entry: string; maxBytes?: number
@@ -107,9 +107,8 @@ export const previewClient = {
 
   // URL の先頭 maxBytes だけ読み、残りは reader.cancel() で捨てる。
   //
-  // /preview/tar-entry は Range 非対応で常に全量 (最大 100MB) を返す。テキストか
-  // どうかを見るだけのために 100MB の npy を落としきるのは無駄なので、ストリームを
-  // 途中で打ち切る。size を知らなくても安全なので、呼び出し側にサイズ上限の分岐が要らない。
+  // テキストかどうか見るときはtarEntryUrlのmaxBytesも指定し、
+  // サーバーで先頭取得、ブラウザで読み取り打ち切りの両方を行う。
   readHead: async (url: string, maxBytes: number): Promise<Uint8Array> => {
     const res = await fetchOk(url)
     // body が無い環境 (TS の型上 nullable) では stream を刻めない。せめて maxBytes で切る。

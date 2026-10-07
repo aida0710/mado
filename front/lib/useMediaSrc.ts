@@ -7,15 +7,16 @@ export interface MediaSrcState {
   error: string | null
 }
 
-// 単体mediaはRange対応のAPI URLをそのまま返し、tar内エントリは一度だけ取得して
-// blob URL化する。tar-entry APIはRange非対応なので、blob化しないとaudio/videoの
-// 未buffer位置へのseekが安定しない。
-export function useMediaSrc(
-  directUrl: string | null,
-  archiveEntryUrl: string | null,
-): MediaSrcState {
+// 単体ファイルと非圧縮tarはRange対応のURLを直接再生する。
+// 順次解凍が必要な圧縮tarは一度取得してBlobにし、ブラウザ内でシークする。
+export function useMediaSrc({ directUrl, archiveEntryUrl, archiveKey }: {
+  directUrl: string | null
+  archiveEntryUrl: string | null
+  archiveKey?: string
+}): MediaSrcState {
+  const streamingUrl = directUrl ?? (archiveKey?.toLowerCase().endsWith('.tar') ? archiveEntryUrl : null)
   const [archive, setArchive] = useState<MediaSrcState>(() =>
-    archiveEntryUrl
+    archiveEntryUrl && !streamingUrl
       ? { src: null, loading: true, error: null }
       : { src: null, loading: false, error: null },
   )
@@ -23,7 +24,7 @@ export function useMediaSrc(
   // archiveEntryUrlの変更は呼び出し側がkeyで再mountする前提。ここでは取得・解放だけを
   // 担当し、effect内の同期setStateによる余分な再renderは避ける。
   useEffect(() => {
-    if (!archiveEntryUrl) return
+    if (!archiveEntryUrl || streamingUrl) return
     let objectUrl: string | null = null
     const ctl = new AbortController()
     fetchApi(archiveEntryUrl, { signal: ctl.signal })
@@ -44,8 +45,8 @@ export function useMediaSrc(
       ctl.abort()
       if (objectUrl) URL.revokeObjectURL(objectUrl)
     }
-  }, [archiveEntryUrl])
+  }, [archiveEntryUrl, streamingUrl])
 
-  if (directUrl) return { src: directUrl, loading: false, error: null }
+  if (streamingUrl) return { src: streamingUrl, loading: false, error: null }
   return archive
 }

@@ -27,7 +27,7 @@ function AddTarButton() {
   const deck = usePlayerDeck()
   return (
     <button onClick={() => deck.addTrack({
-      label: 'tar-entry', connectionId: 'c', bucket: 'b', key: 'shard.tar', entryPath: 'u1.wav',
+      label: 'tar-entry', connectionId: 'c', bucket: 'b', key: 'shard.tar.gz', entryPath: 'u1.wav',
     })}>
       addTar
     </button>
@@ -117,7 +117,7 @@ describe('PlayerDeck', () => {
     expect(audios[0].muted).toBe(false)
   })
 
-  it('tar 内エントリのトラックは blob 解決後に <audio src> が blob: URL になる (デッキでもシーク不具合対策を適用)', async () => {
+  it('圧縮tar内のトラックは取得後にBlobで再生できる', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: true,
       blob: () => Promise.resolve(new Blob(['data'])),
@@ -560,7 +560,7 @@ describe('PlayerDeck - L/R チャンネル', () => {
     await waitFor(() => expect(leftBtn()).toBeEnabled())
   })
 
-  it('tar エントリは blob 取得が終わるまで L/R が無効 (<audio> が無くグラフを作れない)', async () => {
+  it('圧縮tarは本文の取得が終わるまでL/Rが無効になる', async () => {
     installMockAudioContext()
     mockAnalyze(2)
     let resolveFetch!: (v: Response) => void

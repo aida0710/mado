@@ -25,8 +25,7 @@ export function PreviewAudio({ connectionId, bucket, k, entryPath }: Props) {
   const [progress, setProgress] = useState(0)
   const caps = useCapabilities(connectionId)
 
-  // tar 内エントリは blob 化して取得する (シークバーが現在位置に巻き戻る不具合の
-  // 対策)。詳細は useAudioSrc のコメントを参照。
+  // 再生の部分取得と波形解析の全量取得は別の経路で行う。
   const { src, loading: srcLoading, error: srcError } = useAudioSrc({ connectionId, bucket, key: k, entryPath })
 
   // 解析はサーバー側キャッシュがあるので毎マウントで呼んでよい。ファイル切替時の

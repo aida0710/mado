@@ -1,24 +1,11 @@
-// Range リクエストを使った tar ヘッダー列挙。
-//
-// プレーン `.tar` は `[header(512B) | body(512Bパディング済み)]*` の繰り返しで構成される。
-// tar-stream.ts のストリーミング方式は次のヘッダーへ進むためにエントリ本体を *ドレイン*
-// しなければならない。1 GB の WebDataset シャード (本体 ~1 GB) ではファイル名の列挙だけで
-// ~1 GB のダウンロードが発生する。本ファイルは HTTP Range リクエストを使って本体を丸ごとスキップ
-// する。典型的な WebDataset シャードで最初の 100 エントリは ~100 × 512 B = 51 KB で済む。
-//
-// 制限:
-//   * ustar / GNU-tar の `prefix` 形式の長名のみパース。GNU `L` (long-link レコード) や
-//     POSIX pax `x` ヘッダーは切り詰め済みの 100 バイト名フィールドにフォールバックする
-//     (WebDataset のキーは短いため実用上は問題ない)。
-//   * kind === 'tar' のみ使用。圧縮アーカイブはバイトストリームがシーク不可なため
-//     ストリーミングリーダーを使う。
-
-import { GetObjectCommand, type S3Client } from '@aws-sdk/client-s3'
 import { isMacOsMetadata, type TarEntry } from './tar-stream.js'
+import { decodePaxAttributes, decodeTarHeader, decodeTarString, TAR_BLOCK_SIZE } from './tar-header.js'
 
-export interface RangeOpts {
+export interface RangeOptions {
   entryLimit: number
   offset?: number
+  signal?: AbortSignal
+  onProgress?: (progress: { bytes: number; requests: number }) => void
 }
 
 export interface RangeListing {
@@ -26,138 +13,125 @@ export interface RangeListing {
   hasMore: boolean
 }
 
-const HEADER_SIZE = 512
-// 大きめのチャンクで読むことで、WebDataset のように小さなエントリが連続する場合の
-// リクエスト往復コストを分散できる。
-const CHUNK_SIZE = 256 * 1024
-
-export type RangeReader = (start: number, length: number) => Promise<Buffer>
-
-export function makeStorageRangeReader(
-  storage: S3Client,
-  bucket: string,
-  key: string,
-): RangeReader {
-  return async (start, length) => {
-    const r = await storage.send(new GetObjectCommand({
-      Bucket: bucket,
-      Key: key,
-      Range: `bytes=${start}-${start + length - 1}`,
-    }))
-    const chunks: Buffer[] = []
-    for await (const c of r.Body as unknown as AsyncIterable<Buffer>) {
-      chunks.push(c)
-    }
-    return Buffer.concat(chunks)
-  }
+export interface IndexedTarEntry extends TarEntry {
+  bodyOffset: number
 }
 
-export async function listTarHeadersByRange(
-  read: RangeReader,
-  opts: RangeOpts,
-  onEntry?: (e: TarEntry) => void,
-): Promise<RangeListing> {
-  const out: TarEntry[] = []
-  const offset = opts.offset ?? 0
-  let skipped = 0
-  let pos = 0
-  let cache: { start: number; buf: Buffer } | null = null
+// 小さなJSONと隣接するヘッダーはまとめて読み、大きな本文は読み飛ばす。
+const HEADER_CHUNK_BYTES = 256 * 1024
+// 長名/PAXだけをバッファする。通常は数KBで、1MiB以上はメタデータとして受け付けない。
+const MAX_METADATA_BYTES = 1024 * 1024
 
-  async function getBytes(at: number, n: number): Promise<Buffer> {
-    if (cache && at >= cache.start && at + n <= cache.start + cache.buf.length) {
-      return cache.buf.subarray(at - cache.start, at - cache.start + n)
-    }
-    const want = Math.max(n, CHUNK_SIZE)
-    const buf = await read(at, want)
-    cache = { start: at, buf }
-    return buf.subarray(0, Math.min(n, buf.length))
-  }
+export type RangeReader = (start: number, length: number, signal?: AbortSignal) => Promise<Buffer>
 
-  let exhausted = false
-  while (out.length < opts.entryLimit) {
-    let header: Buffer
-    try {
-      header = await getBytes(pos, HEADER_SIZE)
-    } catch {
-      exhausted = true
-      break
-    }
-    if (header.length < HEADER_SIZE) { exhausted = true; break }
-    if (header[0] === 0) { exhausted = true; break } // tar アーカイブ終端
+/** ヘッダーの位置を順次記録し、一覧と本文取得で同じ索引を使う。 */
+export class TarRangeIndex {
+  private readonly entries: IndexedTarEntry[] = []
+  private readonly entriesByName = new Map<string, IndexedTarEntry>()
+  private position = 0
+  private exhausted = false
+  private chunk: { start: number; buffer: Buffer } | null = null
+  private globalPax: Record<string, string> = {}
+  private localPax: Record<string, string> = {}
+  private longName: string | null = null
+  private pending: Promise<void> = Promise.resolve()
 
-    const parsed = parseTarHeader(header)
-    if (!parsed) { exhausted = true; break }
+  constructor(private readonly read: RangeReader) {}
 
-    // tar メタデータレコード (POSIX pax `x` / `g`、GNU 長名 `L` / long-link `K`) は
-    // 実エントリの前置レコードであり、アーカイブ内のファイルではない。
-    // 位置的にスキップするが列挙結果には含めない。
-    // macOS の AppleDouble (`._*`) / `.DS_Store` / `__MACOSX/` も同様に隠す。
-    const isMetadata =
-      parsed.type === 'x' || parsed.type === 'g' ||
-      parsed.type === 'L' || parsed.type === 'K' ||
-      isMacOsMetadata(parsed.name)
+  get entryCount(): number { return this.entries.length }
 
-    if (!isMetadata) {
-      if (skipped < offset) {
-        skipped++
-      } else {
-        out.push(parsed)
-        onEntry?.(parsed)
+  async list(options: RangeOptions, onEntry?: (entry: TarEntry) => void): Promise<RangeListing> {
+    return this.serialize(async () => {
+      const offset = options.offset ?? 0
+      const end = offset + options.entryLimit
+      let emitted = offset
+      const emitAvailable = (): void => {
+        while (emitted < Math.min(end, this.entries.length)) {
+          const { name, size, type } = this.entries[emitted++]
+          onEntry?.({ name, size, type })
+        }
       }
+      emitAvailable()
+      while (!this.exhausted && this.entries.length <= end) {
+        await this.scanNext(options)
+        emitAvailable()
+      }
+      return {
+        entries: this.entries.slice(offset, end).map(({ name, size, type }) => ({ name, size, type })),
+        hasMore: this.entries.length > end,
+      }
+    })
+  }
+
+  async find(name: string, signal?: AbortSignal): Promise<IndexedTarEntry | null> {
+    return this.serialize(async () => {
+      while (!this.entriesByName.has(name) && !this.exhausted) await this.scanNext({ signal })
+      return this.entriesByName.get(name) ?? null
+    })
+  }
+
+  private async serialize<T>(operation: () => Promise<T>): Promise<T> {
+    const previous = this.pending
+    let release!: () => void
+    this.pending = new Promise(resolve => { release = resolve })
+    await previous
+    try { return await operation() } finally { release() }
+  }
+
+  private async bytesAt(at: number, length: number, options: Pick<RangeOptions, 'signal' | 'onProgress'>): Promise<Buffer> {
+    options.signal?.throwIfAborted()
+    if (this.chunk && at >= this.chunk.start && at + length <= this.chunk.start + this.chunk.buffer.length) {
+      return this.chunk.buffer.subarray(at - this.chunk.start, at - this.chunk.start + length)
     }
-    const padded = Math.ceil(parsed.size / HEADER_SIZE) * HEADER_SIZE
-    pos += HEADER_SIZE + padded
+    const buffer = await this.read(at, Math.max(length, HEADER_CHUNK_BYTES), options.signal)
+    this.chunk = { start: at, buffer }
+    options.onProgress?.({ bytes: buffer.length, requests: 1 })
+    return buffer.subarray(0, length)
   }
 
-  // エントリ上限に達した場合、もう1つ先のヘッダーを確認してページネーションの
-  // 続きがあるか判定する。
-  let hasMore = false
-  if (!exhausted && out.length >= opts.entryLimit) {
-    try {
-      const probe = await getBytes(pos, HEADER_SIZE)
-      if (probe.length === HEADER_SIZE && probe[0] !== 0) hasMore = true
-    } catch {
-      hasMore = false
+  private async scanNext(options: Pick<RangeOptions, 'signal' | 'onProgress'>): Promise<void> {
+    const header = await this.bytesAt(this.position, TAR_BLOCK_SIZE, options)
+    if (header.length === 0) { this.exhausted = true; return }
+    const parsed = decodeTarHeader(header)
+    if (!parsed) { this.exhausted = true; return }
+    const bodyOffset = this.position + TAR_BLOCK_SIZE
+
+    if (['x', 'g', 'L', 'K'].includes(parsed.type)) {
+      await this.readMetadata(parsed, bodyOffset, options)
+      this.position = bodyOffset + Math.ceil(parsed.size / TAR_BLOCK_SIZE) * TAR_BLOCK_SIZE
+      return
     }
+
+    const attributes = { ...this.globalPax, ...this.localPax }
+    const name = attributes.path ?? this.longName ?? parsed.name
+    const size = attributes.size == null ? parsed.size : Number(attributes.size)
+    if (!Number.isSafeInteger(size) || size < 0) throw new Error('invalid PAX file size')
+    // Sparse tarの本文は元のファイルと異なるため、そのまま配信しない。
+    const type = Object.keys(attributes).some(key => key.startsWith('GNU.sparse.')) ? 'sparse' : parsed.type
+    const nextPosition = bodyOffset + Math.ceil(size / TAR_BLOCK_SIZE) * TAR_BLOCK_SIZE
+    if (!Number.isSafeInteger(nextPosition)) throw new Error('tar offset exceeds safe integer range')
+    this.position = nextPosition
+    this.localPax = {}
+    this.longName = null
+    if (isMacOsMetadata(name)) return
+    const entry = { name, size, type, bodyOffset }
+    this.entries.push(entry)
+    // 本文抽出と同じく、同名のエントリは最初のものを開く。
+    if (!this.entriesByName.has(name)) this.entriesByName.set(name, entry)
   }
 
-  return { entries: out, hasMore }
-}
-
-function parseTarHeader(buf: Buffer): TarEntry | null {
-  // 全ゼロブロック = アーカイブ終端。
-  let allZero = true
-  for (let i = 0; i < HEADER_SIZE; i++) {
-    if (buf[i] !== 0) { allZero = false; break }
+  private async readMetadata(parsed: TarEntry, bodyOffset: number, options: Pick<RangeOptions, 'signal' | 'onProgress'>): Promise<void> {
+    if (parsed.type === 'K') return
+    if (parsed.size > MAX_METADATA_BYTES) throw new Error('tar metadata exceeds size limit')
+    const body = await this.bytesAt(bodyOffset, parsed.size, options)
+    if (body.length !== parsed.size) throw new Error('incomplete tar metadata')
+    if (parsed.type === 'L') { this.longName = decodeTarString(body); return }
+    const attributes = decodePaxAttributes(body)
+    if (parsed.type === 'g') this.globalPax = { ...this.globalPax, ...attributes }
+    else this.localPax = { ...this.localPax, ...attributes }
   }
-  if (allZero) return null
-
-  const name100 = readCString(buf, 0, 100)
-  const prefix = readCString(buf, 345, 155)
-  const name = prefix ? `${prefix}/${name100}` : name100
-  if (!name) return null
-
-  const size = readOctal(buf, 124, 12)
-  const tflag = String.fromCharCode(buf[156] || 0x30)
-  const type =
-    tflag === '0' || tflag === '\0' ? 'file' :
-    tflag === '5' ? 'directory' :
-    tflag === '2' ? 'symlink' :
-    tflag  // L (GNU 長名)、x (pax) など — 生のフラグをそのまま返す
-
-  return { name, size, type }
 }
 
-function readCString(buf: Buffer, off: number, len: number): string {
-  const slice = buf.subarray(off, off + len)
-  const nul = slice.indexOf(0)
-  return slice.subarray(0, nul === -1 ? len : nul).toString('utf-8')
-}
-
-function readOctal(buf: Buffer, off: number, len: number): number {
-  const s = buf.subarray(off, off + len).toString('ascii')
-    .replace(/\0.*$/, '').trim()
-  if (!s) return 0
-  const n = parseInt(s, 8)
-  return Number.isFinite(n) ? n : 0
+export async function listTarHeadersByRange(read: RangeReader, options: RangeOptions, onEntry?: (entry: TarEntry) => void): Promise<RangeListing> {
+  return new TarRangeIndex(read).list(options, onEntry)
 }

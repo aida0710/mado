@@ -1,9 +1,10 @@
-import { GetObjectCommand, NoSuchKey, S3Client } from '@aws-sdk/client-s3'
+import { GetObjectCommand, HeadObjectCommand, NoSuchKey, S3Client } from '@aws-sdk/client-s3'
 import { mockClient } from 'aws-sdk-client-mock'
 import { Readable } from 'node:stream'
 import { Hono } from 'hono'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { createReadStream } from 'node:fs'
+import { createReadStream, readFileSync } from 'node:fs'
+import { gzipSync } from 'node:zlib'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { pack as tarPack } from 'tar-stream'
@@ -318,9 +319,7 @@ describe('GET /storage/:connectionId/preview/tar', () => {
   })
 
   it('無圧縮の tar でもエントリを流せる', async () => {
-    storageMock.on(GetObjectCommand).resolves({
-      Body: createReadStream(fixture('sample.tar')) as never,
-    })
+    serveTar(readFileSync(fixture('sample.tar')))
     const res = await app.request(
       `/storage/${TEST_CONN_ID}/preview/tar?bucket=b&key=foo/sample.tar`,
     )
@@ -499,10 +498,19 @@ async function packOneEntryTar(name: string, bodySize: number): Promise<Buffer> 
   return Buffer.concat(chunks)
 }
 
+let fixtureVersion = 0
 function serveTar(tar: Buffer): void {
-  storageMock.on(GetObjectCommand).resolves({
-    Body: Readable.from(tar) as never,
-    ContentLength: tar.length,
+  storageMock.on(HeadObjectCommand).resolves({ ContentLength: tar.length, ETag: `"fixture-${++fixtureVersion}"` })
+  storageMock.on(GetObjectCommand).callsFake(input => {
+    const range = input.Range as string | undefined
+    const match = range && /^bytes=(\d+)-(\d+)$/.exec(range)
+    const start = match ? Number(match[1]) : 0
+    const end = match ? Math.min(Number(match[2]), tar.length - 1) : tar.length - 1
+    return {
+      Body: Readable.from(tar.subarray(start, end + 1)),
+      ContentLength: end - start + 1,
+      ContentRange: match ? `bytes ${start}-${end}/${tar.length}` : undefined,
+    }
   })
 }
 
@@ -542,9 +550,18 @@ describe('GET /storage/:connectionId/preview/tar-entry', () => {
     expect(res.headers.get('Content-Type')).toBe('video/mp4')
   })
 
-  it('maxBytes 無しで上限を超えるエントリは 413', async () => {
-    serveTar(await packOneEntryTar('huge.bin', ENTRY_MAX + 1))
-    const res = await entryApp.request(entryUrl('huge.bin'))
+  it('空ファイルは本文のS3取得をせず200を返す', async () => {
+    serveTar(await packOneEntryTar('empty.txt', 0))
+    const res = await entryApp.request(entryUrl('empty.txt'))
+    expect(res.status).toBe(200)
+    expect(res.headers.get('Content-Length')).toBe('0')
+    expect(await res.text()).toBe('')
+    expect(storageMock.commandCalls(GetObjectCommand)).toHaveLength(1)
+  })
+
+  it('圧縮tarはmaxBytes無しで上限を超えると413', async () => {
+    serveTar(gzipSync(await packOneEntryTar('huge.bin', ENTRY_MAX + 1)))
+    const res = await entryApp.request(entryUrl('huge.bin').replace('key=a.tar', 'key=a.tar.gz'))
     expect(res.status).toBe(413)
     expect((await res.json() as { error: string }).error).toContain('exceeds preview limit')
   })
@@ -576,8 +593,8 @@ describe('GET /storage/:connectionId/preview/tar-entry', () => {
 
   it('不正な maxBytes (0 / 負 / 非数値) は head モードにならない', async () => {
     for (const bad of ['0', '-1', 'abc']) {
-      serveTar(await packOneEntryTar('huge.bin', ENTRY_MAX + 1))
-      const res = await entryApp.request(entryUrl('huge.bin', `&maxBytes=${bad}`))
+      serveTar(gzipSync(await packOneEntryTar('huge.bin', ENTRY_MAX + 1)))
+      const res = await entryApp.request(entryUrl('huge.bin', `&maxBytes=${bad}`).replace('key=a.tar', 'key=a.tar.gz'))
       expect(res.status, `maxBytes=${bad}`).toBe(413)
     }
   })

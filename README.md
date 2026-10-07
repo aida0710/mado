@@ -102,6 +102,10 @@ Settings の接続一覧には、制限のかかっている接続に「制限: 
 
 アーカイブを開くと **中のエントリ一覧** が表示されます。エントリをクリックすると個別にプレビュー (テキスト / 画像 / 音声 / MP4動画) でき、テキストは **「内容をコピー」** で全文コピーできます。
 
+単体の動画・音声と、非圧縮の`.tar`内の動画・音声は、再生に必要な部分を取得します。500MBや1GB以上のファイルも、全量の取得を待たずに再生・シークできます。`.tar`内のファイルの位置は一覧と再生で共有し、後ろのページも先頭から走査し直さずに取得します。オブジェクトが変わった場合は索引を作り直します。
+
+`.tar.gz`・`.tar.xz`内の本文は順次解凍して取得するため、引き続き`PREVIEW_TAR_ENTRY_MAX_BYTES`の上限が適用されます。ブラウザで再生できる動画・音声形式が対象です。
+
 <img width="720" height="302" alt="mosaic_20260524163953" src="https://github.com/user-attachments/assets/e5a41326-34b9-45a2-adaf-94b0e4ef4066" />
 
 ### 5. URL コピー / ダウンロード
@@ -252,6 +256,7 @@ dev の DB パスワードは未設定なら開発用の既定値で動きます
 | `PREVIEW_TEXT_LIMIT` | no | テキストプレビュー最大バイト (default 65536) |
 | `PREVIEW_TAR_ENTRY_LIMIT` | no | tar 内 1 ページのエントリ最大数 (default 200) |
 | `PREVIEW_TARXZ_BYTE_LIMIT` | no | tar.xz の解凍バイト上限 (default 256MiB) |
+| `PREVIEW_TAR_ENTRY_MAX_BYTES` | no | 圧縮tarの本文取得とテキストの先頭取得の上限 (default 100MiB)。非圧縮tarの本文配信には適用しない |
 | `MEDIA_CONCURRENCY` | no | media-worker が同時実行する ffmpeg 解析数の上限 (default 3) |
 | `MEDIA_ANALYZE_TIMEOUT_SEC` | no | 音声 1 ファイルあたりの解析タイムアウト秒 (default 300) |
 | `MEDIA_CACHE_MAX_AGE_DAYS` | no | 解析結果キャッシュ (`media_cache`) の保持日数 (default 30) |

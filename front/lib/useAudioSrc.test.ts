@@ -22,11 +22,19 @@ describe('useAudioSrc', () => {
     expect(fetch).not.toHaveBeenCalled()
   })
 
-  it('tar エントリは fetch して blob URL になる (loading: true → false)', async () => {
+  it('非圧縮tarは即座にRange対応URLを返し、全量取得しない', () => {
+    const { result } = renderHook(() => useAudioSrc({ connectionId: 'c', bucket: 'b', key: 'shard.tar', entryPath: 'u1.wav' }))
+    expect(result.current.loading).toBe(false)
+    expect(result.current.src).toContain('/preview/tar-entry')
+    expect(fetch).not.toHaveBeenCalled()
+    expect(URL.createObjectURL).not.toHaveBeenCalled()
+  })
+
+  it('圧縮tarは取得後にBlobで再生できる', async () => {
     let resolveFetch!: (v: Response) => void
     vi.mocked(fetch).mockReturnValue(new Promise(resolve => { resolveFetch = resolve }))
 
-    const { result } = renderHook(() => useAudioSrc({ connectionId: 'c', bucket: 'b', key: 'shard.tar', entryPath: 'u1.wav' }))
+    const { result } = renderHook(() => useAudioSrc({ connectionId: 'c', bucket: 'b', key: 'shard.tar.gz', entryPath: 'u1.wav' }))
     expect(result.current.loading).toBe(true)
     expect(result.current.src).toBeNull()
     expect(fetch).toHaveBeenCalledWith(
@@ -53,7 +61,7 @@ describe('useAudioSrc', () => {
       blob: () => Promise.resolve(new Blob(['data'])),
     } as unknown as Response)
 
-    const { result, unmount } = renderHook(() => useAudioSrc({ connectionId: 'c', bucket: 'b', key: 'shard.tar', entryPath: 'u1.wav' }))
+    const { result, unmount } = renderHook(() => useAudioSrc({ connectionId: 'c', bucket: 'b', key: 'shard.tar.gz', entryPath: 'u1.wav' }))
     await waitFor(() => expect(result.current.src).toBe('blob:mock-1'))
 
     unmount()
@@ -67,7 +75,7 @@ describe('useAudioSrc', () => {
       json: () => Promise.resolve({ error: 'entry not found' }),
     } as unknown as Response)
 
-    const { result } = renderHook(() => useAudioSrc({ connectionId: 'c', bucket: 'b', key: 'shard.tar', entryPath: 'u1.wav' }))
+    const { result } = renderHook(() => useAudioSrc({ connectionId: 'c', bucket: 'b', key: 'shard.tar.gz', entryPath: 'u1.wav' }))
     await waitFor(() => expect(result.current.loading).toBe(false))
     expect(result.current.error).toBe('entry not found')
     expect(result.current.src).toBeNull()

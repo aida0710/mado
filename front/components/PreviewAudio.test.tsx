@@ -13,7 +13,7 @@ vi.mock('../lib/api/client', async importOriginal => {
   }
 })
 
-// entryPath ありのケースは useAudioSrc が fetch → blob 化する。jsdom には
+// 圧縮tarはuseAudioSrcがfetchしてBlobにする。jsdomには
 // URL.createObjectURL/revokeObjectURL が無いのでスタブする。
 beforeEach(() => {
   vi.stubGlobal('fetch', vi.fn())
@@ -98,13 +98,23 @@ describe('PreviewAudio', () => {
     )
   })
 
-  it('entryPath ありで blob 取得中は「音声を取得中…」が出て audio 要素に src が無い', () => {
+  it('非圧縮tarは全量取得を待たず音声プレーヤーを表示する', async () => {
+    vi.mocked(api.mediaAnalyze).mockResolvedValue({
+      cacheKey: 'ck', peaks: [], durationSec: null, sampleRate: null, hasSpectrogram: false, meta: null,
+    })
+    const { container } = render(<PreviewAudio connectionId="c" bucket="b" k="shard.tar" entryPath="u1.wav" />)
+    expect(container.querySelector('audio')).toHaveAttribute('src', expect.stringContaining('/preview/tar-entry'))
+    expect(fetch).not.toHaveBeenCalledWith(expect.stringContaining('/preview/tar-entry'), expect.anything())
+    await waitFor(() => expect(screen.queryByText('解析中…')).not.toBeInTheDocument())
+  })
+
+  it('圧縮tarの取得中は「音声を取得中…」を表示する', () => {
     vi.mocked(api.mediaAnalyze).mockResolvedValue({
       cacheKey: 'ck', peaks: [], durationSec: null, sampleRate: null, hasSpectrogram: false, meta: null,
     })
     vi.mocked(fetch).mockReturnValue(new Promise(() => {})) // 未解決のまま保持
     const { container } = render(
-      <PreviewAudio connectionId="c" bucket="b" k="shard.tar" entryPath="u1.wav" />,
+      <PreviewAudio connectionId="c" bucket="b" k="shard.tar.gz" entryPath="u1.wav" />,
     )
     expect(screen.getByText('音声を取得中…')).toBeInTheDocument()
     expect(container.querySelector('audio')).toBeNull()
@@ -119,14 +129,14 @@ describe('PreviewAudio', () => {
       blob: () => Promise.resolve(new Blob(['data'])),
     } as unknown as Response)
     const { container } = render(
-      <PreviewAudio connectionId="c" bucket="b" k="shard.tar" entryPath="u1.wav" />,
+      <PreviewAudio connectionId="c" bucket="b" k="shard.tar.gz" entryPath="u1.wav" />,
     )
     await waitFor(() => expect(container.querySelector('audio')).not.toBeNull())
     const audio = container.querySelector('audio')!
     expect(audio.src).toContain('blob:')
     expect(screen.queryByText('音声を取得中…')).not.toBeInTheDocument()
     await waitFor(() => expect(api.mediaAnalyze).toHaveBeenCalledWith(
-      expect.objectContaining({ connectionId: 'c', bucket: 'b', key: 'shard.tar', entryPath: 'u1.wav' }),
+      expect.objectContaining({ connectionId: 'c', bucket: 'b', key: 'shard.tar.gz', entryPath: 'u1.wav' }),
     ))
   })
 
@@ -139,7 +149,7 @@ describe('PreviewAudio', () => {
       statusText: 'Not Found',
       json: () => Promise.resolve({ error: 'entry not found' }),
     } as unknown as Response)
-    render(<PreviewAudio connectionId="c" bucket="b" k="shard.tar" entryPath="u1.wav" />)
+    render(<PreviewAudio connectionId="c" bucket="b" k="shard.tar.gz" entryPath="u1.wav" />)
     await waitFor(() => expect(screen.getByText(/音声を取得できません/)).toBeInTheDocument())
     expect(screen.getByText(/entry not found/)).toBeInTheDocument()
   })

@@ -7,6 +7,14 @@ const require = createRequire(import.meta.url)
 
 export type ArchiveKind = 'tar' | 'gz' | 'xz'
 
+export function detectArchive(key: string): ArchiveKind | null {
+  const normalizedKey = key.toLowerCase()
+  if (normalizedKey.endsWith('.tar.gz') || normalizedKey.endsWith('.tgz')) return 'gz'
+  if (normalizedKey.endsWith('.tar.xz')) return 'xz'
+  if (normalizedKey.endsWith('.tar')) return 'tar'
+  return null
+}
+
 export interface TarEntry {
   name: string
   size: number

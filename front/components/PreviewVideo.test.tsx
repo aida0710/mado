@@ -22,10 +22,20 @@ describe('PreviewVideo', () => {
     expect(fetch).not.toHaveBeenCalled()
   })
 
-  it('tar内MP4は取得後にblob URLで再生する', async () => {
+  it('非圧縮tar内MP4は全量を取得せずRange対応URLを直接使う', () => {
+    render(<PreviewVideo connectionId="c" bucket="b" k="SHARD.TAR" entryPath="clip.mp4" />)
+    const video = screen.getByLabelText('clip.mp4 の動画プレビュー')
+    expect(video).toHaveAttribute('src', expect.stringContaining('/preview/tar-entry'))
+    expect(video).toHaveAttribute('src', expect.stringContaining('entry=clip.mp4'))
+    expect(video).toHaveAttribute('preload', 'metadata')
+    expect(fetch).not.toHaveBeenCalled()
+    expect(URL.createObjectURL).not.toHaveBeenCalled()
+  })
+
+  it('圧縮tar内MP4は取得後にblob URLで再生する', async () => {
     let resolveFetch!: (value: Response) => void
     vi.mocked(fetch).mockReturnValue(new Promise(resolve => { resolveFetch = resolve }))
-    render(<PreviewVideo connectionId="c" bucket="b" k="shard.tar" entryPath="clip.mp4" />)
+    render(<PreviewVideo connectionId="c" bucket="b" k="shard.tar.gz" entryPath="clip.mp4" />)
     expect(screen.getByText('動画を取得中…')).toBeInTheDocument()
 
     await act(async () => {
@@ -46,7 +56,7 @@ describe('PreviewVideo', () => {
       statusText: 'Payload Too Large',
       json: () => Promise.resolve({ error: 'entry exceeds preview limit' }),
     } as unknown as Response)
-    render(<PreviewVideo connectionId="c" bucket="b" k="shard.tar" entryPath="huge.mp4" />)
+    render(<PreviewVideo connectionId="c" bucket="b" k="shard.tar.gz" entryPath="huge.mp4" />)
     expect(await screen.findByText(/entry exceeds preview limit/)).toBeInTheDocument()
   })
 })
