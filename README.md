@@ -4,6 +4,8 @@
 
 各ディレクトリに README を残したり、チームで 1 つの共有ノートを書いたりもできます。
 
+**[ドキュメントを見る →](https://aida0710.github.io/mado/)** — 使い方、画面のスクリーンショット、導入と設定の手順。
+
 <img width="1340" height="771" alt="mosaic_20260524162904" src="https://github.com/user-attachments/assets/4f5349ad-38c2-46c7-8e29-3be76477615c" />
 
 Local UserまたはOIDC SSOでログインでき、Pipelineは人とは別のService Account keyを使います。既存LAN運用から移行できるよう認証無効モードも残していますが、外部公開では使用しません。
