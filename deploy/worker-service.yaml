@@ -5,7 +5,8 @@ services:
       MADO_ENV: production
       DATABASE_URL_RW: "postgres://mado_worker:${WORKER_DB_PASSWORD:-worker-dev-only}@postgres:5432/dashboard"
       DATABASE_URL_RO: "postgres://mado_worker:${WORKER_DB_PASSWORD:-worker-dev-only}@postgres:5432/dashboard"
-      ENCRYPTION_KEY: "${ENCRYPTION_KEY:?ENCRYPTION_KEY is required}"
+      # DBだけの初期化には不要。worker起動時はloadEnvで空の鍵を拒否する。
+      ENCRYPTION_KEY: "${ENCRYPTION_KEY:-}"
       ALLOWED_ORIGINS: "${ALLOWED_ORIGINS:?ALLOWED_ORIGINS is required}"
       MEDIA_CONCURRENCY: "${MEDIA_CONCURRENCY:-3}"
       MEDIA_ANALYZE_TIMEOUT_SEC: "${MEDIA_ANALYZE_TIMEOUT_SEC:-300}"
