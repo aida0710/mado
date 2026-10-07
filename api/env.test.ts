@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { loadEnv, loadLineageEnv } from './env.js'
+import { loadEnv, loadLineageEnv, loadWorkerEnv } from './env.js'
 
 const VALID_KEY = '0'.repeat(64)
 
@@ -219,5 +219,26 @@ describe('loadLineageEnv', () => {
       DATABASE_URL_RW: 'postgres://mado_lineage@postgres/dashboard',
       DATABASE_URL_RO: 'postgres://mado_lineage@postgres/dashboard',
     })).toThrow(/DATASET_REGISTRY/)
+  })
+})
+
+describe('workerの環境設定', () => {
+  const required = {
+    MADO_ENV: 'production', DATABASE_URL_RW: 'postgres://mado_worker@postgres/dashboard',
+    DATABASE_URL_RO: 'postgres://mado_worker@postgres/dashboard', ENCRYPTION_KEY: VALID_KEY,
+  }
+
+  it('本番でもブラウザ認証の設定を要求せず、APIの秘密を設定に含めない', () => {
+    const env = loadWorkerEnv({ ...required, OIDC_CLIENT_SECRET: 'api-secret', DATASET_REGISTRY_TOKEN: 'api-token' })
+    expect(env.MADO_ENV).toBe('production')
+    expect(env.MEDIA_WORKER_PORT).toBe(3100)
+    expect(env).not.toHaveProperty('OIDC_CLIENT_SECRET')
+    expect(env).not.toHaveProperty('DATASET_REGISTRY_TOKEN')
+    expect(env).not.toHaveProperty('AUTH_MODE')
+  })
+
+  it('暗号化キーやDBの接続先が欠けていれば起動を拒否する', () => {
+    expect(() => loadWorkerEnv({ ...required, ENCRYPTION_KEY: '' })).toThrow(/ENCRYPTION_KEY/)
+    expect(() => loadWorkerEnv({ ...required, DATABASE_URL_RW: '' })).toThrow(/DATABASE_URL_RW/)
   })
 })

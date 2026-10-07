@@ -5,7 +5,7 @@ import { serve } from '@hono/node-server'
 import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import { z } from 'zod'
-import { loadEnv } from './env.js'
+import { loadWorkerEnv } from './env.js'
 import { createPools, closePools } from './db.js'
 import { createCrypto } from './crypto.js'
 import { createStorageFactory } from './storage.js'
@@ -29,7 +29,7 @@ import { listStorageBucketNames } from './lib/storage-buckets.js'
 process.on('uncaughtException', err => console.error('UNCAUGHT EXCEPTION (kept alive)', err))
 process.on('unhandledRejection', err => console.error('UNHANDLED REJECTION (kept alive)', err))
 
-const env = loadEnv()
+const env = loadWorkerEnv()
 const pools = createPools({ rw: env.DATABASE_URL_RW, ro: env.DATABASE_URL_RO })
 const crypto = createCrypto(env.ENCRYPTION_KEY)
 const storageFactory = createStorageFactory({ pools, crypto })

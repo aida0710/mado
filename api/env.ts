@@ -20,7 +20,7 @@ const oidcRoleMapping = z.string().default('{}').transform((value, ctx): Record<
   }
 })
 
-const schema = z.object({
+const baseSchema = z.object({
   MADO_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().default(3000),
   DATABASE_URL_RW: z.string().min(1),
@@ -83,7 +83,9 @@ const schema = z.object({
   MARQUEZ_URL: optionalUrl,
   LINEAGE_API_PORT: z.coerce.number().int().min(1).max(65535).default(3001),
   OPENLINEAGE_BODY_LIMIT_BYTES: z.coerce.number().int().min(1024).default(2 * 1024 * 1024),
-}).superRefine((env, ctx) => {
+})
+
+const schema = baseSchema.superRefine((env, ctx) => {
   if (env.MADO_ENV === 'production' && env.AUTH_MODE === 'disabled') {
     ctx.addIssue({
       code: 'custom', path: ['AUTH_MODE'],
@@ -100,6 +102,14 @@ const schema = z.object({
 
 export type Env = z.infer<typeof schema>
 
+// compose内の解析workerにはブラウザ認証やRegistryの設定を渡さない。
+const workerSchema = baseSchema.pick({
+  MADO_ENV: true, DATABASE_URL_RW: true, DATABASE_URL_RO: true, ENCRYPTION_KEY: true,
+  MEDIA_CONCURRENCY: true, MEDIA_ANALYZE_TIMEOUT_SEC: true, MEDIA_CACHE_MAX_AGE_DAYS: true,
+  MEDIA_SPECTROGRAM_MAX_WIDTH: true, MEDIA_WORKER_PORT: true,
+})
+export type WorkerEnv = z.infer<typeof workerSchema>
+
 const lineageSchema = z.object({
   DATABASE_URL_RW: z.string().min(1),
   DATABASE_URL_RO: z.string().min(1),
@@ -112,12 +122,20 @@ const lineageSchema = z.object({
 export type LineageEnv = z.infer<typeof lineageSchema>
 
 export function loadEnv(source: Record<string, string | undefined> = process.env): Env {
-  const parsed = schema.safeParse(source)
+  return parseEnvironment(schema, source, 'environment')
+}
+
+export function loadWorkerEnv(source: Record<string, string | undefined> = process.env): WorkerEnv {
+  return parseEnvironment(workerSchema, source, 'worker environment')
+}
+
+function parseEnvironment<T>(environmentSchema: z.ZodType<T>, source: Record<string, string | undefined>, label: string): T {
+  const parsed = environmentSchema.safeParse(source)
   if (!parsed.success) {
     const msg = parsed.error.issues
       .map(i => `${i.path.join('.')}: ${i.message}`)
       .join('\n')
-    throw new Error(`Invalid environment:\n${msg}`)
+    throw new Error(`Invalid ${label}:\n${msg}`)
   }
   return parsed.data
 }
@@ -126,12 +144,5 @@ export function loadEnv(source: Record<string, string | undefined> = process.env
 export function loadLineageEnv(
   source: Record<string, string | undefined> = process.env,
 ): LineageEnv {
-  const parsed = lineageSchema.safeParse(source)
-  if (!parsed.success) {
-    const msg = parsed.error.issues
-      .map(i => `${i.path.join('.')}: ${i.message}`)
-      .join('\n')
-    throw new Error(`Invalid lineage environment:\n${msg}`)
-  }
-  return parsed.data
+  return parseEnvironment(lineageSchema, source, 'lineage environment')
 }

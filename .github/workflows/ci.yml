@@ -148,6 +148,23 @@ jobs:
               ;;
             worker)
               docker run --rm "$image" ffmpeg -version >/dev/null
+              container=mado-ci-worker-startup
+              docker run -d --name "$container" \
+                -e MADO_ENV=production \
+                -e DATABASE_URL_RW=postgres://unavailable@127.0.0.1:1/dashboard \
+                -e DATABASE_URL_RO=postgres://unavailable@127.0.0.1:1/dashboard \
+                -e ENCRYPTION_KEY=0000000000000000000000000000000000000000000000000000000000000000 \
+                "$image"
+              trap 'docker rm -f "$container" >/dev/null' EXIT
+              docker exec "$container" node --input-type=module -e '
+                const STARTUP_LIMIT_MS=10000, POLL_MS=200;
+                const deadline=Date.now()+STARTUP_LIMIT_MS;
+                for (;;) {
+                  try { const response=await fetch("http://127.0.0.1:3100/healthz"); if(response.ok) break } catch {}
+                  if(Date.now()>=deadline) process.exit(1);
+                  await new Promise(resolve=>setTimeout(resolve,POLL_MS));
+                }
+              ' || { docker logs "$container"; exit 1; }
               ;;
             web)
               docker run --rm --add-host api-internal:127.0.0.1 --add-host api-lineage:127.0.0.1 \

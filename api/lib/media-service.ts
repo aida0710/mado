@@ -17,7 +17,7 @@ export interface MediaServiceDeps {
   pools: Pools
   getStorage: GetStorage
   getConnectionConfig: (connectionId: string) => Promise<ConnectionConfig>
-  env: Env
+  env: Pick<Env, 'MEDIA_CONCURRENCY' | 'MEDIA_ANALYZE_TIMEOUT_SEC' | 'MEDIA_CACHE_MAX_AGE_DAYS' | 'MEDIA_SPECTROGRAM_MAX_WIDTH'>
 }
 
 export interface MediaService {
