@@ -139,7 +139,7 @@ export function extractTarEntry({ source, kind, entryName, byteLimit }: {
         resolveP({ buffer: Buffer.concat(chunks), truncated })
       }
 
-      stream.on('data', (chunk: Buffer) => {
+      stream.on('data', chunk => {
         if (settled) return
         if (total >= byteLimit) {
           // 上限ちょうどで止めていたところへ次のデータが来た = 本体は上限より大きい。
@@ -147,16 +147,18 @@ export function extractTarEntry({ source, kind, entryName, byteLimit }: {
           finish()
           return
         }
+        // tar-streamのSourceはBufferを返すが、streamxのdataイベント型はunknown。
+        const buffer = chunk as Buffer
         const remaining = byteLimit - total
-        if (chunk.byteLength > remaining) {
-          chunks.push(chunk.subarray(0, remaining))
+        if (buffer.byteLength > remaining) {
+          chunks.push(buffer.subarray(0, remaining))
           total = byteLimit
           truncated = true
           finish()
           return
         }
-        chunks.push(chunk)
-        total += chunk.byteLength
+        chunks.push(buffer)
+        total += buffer.byteLength
       })
       stream.on('end', finish)
       stream.resume()
