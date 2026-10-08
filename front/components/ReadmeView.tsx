@@ -11,6 +11,7 @@ import { CacheBanner } from './storage/CacheBanner'
 import { LoadFailedNotice } from './LoadFailedNotice'
 import { useCapabilities } from '../lib/useCapabilities'
 import { failedLoad, LOADING, type LoadState } from '../lib/loadState'
+import { createRevalidationReceiver } from '../lib/revalidationReceiver'
 
 // 履歴ビューワは「ボタンを押した後にだけ」マウントされる。
 // React.lazy() で別チャンクに分け、初回ロード時の JS / CSS 量を絞る。
@@ -54,6 +55,9 @@ export function ReadmeView({ connectionId, bucket, prefix }: Props) {
     if (!caps.readmeRead) return
     const sid = ++sessionRef.current
     const current = (): boolean => sessionRef.current === sid
+    const receiver = createRevalidationReceiver<ReadmeData>(value => {
+      if (current()) setReadmeState({ status: 'loaded', value })
+    })
     api.readme({
       connectionId, bucket, prefix,
       // 期限切れキャッシュが返ってきたときだけ呼ばれる。stale をそのまま出しつつ、
@@ -62,11 +66,11 @@ export function ReadmeView({ connectionId, bucket, prefix }: Props) {
         if (!current()) return
         setRevalidating(true)
         fresh
-          .then(r => { if (current()) { setReadmeState({ status: 'loaded', value: r }); setRevalidating(false) } })
+          .then(r => { if (current()) { receiver.receiveRevalidated(r); setRevalidating(false) } })
           .catch(() => { if (current()) setRevalidating(false) })
       },
     })
-      .then(r => { if (current()) setReadmeState({ status: 'loaded', value: r }) })
+      .then(receiver.receiveInitial)
       .catch((error: unknown) => { if (current()) setReadmeState(failedLoad(error)) })
   }, [connectionId, bucket, prefix, caps.readmeRead])
 

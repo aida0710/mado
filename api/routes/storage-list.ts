@@ -7,7 +7,7 @@ import {
 import type { Hono } from 'hono'
 import { resolveStorageOrFail, type GetStorage } from './_storageRequest.js'
 import type { ConnectionConfig } from '../storage.js'
-import { cacheKey, type CacheScope, type ResponseCache } from '../lib/storage-cache.js'
+import { cacheKey, LIST_CACHE_TTL_MS, type CacheScope, type ResponseCache } from '../lib/storage-cache.js'
 import { SharedRequests } from '../lib/shared-requests.js'
 
 export interface StorageListDeps {
@@ -28,26 +28,26 @@ interface ListBody {
   nextStartAfter: string | null
 }
 
-function withCacheMeta(
-  body: ListBody,
+function withCacheMeta<Body extends object>(
+  body: Body,
   meta: { fetchedAt: string; expiresAt: string },
   hit: boolean,
 ) {
-  return { ...body, cache: { ...meta, hit } }
+  return { ...body, cache: { fetchedAt: meta.fetchedAt, expiresAt: meta.expiresAt, hit } }
 }
 
-/** S3 から取ったばかりの一覧を cache に入れ、その取得時刻を付けて返す。
+/** S3から取得した応答をcacheに入れ、実際の取得時刻を付けて返す。
  *  cache への書き込みに失敗しても応答は返すので、時刻は今から組む。 */
-async function storeFreshList({ cache, scope, body, ttlSec }: {
+async function storeFreshResponse<Body extends object>({ cache, scope, body, ttlMs }: {
   cache: ResponseCache
   scope: CacheScope
-  body: ListBody
-  ttlSec: number
+  body: Body
+  ttlMs: number
 }) {
   const now = new Date()
-  const meta = await cache.set(scope, body, ttlSec * 1000) ?? {
+  const meta = await cache.set(scope, body, ttlMs) ?? {
     fetchedAt: now.toISOString(),
-    expiresAt: new Date(now.getTime() + ttlSec * 1000).toISOString(),
+    expiresAt: new Date(now.getTime() + ttlMs).toISOString(),
   }
   return withCacheMeta(body, meta, false)
 }
@@ -94,7 +94,7 @@ function listBodyFrom(
 }
 
 export function mountStorageListRoutes(app: Hono, deps: StorageListDeps): void {
-  const lists = new SharedRequests<ReturnType<typeof withCacheMeta>>()
+  const lists = new SharedRequests<ReturnType<typeof withCacheMeta<ListBody>>>()
   app.get('/storage/:connectionId/buckets', async c => {
     // フェーズごとに所要時間を JSON ログに出して、
     // 「buckets が遅い」ときに getStorage / S3 の ListBuckets / 全体の
@@ -108,7 +108,7 @@ export function mountStorageListRoutes(app: Hono, deps: StorageListDeps): void {
     const refresh = c.req.query('refresh') === '1'
     if (!refresh) {
       const hit = await deps.cache.get(scope)
-      if (hit) return c.json(hit.payload)
+      if (hit) return c.json(withCacheMeta(hit.payload as object, hit, true))
     }
 
     const out = await storage.send(new ListBucketsCommand({}))
@@ -127,8 +127,7 @@ export function mountStorageListRoutes(app: Hono, deps: StorageListDeps): void {
         creationDate: b.CreationDate?.toISOString() ?? null,
       })),
     }
-    await deps.cache.set(scope, body)
-    return c.json(body)
+    return c.json(await storeFreshResponse({ cache: deps.cache, scope, body, ttlMs: LIST_CACHE_TTL_MS }))
   })
 
   app.get('/storage/:connectionId/list', async c => {
@@ -186,7 +185,7 @@ export function mountStorageListRoutes(app: Hono, deps: StorageListDeps): void {
           }), { abortSignal: signal })
           // V1 には continuation token 概念が無い。pagination は marker (= startAfter) で。
           const body = listBodyFrom(out, prefix, { continuation: null, startAfter: out.NextMarker ?? null })
-          return storeFreshList({ cache: deps.cache, scope, body, ttlSec: config.listCacheTtlSec })
+          return storeFreshResponse({ cache: deps.cache, scope, body, ttlMs: config.listCacheTtlSec * 1000 })
         }
 
         // V2 経路 (既定): 既存挙動を保持。
@@ -209,7 +208,7 @@ export function mountStorageListRoutes(app: Hono, deps: StorageListDeps): void {
         //   (start-after parameter を無視するため)。そういうサーバは接続設定で
         //   list_objects_version='v1' を選んでもらう。
         const body = listBodyFrom(out, prefix, { continuation: out.NextContinuationToken ?? null, startAfter: null })
-        return storeFreshList({ cache: deps.cache, scope, body, ttlSec: config.listCacheTtlSec })
+        return storeFreshResponse({ cache: deps.cache, scope, body, ttlMs: config.listCacheTtlSec * 1000 })
       },
     })
     return c.json(body)

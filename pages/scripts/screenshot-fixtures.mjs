@@ -168,7 +168,7 @@ export async function fulfillSampleApi({ route, media, login = false, unhandled 
   if (path === '/api/internal/lineage/graph') return sendJson(lineageGraph)
   if (path.endsWith('/lineage/resolve-location')) return sendJson({ storageSystemKey: 'demo', uri: `s3://${SAMPLE_BUCKET}/${SAMPLE_PREFIX}`, matches: [] })
   if (path === '/api/internal/jobs/latest' || path === '/api/internal/jobs/1') return sendJson(scanJob)
-  if (suffix === '/buckets') return sendJson({ buckets: ['audio-datasets', 'training-data', 'results', 'archive-2026', 'team-shared'].map(name => ({ name, creationDate: '2026-09-20T00:00:00Z' })) })
+  if (suffix === '/buckets') return sendJson({ buckets: ['audio-datasets', 'training-data', 'results', 'archive-2026', 'team-shared'].map(name => ({ name, creationDate: '2026-09-20T00:00:00Z' })), cache: { fetchedAt: capturedAt, expiresAt: new Date(Date.now() + 86400000).toISOString(), hit: true } })
   if (suffix === '/favorites') return sendJson(['audio-datasets', 'team-shared'])
   if (suffix === '/tags') return sendJson(Object.fromEntries(url.searchParams.getAll('paths').map(name => [name, name.includes('audio') || name.endsWith('.wav') ? ['audio'] : ['ready']])))
   if (suffix === '/readme') return sendJson({ exists: true, body: readmeBody, last_editor: 'Sample team', last_edited_at: capturedAt, size_bytes: 620 })

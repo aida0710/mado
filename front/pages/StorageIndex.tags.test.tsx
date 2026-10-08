@@ -3,7 +3,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { api } from '../lib/api/client'
 import type { Connection } from '../lib/api/types'
-import { PRICING_FIXTURE } from '../lib/api/fixtures'
+import { PRICING_FIXTURE, STORAGE_CACHE_FIXTURE } from '../lib/api/fixtures'
 import { ConnectionContext } from '../lib/connectionContext'
 import StorageIndex from './StorageIndex'
 import { ALL_CAPABILITIES_ON } from '../lib/api/types'
@@ -43,7 +43,7 @@ function renderIndex() {
 
 describe('StorageIndex タグ', () => {
   it('バケット行にタグバッジを表示する', async () => {
-    vi.spyOn(api, 'buckets').mockResolvedValue({ buckets: [{ name: 'bkt-1', creationDate: null }] })
+    vi.spyOn(api, 'buckets').mockResolvedValue({ buckets: [{ name: 'bkt-1', creationDate: null }], cache: STORAGE_CACHE_FIXTURE })
     vi.spyOn(api, 'favorites').mockResolvedValue([])
     vi.spyOn(api, 'tags').mockResolvedValue([{ id: 't1', name: '重要', color: '#ff0000' }])
     // tagAssignments はレスポンスを path 単位で返す (kind='bucket' の path は常に '')。
@@ -63,7 +63,7 @@ describe('StorageIndex タグ', () => {
   // タグ検索は畳んだパネルをやめて別ビューへのリンクにした
   // (一覧の前に積み上がってページが混み合っていたため)。
   it('タグ検索はリンクとして出す', async () => {
-    vi.spyOn(api, 'buckets').mockResolvedValue({ buckets: [{ name: 'bkt-1', creationDate: null }] })
+    vi.spyOn(api, 'buckets').mockResolvedValue({ buckets: [{ name: 'bkt-1', creationDate: null }], cache: STORAGE_CACHE_FIXTURE })
     vi.spyOn(api, 'favorites').mockResolvedValue([])
     vi.spyOn(api, 'tags').mockResolvedValue([])
     vi.spyOn(api, 'tagAssignments').mockResolvedValue({})
@@ -80,7 +80,7 @@ describe('StorageIndex タグ', () => {
   })
 
   it('タグが無効ならタグ検索のリンクを出さない', async () => {
-    vi.spyOn(api, 'buckets').mockResolvedValue({ buckets: [{ name: 'bkt-1', creationDate: null }] })
+    vi.spyOn(api, 'buckets').mockResolvedValue({ buckets: [{ name: 'bkt-1', creationDate: null }], cache: STORAGE_CACHE_FIXTURE })
     vi.spyOn(api, 'favorites').mockResolvedValue([])
     vi.spyOn(api, 'tags').mockResolvedValue([])
     vi.spyOn(api, 'tagAssignments').mockResolvedValue({})

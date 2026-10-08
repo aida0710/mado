@@ -1,4 +1,5 @@
 import {
+  ListBucketsCommand,
   ListObjectsCommand,
   ListObjectsV2Command,
   S3Client,
@@ -224,7 +225,7 @@ describe('サーバー側キャッシュ', () => {
     expect(storageMock.calls()).toHaveLength(1)
   })
 
-  it('/buckets も同じくキャッシュを引く', async () => {
+  it('バケット一覧のcache hitでも元のS3取得時刻を返す', async () => {
     const cached = { buckets: [{ name: 'from-cache', creationDate: null }] }
     cache = {
       ...passthroughCache(),
@@ -236,7 +237,52 @@ describe('サーバー側キャッシュ', () => {
     }
 
     const res = await app.request(`/storage/${TEST_CONN_ID}/buckets`)
-    expect(await res.json()).toEqual(cached)
+    expect(await res.json()).toEqual({
+      ...cached,
+      cache: {
+        fetchedAt: '2026-09-15T01:00:00.000Z',
+        expiresAt: '2026-09-16T01:00:00.000Z',
+        hit: true,
+      },
+    })
     expect(storageMock.calls()).toHaveLength(0)
+  })
+
+  it('バケット一覧を再取得したら新しいS3取得時刻を返す', async () => {
+    storageMock.on(ListBucketsCommand).resolves({ Buckets: [{ Name: 'fresh-bucket' }] })
+    cache = {
+      ...passthroughCache(),
+      set: async () => ({
+        fetchedAt: '2026-09-15T02:00:00.000Z',
+        expiresAt: '2026-09-16T02:00:00.000Z',
+      }),
+    }
+
+    const res = await app.request(`/storage/${TEST_CONN_ID}/buckets`)
+    expect(await res.json()).toEqual({
+      buckets: [{ name: 'fresh-bucket', creationDate: null }],
+      cache: {
+        fetchedAt: '2026-09-15T02:00:00.000Z',
+        expiresAt: '2026-09-16T02:00:00.000Z',
+        hit: false,
+      },
+    })
+    expect(storageMock.commandCalls(ListBucketsCommand)).toHaveLength(1)
+  })
+
+  it('バケット一覧の手動更新では古いサーバーキャッシュを使わない', async () => {
+    storageMock.on(ListBucketsCommand).resolves({ Buckets: [{ Name: 'fresh-bucket' }] })
+    cache = {
+      ...passthroughCache(),
+      get: async () => { throw new Error('手動更新ではcacheを読まない') },
+    }
+
+    const res = await app.request(`/storage/${TEST_CONN_ID}/buckets?refresh=1`)
+    expect(res.status).toBe(200)
+    expect(await res.json()).toMatchObject({
+      buckets: [{ name: 'fresh-bucket', creationDate: null }],
+      cache: { hit: false },
+    })
+    expect(storageMock.commandCalls(ListBucketsCommand)).toHaveLength(1)
   })
 })

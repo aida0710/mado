@@ -12,7 +12,8 @@ import {ViewBreadcrumb} from '../components/ViewBreadcrumb'
 import {useTagsEnabled} from '../lib/useFeatureEnabled'
 import {CopyMenu, type MenuItem} from '../components/CopyMenu'
 import {absoluteUrl} from '../lib/route'
-import type {Tag} from '../lib/api/types'
+import type {ListBuckets, Tag} from '../lib/api/types'
+import {createRevalidationReceiver} from '../lib/revalidationReceiver'
 
 interface BucketRow {
     name: string;
@@ -24,6 +25,7 @@ interface Props {
 }
 
 const EMPTY_FAVORITES = new Set<string>()
+const EMPTY_BUCKETS: BucketRow[] = []
 
 const sectionTitleClass =
     'mt-7 mb-3 text-[10.5px] font-semibold uppercase tracking-[0.22em] text-ink-7 first-of-type:mt-0'
@@ -41,7 +43,7 @@ const subLinkClass =
 export default function StorageIndex({connectionId}: Props) {
     const [searchParams] = useSearchParams()
     const indexHref = `/storage/${encodeURIComponent(connectionId)}/`
-    const [loadedBuckets, setLoadedBuckets] = useState<BucketRow[]>([])
+    const [loadedBucketList, setLoadedBucketList] = useState<ListBuckets | null>(null)
     // 関数形式: そうしないと毎レンダ new Set() が走って即破棄される。
     const [loadedFavorites, setLoadedFavorites] = useState<Set<string>>(() => new Set())
     const [loadError, setLoadError] = useState<{connectionId: string; message: string} | null>(null)
@@ -51,7 +53,8 @@ export default function StorageIndex({connectionId}: Props) {
     const [revalidating, setRevalidating] = useState(false)
     // 遅い応答が接続切替をまたいで届いたときに別接続のバケットを描かないための gate。
     const sessionRef = useRef(0)
-    const buckets = loadedConnectionId === connectionId ? loadedBuckets : []
+    const bucketList = loadedConnectionId === connectionId ? loadedBucketList : null
+    const buckets = bucketList?.buckets ?? EMPTY_BUCKETS
     const favorites = loadedConnectionId === connectionId ? loadedFavorites : EMPTY_FAVORITES
     const error = loadError?.connectionId === connectionId ? loadError.message : null
     // 接続切替直後は effect で同期 setState せず、取得済み identity との差から
@@ -63,6 +66,9 @@ export default function StorageIndex({connectionId}: Props) {
     const refresh = useCallback((opts: { refresh?: boolean } = {}) => {
         const sid = ++sessionRef.current
         const current = (): boolean => sessionRef.current === sid
+        const receiver = createRevalidationReceiver<ListBuckets>(value => {
+            if (current()) setLoadedBucketList(value)
+        })
         Promise.all([
             api.buckets(connectionId, {
                 refresh: opts.refresh,
@@ -71,7 +77,7 @@ export default function StorageIndex({connectionId}: Props) {
                     if (!current()) return
                     setRevalidating(true)
                     fresh
-                        .then(r => { if (current()) { setLoadedBuckets(r.buckets); setRevalidating(false) } })
+                        .then(r => { if (current()) { receiver.receiveRevalidated(r); setRevalidating(false) } })
                         .catch(() => { if (current()) setRevalidating(false) })
                 },
             }),
@@ -79,7 +85,7 @@ export default function StorageIndex({connectionId}: Props) {
         ])
             .then(([bucketsRes, favs]) => {
                 if (!current()) return
-                setLoadedBuckets(bucketsRes.buckets)
+                receiver.receiveInitial(bucketsRes)
                 setLoadedFavorites(new Set(favs))
                 setLoadError(null)
                 setLoadedConnectionId(connectionId)
@@ -180,7 +186,7 @@ export default function StorageIndex({connectionId}: Props) {
                     そこから開くドロップダウンが画面外へはみ出す。 */}
                 <div className="ml-auto flex flex-wrap items-center justify-end gap-3">
                     <CacheBanner
-                        fetchedAt={api.lastFetched.buckets(connectionId)}
+                        fetchedAt={bucketList?.cache ? new Date(bucketList.cache.fetchedAt) : null}
                         revalidating={revalidating}
                         onRefresh={forceRefresh}
                         compact

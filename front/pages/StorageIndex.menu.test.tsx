@@ -4,7 +4,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { api } from '../lib/api/client'
 import type { Connection } from '../lib/api/types'
-import { PRICING_FIXTURE } from '../lib/api/fixtures'
+import { PRICING_FIXTURE, STORAGE_CACHE_FIXTURE } from '../lib/api/fixtures'
 import { ConnectionContext } from '../lib/connectionContext'
 import { copyToClipboard } from '../lib/clipboard'
 import StorageIndex from './StorageIndex'
@@ -37,7 +37,7 @@ const connection: Connection = {
 }
 
 function mountWithOneBucket() {
-  vi.spyOn(api, 'buckets').mockResolvedValue({ buckets: [{ name: 'bkt-1', creationDate: null }] })
+  vi.spyOn(api, 'buckets').mockResolvedValue({ buckets: [{ name: 'bkt-1', creationDate: null }], cache: STORAGE_CACHE_FIXTURE })
   vi.spyOn(api, 'favorites').mockResolvedValue([])
   vi.spyOn(api, 'tags').mockResolvedValue([])
   vi.spyOn(api, 'tagAssignments').mockResolvedValue({})

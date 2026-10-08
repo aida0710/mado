@@ -12,6 +12,7 @@ import { Pager } from './storage/Pager'
 import { SearchBar } from './storage/SearchBar'
 import { TagFilterBar } from './storage/TagFilterBar'
 import { useTagsEnabled } from '../lib/useFeatureEnabled'
+import { createRevalidationReceiver } from '../lib/revalidationReceiver'
 
 interface Props {
   connectionId: string
@@ -57,8 +58,7 @@ type Action =
   | { type: 'loadOk'; page: ListResp }
   | { type: 'loadErr'; error: string }
   | { type: 'revalidateStart' }
-  | { type: 'revalidateOk'; page: ListResp }
-  | { type: 'revalidateFail' }
+  | { type: 'revalidateEnd' }
 
 const initial: State = {
   q: '',
@@ -95,10 +95,8 @@ function reducer(s: State, a: Action): State {
       return { ...s, error: a.error, loading: false, revalidating: false }
     case 'revalidateStart':
       return { ...s, revalidating: true }
-    case 'revalidateOk':
-      return { ...s, page: a.page, revalidating: false }
-    // 再取得に失敗しても表示中の stale は残す — 画面を壊さず「更新中」を消すだけ。
-    case 'revalidateFail':
+    // 成否にかかわらず表示中の内容は残し、再取得中の表示だけ終了する。
+    case 'revalidateEnd':
       return { ...s, revalidating: false }
   }
 }
@@ -122,6 +120,9 @@ export function StorageBrowser({ connectionId, bucket, prefix, onSelectFile }: P
   //  cache key 衝突で前ページのデータが返ってしまう問題への防衛)。
   const load = useCallback((cursor: Cursor, opts: { force?: boolean; refresh?: boolean } = {}) => {
     const sid = ++sessionRef.current
+    const receiver = createRevalidationReceiver<ListResp>(value => {
+      if (sessionRef.current === sid) dispatch({ type: 'loadOk', page: value })
+    })
     api.list({
       connectionId, bucket, prefix: effectivePrefix, cursor,
       recursive,
@@ -135,17 +136,18 @@ export function StorageBrowser({ connectionId, bucket, prefix, onSelectFile }: P
         fresh
           .then(r => {
             if (sessionRef.current !== sid) return
-            dispatch({ type: 'revalidateOk', page: r })
+            receiver.receiveRevalidated(r)
+            dispatch({ type: 'revalidateEnd' })
           })
           .catch(() => {
             if (sessionRef.current !== sid) return
-            dispatch({ type: 'revalidateFail' })
+            dispatch({ type: 'revalidateEnd' })
           })
       },
     })
       .then(r => {
         if (sessionRef.current !== sid) return
-        dispatch({ type: 'loadOk', page: r })
+        receiver.receiveInitial(r)
       })
       .catch((e: Error) => {
         if (sessionRef.current !== sid) return
@@ -381,7 +383,7 @@ export function StorageBrowser({ connectionId, bucket, prefix, onSelectFile }: P
         {/* 「いつのデータか」はテーブルヘッダの真上に置く。ページャの隅では
             視線が届かず、古いキャッシュを最新だと思って見てしまうため。 */}
         <CacheBanner
-          fetchedAt={api.lastFetched.list({ connectionId, bucket, prefix: effectivePrefix, cursor: history[pageIdx] ?? {}, recursive })}
+          fetchedAt={page?.cache ? new Date(page.cache.fetchedAt) : null}
           revalidating={revalidating}
           onRefresh={forceRefresh}
           trailing={

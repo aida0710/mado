@@ -9,6 +9,12 @@
 
 import type { ConnectionPricing } from './types'
 
+export const STORAGE_CACHE_FIXTURE = {
+  fetchedAt: '2026-10-07T00:00:00.000Z',
+  expiresAt: '2026-10-08T00:00:00.000Z',
+  hit: true,
+}
+
 /** 費用のかからない社内ストレージ相当。見積もりを検証しないテスト向けの既定。 */
 export const PRICING_FIXTURE: ConnectionPricing = {
   provider: 'onprem',

@@ -30,6 +30,7 @@ afterEach(() => {
   // mockResolvedValueOnce のキューを完全に空にするため reset (clear だけだと残る)。
   // 残ったキューが次のテストで誤消費されると、見かけ上関係ないテストが落ちる。
   ;(api.list as ReturnType<typeof vi.fn>).mockReset()
+  ;(api.lastFetched.list as ReturnType<typeof vi.fn>).mockReset().mockReturnValue(null)
   vi.clearAllMocks()
 })
 
@@ -401,6 +402,19 @@ describe('force と refresh の分離', () => {
 })
 
 describe('更新中の表示', () => {
+  it('共有キャッシュの時刻が変わっても表示中のページの取得時刻を表示する', async () => {
+    const fetchedAt = '2026-10-07T00:00:00.000Z'
+    ;(api.list as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      directories: ['voice/jp/'], files: [], nextContinuation: null, nextStartAfter: null,
+      cache: { fetchedAt, expiresAt: '2099-10-08T00:00:00.000Z', hit: true },
+    })
+    ;(api.lastFetched.list as ReturnType<typeof vi.fn>).mockReturnValue(new Date())
+    const { container } = renderBrowser('voice/')
+
+    await screen.findByRole('link', { name: /jp\// })
+    expect(container.querySelector('time')).toHaveAttribute('datetime', fetchedAt)
+  })
+
   it('手動更新中は古い一覧を消して異なる鮮度表示との混在を防ぐ', async () => {
     const listMock = api.list as ReturnType<typeof vi.fn>
     listMock.mockResolvedValueOnce({

@@ -1,6 +1,6 @@
 import type { z } from 'zod'
 import { ListBuckets, StorageList } from './types'
-import { LONG_CACHE_TTL_MS, TTLCache } from './cache'
+import { LONG_CACHE_TTL_MS, removePersistedKeysStartingWith, TTLCache } from './cache'
 import { buildUrl, cacheKey, getJson, storagePath, type Revalidatable } from './http'
 
 const listCache = new TTLCache<z.infer<typeof StorageList>>(LONG_CACHE_TTL_MS, {
@@ -10,7 +10,12 @@ const listCache = new TTLCache<z.infer<typeof StorageList>>(LONG_CACHE_TTL_MS, {
   // response another six hours. Revalidate no later than the server expiry.
   expiresAt: value => Date.parse(value.cache.expiresAt),
 })
-const bucketsCache = new TTLCache<z.infer<typeof ListBuckets>>(LONG_CACHE_TTL_MS, { persistKey: 'mado.cache.buckets' })
+const bucketsCache = new TTLCache<z.infer<typeof ListBuckets>>(LONG_CACHE_TTL_MS, {
+  // 旧形式にはS3取得時刻がないため、読み出し直す。
+  persistKey: 'mado.cache.buckets.v2',
+  expiresAt: value => Date.parse(value.cache.expiresAt),
+})
+removePersistedKeysStartingWith('mado.cache.buckets:')
 
 export interface ListCursor {
   continuation?: string
@@ -86,8 +91,8 @@ export const storageListClient = {
       return value ? new Date(value.cache.fetchedAt) : null
     },
     buckets: (connectionId: string): Date | null => {
-      const at = bucketsCache.getFetchedAt(cacheKey('buckets', connectionId))
-      return at != null ? new Date(at) : null
+      const value = bucketsCache.peek(cacheKey('buckets', connectionId))
+      return value ? new Date(value.cache.fetchedAt) : null
     },
   },
 }
