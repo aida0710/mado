@@ -1,7 +1,7 @@
 # nginx/Dockerfile
 
 # ステージ 1: front を build
-FROM node:22-alpine@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32 AS frontbuild
+FROM node:22-alpine@sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402 AS frontbuild
 WORKDIR /front
 # About 表示用のコミット情報。.git はビルドコンテキストに無いので host から渡す
 # (compose.prod.yaml の build.args → deploy.sh が git から export)。未指定なら 'dev'。
