@@ -5,6 +5,10 @@ updates:
     schedule: { interval: weekly, day: monday, time: "09:00", timezone: Asia/Tokyo }
     # Reactと残りの更新をまとめ、通常のnpm更新PRは同時に2件までにする。
     open-pull-requests-limit: 2
+    # 通常更新はminor・patchに限定する。allowのupdate-typesはセキュリティ更新を制限しない。
+    allow:
+      - dependency-name: "*"
+        update-types: [version-update:semver-minor, version-update:semver-patch]
     groups:
       react:
         patterns: [react, react-dom, react-is, "@types/react", "@types/react-dom"]
@@ -14,13 +18,6 @@ updates:
       security:
         applies-to: security-updates
         patterns: ["*"]
-    ignore:
-      # TypeScriptのメジャー更新はtypescript-eslintの対応後に行う。
-      - dependency-name: typescript
-        update-types: [version-update:semver-major]
-      # Node.js 22の構成に型定義のメジャー更新だけを混ぜない。
-      - dependency-name: "@types/node"
-        update-types: [version-update:semver-major]
   - package-ecosystem: docker
     directories: [/api, /nginx]
     schedule: { interval: weekly, day: monday, time: "09:00", timezone: Asia/Tokyo }
