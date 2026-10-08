@@ -1,4 +1,4 @@
-import '@testing-library/jest-dom'
+import '@testing-library/jest-dom/vitest'
 
 // jsdom には matchMedia が無い。テストはすべて desktop (>= sm) 想定で書かれて
 // いるので、どのクエリに対しても matches=true を返す no-op を入れる。

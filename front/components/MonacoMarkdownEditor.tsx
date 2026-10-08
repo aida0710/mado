@@ -10,7 +10,7 @@
 import { forwardRef, useImperativeHandle, useRef } from 'react'
 import Editor, { type Monaco, loader } from '@monaco-editor/react'
 import * as monaco from 'monaco-editor'
-import editorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker'
+import editorWorker from 'monaco-editor/editor/editor.worker.js?worker'
 import type { editor as monacoEditor } from 'monaco-editor'
 
 declare global {
