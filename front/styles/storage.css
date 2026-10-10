@@ -563,7 +563,8 @@ tr.selected .storage-meter {
 .entry-cell-empty {
   color: var(--muted);
 }
-.entry-row-file {
+.entry-row-file,
+.entry-row-directory {
   cursor: pointer;
 }
 .entry-row-file:focus-visible {

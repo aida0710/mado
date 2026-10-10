@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Plus, X } from 'lucide-react'
 import { api } from '../../lib/api/client'
 import type { RegistryDatasetSummary } from '../../lib/api/types'
-import { isFromRowControl } from '../../lib/lineage/rowClick'
+import { isFromRowControl } from '../../lib/rowClick'
 
 export interface VersionChoice {
   id: string

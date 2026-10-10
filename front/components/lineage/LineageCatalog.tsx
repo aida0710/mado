@@ -2,7 +2,7 @@ import { Fragment, useEffect, useId, useState } from 'react'
 import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Search } from 'lucide-react'
 import { api } from '../../lib/api/client'
 import type { RegistryDatasetSummary } from '../../lib/api/types'
-import { isFromRowControl } from '../../lib/lineage/rowClick'
+import { isFromRowControl } from '../../lib/rowClick'
 
 const PAGE_SIZE = 20
 const SEARCH_DELAY_MS = 200

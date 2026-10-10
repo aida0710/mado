@@ -1,6 +1,8 @@
 import { memo } from 'react'
+import { useNavigate } from 'react-router-dom'
 import type { StorageFileEntry, Tag } from '../../lib/api/types'
 import { fmtSize } from '../../lib/format'
+import { isRowActivation } from '../../lib/rowClick'
 import { useIsCompact } from '../../lib/useIsCompact'
 import { CopyMenu } from '../CopyMenu'
 import { EntryLabel } from './EntryLabel'
@@ -8,7 +10,8 @@ import { EntryTagPicker } from './EntryTagPicker'
 import { useDirectoryEntryActions, useFileEntryActions, type EntryTagProps } from './useEntryActions'
 
 // 一覧の表 (共通の部品の table)。1 行 40px 前後に詰め、名前の列にアイコン・名前・タグ、
-// 右にサイズ・更新日、右端に操作のメニュー。ファイルの行は押すとプレビューを開く。
+// 右にサイズ・更新日、右端に操作のメニュー。行のどこを押しても、ディレクトリは開き、
+// ファイルはプレビューを開く (操作のメニューなど行の中のボタンは除く)。
 // 640px 未満は列を Name と操作だけにし、サイズ・更新日は名前の下の 1 行に回す。
 
 interface RowLayout {
@@ -41,10 +44,15 @@ interface FileEntryProps extends EntryTagProps, RowLayout {
 const DirectoryRow = memo(function DirectoryRow(props: DirectoryEntryProps) {
   const { directory, connectionId, bucket, allTags, tagIds, onTagsChange, compact } = props
   const entry = useDirectoryEntryActions(props)
+  const navigate = useNavigate()
   return (
     <>
-      {/* クリック領域は名前のリンクだけ (中クリック・新しいタブが効く本物の <a>)。 */}
-      <tr>
+      {/* 名前は中クリック・新しいタブが効く本物の <a>。キーボードではこのリンクで開く。
+          行の残りの場所を押したときも同じ場所へ移る (スマホで名前を狙わなくてよいように)。 */}
+      <tr
+        className="entry-row-directory"
+        onClick={event => { if (isRowActivation(event)) navigate(entry.href) }}
+      >
         <td>
           <EntryLabel kind="directory" tail={entry.tail} tags={entry.tags} href={entry.href} />
         </td>
@@ -76,7 +84,7 @@ const FileRow = memo(function FileRow(props: FileEntryProps) {
         role="button"
         tabIndex={0}
         aria-current={selected ? 'true' : undefined}
-        onClick={entry.select}
+        onClick={event => { if (isRowActivation(event)) entry.select() }}
         onKeyDown={entry.onKeyDown}
       >
         <td>
