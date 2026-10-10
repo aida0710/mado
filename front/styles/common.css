@@ -6,14 +6,40 @@
   margin: 0;
 }
 
-/* 製品名 (ProductName)。前の mado は通常の太さ、製品の部分は上部バーの .brand strong と同じ 600。
-   ログイン画面の .login-mark は全体が 600 なので、前の部分だけ通常の太さに戻す。 */
+/* 製品のロゴ (ProductLogo)。窓の印と名前を並べる。名前の前の mado は通常の太さ、製品の部分は
+   上部バーの .brand strong と同じ 600。ログイン画面の .login-mark は全体が 600 なので、
+   前の部分だけ通常の太さに戻す。 */
+.product-logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
 .product-prefix {
   font-weight: 400;
 }
 .navigation-drawer-header strong,
 .login-mark strong {
   font-weight: 600;
+}
+/* 印の大きさは名前の文字 (14〜16px) より一回り大きく、線は手前と奥で同じ太さ。 */
+.product-mark {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke-width: 1.75;
+}
+.product-mark-front {
+  stroke: currentColor;
+}
+/* 奥の窓の色。黒い上部バーとドロワーでは、上部バーの印と同じ明るい強調色を使う。 */
+.product-mark-back {
+  stroke: var(--accent);
+  stroke-linecap: square;
+}
+.brand .product-mark-back,
+.navigation-drawer-header .product-mark-back {
+  stroke: var(--header-indicator);
 }
 
 /* 同期プレイヤーとピン留め (BottomDock) が画面の下に出ている間は、本文の下端が隠れないよう
