@@ -117,13 +117,20 @@
 .preview-stack > .notice {
   margin: 0;
 }
-/* 左に情報 (行数など)、右に操作。 */
+/* 左に情報 (行数など) と表示形式、右に操作。 */
 .preview-toolbar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  min-width: 0;
+}
+.preview-info {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
   min-width: 0;
 }
 .preview-actions {
@@ -140,19 +147,10 @@
   overflow-wrap: anywhere;
 }
 
-/* テキスト。ログや端末の出力と同じく、どちらのテーマでも暗い面に置く。整形を崩さないよう
-   折り返さず、縦横にスクロールさせる。 */
+/* テキスト。見た目と色付けは @mado/design-tokens の .code-view (ログや端末の出力と同じく、
+   どちらのテーマでも暗い面に置き、折り返さずに縦横にスクロールさせる)。ここでは高さだけ決める。 */
 .preview-code {
   max-height: 70vh;
-  overflow: auto;
-  padding: 12px 14px;
-  background: var(--code-background);
-  color: var(--code-text);
-  color-scheme: dark;
-  line-height: 1.6;
-  white-space: pre;
-  overflow-wrap: normal;
-  scrollbar-width: thin;
 }
 
 .preview-image {

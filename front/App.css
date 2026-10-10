@@ -1,9 +1,9 @@
 /* ====================================================================
    mado の見た目の入口。Mado Model Tracking と同じ部品を使う。
    1. Tailwind (preflight は base、ユーティリティは utilities の layer)。
-   2. @mado/design-tokens の要素の既定・共通の部品・画面の枠。3 つとも components の layer に
-      入れるので、preflight より強く、ユーティリティより弱い。共通の CSS どうしの優先順位は
-      layer を使わない Mado Model Tracking と同じになる (要素より class が勝つ)。
+   2. @mado/design-tokens の要素の既定・共通の部品・画面の枠・テキストの色付け。4 つとも
+      components の layer に入れるので、preflight より強く、ユーティリティより弱い。共通の CSS
+      どうしの優先順位は layer を使わない Mado Model Tracking と同じになる (要素より class が勝つ)。
    3. 領域ごとのファイル (styles/、layer の外)。共通の部品をその画面に合わせて上書きする。
    色・書体の変数 (tokens.css) と書体 (fonts.css) は main.tsx で先に読み込む。
    ==================================================================== */
@@ -11,6 +11,7 @@
 @import "@mado/design-tokens/base.css" layer(components);
 @import "@mado/design-tokens/components.css" layer(components);
 @import "@mado/design-tokens/shell.css" layer(components);
+@import "@mado/design-tokens/code.css" layer(components);
 @import "@xyflow/react/dist/style.css";
 @import "./styles/common.css";
 @import "./styles/auth.css";

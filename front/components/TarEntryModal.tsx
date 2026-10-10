@@ -8,7 +8,9 @@ import { absoluteUrl, tarEntryWebUrl } from '../lib/route'
 import { copyToClipboard } from '../lib/clipboard'
 import { usePinnedPreviews } from '../lib/pinnedPreviews'
 import { TEXT_HEAD_BYTES } from '../lib/textSniff'
+import { useCodeLanguage } from '../lib/useCodeLanguage'
 import { useSniffedText } from '../lib/useSniffedText'
+import { CodeFormatSelect, CodeView } from './CodeView'
 import { CopyMenu, type MenuItem } from './CopyMenu'
 import { Dialog } from './Dialog'
 import { PreviewAudio } from './PreviewAudio'
@@ -127,11 +129,11 @@ export function TarEntryModal({ connectionId, bucket, archiveKey, entry, onClose
   )
 }
 
-/** 本文の上の帯。左に行数などの情報、右に操作。 */
+/** 本文の上の帯。左に行数などの情報と表示形式、右に操作。 */
 function EntryToolbar({ info, children }: { info?: ReactNode; children: ReactNode }) {
   return (
     <div className="preview-toolbar">
-      {info != null && <span className="muted mono">{info}</span>}
+      {info != null && <div className="preview-info">{info}</div>}
       <div className="preview-actions">{children}</div>
     </div>
   )
@@ -139,7 +141,6 @@ function EntryToolbar({ info, children }: { info?: ReactNode; children: ReactNod
 
 function TextBody({ url, name, actions }: { url: string; name: string; actions: ReactNode }) {
   const sniffed = useSniffedText(url)
-  const [copied, setCopied] = useState<boolean | null>(null)
 
   // 読み込み中・失敗・バイナリでも、ピン留めとダウンロードは使えるよう帯は出す。
   if (sniffed.status !== 'text') {
@@ -152,25 +153,37 @@ function TextBody({ url, name, actions }: { url: string; name: string; actions: 
       </>
     )
   }
+  return <LoadedText name={name} text={prettyPrintJson(name, sniffed.text)} actions={actions} />
+}
 
-  const display = prettyPrintJson(name, sniffed.text)
+/** 読み込んだテキスト。形式を推測して色を付け、帯の選択欄で形式を選び直せる。 */
+function LoadedText({ name, text, actions }: { name: string; text: string; actions: ReactNode }) {
+  const [copied, setCopied] = useState<boolean | null>(null)
+  const code = useCodeLanguage(name, text)
 
   // 末尾の改行で行数が余分に増えないようにする。
-  const trimmed = display.endsWith('\n') ? display.slice(0, -1) : display
+  const trimmed = text.endsWith('\n') ? text.slice(0, -1) : text
   const lines = trimmed.length === 0 ? 0 : trimmed.split('\n').length
 
   const handleCopy = async () => {
-    setCopied(await copyToClipboard(display))
+    setCopied(await copyToClipboard(text))
     setTimeout(() => setCopied(null), 1500)
   }
 
   return (
     <>
-      <EntryToolbar info={`${lines} 行`}>
+      <EntryToolbar
+        info={
+          <>
+            <span className="muted mono">{`${lines} 行`}</span>
+            <CodeFormatSelect code={code} />
+          </>
+        }
+      >
         <CopyContentButton copied={copied} onCopy={handleCopy} />
         {actions}
       </EntryToolbar>
-      <pre className="preview-code">{display}</pre>
+      <CodeView text={text} language={code.language} className="preview-code" />
     </>
   )
 }

@@ -2,18 +2,25 @@ import { useState } from 'react'
 import { Check, Copy } from 'lucide-react'
 import { api } from '../lib/api/client'
 import { copyToClipboard } from '../lib/clipboard'
+import { useCodeLanguage } from '../lib/useCodeLanguage'
 import { useSniffedText } from '../lib/useSniffedText'
+import { CodeFormatSelect, CodeView } from './CodeView'
 import { UnsupportedPreview } from './UnsupportedPreview'
 
 export function PreviewText({ connectionId, bucket, k }: { connectionId: string; bucket: string; k: string }) {
   const sniffed = useSniffedText(api.textPreviewUrl(connectionId, bucket, k))
-  const [copied, setCopied] = useState<boolean | null>(null)
 
   if (sniffed.status === 'error') return <p className="notice error">{sniffed.message}</p>
   if (sniffed.status === 'loading') return <p className="muted">読み込み中…</p>
   if (sniffed.status === 'binary') return <UnsupportedPreview />
+  return <TextBody name={k} text={sniffed.text} />
+}
 
-  const text = sniffed.text
+/** 読み込んだテキスト。形式を推測して色を付け、帯の選択欄で形式を選び直せる。 */
+function TextBody({ name, text }: { name: string; text: string }) {
+  const [copied, setCopied] = useState<boolean | null>(null)
+  const code = useCodeLanguage(name, text)
+
   const handleCopy = async () => {
     setCopied(await copyToClipboard(text))
     setTimeout(() => setCopied(null), 1500)
@@ -22,11 +29,12 @@ export function PreviewText({ connectionId, bucket, k }: { connectionId: string;
   return (
     <div className="preview-stack">
       <div className="preview-toolbar">
+        <CodeFormatSelect code={code} />
         <div className="preview-actions">
           <CopyContentButton copied={copied} onCopy={handleCopy} />
         </div>
       </div>
-      <pre className="preview-code">{text}</pre>
+      <CodeView text={text} language={code.language} className="preview-code" />
     </div>
   )
 }

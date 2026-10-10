@@ -3,9 +3,11 @@ import { api } from '../lib/api/client'
 import { classify, classifyEntry } from '../lib/api/mime'
 import { basename, fullEntryLabel, prettyPrintJson } from '../lib/format'
 import { TEXT_HEAD_BYTES } from '../lib/textSniff'
+import { useCodeLanguage } from '../lib/useCodeLanguage'
 import { useSniffedText } from '../lib/useSniffedText'
 import { usePinnedPreviews, type PinnedItem } from '../lib/pinnedPreviews'
 import { useCapabilities } from '../lib/useCapabilities'
+import { CodeView } from './CodeView'
 import { CopyablePath } from './CopyablePath'
 import { PreviewImage } from './PreviewImage'
 import { PreviewAudio } from './PreviewAudio'
@@ -23,8 +25,13 @@ function PinnedTextBody({ name, url }: { name: string; url: string }) {
   if (sniffed.status === 'error') return <p className="notice error">{sniffed.message}</p>
   if (sniffed.status === 'loading') return <p className="muted">読み込み中…</p>
   if (sniffed.status === 'binary') return <UnsupportedPreview />
+  return <PinnedText name={name} text={prettyPrintJson(name, sniffed.text)} />
+}
 
-  return <pre className="preview-code pinned-text">{prettyPrintJson(name, sniffed.text)}</pre>
+// カードは狭いので選択欄は置かず、推測した形式か、プレビューでこの拡張子に選んだ形式で色を付ける。
+function PinnedText({ name, text }: { name: string; text: string }) {
+  const code = useCodeLanguage(name, text)
+  return <CodeView text={text} language={code.language} className="preview-code pinned-text" />
 }
 
 function PinnedPreviewBody({ item }: { item: PinnedItem }) {

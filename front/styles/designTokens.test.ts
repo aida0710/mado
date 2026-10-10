@@ -15,7 +15,7 @@ const appStylesheets = [
   { name: 'App.css', css: withoutComments(readFileSync(new URL('../App.css', import.meta.url), 'utf8')) },
 ]
 const resolvePackageFile = createRequire(import.meta.url).resolve
-const packageCss = ['tokens.css', 'base.css', 'components.css', 'shell.css']
+const packageCss = ['tokens.css', 'base.css', 'components.css', 'shell.css', 'code.css']
   .map(name => withoutComments(readFileSync(resolvePackageFile(`@mado/design-tokens/${name}`), 'utf8')))
   .join('\n')
 

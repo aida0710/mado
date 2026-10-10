@@ -98,26 +98,37 @@ describe('PinnedPreviewCard - 種別ごとの描き分け', () => {
     expect(await screen.findByText(/プレビュー非対応/)).toBeInTheDocument()
   })
 
+  // 本文は形式に合わせて色の span に分かれるので、行の文字は pre 全体の textContent で見る。
+  const shownText = async (container: HTMLElement) => {
+    await waitFor(() => expect(container.querySelector('pre.code-view')).not.toBeNull())
+    return container.querySelector('pre.code-view')!.textContent
+  }
+
   it('拡張子が未知でも中身がテキストなら開ける', async () => {
     vi.mocked(api.readHead).mockResolvedValue(utf8('FROM alpine'))
-    render(<PinnedPreviewCard item={item({ key: 'Dockerfile' })} />)
-    expect(await screen.findByText('FROM alpine')).toBeInTheDocument()
+    const { container } = render(<PinnedPreviewCard item={item({ key: 'Dockerfile' })} />)
+    expect(await shownText(container)).toBe('FROM alpine')
+  })
+
+  it('Dockerfile は名前から形式を決めて色を付ける', async () => {
+    vi.mocked(api.readHead).mockResolvedValue(utf8('FROM alpine'))
+    const { container } = render(<PinnedPreviewCard item={item({ key: 'Dockerfile' })} />)
+    await shownText(container)
+    expect(container.querySelector('pre.code-view .hljs-keyword')?.textContent).toBe('FROM')
   })
 
   it('単体テキストファイルのピンは固定高さの pre で表示される', async () => {
     vi.mocked(api.readHead).mockResolvedValue(utf8('plain body'))
     render(<PinnedPreviewCard item={{ id: 'i1', connectionId: 'c', bucket: 'b', key: 'x.txt' }} />)
-    const pre = await screen.findByText('plain body')
-    expect(pre.tagName).toBe('PRE')
-    expect(pre).toHaveClass('pinned-text')
+    const pre = (await screen.findByText('plain body')).closest('pre')
+    expect(pre).toHaveClass('code-view', 'pinned-text')
   })
 
   it('tar エントリのテキストも固定高さの pre で表示される', async () => {
     vi.mocked(api.readHead).mockResolvedValue(utf8('hello'))
     render(<PinnedPreviewCard item={{ id: 'i2', connectionId: 'c', bucket: 'b', key: 's.tar', entryPath: 'u.txt' }} />)
-    const pre = await screen.findByText('hello')
-    expect(pre.tagName).toBe('PRE')
-    expect(pre).toHaveClass('pinned-text')
+    const pre = (await screen.findByText('hello')).closest('pre')
+    expect(pre).toHaveClass('code-view', 'pinned-text')
   })
 
   it('単体 .json のピンは minify されていてもプリティプリントされる', async () => {
@@ -125,8 +136,7 @@ describe('PinnedPreviewCard - 種別ごとの描き分け', () => {
     const { container } = render(
       <PinnedPreviewCard item={{ id: 'j1', connectionId: 'c', bucket: 'b', key: 'x.json' }} />,
     )
-    await screen.findByText(/"a": 1/)
-    expect(container.querySelector('pre')?.textContent).toBe('{\n  "a": 1,\n  "b": 2\n}')
+    expect(await shownText(container)).toBe('{\n  "a": 1,\n  "b": 2\n}')
   })
 
   it('tar エントリの .json もプリティプリントされる', async () => {
@@ -134,8 +144,7 @@ describe('PinnedPreviewCard - 種別ごとの描き分け', () => {
     const { container } = render(
       <PinnedPreviewCard item={{ id: 'j2', connectionId: 'c', bucket: 'b', key: 's.tar', entryPath: 'meta.json' }} />,
     )
-    await screen.findByText(/"x": true/)
-    expect(container.querySelector('pre')?.textContent).toBe('{\n  "x": true\n}')
+    expect(await shownText(container)).toBe('{\n  "x": true\n}')
   })
 
   it('不正な JSON の .json はそのまま表示される (整形は try/catch でフォールバック)', async () => {
@@ -143,8 +152,7 @@ describe('PinnedPreviewCard - 種別ごとの描き分け', () => {
     const { container } = render(
       <PinnedPreviewCard item={{ id: 'j3', connectionId: 'c', bucket: 'b', key: 'bad.json' }} />,
     )
-    await screen.findByText('{oops not json')
-    expect(container.querySelector('pre')?.textContent).toBe('{oops not json')
+    expect(await shownText(container)).toBe('{oops not json')
   })
 
   it('.jsonl は1行1値なので整形せずそのまま表示される', async () => {
@@ -152,8 +160,7 @@ describe('PinnedPreviewCard - 種別ごとの描き分け', () => {
     const { container } = render(
       <PinnedPreviewCard item={{ id: 'j4', connectionId: 'c', bucket: 'b', key: 'data.jsonl' }} />,
     )
-    await screen.findByText(/"a":1/)
-    expect(container.querySelector('pre')?.textContent).toBe('{"a":1}\n{"b":2}')
+    expect(await shownText(container)).toBe('{"a":1}\n{"b":2}')
   })
 })
 
