@@ -1,168 +1,500 @@
-/* アプリと同じ紙・墨・書体を使い、長文を読む幅だけドキュメント向けにする。 */
+/* ドキュメントサイトの見た目。色・書体は @mado/design-system の変数を使い、アプリと同じ枠にする:
+   上部バーとサイドバーは暗い色でひと続き、本文は白。角は四角、表・注記・コードもアプリに合わせる。 */
+
+/* ── VitePress の変数をデザインシステムの変数に合わせる ─────────────── */
 :root {
-  --paper: #faf9f5;
-  --ink-0: #f5f4ee;
-  --ink-1: #eceae3;
-  --ink-2: #ddd9d0;
-  --ink-3: #c2bdb1;
-  --ink-5: #8e887b;
-  --ink-7: #5e5a4f;
-  --ink-9: #2e2c25;
-  --ink-12: #0a0904;
-  --rule: rgba(10, 9, 4, 0.10);
-  --rule-strong: rgba(10, 9, 4, 0.18);
-  --space-1: 4px;
-  --space-2: 8px;
-  --space-3: 12px;
-  --space-4: 16px;
-  --space-5: 24px;
-  --space-6: 32px;
-  --space-7: 48px;
-  --space-8: 72px;
-  --radius-1: 2px;
-  --radius-2: 4px;
-  --font-serif: 'Newsreader Variable', 'Noto Sans JP', Georgia, serif;
-  --font-sans: 'Public Sans Variable', 'Noto Sans JP', system-ui, sans-serif;
-  --font-mono: 'IBM Plex Mono', monospace;
-  /* 画面の細部を読めるよう、機能紹介では画像に広い列を割り当てる。 */
-  --home-feature-columns: 0.7fr 1.3fr;
-  --vp-font-family-base: var(--font-sans);
-  --vp-font-family-mono: var(--font-mono);
-  --vp-c-bg: var(--paper);
-  --vp-c-bg-alt: var(--ink-0);
-  --vp-c-bg-elv: var(--paper);
-  --vp-c-bg-soft: var(--ink-0);
-  --vp-c-text-1: var(--ink-12);
-  --vp-c-text-2: var(--ink-7);
-  --vp-c-text-3: var(--ink-7);
-  --vp-c-divider: var(--rule);
-  --vp-c-border: var(--rule-strong);
-  --vp-c-brand-1: var(--ink-12);
-  --vp-c-brand-2: var(--ink-9);
-  --vp-c-brand-3: var(--ink-9);
-  --vp-c-brand-soft: var(--ink-1);
-  --vp-c-default-soft: var(--ink-0);
-  --vp-c-tip-1: var(--ink-9);
-  --vp-c-tip-soft: var(--ink-0);
-  --vp-button-brand-bg: var(--ink-12);
-  --vp-button-brand-hover-bg: var(--ink-9);
-  --vp-button-brand-text: var(--paper);
-  --vp-sidebar-width: 256px;
-  --vp-nav-height: 76px;
+  --vp-font-family-base: var(--font);
+  --vp-font-family-mono: var(--mono);
+  --vp-c-bg: var(--background);
+  --vp-c-bg-alt: var(--surface);
+  --vp-c-bg-soft: var(--surface);
+  --vp-c-bg-elv: var(--background);
+  --vp-c-text-1: var(--text);
+  --vp-c-text-2: var(--muted);
+  --vp-c-text-3: var(--muted);
+  --vp-c-divider: var(--border);
+  --vp-c-border: var(--border-strong);
+  --vp-c-gutter: var(--border);
+  --vp-c-brand-1: var(--link);
+  --vp-c-brand-2: var(--accent-strong);
+  --vp-c-brand-3: var(--accent);
+  --vp-c-brand-soft: var(--accent-tint);
+  --vp-c-default-soft: var(--surface);
+  --vp-c-tip-1: var(--link);
+  --vp-c-tip-soft: var(--accent-tint);
+  --vp-button-brand-bg: var(--accent-strong);
+  --vp-button-brand-hover-bg: var(--link);
+  --vp-button-brand-text: var(--on-accent);
+  --vp-code-block-bg: var(--code-background);
+  --vp-code-block-color: var(--code-text);
+  --vp-code-color: var(--text);
+  --vp-code-bg: var(--surface);
   --vp-layout-max-width: 1440px;
-  --vp-code-block-bg: var(--ink-0);
-  --vp-code-color: var(--ink-9);
-  --vp-code-bg: var(--ink-1);
-  --vp-code-block-divider-color: var(--rule-strong);
-  --vp-local-search-bg: var(--paper);
-  --vp-local-search-result-bg: var(--paper);
-  --vp-local-search-result-border: var(--rule-strong);
-  --vp-local-search-result-selected-bg: var(--ink-0);
-  --vp-local-search-result-selected-border: var(--ink-9);
-  --vp-local-search-highlight-bg: var(--ink-12);
-  --vp-local-search-highlight-text: var(--paper);
+  --vp-local-search-highlight-bg: var(--accent-strong);
+  --vp-local-search-highlight-text: var(--on-accent);
+  /* 上部バーの高さはアプリの --topbar-height と同じ 49px。 */
+  --vp-nav-height: 49px;
+  --vp-nav-bg-color: var(--header);
+  --vp-sidebar-bg-color: var(--header);
+  --vp-sidebar-width: 256px;
+}
+body {
+  color-scheme: light;
+  font-size: 14px;
+}
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
 }
 
-body { color-scheme: light; }
-.VPNavBarTitle .title { font-family: var(--font-serif); font-size: 28px; font-weight: 500; letter-spacing: -0.02em; }
-.VPNavBarTitle .logo { width: 18px; height: 18px; margin-right: var(--space-3); opacity: 0.8; }
-.VPNavBarMenuLink { font-size: 11px !important; font-weight: 600 !important; letter-spacing: 0.18em; text-transform: uppercase; }
-.VPNavBarMenuLink.active { text-decoration: underline; text-underline-offset: 8px; }
-.VPNavBarSearch .DocSearch-Button { border-radius: var(--radius-1); background: var(--ink-0); }
-.VPNavBar { background: var(--paper) !important; }
-.VPNavBar .divider-line { background: var(--rule) !important; }
-.VPSidebar { background: var(--paper) !important; }
-.VPSidebarItem.level-0 > .item .text { font-size: 12px; font-weight: 600; }
-.VPSidebarItem.level-1 .text { font-size: 12.5px; line-height: 24px; }
-.VPSidebarItem.is-active > .item .link > .text { font-weight: 600; }
-.VPSidebarItem.is-active > .item .link > .text::before { content: '— '; }
-.VPDoc.has-aside .content-container { max-width: 780px !important; }
-.vp-doc { font-size: 15px; }
-.vp-doc h1 { font-size: 28px; line-height: 1.55; font-weight: 600; letter-spacing: -0.025em; }
-.vp-doc h2 { margin-top: var(--space-7); padding-top: var(--space-5); font-size: 21px; line-height: 1.5; }
-.vp-doc h3 { font-size: 17px; line-height: 1.65; }
-.vp-doc p, .vp-doc li { line-height: 1.95; }
-.vp-doc p { color: var(--ink-9); }
-.vp-doc a { text-decoration-thickness: 1px; text-underline-offset: 4px; }
-.vp-doc table { font-size: 12.5px; width: 100%; }
-.vp-doc th, .vp-doc td { border-right: 0; border-left: 0; line-height: 1.8; }
-.vp-doc th { background: var(--ink-0); }
-.vp-doc tr { background: var(--paper); }
-.vp-doc tr:nth-child(2n) { background: var(--ink-0); }
-.vp-doc [class*='language-'] { border: 1px solid var(--rule); border-radius: var(--radius-2); }
-.vp-doc .custom-block { border-radius: 0; border: 0; border-left: 2px solid var(--ink-9); }
-.vp-doc blockquote { border-left-color: var(--ink-3); }
-.VPDocFooter .pager-link { border-radius: var(--radius-1); }
-.VPDocFooter .pager-link:hover { background: var(--ink-0); }
-.VPDocAsideOutline .outline-marker { width: 1px; }
-.VPLocalSearchBox .shell { border-radius: var(--radius-2) !important; }
-.VPLocalSearchBox .search-input { font-size: 16px !important; }
+/* ── 製品のロゴ (ProductLogo.vue) ────────────────────────────────────── */
+.product-logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  font-weight: 400;
+  white-space: nowrap;
+}
+.product-logo strong {
+  font-weight: 600;
+}
+.product-mark {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke-width: 1.75;
+}
+.product-mark-front {
+  stroke: currentColor;
+}
+/* 黒い上部バーの上なので、奥の窓はアプリの上部バーと同じ明るい強調色。 */
+.product-mark-back {
+  stroke: var(--header-indicator);
+  stroke-linecap: square;
+}
 
-.screenshot { margin: var(--space-5) 0 var(--space-6); }
-.screenshot-open { display: block; position: relative; width: 100%; padding: 0; border: 1px solid var(--rule-strong); background: var(--paper); cursor: zoom-in; }
-.screenshot-open img { display: block; width: 100%; height: auto; }
-.screenshot-enlarge { position: absolute; right: var(--space-2); bottom: var(--space-2); display: grid; place-items: center; width: 26px; height: 26px; background: var(--paper); border: 1px solid var(--rule-strong); color: var(--ink-9); font-size: 16px; }
-.screenshot figcaption { margin-top: var(--space-3); font-size: 11.5px; color: var(--ink-7); line-height: 1.75; }
-.screenshot-dialog { position: fixed; inset: 0; padding: var(--space-4); width: min(1440px, 96vw); max-width: 96vw; max-height: 94vh; border: 1px solid var(--rule-strong); background: var(--paper); color: var(--ink-12); overflow: auto; }
-.screenshot-dialog::backdrop { background: rgba(10, 9, 4, 0.72); }
-.screenshot-dialog img { display: block; width: 100%; height: auto; }
-.screenshot-dialog p { margin: var(--space-3) 0 0; font-size: 12px; }
-.screenshot-close { position: sticky; top: 0; float: right; width: 32px; height: 32px; border: 1px solid var(--rule-strong); background: var(--paper); cursor: pointer; }
+/* ── 上部バー ─────────────────────────────────────────────────────────── */
+.VPNavBar,
+.VPNavBar .content-body {
+  background: var(--header) !important;
+}
+.VPNavBar .divider-line {
+  background: var(--header-border) !important;
+}
+.VPNavBar .title,
+.VPNavBar.has-sidebar .title {
+  color: var(--header-text);
+  border-bottom: 0 !important;
+}
+.VPNavBarMenuLink {
+  color: var(--header-text-muted) !important;
+  font-size: 13px !important;
+}
+.VPNavBarMenuLink:hover,
+.VPNavBarMenuLink.active {
+  color: var(--header-text-strong) !important;
+}
+.VPNavBarMenuLink.active {
+  box-shadow: inset 0 -3px 0 var(--header-indicator);
+}
+.VPNavBar .DocSearch-Button {
+  border: 1px solid var(--header-border) !important;
+  border-radius: 0 !important;
+  background: var(--header-hover) !important;
+}
+.VPNavBar .DocSearch-Search-Icon,
+.VPNavBar .DocSearch-Button-Placeholder,
+.VPNavBar .DocSearch-Button-Key {
+  color: var(--header-text-muted) !important;
+}
+.VPNavBar .DocSearch-Button-Key {
+  border-color: var(--header-border) !important;
+}
+.VPNavBarSocialLinks .VPSocialLink,
+.VPNavBarExtra .button {
+  color: var(--header-text-muted) !important;
+}
+.VPNavBarHamburger .top,
+.VPNavBarHamburger .middle,
+.VPNavBarHamburger .bottom {
+  background: var(--header-text) !important;
+}
+.VPNavScreen {
+  background: var(--header) !important;
+}
+.VPNavScreenMenuLink {
+  border-color: var(--header-border) !important;
+  color: var(--header-text) !important;
+}
 
-.mado-home { max-width: 1180px; margin: 0 auto; padding: 0 var(--space-5); }
-.eyebrow { margin: 0; color: var(--ink-7); font-size: 10.5px; font-weight: 600; letter-spacing: 0.2em; text-transform: uppercase; }
-.home-intro { padding: var(--space-8) 0 var(--space-7); }
-.home-intro h1 { margin: var(--space-5) 0 var(--space-3); font-family: var(--font-serif); font-size: clamp(64px, 7vw, 88px); font-weight: 400; line-height: 0.95; letter-spacing: -0.04em; }
-.home-intro h1 span { color: var(--ink-7); }
-.home-intro h2 { margin: var(--space-5) 0 var(--space-4); font-size: clamp(24px, 3vw, 32px); font-weight: 500; letter-spacing: -0.035em; }
-.home-lead { margin: 0; color: var(--ink-7); font-size: 15px; line-height: 1.95; }
-.home-actions { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-top: var(--space-5); }
-.home-button { display: inline-flex; align-items: center; gap: var(--space-5); padding: var(--space-3) var(--space-4); border: 1px solid var(--rule-strong); border-radius: var(--radius-1); font-size: 12.5px; font-weight: 500; }
-.home-button.primary { background: var(--ink-12); color: var(--paper); border-color: var(--ink-12); }
-.home-button:hover { background: var(--ink-1); }
-.home-button.primary:hover { background: var(--ink-9); }
-.figure-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-3); padding-bottom: var(--space-3); border-bottom: 1px solid var(--rule-strong); }
-.figure-heading > span:last-child { color: var(--ink-7); font-size: 11px; }
-.home-overview .screenshot { margin-top: var(--space-4); }
-.home-start { display: grid; grid-template-columns: repeat(3, 1fr); margin: var(--space-7) 0 var(--space-8); border-top: 1px solid var(--rule-strong); border-bottom: 1px solid var(--rule-strong); }
-.home-start a { padding: var(--space-5); }
-.home-start a:first-child { padding-left: 0; }
-.home-start a + a { border-left: 1px solid var(--rule); }
-.home-start strong { display: block; margin: var(--space-3) 0 var(--space-2); font-size: 17px; font-weight: 500; }
-.home-start a > span:last-child { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); font-size: 11.5px; color: var(--ink-7); }
-.home-start b { font-weight: 400; font-size: 16px; }
-.home-start a:hover { background: var(--ink-0); }
-.home-section-heading { margin-bottom: var(--space-7); }
-.home-section-heading h2 { margin-top: var(--space-4); font-size: 25px; line-height: 1.5; font-weight: 500; letter-spacing: -0.03em; }
-.home-feature { display: grid; grid-template-columns: var(--home-feature-columns); align-items: center; gap: var(--space-7); padding: var(--space-7) 0; border-top: 1px solid var(--rule); }
-.home-feature .screenshot { margin: 0; }
-.feature-number { margin-right: var(--space-4); font-family: var(--font-mono); font-weight: 400; }
-.home-feature h3 { margin: var(--space-4) 0; font-size: 25px; font-weight: 500; letter-spacing: -0.035em; line-height: 1.55; }
-.home-feature-copy > p:not(.eyebrow) { font-size: 14px; color: var(--ink-7); line-height: 1.95; }
-.home-feature-copy > a, .home-note a { display: inline-block; margin-top: var(--space-5); padding-bottom: var(--space-2); border-bottom: 1px solid var(--ink-3); font-size: 12.5px; font-weight: 500; }
-.home-feature-copy > a span, .home-note a span { margin-left: var(--space-4); }
-.home-note { display: grid; grid-template-columns: var(--home-feature-columns); align-items: center; gap: var(--space-7); margin-top: var(--space-6); padding: var(--space-7) 0; border-top: 1px solid var(--rule-strong); }
-.home-note h2 { margin: var(--space-4) 0; font-size: 22px; font-weight: 500; line-height: 1.65; }
-.home-note p:not(.eyebrow) { color: var(--ink-7); font-size: 13px; line-height: 1.95; }
-.home-note .screenshot { margin: 0; }
-.home-footer { display: flex; flex-wrap: wrap; gap: var(--space-4); padding: var(--space-5) 0 var(--space-6); border-top: 1px solid var(--rule); font-size: 10.5px; color: var(--ink-7); }
-.home-footer span { margin-right: auto; }
-:focus-visible { outline: 2px solid var(--ink-9); outline-offset: 3px; }
+/* ── サイドバー: アプリと同じく、暗い地に上部バーとの境目の線 ────────── */
+.VPSidebar {
+  border-top: 1px solid var(--header-border);
+}
+.VPSidebar .group + .group {
+  border-top: 1px solid var(--header-border) !important;
+}
+.VPSidebarItem.level-0 > .item .text,
+.VPSidebarItem.level-0.has-active > .item .text {
+  color: var(--header-text-muted) !important;
+  font-size: 11px;
+  font-weight: 400;
+}
+.VPSidebarItem.level-1 .text {
+  color: var(--header-text-muted);
+  font-size: 13px;
+}
+.VPSidebarItem.level-1 .link:hover .text {
+  color: var(--header-text-strong);
+}
+.VPSidebarItem.level-1 > .item {
+  z-index: 0;
+}
+/* 選択中の項目は、サイドバーの端から端まで地を変え、左に強調色の線を引く (アプリの .navigation-link と同じ)。 */
+.VPSidebarItem.level-1.is-active > .item::before {
+  content: '';
+  position: absolute;
+  inset: 0 -32px;
+  z-index: -1;
+  background: var(--header-active);
+  border-left: 3px solid var(--header-indicator);
+}
+.VPSidebarItem.level-1.is-active > .item .text {
+  color: var(--header-text-strong) !important;
+  font-weight: 600;
+}
+.VPSidebarItem .indicator {
+  display: none;
+}
+.VPLocalNav {
+  border-color: var(--header-border) !important;
+  background: var(--header) !important;
+}
+.VPLocalNav .menu,
+.VPLocalNav .VPLocalNavOutlineDropdown button {
+  color: var(--header-text-muted) !important;
+}
 
-@media (max-width: 767px) {
-  .mado-home { padding: 0 var(--space-4); }
-  .home-intro { padding-top: var(--space-7); }
-  .home-start { grid-template-columns: 1fr; margin: var(--space-6) 0 var(--space-7); }
-  .home-start a, .home-start a:first-child { padding: var(--space-5) 0; }
-  .home-start a + a { border-left: 0; border-top: 1px solid var(--rule); }
-  .home-feature, .home-note { grid-template-columns: 1fr; gap: var(--space-5); padding: var(--space-6) 0; }
-  .home-feature-copy > a { margin-top: var(--space-4); }
-  .home-feature h3 { font-size: 22px; }
-  .vp-doc h1 { font-size: 24px; }
-  .screenshot-dialog { padding: var(--space-2); }
-  .home-footer span { flex-basis: 100%; }
+/* ── 本文 ─────────────────────────────────────────────────────────────── */
+.vp-doc {
+  font-size: 14.5px;
+}
+.vp-doc h1 {
+  font-size: 28px;
+  font-weight: 450;
+  letter-spacing: -0.4px;
+  line-height: 1.4;
+}
+.vp-doc h2 {
+  border-top: 1px solid var(--border);
+  font-size: 20px;
+  font-weight: 550;
+}
+.vp-doc h3 {
+  font-size: 16px;
+  font-weight: 600;
+}
+.vp-doc p,
+.vp-doc li {
+  line-height: 1.85;
+}
+.vp-doc a {
+  text-underline-offset: 3px;
+}
+/* 表はアプリと同じく、見出しの地と行の下線だけで区切る。 */
+.vp-doc table {
+  display: table;
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.vp-doc th {
+  background: var(--table-header);
+  font-weight: 600;
+  text-align: left;
+}
+.vp-doc tr,
+.vp-doc tr:nth-child(2n) {
+  background: var(--background);
+}
+.vp-doc th,
+.vp-doc td {
+  border: 0;
+  border-bottom: 1px solid var(--border);
+}
+.vp-doc [class*='language-'],
+.vp-doc :not(pre) > code {
+  border-radius: 0;
+}
+/* 注記はアプリの .notice と同じ、左の線と淡い地。 */
+.vp-doc .custom-block {
+  border: 0;
+  border-left: 3px solid var(--accent);
+  border-radius: 0;
+  background: var(--accent-tint);
+}
+.vp-doc .custom-block.warning,
+.vp-doc .custom-block.danger {
+  border-left-color: var(--warning);
+  background: var(--status-attention-background);
+}
+.VPDocFooter .pager-link,
+.VPLocalSearchBox .shell {
+  border-radius: 0 !important;
+}
+
+/* ── スクリーンショット (Screenshot.vue) ─────────────────────────────── */
+.screenshot {
+  margin: 24px 0 32px;
+}
+.screenshot-open {
+  position: relative;
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 1px solid var(--border-strong);
+  background: var(--background);
+  cursor: zoom-in;
+}
+.screenshot-open img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.screenshot-enlarge {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--border-strong);
+  background: var(--background);
+  color: var(--text);
+  font-size: 15px;
+}
+.screenshot figcaption {
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.7;
+}
+.screenshot-dialog {
+  position: fixed;
+  inset: 0;
+  width: min(1440px, 96vw);
+  max-width: 96vw;
+  max-height: 94vh;
+  padding: 16px;
+  overflow: auto;
+  border: 1px solid var(--border-strong);
+  background: var(--background);
+  color: var(--text);
+}
+.screenshot-dialog::backdrop {
+  background: var(--backdrop);
+}
+.screenshot-dialog img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.screenshot-dialog p {
+  margin: 12px 0 0;
+  font-size: 12px;
+}
+.screenshot-close {
+  position: sticky;
+  top: 0;
+  float: right;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--border-strong);
+  background: var(--background);
+  cursor: pointer;
+}
+
+/* ── トップページ (Home.vue) ──────────────────────────────────────────── */
+.mado-home {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 32px 48px;
+}
+.home-eyebrow {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.home-hero {
+  display: grid;
+  /* 画面の細部が読めるよう、スクリーンショットに広い列を割り当てる。 */
+  grid-template-columns: 0.85fr 1.15fr;
+  gap: 48px;
+  align-items: center;
+  padding: 56px 0 40px;
+}
+.home-hero h1 {
+  margin: 12px 0 16px;
+  font-size: 36px;
+  font-weight: 450;
+  letter-spacing: -0.6px;
+  line-height: 1.3;
+}
+.home-lead {
+  margin: 0;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.85;
+}
+.home-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 28px;
+}
+/* ボタンはアプリの .button と同じ四角。主ボタンは強調色の地。 */
+.home-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 28px;
+  min-height: 40px;
+  padding: 0 16px;
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+  font-size: 14px;
+}
+.home-button:hover {
+  background: var(--surface-hover);
+  text-decoration: none;
+}
+.home-button.primary {
+  border-color: var(--accent-strong);
+  background: var(--accent-strong);
+  color: var(--on-accent);
+}
+.home-button.primary:hover {
+  background: var(--link);
+}
+.home-hero .screenshot {
+  margin: 0;
+}
+.home-entries {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 2px;
+  margin: 24px 0 64px;
+}
+.home-entry {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 140px;
+  padding: 20px 20px 44px;
+  background: var(--surface);
+  color: var(--text);
+}
+.home-entry:hover {
+  background: var(--surface-hover);
+  text-decoration: none;
+}
+.home-entry-label,
+.home-entry-description {
+  color: var(--muted);
+}
+.home-entry-label {
+  font-size: 12px;
+}
+.home-entry strong {
+  font-size: 18px;
+  font-weight: 450;
+}
+.home-entry-description {
+  font-size: 13px;
+}
+.home-entry-arrow {
+  position: absolute;
+  right: 18px;
+  bottom: 14px;
+  color: var(--accent-strong);
+  font-size: 20px;
+}
+.home-features h2 {
+  margin: 0 0 8px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: 22px;
+  font-weight: 450;
+}
+.home-feature {
+  display: grid;
+  grid-template-columns: 0.7fr 1.3fr;
+  gap: 48px;
+  align-items: center;
+  padding: 40px 0;
+  border-bottom: 1px solid var(--border);
+}
+.home-feature.reverse .home-feature-copy {
+  order: 2;
+}
+.home-feature .screenshot {
+  margin: 0;
+}
+.home-feature h3 {
+  margin: 8px 0 12px;
+  font-size: 22px;
+  font-weight: 450;
+}
+.home-feature-copy > p:not(.home-eyebrow) {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.85;
+}
+.home-feature-copy > a {
+  display: inline-block;
+  margin-top: 12px;
+  color: var(--link);
+  font-size: 14px;
+}
+.home-footer {
+  display: flex;
+  gap: 20px;
+  padding: 24px 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.home-footer span {
+  margin-right: auto;
+}
+
+@media (max-width: 899px) {
+  .mado-home {
+    padding: 0 16px 40px;
+  }
+  .home-hero,
+  .home-feature {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
+  .home-feature.reverse .home-feature-copy {
+    order: 0;
+  }
+  .home-hero h1 {
+    font-size: 30px;
+  }
+  .home-entries {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation-duration: 0s !important; transition-duration: 0s !important; scroll-behavior: auto !important; }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0s !important;
+    transition-duration: 0s !important;
+    scroll-behavior: auto !important;
+  }
 }

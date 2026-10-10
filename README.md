@@ -445,7 +445,6 @@ npm install https://github.com/aida0710/mado-design-systems/releases/download/v<
 
 ## クレジット
 
-- ロゴ: "Window" icon by [Inmotus Design](https://icons8.com/icon/set/window/external-others-inmotus-design) on [Icons8](https://icons8.com/)。Icons8 の無料利用規約により attribution を明記。ドキュメントサイトの `pages/public/mado-icon.png` はこのアイコンのまま。画面の印とタブのアイコン（`front/components/shell/ProductLogo.tsx`、`front/public/mado-icon.svg`・`mado-icon.png`）は、この形をもとに線で描き直したもの。
 - 書体: [IBM Plex](https://github.com/IBM/plex) (`@mado/design-system` に同梱) と [Noto Sans JP](https://fonts.google.com/noto/specimen/Noto+Sans+JP)。どちらも SIL Open Font License 1.1。
 - アイコン: [Lucide](https://lucide.dev/) (`lucide-react`)。ISC License。
 - テキストの色付け: [highlight.js](https://highlightjs.org/)。BSD 3-Clause License。

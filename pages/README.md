@@ -2,7 +2,7 @@
 
 公開先: https://aida0710.github.io/mado/
 
-VitePressで日本語の利用ガイド・管理設定・リファレンスを生成する。配色と書体は現在のmadoに合わせ、本文はMarkdown、トップページは`.vitepress/theme/Home.vue`に置く。
+VitePressで日本語の利用ガイド・管理設定・リファレンスを生成する。色・書体はアプリと同じ`@mado/design-system`の変数を使い、上部バーとサイドバーはアプリと同じ暗い枠にする（`.vitepress/theme/style.css`）。本文はMarkdown、トップページは`.vitepress/theme/Home.vue`、紹介する機能と入口は`.vitepress/theme/homeContent.ts`に置く。タブのアイコン`public/mado-icon.svg`はアプリの`front/public/mado-icon.svg`と同じファイルで、変えるときは両方を替える。
 
 ## 起動・ビルド
 
