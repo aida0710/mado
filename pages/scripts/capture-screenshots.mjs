@@ -125,6 +125,8 @@ try {
   await capturePage({ name: 'pinned-preview', path: previewPath('metadata.json'), prepare: async page => {
     await page.getByRole('button', { name: 'ピン留め', exact: true }).click()
     await page.locator('tr').filter({ hasText: 'spectrogram.png' }).click()
+    // 画像が読み込まれてから撮る。読み込み前だとプレビューの枠が空のまま写る。
+    await page.locator('.preview-image').evaluate(image => image.complete || new Promise(resolve => image.addEventListener('load', resolve, { once: true })))
   } })
   await capturePage({ name: 'video-preview', path: previewPath('sample.mp4'), prepare: async page => {
     await page.locator('video').evaluate(async video => { await video.play(); video.pause() })

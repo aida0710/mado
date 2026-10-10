@@ -14,9 +14,9 @@ Storageのファイルの行をクリックするとプレビューが開きま�
 
 ## 画像を開く
 
-画像も同じプレビューで確認できます。元ファイルを保存したいときはヘッダの **DL** を使います。
+画像も同じプレビューで確認できます。元ファイルを保存したいときは、ヘッダの **ダウンロード**（下向きの矢印のボタン）を使います。
 
-<Screenshot src="/screenshots/image-preview.png" alt="spectrogram.pngを表示した画像プレビュー" caption="画像ファイルを開いた例。元のファイルはDLからダウンロードできます。" />
+<Screenshot src="/screenshots/image-preview.png" alt="spectrogram.pngを表示した画像プレビュー" caption="画像ファイルを開いた例。元のファイルはヘッダのダウンロードのボタンから保存できます。" />
 
 ## 動画を再生・シークする
 
