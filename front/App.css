@@ -133,19 +133,23 @@ body {
   border-radius: var(--radius-2);
 }
 
-/* ── 上部バー — Mado Model Tracking の .topbar と同じ並びと色 ─────────
-   左にアプリ名、続けて画面の切り替え。幅が足りないときは切り替えだけ横に
-   スクロールする。色は @mado/design-tokens の --header-* (両テーマで暗い)。 */
+/* ── 上部バーとサイドバー — Mado Model Tracking と同じ枠 ──────────────
+   上はアプリ名の暗い帯 (色は @mado/design-tokens の --header-*)。画面の切り替えは
+   左のサイドバーに置き、選んでいる画面は面の色と左端のティールの線で示す。
+   幅は Mado Model Tracking の --navigation-width と同じ 192px。狭い画面では
+   サイドバーをやめ、上部バーの下に横並びにする。 */
+:root { --mado-sidebar-width: 192px; --mado-topbar-height: 49px; }
 .mado-topbar {
   display: flex;
   align-items: stretch;
-  min-height: 49px;
+  min-height: var(--mado-topbar-height);
   background: var(--header);
   color: var(--header-text);
 }
 .mado-brand {
   display: flex;
   align-items: center;
+  min-width: var(--mado-sidebar-width);
   padding: 0 18px;
   color: var(--header-text);
   font-size: 14px;
@@ -153,31 +157,71 @@ body {
   text-decoration: none;
 }
 .mado-brand:hover { text-decoration: none; }
-.mado-tabs {
+.mado-body {
   display: flex;
-  min-width: 0;
-  overflow-x: auto;
-  scrollbar-width: thin;
+  align-items: flex-start;
 }
-.mado-tab {
+.mado-sidebar {
+  position: sticky;
+  top: 0;
+  flex: 0 0 var(--mado-sidebar-width);
+  width: var(--mado-sidebar-width);
+  min-height: calc(100vh - var(--mado-topbar-height));
+  max-height: 100vh;
+  overflow-y: auto;
+  border-right: 1px solid var(--rule);
+  background: var(--paper);
+}
+.mado-content {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.mado-nav {
+  display: flex;
+  flex-direction: column;
+  padding: 12px 0 24px;
+}
+.mado-nav__link {
   display: flex;
   align-items: center;
-  min-height: 49px;
-  padding: 0 16px;
-  color: var(--header-text-muted);
-  border-bottom: 3px solid transparent;
-  white-space: nowrap;
+  min-height: 34px;
+  padding: 0 16px 0 13px;
+  border-left: 3px solid transparent;
+  color: var(--ink-11);
   text-decoration: none;
+  white-space: nowrap;
 }
-.mado-tab:hover { background: var(--header-hover); text-decoration: none; }
-.mado-tab[aria-current='page'] {
-  background: var(--header-active);
-  border-bottom-color: var(--header-indicator);
-  color: var(--header-text-strong);
+.mado-nav__link:hover { background: var(--ink-1); text-decoration: none; }
+.mado-nav__link[aria-current='page'] {
+  background: var(--ink-2);
+  border-left-color: var(--accent);
+  font-weight: 600;
 }
-@media (max-width: 640px) {
-  .mado-brand { padding: 0 12px; }
-  .mado-tab { padding: 0 10px; }
+@media (max-width: 767px) {
+  .mado-brand { min-width: 0; padding: 0 12px; }
+  .mado-body { display: block; }
+  .mado-sidebar {
+    position: static;
+    width: auto;
+    min-height: 0;
+    max-height: none;
+    border-right: 0;
+    border-bottom: 1px solid var(--rule);
+  }
+  .mado-nav {
+    flex-direction: row;
+    overflow-x: auto;
+    padding: 0;
+    scrollbar-width: none;
+  }
+  .mado-nav__link {
+    flex: 0 0 auto;
+    min-height: 42px;
+    padding: 0 14px;
+    border-left: 0;
+    border-bottom: 3px solid transparent;
+  }
+  .mado-nav__link[aria-current='page'] { background: transparent; border-bottom-color: var(--accent); }
 }
 
 /* ── Authentication ─────────────────────────────────────────────── */

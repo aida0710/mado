@@ -15,13 +15,13 @@ const NoteEditPage = lazy(() => import('./pages/NoteEditPage'))
 const LineagePage = lazy(() => import('./pages/LineagePage'))
 const LineageRegisterPage = lazy(() => import('./pages/LineageRegisterPage'))
 
-/* ── Tab — 上部バーの画面の切り替え。Mado Model Tracking と同じく、
-   選んでいる画面は下線と明るい文字で示す (aria-current="page")。      */
-function Tab({ to, label }: { to: string; label: string }) {
+/* ── SidebarLink — 左のサイドバーの画面の切り替え。Mado Model Tracking と
+   同じく、選んでいる画面は面の色と左端の線で示す (aria-current="page")。 */
+function SidebarLink({ to, label }: { to: string; label: string }) {
   const { pathname } = useLocation()
   const active = to === '/' ? pathname === '/' : pathname.startsWith(to)
   return (
-    <Link className="mado-tab" to={to} aria-current={active ? 'page' : undefined}>
+    <Link className="mado-nav__link" to={to} aria-current={active ? 'page' : undefined}>
       {label}
     </Link>
   )
@@ -33,13 +33,13 @@ function StoragePageWithKey() {
   return <StoragePage key={connectionId} connectionId={connectionId!} />
 }
 
-function Tabs() {
+function Navigation() {
   return (
-    <nav className="mado-tabs" aria-label="メインナビゲーション">
-      <Tab to="/"            label="Home" />
-      <Tab to="/storage"     label="Storage" />
-      <Tab to="/lineage"     label="DataLineage" />
-      <Tab to="/settings"    label="Settings" />
+    <nav className="mado-nav" aria-label="メインナビゲーション">
+      <SidebarLink to="/"            label="Home" />
+      <SidebarLink to="/storage"     label="Storage" />
+      <SidebarLink to="/lineage"     label="DataLineage" />
+      <SidebarLink to="/settings"    label="Settings" />
     </nav>
   )
 }
@@ -68,32 +68,38 @@ export default function App() {
   return (
     <PlayerDeckProvider>
       <PinnedPreviewsProvider>
-        {/* ── 上部バー ─────────────────────────────────────────────────
-            Mado Model Tracking と同じ暗い帯。幅いっぱいに置き、本文だけを
-            これまでどおり中央の 1180px に収める。                        */}
+        {/* ── 上部バーと左のサイドバー ─────────────────────────────────
+            Mado Model Tracking と同じ枠: 上はアプリ名の暗い帯、画面の切り替えは
+            左のサイドバー。本文はサイドバーの右で、これまでどおり 1180px に収める。 */}
         <header className="mado-topbar">
           <Link to="/" className="mado-brand" aria-label="mado ホームへ">
             Mado
           </Link>
-          <Tabs />
         </header>
-        <div className="mx-auto max-w-[1180px] px-4 sm:px-6">
-          <MainContent>
-            <Suspense fallback={<p className="text-[13px] text-ink-7">読み込み中…</p>}>
-              <Routes>
-                <Route path="/"                  element={<HomePage />} />
-                <Route path="/edit-note"         element={<NoteEditPage />} />
-                <Route path="/settings/*"        element={<SettingsPage />} />
-                <Route path="/storage"           element={<StorageLanding />} />
-                <Route path="/storage/:connectionId/*" element={<StoragePageWithKey />} />
-                <Route path="/lineage"            element={<LineagePage />} />
-                <Route path="/lineage/register"   element={<LineageRegisterPage />} />
-                <Route path="/access/*"           element={<LegacyAccessRedirect />} />
-              </Routes>
-            </Suspense>
-          </MainContent>
-          <BottomDock />
+        <div className="mado-body">
+          <aside className="mado-sidebar">
+            <Navigation />
+          </aside>
+          <div className="mado-content">
+            <div className="mx-auto max-w-[1180px] px-4 sm:px-6">
+              <MainContent>
+                <Suspense fallback={<p className="text-[13px] text-ink-7">読み込み中…</p>}>
+                  <Routes>
+                    <Route path="/"                  element={<HomePage />} />
+                    <Route path="/edit-note"         element={<NoteEditPage />} />
+                    <Route path="/settings/*"        element={<SettingsPage />} />
+                    <Route path="/storage"           element={<StorageLanding />} />
+                    <Route path="/storage/:connectionId/*" element={<StoragePageWithKey />} />
+                    <Route path="/lineage"            element={<LineagePage />} />
+                    <Route path="/lineage/register"   element={<LineageRegisterPage />} />
+                    <Route path="/access/*"           element={<LegacyAccessRedirect />} />
+                  </Routes>
+                </Suspense>
+              </MainContent>
+            </div>
+          </div>
         </div>
+        <BottomDock />
       </PinnedPreviewsProvider>
     </PlayerDeckProvider>
   )
