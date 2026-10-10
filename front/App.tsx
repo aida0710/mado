@@ -15,25 +15,13 @@ const NoteEditPage = lazy(() => import('./pages/NoteEditPage'))
 const LineagePage = lazy(() => import('./pages/LineagePage'))
 const LineageRegisterPage = lazy(() => import('./pages/LineageRegisterPage'))
 
-/* ── Tab — masthead 右側のナビ。
-   editorial: 小キャップ + tracking。アクティブは細い下線で示す
-   (背景塗りはやめて静謐さを優先)。                                     */
+/* ── Tab — 上部バーの画面の切り替え。Mado Model Tracking と同じく、
+   選んでいる画面は下線と明るい文字で示す (aria-current="page")。      */
 function Tab({ to, label }: { to: string; label: string }) {
   const { pathname } = useLocation()
   const active = to === '/' ? pathname === '/' : pathname.startsWith(to)
   return (
-    <Link
-      className={
-        'mado-tab inline-flex h-9 items-center px-1 ' +
-        'text-[11px] font-semibold uppercase tracking-[0.22em] ' +
-        'no-underline transition-colors duration-[160ms] ' +
-        'border-b-[1.5px] ' +
-        (active
-          ? 'border-ink-12 text-ink-12'
-          : 'border-transparent text-ink-7 hover:text-ink-11')
-      }
-      to={to}
-    >
+    <Link className="mado-tab" to={to} aria-current={active ? 'page' : undefined}>
       {label}
     </Link>
   )
@@ -47,7 +35,7 @@ function StoragePageWithKey() {
 
 function Tabs() {
   return (
-    <nav className="mado-tabs flex items-stretch gap-4 sm:gap-6" aria-label="メインナビゲーション">
+    <nav className="mado-tabs" aria-label="メインナビゲーション">
       <Tab to="/"            label="Home" />
       <Tab to="/storage"     label="Storage" />
       <Tab to="/lineage"     label="DataLineage" />
@@ -80,42 +68,16 @@ export default function App() {
   return (
     <PlayerDeckProvider>
       <PinnedPreviewsProvider>
+        {/* ── 上部バー ─────────────────────────────────────────────────
+            Mado Model Tracking と同じ暗い帯。幅いっぱいに置き、本文だけを
+            これまでどおり中央の 1180px に収める。                        */}
+        <header className="mado-topbar">
+          <Link to="/" className="mado-brand" aria-label="mado ホームへ">
+            Mado
+          </Link>
+          <Tabs />
+        </header>
         <div className="mx-auto max-w-[1180px] px-4 sm:px-6">
-          {/* ── Masthead ─────────────────────────────────────────────────
-              newspaper の刊頭 (masthead) を意識:
-              ・左 = upright serif で "mado." (ピリオドはタイポ的アクセント)
-              ・右 = small-cap タブ
-              ・下に hairline rule (border-color はトークンの --color-rule)
-              を thin に置く。                                             */}
-          <header
-            className="mado-header flex flex-wrap items-center justify-between gap-x-4 gap-y-2 pt-6 pb-4 sm:pt-7"
-            style={{ borderBottom: '1px solid var(--rule)' }}
-          >
-            <Link
-              to="/"
-              className="group flex items-baseline gap-3 self-end text-ink-12 no-underline"
-              aria-label="mado ホームへ"
-            >
-              <img
-                src="/mado-icon.png"
-                alt=""
-                width={18}
-                height={18}
-                className="-mb-0.5 self-center opacity-80 transition-opacity group-hover:opacity-100"
-              />
-              <h1
-                className="m-0 font-serif font-medium text-[26px] leading-none tracking-[-0.02em] text-ink-12"
-                style={{ fontVariationSettings: "'opsz' 28" }}
-              >
-                <span>mado</span>
-                <span className="text-ink-9">.</span>
-              </h1>
-            </Link>
-            <div className="mado-nav-row flex items-center gap-5">
-              <Tabs />
-            </div>
-          </header>
-
           <MainContent>
             <Suspense fallback={<p className="text-[13px] text-ink-7">読み込み中…</p>}>
               <Routes>

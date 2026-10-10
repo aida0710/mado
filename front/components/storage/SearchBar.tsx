@@ -43,7 +43,7 @@ export function SearchBar({ q, recursive, isSearching, onChangeQ, onToggleRecurs
           onClick={onClear}
           className={
             'cursor-pointer rounded-1 bg-paper px-2 py-1 text-[11px] ' +
-            'font-semibold uppercase tracking-[0.16em] text-ink-7 ' +
+            'font-semibold text-ink-7 ' +
             'transition-colors hover:bg-ink-1 hover:text-ink-11'
           }
           style={{ border: '1px solid var(--color-rule-strong)' }}

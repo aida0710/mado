@@ -22,7 +22,7 @@ const INITIAL_VISIBLE_PREFIXES = 5
 const rowGridClass =
   'grid grid-cols-[minmax(0,1fr)_6.5rem] items-center border-b border-rule ' +
   'sm:grid-cols-[minmax(0,1fr)_7rem_9rem_7rem] md:grid-cols-[minmax(0,1fr)_7rem_9rem_11rem_7rem]'
-const headerCellClass = 'px-2 py-1.5 text-[9.5px] font-semibold uppercase tracking-[0.12em] text-ink-7'
+const headerCellClass = 'px-2 py-1.5 text-[11px] font-semibold text-ink-7'
 const numClass = 'whitespace-nowrap px-2 py-1.5 text-right font-mono text-[12px] tabular-nums'
 const shareCellClass = 'hidden px-2 py-1.5 sm:block'
 const deltaCellClass = `${numClass} hidden text-ink-7 md:block`
@@ -61,7 +61,7 @@ export function BucketPrefixCapacity({
   return (
     <section className="mt-2 border-t border-rule pt-2" aria-label={`${bucket}の直下のディレクトリ別の容量`}>
       <div className="flex items-baseline justify-between gap-3 px-2">
-        <h4 className="text-[10.5px] font-semibold uppercase tracking-[0.18em] text-ink-7">直下のディレクトリ別</h4>
+        <h4 className="text-[12px] font-semibold text-ink-7">直下のディレクトリ別</h4>
         <p className="text-[11px] text-ink-7">容量の大きい{prefixes.length.toLocaleString('ja-JP')}件</p>
       </div>
       <div role="table" className="mt-1" aria-label={`${bucket}の直下のディレクトリ`}>
@@ -166,7 +166,7 @@ function ShareBar({ share }: { share: number }) {
   return (
     <span className="flex items-center gap-2">
       <span className="h-1.5 flex-1 bg-ink-1" aria-hidden>
-        <span className="block h-full bg-ink-9" style={{ width: `${percent}%` }} />
+        <span className="block h-full bg-accent" style={{ width: `${percent}%` }} />
       </span>
       <span className="w-12 text-right font-mono text-[11px] tabular-nums text-ink-7">{percent.toFixed(1)}%</span>
     </span>

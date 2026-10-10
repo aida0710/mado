@@ -2,7 +2,7 @@ import { useEffect, useReducer } from 'react'
 import { api } from '../lib/api/client'
 
 const sectionTitleClass =
-  'm-0 text-[10.5px] font-semibold uppercase tracking-[0.22em] text-ink-7'
+  'm-0 text-[12px] font-semibold text-ink-7'
 
 // 機能の全体トグル。app_settings の 1 行 = 1 機能で、値は 'true' / 'false' の文字列。
 // 「行が無い / 'false' 以外」は有効 — 設定行を消しても既存機能が消えないように。

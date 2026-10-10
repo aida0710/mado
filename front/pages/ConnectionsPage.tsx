@@ -269,11 +269,11 @@ export default function ConnectionsPage() {
                 style={{ borderBottom: '1px solid var(--rule)' }}
               >
                 <div className="min-w-0 sm:flex-1">
-                  <strong className="block text-[15px] font-semibold tracking-[0.005em] text-ink-12">
+                  <strong className="block text-[15px] font-semibold text-ink-12">
                     {connection.name}
                     {connection.isDefault ? (
                       <span
-                        className="ml-2 align-middle text-[9.5px] font-semibold uppercase tracking-[0.18em] text-ink-7"
+                        className="ml-2 align-middle text-[11px] font-semibold text-ink-7"
                         style={{ border: '1px solid var(--rule)', borderRadius: 2, padding: '1px 5px' }}
                         title="Storage タブはこの接続を開きます"
                       >
@@ -282,7 +282,7 @@ export default function ConnectionsPage() {
                     ) : null}
                     {connection.visibility.mode === 'whitelist' ? (
                       <span
-                        className="ml-2 align-middle text-[9.5px] font-semibold uppercase tracking-[0.12em] text-ink-7"
+                        className="ml-2 align-middle text-[11px] font-semibold text-ink-7"
                         style={{ border: '1px solid var(--rule)', borderRadius: 2, padding: '1px 5px' }}
                         title={`${connection.visibility.allowedUsers.length}人を許可`}
                       >

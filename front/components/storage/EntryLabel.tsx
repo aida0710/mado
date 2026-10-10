@@ -28,7 +28,7 @@ export function EntryLabel({ kind, tail, tags, overflow }: Props) {
   return (
     <>
       {kind === 'directory'
-        // dir glyph: chevron — folder シンボルとしての editorial 表現
+        // dir glyph: chevron — folder シンボルとしての表現
         ? <span aria-hidden className="text-ink-5 select-none text-[10px]">▸</span>
         // file glyph: 控えめな点 — タイポ的に存在を主張しすぎない
         : <span aria-hidden className="text-ink-3 select-none text-[10px]">·</span>}

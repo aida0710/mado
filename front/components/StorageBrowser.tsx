@@ -356,7 +356,7 @@ export function StorageBrowser({ connectionId, bucket, prefix, onSelectFile }: P
           <div
             role="progressbar"
             aria-label="読み込み中"
-            className="storage-progress h-full w-1/3 bg-ink-9"
+            className="storage-progress h-full w-1/3 bg-accent"
           />
         )}
       </div>

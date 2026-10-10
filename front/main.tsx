@@ -2,19 +2,16 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { createBrowserRouter, RouterProvider } from 'react-router-dom'
 
-// ── Editorial type stack (self-hosted via @fontsource) ──────────────
+// ── 書体と色の変数 (Mado Model Tracking と共通) ─────────────────────
 // LAN/VPN 内ツールなので CDN には依存させず、Vite のバンドルに同梱する。
-// ・Display serif: Newsreader (upright のみ)。筆記体は使わない。
-// ・Body sans:    Public Sans (upright のみ)。
-// ・Mono:         IBM Plex Mono。
-// ・日本語:        Noto Sans JP のみ。明朝 (Noto Serif JP) は使わない。
-import '@fontsource-variable/newsreader/opsz.css'         // serif display, optical sizing
-import '@fontsource-variable/public-sans/wght.css'        // sans body
-import '@fontsource/ibm-plex-mono/400.css'                // monospace (paths, code)
-import '@fontsource/ibm-plex-mono/500.css'
-import '@fontsource/noto-sans-jp/japanese-400.css'        // 日本語 body
+// ・英字: IBM Plex Sans / IBM Plex Mono (@mado/design-tokens に同梱)。
+// ・日本語: Noto Sans JP。
+// 色・角丸・書体の変数も @mado/design-tokens から読み、App.css の @theme がそれを参照する。
+import '@fontsource/noto-sans-jp/japanese-400.css'
 import '@fontsource/noto-sans-jp/japanese-500.css'
 import '@fontsource/noto-sans-jp/japanese-700.css'
+import '@mado/design-tokens/fonts.css'
+import '@mado/design-tokens/tokens.css'
 
 import App from './App.tsx'
 import { AuthGate } from './lib/auth.tsx'

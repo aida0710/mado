@@ -14,7 +14,7 @@ const linkClass =
   'text-ink-11 no-underline px-1.5 py-[2px] rounded-1 ' +
   'font-mono text-[12.5px] ' +
   'transition-colors hover:bg-ink-1'
-const sepClass = 'text-ink-5 px-[3px] font-serif select-none'
+const sepClass = 'text-ink-5 px-[3px] select-none'
 
 export function ViewBreadcrumb({
   connectionId, label, href,

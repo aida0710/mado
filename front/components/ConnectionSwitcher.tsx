@@ -52,8 +52,8 @@ export function ConnectionSwitcher() {
         aria-expanded={open}
         onClick={() => setOpen(o => !o)}
       >
-        <span className="text-[10.5px] font-semibold uppercase tracking-[0.18em] text-ink-7">
-          connection
+        <span className="text-[12px] font-semibold text-ink-7">
+          Connection
         </span>
         <span className="text-ink-12">{current.name}</span>
         <span aria-hidden className="text-ink-7">▾</span>
@@ -70,7 +70,7 @@ export function ConnectionSwitcher() {
           role="menu"
         >
           <div
-            className="px-3 pt-1 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.22em] text-ink-7"
+            className="px-3 pt-1 pb-1.5 text-[11px] font-semibold text-ink-7"
             style={{ borderBottom: '1px solid var(--rule)' }}
           >
             Connections

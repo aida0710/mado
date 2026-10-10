@@ -55,8 +55,8 @@ export function LoginPage({
   return (
     <main className="auth-page">
       <section className="auth-card auth-card--login" aria-labelledby={AUTH_TITLE_ID}>
-        <div className="auth-card__mark">mado<span>.</span></div>
-        <p className="auth-card__eyebrow">DATA CATALOG</p>
+        <div className="auth-card__mark">Mado</div>
+        <p className="auth-card__eyebrow">Data catalog</p>
         <h1 id={AUTH_TITLE_ID}>ログイン</h1>
         {(sessionExpired || idpLogoutIncomplete || overlay) && (
           <div className="auth-card__lead">
@@ -134,8 +134,8 @@ export function ChangePasswordPage({ onChanged }: { onChanged(): Promise<void> }
   return (
     <main className="auth-page">
       <section className="auth-card" aria-labelledby={AUTH_TITLE_ID}>
-        <div className="auth-card__mark">mado<span>.</span></div>
-        <p className="auth-card__eyebrow">FIRST SIGN-IN</p>
+        <div className="auth-card__mark">Mado</div>
+        <p className="auth-card__eyebrow">First sign-in</p>
         <h1 id={AUTH_TITLE_ID}>パスワードを変更</h1>
         <p className="auth-card__lead">初回ログイン用パスワードはこの画面で更新してください。</p>
         <form onSubmit={submit} className="auth-form">

@@ -122,7 +122,7 @@ export function PinnedPreviewCard({ item }: { item: PinnedItem }) {
             title="ダウンロード"
           >
             <span aria-hidden>↓</span>
-            <span className="text-[10.5px] font-semibold uppercase tracking-[0.18em]">DL</span>
+            <span className="text-[12px] font-semibold">DL</span>
           </a>
         )}
         <button

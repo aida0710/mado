@@ -55,7 +55,7 @@ export function TarEntryModal({ connectionId, bucket, archiveKey, entry, onClose
           style={{ fontFamily: 'var(--font-mono)', fontSize: '12px' }}
         >
           <span className="text-ink-7 truncate">{archiveKey}</span>
-          <span className="text-ink-3 px-[2px]" style={{ fontFamily: 'var(--font-serif)' }}>›</span>
+          <span className="text-ink-3 px-[2px]">›</span>
           <span className="text-ink-12">{entry.name}</span>
         </p>
         {entry.size != null && (
@@ -84,7 +84,7 @@ export function TarEntryModal({ connectionId, bucket, archiveKey, entry, onClose
           title="ダウンロード"
         >
           <span aria-hidden>↓</span>
-          <span className="text-[10.5px] font-semibold uppercase tracking-[0.18em]">DL</span>
+          <span className="text-[12px] font-semibold">DL</span>
         </a>
         <button
           type="button"

@@ -286,7 +286,7 @@ export function TagSearchView({ connectionId }: Props) {
 
           {hits !== null && hits.length > 0 && (
             <>
-              <p className="mt-5 text-[10.5px] font-semibold uppercase tracking-[0.22em] text-ink-7">
+              <p className="mt-5 text-[12px] font-semibold text-ink-7">
                 {hits.length} 件
               </p>
               <ul className="m-0 mt-2 list-none p-0" style={{ borderTop: '1px solid var(--rule)' }}>

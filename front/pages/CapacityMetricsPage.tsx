@@ -120,10 +120,10 @@ export default function CapacityMetricsPage({ connectionId }: { connectionId: st
         <ConnectionSwitcher />
       </div>
       <header className="mt-7 mb-5">
-        <p className="text-[10.5px] font-semibold uppercase tracking-[0.22em] text-ink-7">Bucket capacity</p>
+        <p className="text-[12px] font-semibold text-ink-7">Bucket capacity</p>
         <div className="mt-1 flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h2 className="text-[27px] font-semibold tracking-[-0.025em]">バケット容量メトリクス</h2>
+            <h2 className="text-[27px] font-semibold">バケット容量メトリクス</h2>
             <p className="mt-1 text-[13px] text-ink-7">このコネクションにある全バケットの完全走査結果をまとめて表示します。</p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -280,9 +280,9 @@ function BucketMetrics({ connectionId, history, days, intervalSeconds, scanJob }
 }
 
 function Metric({ label, value }: { label: string; value: string }) {
-  return <div className="bg-paper px-4 py-3"><p className="text-[10px] uppercase tracking-[0.14em] text-ink-7">{label}</p><p className="mt-0.5 font-mono text-[17px] font-semibold tabular-nums">{value}</p></div>
+  return <div className="bg-paper px-4 py-3"><p className="text-[11px] text-ink-7">{label}</p><p className="mt-0.5 font-mono text-[17px] font-semibold tabular-nums">{value}</p></div>
 }
 
 function CompactMetric({ label, value }: { label: string; value: string }) {
-  return <div className="bg-paper px-3 py-2"><p className="text-[9.5px] uppercase tracking-[0.12em] text-ink-7">{label}</p><p className="mt-0.5 truncate font-mono text-[13px] font-semibold tabular-nums" title={value}>{value}</p></div>
+  return <div className="bg-paper px-3 py-2"><p className="text-[11px] text-ink-7">{label}</p><p className="mt-0.5 truncate font-mono text-[13px] font-semibold tabular-nums" title={value}>{value}</p></div>
 }

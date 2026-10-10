@@ -28,7 +28,7 @@ const EMPTY_FAVORITES = new Set<string>()
 const EMPTY_BUCKETS: BucketRow[] = []
 
 const sectionTitleClass =
-    'mt-7 mb-3 text-[10.5px] font-semibold uppercase tracking-[0.22em] text-ink-7 first-of-type:mt-0'
+    'mt-7 mb-3 text-[12px] font-semibold text-ink-7 first-of-type:mt-0'
 const listClass = 'm-0 list-none p-0'
 const liClass =
     'flex min-w-0 items-baseline gap-3 px-1 py-3 transition-colors hover:bg-ink-0'
@@ -36,7 +36,7 @@ const liClass =
 // 明示しないと inline のままで text-ellipsis が効かない。
 const linkClass =
     'block min-w-0 overflow-hidden text-ellipsis whitespace-nowrap font-semibold ' +
-    'tracking-[-0.005em] text-ink-12 no-underline hover:underline underline-offset-[3px]'
+    'text-ink-12 no-underline hover:underline underline-offset-[3px]'
 const subLinkClass =
     'text-[12px] text-ink-9 no-underline hover:text-ink-12 hover:underline underline-offset-[3px]'
 

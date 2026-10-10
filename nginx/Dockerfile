@@ -11,6 +11,8 @@ ARG MADO_VERSION=dev
 ENV VITE_GIT_COMMIT=$VITE_GIT_COMMIT
 ENV VITE_GIT_DATE=$VITE_GIT_DATE
 COPY front/package.json front/package-lock.json ./
+# 共通の見た目 (@mado/design-tokens) は vendor/ の tarball から入れるので npm ci より先に置く。
+COPY front/vendor ./vendor
 RUN npm ci
 COPY front .
 RUN npm run build

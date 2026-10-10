@@ -22,7 +22,7 @@ const PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const
 const DEFAULT_PAGE_SIZE = 10
 
 const tableHeadClass =
-  'px-2 py-2 text-left text-[10.5px] font-semibold uppercase tracking-[0.22em] text-ink-7'
+  'px-2 py-2 text-left text-[12px] font-semibold text-ink-7'
 const rowClass = 'cursor-pointer transition-colors hover:bg-ink-0 focus-visible:bg-ink-1'
 const pagerBtnClass =
   'cursor-pointer bg-paper px-3 py-1 text-[12px] transition-colors ' +
@@ -196,7 +196,7 @@ export function PreviewArchive({ connectionId, bucket, k, initialEntry = null, o
     <div className="flex items-center gap-2">
       <label className="flex items-center gap-2">
         <span
-          className="text-[10.5px] font-semibold uppercase tracking-[0.18em] text-ink-7"
+          className="text-[12px] font-semibold text-ink-7"
         >
           表示件数
         </span>

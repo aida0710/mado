@@ -58,7 +58,7 @@ export default function CapacityHistoryChart({ points, intervalSeconds, capacity
               : latest !== undefined && <ReferenceLine y={latest} stroke="var(--ink-3)" strokeDasharray="3 4" />}
             <Line
               type="linear" dataKey="totalBytes" name="容量" connectNulls={false} isAnimationActive={false}
-              stroke="var(--ink-12)" strokeWidth={1.75} dot={false} activeDot={{ r: 3.5 }}
+              stroke="var(--accent)" strokeWidth={1.75} dot={false} activeDot={{ r: 3.5 }}
             />
           </LineChart>
         </ResponsiveContainer>

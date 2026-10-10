@@ -71,29 +71,29 @@ export const MonacoMarkdownEditor = forwardRef<MonacoMarkdownEditorHandle, Props
 
     const handleMount = (ed: monacoEditor.IStandaloneCodeEditor, m: Monaco) => {
       editorRef.current = ed
-      // editorial: paper bg + ink-12 (ほぼ黒) のカーソル。base 'vs' (light) を継承して
-      // 必要色だけ paper 系に置き換える。Monaco は canvas で描画するので CSS 変数は
-      // 解決されない — 色を直値で指定する。
-      m.editor.defineTheme('mado-paper', {
+      // @mado/design-tokens のライトテーマと同じ色。base 'vs' (light) を継承して
+      // 必要色だけ置き換える。Monaco は canvas で描画するので CSS 変数は
+      // 解決されない — 色を直値で指定する (コメントは対応する変数)。
+      m.editor.defineTheme('mado-light', {
         base: 'vs',
         inherit: true,
         rules: [],
         colors: {
-          'editor.background':              '#faf9f5', // --color-paper
-          'editor.foreground':              '#16140f', // --color-ink-11
-          'editorLineNumber.foreground':    '#7a7565',
-          'editorLineNumber.activeForeground': '#16140f',
-          'editor.lineHighlightBackground': '#f3f0e6',
+          'editor.background':              '#ffffff', // --background
+          'editor.foreground':              '#202020', // --text
+          'editorLineNumber.foreground':    '#5f6367', // --muted
+          'editorLineNumber.activeForeground': '#202020', // --text
+          'editor.lineHighlightBackground': '#f4f4f4', // --surface
           'editor.lineHighlightBorder':     '#00000000',
-          'editorCursor.foreground':        '#0a0904',
-          'editor.selectionBackground':     '#dad4c2',
-          'editor.inactiveSelectionBackground': '#e8e3d2',
-          'editorIndentGuide.background':   '#ebe5d2',
-          'editorIndentGuide.activeBackground': '#cfc8b6',
-          'editorWhitespace.foreground':    '#cdc6b3',
+          'editorCursor.foreground':        '#202020', // --text
+          'editor.selectionBackground':     '#c8e5e2', // --accent-tint より一段濃く、選択範囲を見分けやすく
+          'editor.inactiveSelectionBackground': '#e2f3f1', // --accent-tint
+          'editorIndentGuide.background':   '#eaeaea', // --surface-hover
+          'editorIndentGuide.activeBackground': '#c6c6c6', // --border-strong
+          'editorWhitespace.foreground':    '#c6c6c6', // --border-strong
         },
       })
-      m.editor.setTheme('mado-paper')
+      m.editor.setTheme('mado-light')
     }
 
     return (

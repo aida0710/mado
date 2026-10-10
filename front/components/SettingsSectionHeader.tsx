@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 
 const titleClass =
-  'm-0 text-[10.5px] font-semibold uppercase tracking-[0.22em] text-ink-7'
+  'm-0 text-[12px] font-semibold text-ink-7'
 
 interface SettingsSectionHeaderProps {
   title: string

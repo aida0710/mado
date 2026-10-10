@@ -59,7 +59,7 @@ export function Pager({
                 'cursor-pointer rounded-1 px-2.5 py-1 text-[11.5px] tabular-nums ' +
                 'transition-colors disabled:cursor-default ' +
                 (current
-                  ? 'bg-ink-12 text-paper'
+                  ? 'bg-accent-strong text-on-accent'
                   : 'bg-paper text-ink-9 hover:bg-ink-1 hover:text-ink-11 disabled:opacity-40')
               }
               style={{ border: '1px solid var(--color-rule-strong)' }}

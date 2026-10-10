@@ -16,16 +16,16 @@ function parentPath(connectionId: string, bucket: string, prefix: string): strin
   return `/storage/${encodeURIComponent(connectionId)}/${encodeURIComponent(bucket)}/${encPath(parentPrefix)}`
 }
 
-// editorial breadcrumb:
+// breadcrumb:
 // ・パス segment は font-mono (ファイルシステム表現)
-// ・separator は serif の "›"  (ink-3)
+// ・separator は "›"  (補足の文字色)
 // ・親へ戻るボタンは hairline 罫の正方形
 const linkClass =
   'text-ink-11 no-underline px-1.5 py-[2px] rounded-1 ' +
   'font-mono text-[12.5px] ' +
   'transition-colors hover:bg-ink-1'
 const sepClass =
-  'text-ink-5 px-[3px] font-serif select-none'
+  'text-ink-5 px-[3px] select-none'
 
 export function Breadcrumb({
   connectionId, bucket, prefix,

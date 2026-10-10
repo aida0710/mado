@@ -14,7 +14,7 @@ export function TagFilterBar({ tags, selected, onToggle, onClear }: Props) {
   if (tags.length === 0) return null
   return (
     <div className="flex flex-wrap items-center gap-2 py-2">
-      <span className="text-[10.5px] font-semibold uppercase tracking-[0.22em] text-ink-7">
+      <span className="text-[12px] font-semibold text-ink-7">
         タグで絞り込み
       </span>
       <TagToggleChips tags={tags} selected={selected} onToggle={onToggle} onClear={onClear} />

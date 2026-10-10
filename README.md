@@ -415,11 +415,23 @@ cd api   && npm test && npm run lint
 cd front && npm test && npm run lint
 ```
 
+### 画面の見た目 (Mado Model Tracking と共通)
+
+色・書体・角丸の値は `@mado/design-tokens` (Mado Model Tracking の `packages/design-tokens`) が持ち、`front/App.css` の `@theme` はその変数を参照するだけです。パッケージは `front/vendor/` の tarball から入れています。値を変えるときはパッケージ側で版を上げ、次の手順で取り込みます。
+
+```bash
+# Mado Model Tracking の作業ツリーで
+npm pack --workspace @mado/design-tokens --pack-destination <mado>/front/vendor
+# mado の front で (古い tarball は消す)
+npm install ./vendor/mado-design-tokens-<version>.tgz
+```
+
 ---
 
 ## クレジット
 
 - ロゴ (`front/public/mado-icon.png`): "Window" icon by [Inmotus Design](https://icons8.com/icon/set/window/external-others-inmotus-design) on [Icons8](https://icons8.com/)。Icons8 の無料利用規約により attribution を明記。
+- 書体: [IBM Plex](https://github.com/IBM/plex) (`@mado/design-tokens` に同梱) と [Noto Sans JP](https://fonts.google.com/noto/specimen/Noto+Sans+JP)。どちらも SIL Open Font License 1.1。
 
 ---
 

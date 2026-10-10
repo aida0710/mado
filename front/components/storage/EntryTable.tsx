@@ -8,9 +8,9 @@ import { EntryLabel } from './EntryLabel'
 import { EntryTagPicker } from './EntryTagPicker'
 import { useDirectoryEntryActions, useFileEntryActions, type EntryTagProps } from './useEntryActions'
 
-// Editorial table: ヘッダ small caps + 0.22em tracking、罫線は hairline (var(--rule))
+// 一覧の表: ヘッダは小さめの太字 (補足の文字色)、罫線は hairline (var(--rule))
 const headThClass =
-  'p-2 text-left text-[10.5px] font-semibold uppercase tracking-[0.22em] text-ink-7'
+  'p-2 text-left text-[12px] font-semibold text-ink-7'
 // 行内 cell。下端 hairline。tdNumClass は右寄せ + tabular-nums。
 const tdNameClass =
   'max-w-0 overflow-hidden text-ellipsis whitespace-nowrap px-2 py-2.5'
