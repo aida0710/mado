@@ -1,5 +1,4 @@
 import { memo } from 'react'
-import { Link } from 'react-router-dom'
 import type { StorageFileEntry, Tag } from '../../lib/api/types'
 import { fmtSize } from '../../lib/format'
 import { useIsCompact } from '../../lib/useIsCompact'
@@ -8,27 +7,16 @@ import { EntryLabel } from './EntryLabel'
 import { EntryTagPicker } from './EntryTagPicker'
 import { useDirectoryEntryActions, useFileEntryActions, type EntryTagProps } from './useEntryActions'
 
-// 一覧の表: ヘッダは小さめの太字 (補足の文字色)、罫線は hairline (var(--rule))
-const headThClass =
-  'p-2 text-left text-[12px] font-semibold text-ink-7'
-// 行内 cell。下端 hairline。tdNumClass は右寄せ + tabular-nums。
-const tdNameClass =
-  'max-w-0 overflow-hidden text-ellipsis whitespace-nowrap px-2 py-2.5'
-const tdNumClass =
-  'w-px whitespace-nowrap px-2 py-2.5 text-right tabular-nums text-ink-7 ' +
-  'font-mono text-[12px]'
-// File rows: 行全体クリック (preview drawer 開閉) なので pointer cursor
-const fileRowClass =
-  'cursor-pointer transition-colors hover:bg-ink-0 focus-within:bg-ink-1'
-// Dir rows: クリック領域は内側の <Link> だけ。inert セルでは pointer を出さない
-const dirRowClass =
-  'transition-colors hover:bg-ink-0 focus-within:bg-ink-1'
-const hairline = { borderBottom: '1px solid var(--rule)' } as const
-// ヘッダ下の罫線。一覧の取得から時間が経つと、App.css の .entry-listing が
-// --entry-table-head-rule-color を経過時間の色にする。
-const entryTableHeadRule = '1px solid var(--entry-table-head-rule-color, var(--color-rule-strong))'
+// 一覧の表 (共通の部品の table)。1 行 40px 前後に詰め、名前の列にアイコン・名前・タグ、
+// 右にサイズ・更新日、右端に操作のメニュー。ファイルの行は押すとプレビューを開く。
+// 640px 未満は列を Name と操作だけにし、サイズ・更新日は名前の下の 1 行に回す。
 
-interface DirectoryEntryProps extends EntryTagProps {
+interface RowLayout {
+  /** 640px 未満の形 (列を減らす)。 */
+  compact: boolean
+}
+
+interface DirectoryEntryProps extends EntryTagProps, RowLayout {
   directory: string
   prefix: string
   connectionId: string
@@ -36,36 +24,33 @@ interface DirectoryEntryProps extends EntryTagProps {
   onTagsChange?: (path: string, tagIds: string[]) => void
 }
 
-interface FileEntryProps extends EntryTagProps {
+interface FileEntryProps extends EntryTagProps, RowLayout {
   file: StorageFileEntry
   prefix: string
   connectionId: string
   bucket: string
+  /** プレビューで開いている行か (tr.selected)。 */
+  selected: boolean
   onSelectFile?: (key: string) => void
   onTagsChange?: (path: string, tagIds: string[]) => void
 }
 
-// 行ごとに memo 化することで、StorageBrowser が loading フラグや scroll
-// 起動の loadMore で再レンダしても、エントリが変わらない既存行は描画を
-// スキップできる。各行は items: MenuItem[] を内部で useMemo して
-// CopyMenu の memo を活かす。
+// 行ごとに memo 化することで、StorageBrowser が loading フラグなどで再レンダしても、
+// エントリが変わらない既存行は描画をスキップできる。各行は items: MenuItem[] を
+// 内部で useMemo して CopyMenu の memo を活かす。
 const DirectoryRow = memo(function DirectoryRow(props: DirectoryEntryProps) {
-  const { directory, connectionId, bucket, allTags, tagIds, onTagsChange } = props
+  const { directory, connectionId, bucket, allTags, tagIds, onTagsChange, compact } = props
   const entry = useDirectoryEntryActions(props)
   return (
     <>
-      <tr className={dirRowClass} style={hairline}>
-        <td className={`${tdNameClass} p-0`}>
-          <Link
-            to={entry.href}
-            className="flex items-baseline gap-2 px-2 py-2.5 font-semibold text-ink-12 no-underline"
-          >
-            <EntryLabel kind="directory" tail={entry.tail} tags={entry.tags} overflow="truncate" />
-          </Link>
+      {/* クリック領域は名前のリンクだけ (中クリック・新しいタブが効く本物の <a>)。 */}
+      <tr>
+        <td>
+          <EntryLabel kind="directory" tail={entry.tail} tags={entry.tags} href={entry.href} />
         </td>
-        <td className={tdNumClass}>-</td>
-        <td className={tdNumClass}>-</td>
-        <td className={tdNumClass}>
+        {!compact && <td className="numeric mono entry-cell-empty">-</td>}
+        {!compact && <td className="mono entry-cell-empty">-</td>}
+        <td className="entry-cell-actions">
           <CopyMenu items={entry.items} />
         </td>
       </tr>
@@ -79,26 +64,32 @@ const DirectoryRow = memo(function DirectoryRow(props: DirectoryEntryProps) {
 })
 
 const FileRow = memo(function FileRow(props: FileEntryProps) {
-  const { file, connectionId, bucket, allTags, tagIds, onTagsChange } = props
+  const { file, connectionId, bucket, allTags, tagIds, onTagsChange, compact, selected } = props
   const entry = useFileEntryActions(props)
+  const size = fmtSize(file.size)
+  const modified = file.lastModified?.slice(0, 10) ?? ''
   return (
     <>
+      {/* 行全体がボタン (押す・Enter・Space でプレビュー)。 */}
       <tr
-        className={fileRowClass}
-        style={hairline}
+        className={selected ? 'entry-row-file selected' : 'entry-row-file'}
         role="button"
         tabIndex={0}
+        aria-current={selected ? 'true' : undefined}
         onClick={entry.select}
         onKeyDown={entry.onKeyDown}
       >
-        <td className={tdNameClass}>
-          <span className="flex items-baseline gap-2">
-            <EntryLabel kind="file" tail={entry.tail} tags={entry.tags} overflow="truncate" />
-          </span>
+        <td>
+          <EntryLabel kind="file" tail={entry.tail} tags={entry.tags} fileKey={file.key} />
+          {compact && (
+            <div className="entry-meta">
+              {size}{modified && ` · ${modified}`}
+            </div>
+          )}
         </td>
-        <td className={tdNumClass}>{fmtSize(file.size)}</td>
-        <td className={tdNumClass}>{file.lastModified?.slice(0, 10) ?? ''}</td>
-        <td className={tdNumClass}>
+        {!compact && <td className="numeric mono">{size}</td>}
+        {!compact && <td className="mono">{modified}</td>}
+        <td className="entry-cell-actions">
           <CopyMenu items={entry.items} />
         </td>
       </tr>
@@ -111,74 +102,6 @@ const FileRow = memo(function FileRow(props: FileEntryProps) {
   )
 })
 
-// ── Mobile card variants ───────────────────────────────────────
-// <sm では table を card list に切替。table の横スクロールでは長いキー名が
-// 一行に収まらず読みにくいので、カード上で 2 段組 (name / meta) に展開する。
-
-const DirectoryCard = memo(function DirectoryCard(props: DirectoryEntryProps) {
-  const { directory, connectionId, bucket, allTags, tagIds, onTagsChange } = props
-  const entry = useDirectoryEntryActions(props)
-  return (
-    <li className={dirRowClass} style={hairline}>
-      <div className="flex items-baseline gap-2 px-2 py-3">
-        <Link
-          to={entry.href}
-          className="flex-1 min-w-0 flex items-baseline gap-2 font-semibold text-ink-12 no-underline"
-        >
-          <EntryLabel kind="directory" tail={entry.tail} tags={entry.tags} overflow="break-all" />
-        </Link>
-        <CopyMenu items={entry.items} />
-      </div>
-      <EntryTagPicker
-        open={entry.pickerOpen} onClose={() => entry.setPickerOpen(false)}
-        connectionId={connectionId} bucket={bucket} kind="prefix" path={directory} label={entry.tail}
-        allTags={allTags} tagIds={tagIds} onTagsChange={onTagsChange}
-      />
-    </li>
-  )
-})
-
-const FileCard = memo(function FileCard(props: FileEntryProps) {
-  const { file, connectionId, bucket, allTags, tagIds, onTagsChange } = props
-  const entry = useFileEntryActions(props)
-  return (
-    <li
-      className={fileRowClass}
-      style={hairline}
-      role="button"
-      tabIndex={0}
-      onClick={entry.select}
-      onKeyDown={entry.onKeyDown}
-    >
-      <div className="flex items-start gap-2 px-2 py-3">
-        <div className="min-w-0 flex-1">
-          <div className="flex items-baseline gap-2">
-            <EntryLabel kind="file" tail={entry.tail} tags={entry.tags} overflow="break-all" />
-          </div>
-          <div
-            className="mt-1 ml-3 text-[11px] text-ink-7 tabular-nums"
-            style={{ fontFamily: 'var(--font-mono)', letterSpacing: '0.02em' }}
-          >
-            <span>{fmtSize(file.size)}</span>
-            {file.lastModified && (
-              <>
-                {' '}<span className="text-ink-3">·</span>{' '}
-                <span>{file.lastModified.slice(0, 10)}</span>
-              </>
-            )}
-          </div>
-        </div>
-        <CopyMenu items={entry.items} />
-      </div>
-      <EntryTagPicker
-        open={entry.pickerOpen} onClose={() => entry.setPickerOpen(false)}
-        connectionId={connectionId} bucket={bucket} kind="file" path={file.key} label={entry.tail}
-        allTags={allTags} tagIds={tagIds} onTagsChange={onTagsChange}
-      />
-    </li>
-  )
-})
-
 interface Props {
   dirs: string[]
   files: StorageFileEntry[]
@@ -186,6 +109,8 @@ interface Props {
   connectionId: string
   bucket: string
   onSelectFile?: (key: string) => void
+  /** プレビューで開いているファイルのキー。その行を選択中にする。 */
+  selectedKey?: string | null
   allTags?: Tag[]
   /** タグ機能の全体トグル (Settings → 機能)。false ならタグ関連の導線を出さない。 */
   tagsEnabled?: boolean
@@ -194,35 +119,20 @@ interface Props {
 }
 
 export function EntryTable({
-  dirs, files, prefix, connectionId, bucket, onSelectFile,
+  dirs, files, prefix, connectionId, bucket, onSelectFile, selectedKey = null,
   allTags = [], tagsByPath = {}, onTagsChange, tagsEnabled = true,
 }: Props) {
-  const isCompact = useIsCompact()
-  const shared = { prefix, connectionId, bucket, allTags, onTagsChange, tagsEnabled }
-  if (isCompact) {
-    return (
-      <ul
-        className="entry-table m-0 list-none p-0"
-        style={{ borderTop: entryTableHeadRule }}
-      >
-        {dirs.map(d => (
-          <DirectoryCard key={d} directory={d} tagIds={tagsByPath[d] ?? []} {...shared} />
-        ))}
-        {files.map(f => (
-          <FileCard key={f.key} file={f} tagIds={tagsByPath[f.key] ?? []} onSelectFile={onSelectFile} {...shared} />
-        ))}
-      </ul>
-    )
-  }
+  const compact = useIsCompact()
+  const shared = { prefix, connectionId, bucket, allTags, onTagsChange, tagsEnabled, compact }
   return (
-    <div className="entry-table overflow-x-auto">
-      <table className="w-full border-collapse text-[13px]">
+    <div className={compact ? 'table-scroll entry-table compact' : 'table-scroll entry-table'}>
+      <table>
         <thead>
-          <tr style={{ borderBottom: entryTableHeadRule }}>
-            <th className={headThClass}>Name</th>
-            <th className={`${headThClass} text-right`}>Size</th>
-            <th className={`${headThClass} text-right`}>Modified</th>
-            <th className={headThClass}></th>
+          <tr>
+            <th scope="col">Name</th>
+            {!compact && <th scope="col" className="numeric entry-col-size">Size</th>}
+            {!compact && <th scope="col" className="entry-col-modified">Modified</th>}
+            <th scope="col" className="entry-col-actions"><span className="sr-only">操作</span></th>
           </tr>
         </thead>
         <tbody>
@@ -230,7 +140,14 @@ export function EntryTable({
             <DirectoryRow key={d} directory={d} tagIds={tagsByPath[d] ?? []} {...shared} />
           ))}
           {files.map(f => (
-            <FileRow key={f.key} file={f} tagIds={tagsByPath[f.key] ?? []} onSelectFile={onSelectFile} {...shared} />
+            <FileRow
+              key={f.key}
+              file={f}
+              tagIds={tagsByPath[f.key] ?? []}
+              selected={f.key === selectedKey}
+              onSelectFile={onSelectFile}
+              {...shared}
+            />
           ))}
         </tbody>
       </table>

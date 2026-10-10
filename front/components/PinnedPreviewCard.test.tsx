@@ -109,7 +109,7 @@ describe('PinnedPreviewCard - 種別ごとの描き分け', () => {
     render(<PinnedPreviewCard item={{ id: 'i1', connectionId: 'c', bucket: 'b', key: 'x.txt' }} />)
     const pre = await screen.findByText('plain body')
     expect(pre.tagName).toBe('PRE')
-    expect(pre.className).toContain('h-[280px]')
+    expect(pre).toHaveClass('pinned-text')
   })
 
   it('tar エントリのテキストも固定高さの pre で表示される', async () => {
@@ -117,7 +117,7 @@ describe('PinnedPreviewCard - 種別ごとの描き分け', () => {
     render(<PinnedPreviewCard item={{ id: 'i2', connectionId: 'c', bucket: 'b', key: 's.tar', entryPath: 'u.txt' }} />)
     const pre = await screen.findByText('hello')
     expect(pre.tagName).toBe('PRE')
-    expect(pre.className).toContain('h-[280px]')
+    expect(pre).toHaveClass('pinned-text')
   })
 
   it('単体 .json のピンは minify されていてもプリティプリントされる', async () => {
@@ -176,7 +176,7 @@ describe('PinnedPreviewCard - パスのコピー', () => {
     expect(label).toHaveTextContent('u1.wav')
     fireEvent.click(label)
     expect(copyToClipboard).toHaveBeenCalledWith('rec/shard.tar › audio/u1.wav')
-    await waitFor(() => expect(label).toHaveTextContent('コピーしました ✓'))
+    await waitFor(() => expect(label).toHaveTextContent('コピーしました'))
   })
 
   it('単体ファイルは key をそのままコピーする', () => {

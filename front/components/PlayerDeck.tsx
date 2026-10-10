@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { ChevronDown, ChevronUp, Headphones, Pause, Play, Square, Trash2, Volume2, VolumeX, X } from 'lucide-react'
 import {
   canSplitChannels,
   createTrackAudioGraph,
@@ -11,7 +12,9 @@ import {
 import { computeDriftAdjustments, masterTimeOf } from '../lib/driftSync'
 import { basename, fullEntryLabel } from '../lib/format'
 import { usePlayerDeck, type DeckTrack } from '../lib/playerDeck'
+import { narrowerThan } from '../lib/breakpoints'
 import { useAudioSrc } from '../lib/useAudioSrc'
+import { useMediaQuery } from '../lib/useMediaQuery'
 import { CopyablePath } from './CopyablePath'
 import { Waveform } from './Waveform'
 import { api } from '../lib/api/client'
@@ -75,8 +78,14 @@ function DeckAudio({
 // セクション。<audio> ベース + 1 秒ごとのドリフト補正 (サンプル精度ではない)。
 // fixed の外枠は BottomDock が持つ (ピン留めセクションと単一コンテナに同居させる
 // ため、ここでは fixed を張らない)。トラック 0 件では何も描画しない。
+// トラックの波形の高さ。波形を押すとその位置へ全トラックをシークするので、
+// タッチ前提の 900px 未満では指で押せる高さ (--tap-target と同じ 40px) にする。
+const TRACK_WAVEFORM_HEIGHT = 28
+const TRACK_WAVEFORM_TOUCH_HEIGHT = 40
+
 export function PlayerDeck() {
   const { tracks, removeTrack, clear } = usePlayerDeck()
+  const touch = useMediaQuery(narrowerThan('md'))
   const audioRefs = useRef(new Map<string, HTMLAudioElement>())
   const [playing, setPlaying] = useState(false)
   const [collapsed, setCollapsed] = useState(false)
@@ -156,8 +165,8 @@ export function PlayerDeck() {
 
   // ソロ対象が削除済みなら「ソロなし」として扱う (削除ハンドラの setSoloId(null)
   // と二重の防御)。存在しない ID がソロ扱いのまま残ると全トラックが無音になり、
-  // どの S ボタンもアクティブ表示にならず原因も見えない (幽霊ソロ)。ミュート計算と
-  // S ボタンの押下表示 (反転チップ / aria-pressed) は必ずこちらを使う。
+  // どのソロのボタンも押した表示にならず原因も見えない (幽霊ソロ)。ミュート計算と
+  // ソロのボタンの押した表示 (aria-pressed) は必ずこちらを使う。
   const effectiveSoloId =
     soloId != null && tracks.some(t => t.id === soloId) ? soloId : null
 
@@ -203,10 +212,10 @@ export function PlayerDeck() {
     }
   }, [tracks, peaksById])
 
-  // 外から removeTrack された (この component の ✕ を経由しない) トラックの
+  // 外から removeTrack された (この component の削除ボタンを経由しない) トラックの
   // ノードを掃除する。durations に幽霊が残りうるのと同じ穴を塞ぐ防御。
   //
-  // トラックが 0 件になったら ctx も畳む。✕ で 1 本ずつ消した場合、ピンが 1 件でも
+  // トラックが 0 件になったら ctx も畳む。削除ボタンで 1 本ずつ消した場合、ピンが 1 件でも
   // 残っていると BottomDock は PlayerDeck を描画し続ける (tracks 0 件の `return null`
   // はフック実行後なのでアンマウントされない) ため、ここで閉じないと使われない
   // AudioContext がオーディオスレッドごと居座る。
@@ -251,7 +260,7 @@ export function PlayerDeck() {
   // L / R ボタン。押されたトラックのグラフをここで初めて作る。
   //
   // createMediaElementSource() は 1 要素 1 回きりで、呼んだ瞬間からその <audio> は
-  // AudioContext 経由でしか鳴らなくなる。deck のマウント時や初回 ▶ でまとめて作ると、
+  // AudioContext 経由でしか鳴らなくなる。deck のマウント時や初回の再生でまとめて作ると、
   // L/R を使わないユーザーまで巻き込み、autoplay policy で ctx が suspended のままだと
   // 「両チャンネルすら無音」という退行になる。ユーザーが L/R を押した瞬間 (= gesture)
   // にそのトラックだけ作れば、触らないトラックは今までどおりネイティブ出力で鳴る。
@@ -276,7 +285,7 @@ export function PlayerDeck() {
   }
 
   const playAll = (): void => {
-    // 全トラック終了状態から ▶ を押したら頭から再生し直す。
+    // 全トラック終了状態から再生を押したら頭から再生し直す。
     if (maxDuration > 0 && masterTime >= maxDuration) {
       for (const a of audios()) a.currentTime = 0
       setMasterTime(0)
@@ -313,7 +322,7 @@ export function PlayerDeck() {
   // <audio> が後から現れたトラックへの追従 (DeckAudio が 1 マウント 1 回だけ呼ぶ)。
   // blob 取得中のトラックは playAll 時点で <audio> が存在せず play 対象から漏れる
   // ため、再生中ならマスター時刻へシークして再生を開始する — これが無いと
-  // 「▶ は押せたのにそのトラックだけ永久に無音」のまま取り残される。
+  // 「再生は押せたのにそのトラックだけ永久に無音」のまま取り残される。
   const onTrackArrive = (id: string, el: HTMLAudioElement): void => {
     setReadyIds(cur => {
       if (cur.has(id)) return cur
@@ -339,23 +348,26 @@ export function PlayerDeck() {
   const maxDuration = Math.max(0, ...tracks.map(t => durations[t.id] ?? 0))
   const fmt = (s: number): string =>
     `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`
-  // S(ソロ)/M(ミュート) のアクティブ状態は反転チップ (黒背景 + 紙色文字) で
-  // 明示する — font-bold / opacity だけでは押されているか視認しにくい。
-  const toggleBtnStyle = (active: boolean): CSSProperties | undefined =>
-    active
-      ? { background: 'var(--color-ink-12)', color: 'var(--paper)', borderRadius: 2 }
-      : undefined
+  // L/R・ミュート・ソロの押した状態は aria-pressed で表し、見た目 (塗り) は
+  // preview.css の .deck-button が aria-pressed から付ける。
 
   return (
-    <section>
-      <div className="flex items-center gap-3">
-        <button type="button" className="ghost text-[11px]" onClick={() => setCollapsed(c => !c)}>
-          {collapsed ? '▲' : '▼'} 同期プレイヤー ({tracks.length})
-        </button>
-        <div className="flex-1" />
+    <section className="dock-section">
+      <div className="dock-section-header">
         <button
           type="button"
-          className="ghost text-[11px]"
+          className="dock-toggle"
+          aria-expanded={!collapsed}
+          onClick={() => setCollapsed(c => !c)}
+        >
+          {collapsed
+            ? <ChevronUp size={16} aria-hidden="true" />
+            : <ChevronDown size={16} aria-hidden="true" />}
+          <span>同期プレイヤー ({tracks.length})</span>
+        </button>
+        <button
+          type="button"
+          className="button small"
           onClick={() => {
             stopAll()
             clear()
@@ -378,6 +390,7 @@ export function PlayerDeck() {
             ctxRef.current = null
           }}
         >
+          <Trash2 size={14} aria-hidden="true" />
           クリア
         </button>
       </div>
@@ -397,7 +410,7 @@ export function PlayerDeck() {
       ))}
       {!collapsed && (
         <>
-          <ul className="m-0 max-h-48 list-none overflow-y-auto p-0">
+          <ul className="deck-tracks">
             {tracks.map(t => {
               // 表示は basename に揃える。t.label は tar エントリだとフルエントリパス
               // (audio/mic_01.wav)、単体ファイルだと basename と意味が揃っておらず、
@@ -420,141 +433,154 @@ export function PlayerDeck() {
                 : !splittable ? 'モノラルのため分割できません'
                 : '選んだチャンネルを左右両方から鳴らす'
               return (
-              <li key={t.id} className="flex items-center gap-2 py-1" style={{ borderTop: '1px solid var(--rule)' }}>
-                <CopyablePath
-                  text={basename(t.label)}
-                  fullPath={fullPath}
-                  className="w-56 text-[12px] text-ink-11"
-                />
-                {/* tar 内エントリは blob 取得が終わるまで再生できない。無表示だと
-                    ▶ を押しても鳴らない理由が見えないので、取得中を明示する。 */}
-                {t.entryPath != null && !readyIds.has(t.id) && (
-                  <span className="shrink-0 text-[11px] text-ink-7">取得中…</span>
-                )}
-                <div className="min-w-0 flex-1">
+              <li key={t.id} className="deck-track">
+                <div className="deck-track-name">
+                  <CopyablePath text={basename(t.label)} fullPath={fullPath} />
+                  {/* tar 内エントリは blob 取得が終わるまで再生できない。無表示だと
+                      再生を押しても鳴らない理由が見えないので、取得中を明示する。 */}
+                  {t.entryPath != null && !readyIds.has(t.id) && (
+                    <span className="deck-track-status muted">取得中…</span>
+                  )}
+                </div>
+                <div className="deck-track-wave">
                   <Waveform
                     peaks={peaksById[t.id] ?? []}
                     progress={maxDuration > 0 ? masterTime / maxDuration : 0}
                     durationRatio={maxDuration > 0 ? (durations[t.id] ?? 0) / maxDuration : 1}
                     onSeek={maxDuration > 0 ? ratio => seekAll(ratio * maxDuration) : undefined}
-                    height={28}
+                    height={touch ? TRACK_WAVEFORM_TOUCH_HEIGHT : TRACK_WAVEFORM_HEIGHT}
                   />
                 </div>
-                {/* L / R: 既定は両チャンネル (どちらも非押下)。Web Audio 非対応の
-                    ブラウザでは出さない — 押しても何も起きないボタンは害しかない。 */}
-                {AudioCtx && (
-                  <>
-                    <button
-                      type="button"
-                      className="ghost text-[11px]"
-                      style={toggleBtnStyle(mode === 'left')}
-                      aria-pressed={mode === 'left'}
-                      aria-label="左チャンネル"
-                      title={lrTitle}
-                      disabled={lrDisabled}
-                      onClick={() => toggleChannel(t, 'left')}
-                    >L</button>
-                    <button
-                      type="button"
-                      className="ghost text-[11px]"
-                      style={toggleBtnStyle(mode === 'right')}
-                      aria-pressed={mode === 'right'}
-                      aria-label="右チャンネル"
-                      title={lrTitle}
-                      disabled={lrDisabled}
-                      onClick={() => toggleChannel(t, 'right')}
-                    >R</button>
-                  </>
-                )}
-                <button
-                  type="button"
-                  className="ghost text-[11px]"
-                  style={toggleBtnStyle(muted.has(t.id))}
-                  aria-pressed={muted.has(t.id)}
-                  aria-label="ミュート"
-                  onClick={() => setMuted(cur => {
-                    const next = new Set(cur)
-                    if (next.has(t.id)) next.delete(t.id)
-                    else next.add(t.id)
-                    return next
-                  })}
-                >M</button>
-                <button
-                  type="button"
-                  className="ghost text-[11px]"
-                  style={toggleBtnStyle(effectiveSoloId === t.id)}
-                  aria-pressed={effectiveSoloId === t.id}
-                  aria-label="ソロ"
-                  onClick={() => setSoloId(cur => (cur === t.id ? null : t.id))}
-                >S</button>
-                <button
-                  type="button"
-                  className="ghost text-[11px]"
-                  aria-label="削除"
-                  onClick={() => {
-                    removeTrack(t.id)
-                    // 削除トラックに紐づく状態を漏れなく剪定する。soloId は
-                    // effectiveSoloId の導出でも守られるが、明示的に消して
-                    // 「消したトラックの ID が state に残る」余地をなくす。
-                    // Web Audio ノードは reconcile effect でも拾えるが、ここでも
-                    // 即座に畳んで <audio> より長生きさせない。
-                    disposeGraph(t.id)
-                    setChannelById(cur => {
-                      if (!(t.id in cur)) return cur
-                      const next = { ...cur }
-                      delete next[t.id]
-                      return next
-                    })
-                    setChannelsById(cur => {
-                      if (!(t.id in cur)) return cur
-                      const next = { ...cur }
-                      delete next[t.id]
-                      return next
-                    })
-                    // peaksById は解析 effect の「解析済みか」の番人でもある。残すと
-                    // 再追加時に skip され、チャンネル数が不明のまま L/R が無効になる。
-                    setPeaksById(cur => {
-                      if (!(t.id in cur)) return cur
-                      const next = { ...cur }
-                      delete next[t.id]
-                      return next
-                    })
-                    setSoloId(cur => (cur === t.id ? null : cur))
-                    setMuted(cur => {
-                      if (!cur.has(t.id)) return cur
+                <div className="deck-track-controls">
+                  {/* L / R: 既定は両チャンネル (どちらも非押下)。Web Audio 非対応の
+                      ブラウザでは出さない — 押しても何も起きないボタンは害しかない。 */}
+                  {AudioCtx && (
+                    <>
+                      <button
+                        type="button"
+                        className="deck-button"
+                        aria-pressed={mode === 'left'}
+                        aria-label="左チャンネル"
+                        title={lrTitle}
+                        disabled={lrDisabled}
+                        onClick={() => toggleChannel(t, 'left')}
+                      >L</button>
+                      <button
+                        type="button"
+                        className="deck-button"
+                        aria-pressed={mode === 'right'}
+                        aria-label="右チャンネル"
+                        title={lrTitle}
+                        disabled={lrDisabled}
+                        onClick={() => toggleChannel(t, 'right')}
+                      >R</button>
+                    </>
+                  )}
+                  <button
+                    type="button"
+                    className="deck-button"
+                    aria-pressed={muted.has(t.id)}
+                    aria-label="ミュート"
+                    title="ミュート"
+                    onClick={() => setMuted(cur => {
                       const next = new Set(cur)
-                      next.delete(t.id)
+                      if (next.has(t.id)) next.delete(t.id)
+                      else next.add(t.id)
                       return next
-                    })
-                    setDurations(cur => {
-                      if (!(t.id in cur)) return cur
-                      const next = { ...cur }
-                      delete next[t.id]
-                      return next
-                    })
-                    setReadyIds(cur => {
-                      if (!cur.has(t.id)) return cur
-                      const next = new Set(cur)
-                      next.delete(t.id)
-                      return next
-                    })
-                  }}
-                >✕</button>
+                    })}
+                  >
+                    {muted.has(t.id)
+                      ? <VolumeX size={14} aria-hidden="true" />
+                      : <Volume2 size={14} aria-hidden="true" />}
+                  </button>
+                  <button
+                    type="button"
+                    className="deck-button"
+                    aria-pressed={effectiveSoloId === t.id}
+                    aria-label="ソロ"
+                    title="ソロ"
+                    onClick={() => setSoloId(cur => (cur === t.id ? null : t.id))}
+                  >
+                    <Headphones size={14} aria-hidden="true" />
+                  </button>
+                  <button
+                    type="button"
+                    className="icon-button"
+                    aria-label="削除"
+                    title="削除"
+                    onClick={() => {
+                      removeTrack(t.id)
+                      // 削除トラックに紐づく状態を漏れなく剪定する。soloId は
+                      // effectiveSoloId の導出でも守られるが、明示的に消して
+                      // 「消したトラックの ID が state に残る」余地をなくす。
+                      // Web Audio ノードは reconcile effect でも拾えるが、ここでも
+                      // 即座に畳んで <audio> より長生きさせない。
+                      disposeGraph(t.id)
+                      setChannelById(cur => {
+                        if (!(t.id in cur)) return cur
+                        const next = { ...cur }
+                        delete next[t.id]
+                        return next
+                      })
+                      setChannelsById(cur => {
+                        if (!(t.id in cur)) return cur
+                        const next = { ...cur }
+                        delete next[t.id]
+                        return next
+                      })
+                      // peaksById は解析 effect の「解析済みか」の番人でもある。残すと
+                      // 再追加時に skip され、チャンネル数が不明のまま L/R が無効になる。
+                      setPeaksById(cur => {
+                        if (!(t.id in cur)) return cur
+                        const next = { ...cur }
+                        delete next[t.id]
+                        return next
+                      })
+                      setSoloId(cur => (cur === t.id ? null : cur))
+                      setMuted(cur => {
+                        if (!cur.has(t.id)) return cur
+                        const next = new Set(cur)
+                        next.delete(t.id)
+                        return next
+                      })
+                      setDurations(cur => {
+                        if (!(t.id in cur)) return cur
+                        const next = { ...cur }
+                        delete next[t.id]
+                        return next
+                      })
+                      setReadyIds(cur => {
+                        if (!cur.has(t.id)) return cur
+                        const next = new Set(cur)
+                        next.delete(t.id)
+                        return next
+                      })
+                    }}
+                  >
+                    <X size={16} aria-hidden="true" />
+                  </button>
+                </div>
               </li>
               )
             })}
           </ul>
-          <div className="flex items-center gap-3 pt-1" style={{ borderTop: '1px solid var(--rule)' }}>
+          <div className="deck-transport">
             {playing ? (
-              <button type="button" className="ghost" aria-label="一時停止" onClick={pauseAll}>⏸</button>
+              <button type="button" className="button small" aria-label="一時停止" title="一時停止" onClick={pauseAll}>
+                <Pause size={14} aria-hidden="true" />
+              </button>
             ) : (
-              <button type="button" className="ghost" aria-label="一括再生" onClick={playAll}>▶</button>
+              <button type="button" className="button small" aria-label="一括再生" title="一括再生" onClick={playAll}>
+                <Play size={14} aria-hidden="true" />
+              </button>
             )}
-            <button type="button" className="ghost" aria-label="停止" onClick={stopAll}>■</button>
-            <span className="text-[11px] tabular-nums text-ink-7">{fmt(masterTime)} / {fmt(maxDuration)}</span>
+            <button type="button" className="button small" aria-label="停止" title="停止" onClick={stopAll}>
+              <Square size={14} aria-hidden="true" />
+            </button>
+            <span className="deck-time muted mono">{fmt(masterTime)} / {fmt(maxDuration)}</span>
             <input
               type="range"
-              className="flex-1"
+              className="deck-seek"
               min={0}
               max={maxDuration || 0}
               step={0.1}

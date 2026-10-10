@@ -26,17 +26,17 @@ function mount(prefixes: CapacityPrefixSummary[], bucketTotalBytes = 2048) {
 }
 
 function rowNames(): string[] {
-  return screen.getAllByRole('button', { name: /\/$/ }).map(button => button.textContent?.replace(/^[▸▾]/, '') ?? '')
+  return screen.getAllByRole('button', { name: /\/$/ }).map(button => button.textContent ?? '')
 }
 
 describe('BucketPrefixCapacity', () => {
   it('ディレクトリごとに容量・割合・前回からの増減を出す', () => {
     mount([prefix('ja/', 1024, 512), prefix('en/', 512)])
-    const jaRow = screen.getByRole('button', { name: 'ja/' }).closest<HTMLElement>('[role="row"]')!
+    const jaRow = screen.getByRole('button', { name: 'ja/' }).closest<HTMLElement>('tr')!
     expect(within(jaRow).getByText('1 KiB')).toBeInTheDocument()
     expect(within(jaRow).getByText('50.0%')).toBeInTheDocument()
     expect(within(jaRow).getByText('+512 B (+100.0%)')).toBeInTheDocument()
-    const enRow = screen.getByRole('button', { name: 'en/' }).closest<HTMLElement>('[role="row"]')!
+    const enRow = screen.getByRole('button', { name: 'en/' }).closest<HTMLElement>('tr')!
     expect(within(enRow).getByText('—')).toBeInTheDocument()
   })
 
@@ -54,7 +54,7 @@ describe('BucketPrefixCapacity', () => {
     await userEvent.click(screen.getByRole('button', { name: '残り2件も表示' }))
     expect(rowNames()).toHaveLength(7)
     // 7件の合計は 679 B。バケット全体 1000 B との差が内訳に入らなかった残り。
-    const restRow = screen.getByText('直下のファイル・上位に入らないディレクトリ').closest<HTMLElement>('[role="row"]')!
+    const restRow = screen.getByText('直下のファイル・上位に入らないディレクトリ').closest<HTMLElement>('tr')!
     expect(within(restRow).getByText('321 B')).toBeInTheDocument()
   })
 

@@ -1,0 +1,713 @@
+/* ====================================================================
+   DataLineage (/lineage) と手動登録 (/lineage/register)。
+   見出し・表・入力欄・通知・タブ・詳細の一覧は共通の部品 (@mado/design-tokens) のまま使い、
+   ここにはこの画面にしかない形だけを書く。グラフ (React Flow) は読み取り専用。
+   ==================================================================== */
+
+/* ── ツールバー ────────────────────────────────────────────────────────
+   灰色の面に検索欄・切り替え・選択を並べる (Mado Model Tracking の Runs のツールバーと同じ形)。
+   入りきらないと次の行へ折り返す。 */
+.lineage-toolbar {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  min-height: 40px;
+  margin-bottom: 16px;
+  background: var(--surface);
+}
+/* 項目の間の区切りは地の色の線。 */
+.lineage-toolbar > * + * {
+  border-left: 1px solid var(--background);
+}
+.lineage-search-field {
+  display: flex;
+  flex: 1 1 220px;
+  align-items: center;
+  gap: 10px;
+  min-width: 180px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--input-border);
+  color: var(--muted);
+}
+.lineage-search-field > input {
+  flex: 1;
+  width: 100%;
+  padding: 10px 0;
+  border: 0;
+  background: transparent;
+  font-size: 12px;
+}
+/* 入力中は下の線を太くして示す (枠の外にはみ出すフォーカスの線の代わり)。 */
+.lineage-search-field > input:focus-visible {
+  outline: none;
+}
+.lineage-search-field:focus-within {
+  border-bottom-color: var(--accent);
+  box-shadow: inset 0 -1px 0 var(--accent);
+}
+/* 見出しの文字と、それで切り替える選択欄やボタンの並び。 */
+.lineage-toolbar__item {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+  padding-left: 12px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+label.lineage-toolbar__item {
+  padding-right: 8px;
+}
+.lineage-toolbar__item > select {
+  max-width: 148px;
+  padding: 5px 4px;
+  border: 0;
+  background: transparent;
+  font-size: 12px;
+}
+.lineage-toolbar__status {
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+/* ツールバーの中のボタンと開閉のつまみは、枠を付けずに面へなじませる。 */
+.lineage-toolbar .lineage-toolbar__button,
+.lineage-toolbar__menu > summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  height: 100%;
+  padding: 0 14px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.lineage-toolbar .lineage-toolbar__button:hover:not(:disabled),
+.lineage-toolbar__menu > summary:hover,
+.lineage-toolbar__menu[open] > summary {
+  background: var(--surface-hover);
+}
+/* 技術 ID での指定。ツールバーの右端に置き、入力欄はその下に重ねて開く。 */
+.lineage-toolbar__menu {
+  position: relative;
+  margin-left: auto;
+}
+.lineage-toolbar__menu > summary {
+  list-style: none;
+}
+.lineage-toolbar__menu > summary::-webkit-details-marker {
+  display: none;
+}
+.lineage-toolbar__menu[open] > summary > svg {
+  transform: rotate(180deg);
+}
+.lineage-root-form {
+  width: min(340px, calc(100vw - 32px));
+  padding: 16px 16px 18px;
+}
+.lineage-root-form > .button {
+  width: 100%;
+}
+
+/* ── 表示の切り替え: ボタンの並び。選んでいるものを --accent-strong で塗る ── */
+.lineage-segmented {
+  display: inline-flex;
+  align-items: stretch;
+}
+.lineage-segmented > button {
+  min-height: 34px;
+  padding: 6px 14px;
+  border: 1px solid var(--border-strong);
+  background: var(--background);
+  color: var(--text);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.lineage-segmented > button + button {
+  border-left-width: 0;
+}
+.lineage-segmented > button[aria-pressed='true'] {
+  border-color: var(--accent-strong);
+  background: var(--accent-strong);
+  color: var(--on-accent);
+  font-weight: 600;
+}
+/* ツールバーの中では枠を付けず、面の高さいっぱいに並べる。 */
+.lineage-toolbar .lineage-segmented > button {
+  min-height: 40px;
+  border: 0;
+  background: transparent;
+}
+.lineage-toolbar .lineage-segmented > button + button {
+  border-left: 1px solid var(--background);
+}
+.lineage-toolbar .lineage-segmented > button[aria-pressed='true'] {
+  background: var(--accent-strong);
+}
+.lineage-segmented > button:hover:not([aria-pressed='true']) {
+  background: var(--surface-hover);
+}
+
+/* ── 種類の色: データセットとバージョンは --lineage-dataset、処理と実行は --accent、
+   入手元は --muted。グラフの項目・詳細の種類名・ミニマップで同じ色を使う。 ── */
+.lineage-node-card,
+.lineage-kind {
+  --lineage-kind-color: var(--muted);
+}
+:is(.lineage-node-card, .lineage-kind):is([data-kind='dataset'], [data-kind='version']) {
+  --lineage-kind-color: var(--lineage-dataset);
+}
+:is(.lineage-node-card, .lineage-kind):is([data-kind='job'], [data-kind='run']) {
+  --lineage-kind-color: var(--accent);
+}
+.lineage-kind {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.lineage-kind[data-kind]::before {
+  content: '';
+  flex: 0 0 auto;
+  width: 3px;
+  height: 12px;
+  background: var(--lineage-kind-color);
+}
+
+/* ── 登録一覧・検索 ──────────────────────────────────────────────────── */
+.lineage-catalog {
+  margin-bottom: 16px;
+}
+.lineage-catalog__heading {
+  margin: 0 0 12px;
+}
+.lineage-catalog__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: -4px;
+  padding: 2px 4px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+.lineage-catalog__toggle > svg {
+  color: var(--muted);
+}
+.lineage-catalog__toggle:hover {
+  color: var(--link);
+}
+.lineage-catalog__body > .lineage-toolbar {
+  margin-bottom: 12px;
+}
+/* 20 件の一覧でもグラフを押し下げすぎないよう、表の中でスクロールする。見出しの行は残す。 */
+.lineage-catalog .table-scroll {
+  max-height: 440px;
+  overflow-y: auto;
+}
+.lineage-catalog thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+.lineage-catalog__description {
+  min-width: 14em;
+}
+/* 行の下に開く説明とデータ形式は、640px 未満だけで使う。 */
+.lineage-catalog__row-toggle,
+.lineage-catalog__details {
+  display: none;
+}
+
+/* ── 通知 ────────────────────────────────────────────────────────────── */
+.notice.lineage-warning {
+  border-left-color: var(--warning);
+}
+/* 登録の種類ごとの使いどころ。見出しを 1 行目に、説明を 2 行目に置く。 */
+.lineage-guidance {
+  align-items: flex-start;
+  margin: 0 0 24px;
+}
+.lineage-guidance > svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+  color: var(--link);
+}
+.lineage-guidance strong {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 13px;
+}
+
+/* ── グラフと詳細 ────────────────────────────────────────────────────── */
+/* 広い画面ではグラフの右に詳細、900px 未満では下に詳細 (mmt の Registry の一覧と詳細と同じ区切り)。 */
+.lineage-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 28px;
+  align-items: stretch;
+}
+.lineage-graph {
+  min-width: 0;
+}
+.lineage-graph__tools {
+  margin-bottom: 8px;
+}
+.lineage-graph__search {
+  position: relative;
+  display: flex;
+  flex: 1 1 220px;
+  min-width: 180px;
+}
+.lineage-graph__search > .lineage-search-field {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+/* グラフ内検索の候補。検索欄の幅で、すぐ下に重ねる。 */
+.lineage-graph__results {
+  left: 0;
+  right: 0;
+  min-width: 0;
+  max-height: 320px;
+  padding: 4px 0;
+}
+.lineage-graph__results ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.lineage-graph__results button {
+  display: grid;
+  gap: 3px;
+  width: 100%;
+  padding: 8px 12px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+}
+.lineage-graph__results button:hover {
+  background: var(--surface-hover);
+}
+.lineage-graph__results strong {
+  font-size: 12px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.lineage-graph__results p {
+  margin: 0;
+  padding: 8px 12px;
+}
+
+/* React Flow の色をすべて token に向ける。既定値 (--xy-*-default) ではなく、上書き用の変数を使う。 */
+.lineage-canvas {
+  --xy-background-color: var(--surface);
+  --xy-background-pattern-color: var(--border-strong);
+  --xy-edge-stroke: var(--muted);
+  --xy-edge-stroke-width: 1.5;
+  --xy-edge-stroke-selected: var(--text);
+  --xy-handle-background-color: var(--muted);
+  --xy-handle-border-color: var(--background);
+  --xy-controls-button-background-color: var(--background);
+  --xy-controls-button-background-color-hover: var(--surface-hover);
+  --xy-controls-button-color: var(--text);
+  --xy-controls-button-color-hover: var(--text);
+  --xy-controls-button-border-color: var(--border);
+  --xy-controls-box-shadow: none;
+  --xy-minimap-background-color: var(--background);
+  --xy-minimap-mask-background-color: color-mix(in srgb, var(--surface) 70%, transparent);
+  --xy-minimap-mask-stroke-color: var(--border-strong);
+  --xy-minimap-node-background-color: var(--border-strong);
+  --xy-selection-background-color: color-mix(in srgb, var(--accent) 10%, transparent);
+  --xy-selection-border: 1px dotted var(--accent);
+  --xy-attribution-background-color: color-mix(in srgb, var(--surface) 85%, transparent);
+  width: 100%;
+  height: clamp(480px, 68vh, 820px);
+  min-width: 0;
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+.lineage-canvas .react-flow__controls,
+.lineage-canvas .react-flow__minimap {
+  border: 1px solid var(--border-strong);
+}
+.lineage-canvas .react-flow__attribution a {
+  color: var(--muted);
+}
+.lineage-canvas .react-flow__minimap-node:is(.lineage-minimap-node--dataset, .lineage-minimap-node--version) {
+  fill: var(--lineage-dataset);
+}
+.lineage-canvas .react-flow__minimap-node:is(.lineage-minimap-node--job, .lineage-minimap-node--run) {
+  fill: var(--accent);
+}
+.lineage-canvas .react-flow__minimap-node.lineage-minimap-node--source {
+  fill: var(--muted);
+}
+/* 選んだ項目から辿れる経路を --link で強調し、ほかは薄くする。 */
+.lineage-canvas .react-flow__node,
+.lineage-canvas .react-flow__edge {
+  transition: opacity 160ms ease;
+}
+.lineage-canvas .react-flow__node.lineage-flow-node--muted,
+.lineage-canvas .react-flow__edge.lineage-flow-edge--muted {
+  opacity: 0.25;
+}
+.lineage-canvas .react-flow__edge.lineage-flow-edge--path .react-flow__edge-path {
+  stroke: var(--link);
+  stroke-width: 2.2;
+}
+/* React Flow はノードのフォーカスの線を消すので、カードに付け直す。 */
+.lineage-canvas .react-flow__node:focus-visible > .lineage-node-card {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+/* グラフの 1 項目。大きさは lib/lineage/layout.ts の LINEAGE_NODE_WIDTH / HEIGHT と同じ。 */
+.lineage-node-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 3px;
+  width: 224px;
+  height: 78px;
+  min-width: 0;
+  padding: 6px 10px 6px 12px;
+  border: 1px solid var(--border-strong);
+  border-left: 4px solid var(--lineage-kind-color);
+  background: var(--background);
+  color: var(--text);
+}
+.react-flow__node:hover > .lineage-node-card {
+  border-color: var(--input-border) var(--input-border) var(--input-border) var(--lineage-kind-color);
+}
+.lineage-node-card[data-selected],
+.react-flow__node:hover > .lineage-node-card[data-selected] {
+  border-color: var(--accent) var(--accent) var(--accent) var(--lineage-kind-color);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.lineage-node-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+.lineage-node-card__kind {
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 10px;
+  white-space: nowrap;
+}
+.lineage-node-card .status-badge {
+  padding: 2px 7px;
+}
+.lineage-node-card__title,
+.lineage-node-card__subtitle,
+.lineage-node-card__meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lineage-node-card__title {
+  font-size: 13px;
+  font-weight: 600;
+}
+.lineage-node-card__subtitle,
+.lineage-node-card__meta {
+  color: var(--muted);
+  font-size: 10px;
+}
+.lineage-node-card__subtitle {
+  font-family: var(--mono);
+}
+
+/* 選んだ項目の詳細 (mmt の .registry-detail と同じく、左の区切り線で一覧と分ける)。 */
+.lineage-detail {
+  min-width: 0;
+  padding-left: 28px;
+  border-left: 1px solid var(--border);
+}
+.lineage-detail__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.lineage-detail__header > div {
+  min-width: 0;
+}
+.lineage-detail__header h2 {
+  margin: 6px 0 0;
+  overflow-wrap: anywhere;
+}
+.lineage-detail__header p {
+  margin: 4px 0 0;
+}
+.lineage-detail__header .icon-button {
+  flex: 0 0 auto;
+  margin: -4px -8px 0 0;
+}
+.lineage-detail > p.muted {
+  margin: 0 0 12px;
+  line-height: 1.6;
+}
+.lineage-detail__actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 8px;
+}
+/* 細い列なので、項目名の列を共通の 150px より狭くする。JSON は行の幅いっぱいに出す。 */
+.lineage-detail .details-list > div {
+  grid-template-columns: 120px minmax(0, 1fr);
+  gap: 12px;
+}
+.lineage-detail .details-list > .lineage-detail__json-field {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+}
+.lineage-detail .json-view {
+  max-height: 320px;
+  padding: 12px;
+}
+.lineage-detail h3 {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 24px 0 10px;
+}
+.lineage-detail h3 > .muted {
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+.lineage-detail th,
+.lineage-detail td {
+  padding: 8px 10px;
+}
+.lineage-detail__io-direction {
+  width: 1%;
+  vertical-align: top;
+}
+.lineage-location-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.lineage-location {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+}
+.lineage-location__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.lineage-location p {
+  margin: 6px 0 0;
+}
+.lineage-location__open {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+}
+.lineage-detail__edit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+/* ── 手動登録 ────────────────────────────────────────────────────────── */
+.lineage-register-form {
+  max-width: 880px;
+}
+/* まとまりごとに上の区切り線と h2 (mmt の設定画面の区切りと同じ)。 */
+.lineage-form-section {
+  margin-top: 28px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+}
+.lineage-form-section:first-of-type {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+.lineage-form-section > p.muted {
+  margin: 0 0 16px;
+}
+.lineage-form-switch {
+  margin-bottom: 16px;
+}
+.lineage-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 16px;
+}
+.lineage-form-grid--3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.lineage-form-grid--top {
+  align-items: start;
+}
+.lineage-form-wide {
+  grid-column: 1 / -1;
+}
+/* チェックで開く入力欄。左の線でそのチェックに続くものだと示す。 */
+.lineage-form-subsection {
+  margin: 4px 0 12px;
+  padding-left: 16px;
+  border-left: 2px solid var(--border);
+}
+.lineage-register-form .checkbox-field {
+  margin-bottom: 4px;
+}
+
+/* データセット・バージョンを検索して選ぶ欄。候補は表で、すぐ下に並べる。 */
+.lineage-picker {
+  min-width: 0;
+  margin-bottom: 16px;
+}
+.lineage-picker > .field {
+  margin-bottom: 0;
+}
+.lineage-picker__status {
+  margin: 6px 0 0;
+}
+.lineage-picker__results {
+  max-height: 300px;
+  margin-top: 6px;
+  overflow-y: auto;
+}
+.lineage-picked {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  padding: 6px 6px 6px 12px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  background: var(--surface);
+  color: var(--text);
+}
+.lineage-picked > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+.lineage-picked strong {
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+.lineage-version-list {
+  min-width: 0;
+  margin-bottom: 16px;
+}
+.lineage-version-list > .button {
+  margin-bottom: 12px;
+}
+.lineage-version-list__selected {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.lineage-version-list__selected li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 4px 2px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  font-size: 12px;
+}
+.lineage-version-list__selected li > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* ── 幅ごとの形 ──────────────────────────────────────────────────────── */
+@media (width < 1200px) {
+  .lineage-workspace {
+    grid-template-columns: minmax(0, 1fr) 320px;
+    gap: 20px;
+  }
+  .lineage-detail {
+    padding-left: 20px;
+  }
+}
+/* 900px 未満はタッチ前提: 押す物を --tap-target の高さにし、詳細はグラフの下へ。 */
+@media (width < 900px) {
+  .lineage-workspace {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 24px;
+  }
+  .lineage-detail {
+    padding: 22px 0 0;
+    border-top: 1px solid var(--border);
+    border-left: 0;
+  }
+  .lineage-canvas {
+    height: clamp(360px, 60vh, 560px);
+  }
+  .lineage-canvas .react-flow__controls-button {
+    width: var(--tap-target);
+    height: var(--tap-target);
+  }
+  .lineage-segmented > button,
+  .lineage-catalog__toggle,
+  .lineage-graph__results button {
+    min-height: var(--tap-target);
+  }
+  /* 折り返したツールバーのどこにあっても、技術 ID の入力欄はツールバーの幅で開く。 */
+  .lineage-toolbar__menu {
+    position: static;
+  }
+  .lineage-toolbar__menu > .popover {
+    left: 0;
+    right: 0;
+    width: auto;
+  }
+  .lineage-form-grid,
+  .lineage-form-grid--3 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+/* 640px 未満の一覧は、データセット名とバージョン数だけを行に残し、説明とデータ形式は行の下に開く。 */
+@media (width < 640px) {
+  .lineage-catalog__secondary {
+    display: none;
+  }
+  .lineage-catalog__row-toggle {
+    display: table-cell;
+  }
+  .lineage-catalog__details {
+    display: table-row;
+  }
+  .lineage-canvas {
+    height: clamp(320px, 55vh, 480px);
+  }
+  .lineage-canvas .react-flow__minimap-svg {
+    width: 120px;
+    height: 90px;
+  }
+  .lineage-segmented {
+    display: flex;
+  }
+  .lineage-form-switch > button {
+    flex: 1 1 0;
+    white-space: normal;
+  }
+}

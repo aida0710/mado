@@ -1,5 +1,6 @@
+import { Check } from 'lucide-react'
 import type { Tag } from '../lib/api/types'
-import { TagBadge } from './TagBadge'
+import { TagColorDot } from './TagBadge'
 
 interface Props {
   tags: Tag[]
@@ -8,27 +9,30 @@ interface Props {
   onClear: () => void
 }
 
-/** タグを押して選択の on / off を切り替えるチップ群。何か選んでいればクリアも出す。
- *  一覧の絞り込みとタグ検索で同じ見た目にする。 */
+/** タグを押して選択の on / off を切り替えるボタン群。何か選んでいればクリアも出す。
+ *  一覧の絞り込みとタグ検索で同じ見た目にする。選択中は地と枠をアクセントの色にし、
+ *  色だけに頼らないようチェックの印も付ける。 */
 export function TagToggleChips({ tags, selected, onToggle, onClear }: Props) {
   return (
     <>
-      {tags.map(tag => (
-        <button
-          key={tag.id}
-          type="button"
-          onClick={() => onToggle(tag.id)}
-          className="cursor-pointer border-0 bg-transparent p-0"
-          // 未選択は淡くするが 0.4 だと薄い。バッジ自体が淡いティントに
-          // なったので、それより薄くすると読めなくなる。
-          style={{ opacity: selected.size === 0 || selected.has(tag.id) ? 1 : 0.55 }}
-          aria-pressed={selected.has(tag.id)}
-        >
-          <TagBadge tag={tag} />
-        </button>
-      ))}
+      {tags.map(tag => {
+        const pressed = selected.has(tag.id)
+        return (
+          <button
+            key={tag.id}
+            type="button"
+            className="tag-chip"
+            onClick={() => onToggle(tag.id)}
+            aria-pressed={pressed}
+          >
+            <TagColorDot color={tag.color} />
+            {tag.name}
+            {pressed && <Check size={12} aria-hidden="true" />}
+          </button>
+        )
+      })}
       {selected.size > 0 && (
-        <button type="button" className="ghost" onClick={onClear}>クリア</button>
+        <button type="button" className="button small" onClick={onClear}>クリア</button>
       )}
     </>
   )

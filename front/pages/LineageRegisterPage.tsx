@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
+import { ArrowLeft, CircleCheck, Info } from 'lucide-react'
 import { api } from '../lib/api/client'
 import type {
   Connection,
@@ -18,6 +19,12 @@ import {
 } from '../components/lineage/ManualLineagePicker'
 
 type RegistrationKind = 'dataset' | 'location' | 'run'
+
+const REGISTRATION_KINDS: Array<{ value: RegistrationKind; label: string }> = [
+  { value: 'dataset', label: 'データセット' },
+  { value: 'location', label: '保存場所' },
+  { value: 'run', label: '処理履歴' },
+]
 
 function text(form: FormData, name: string): string {
   return String(form.get(name) ?? '').trim()
@@ -62,23 +69,23 @@ function occurredAt(form: FormData): string | undefined {
 
 function ConnectionLocationFields({ connections }: { connections: Connection[] }) {
   return (
-    <div className="manual-grid manual-grid--3">
-      <label className="manual-field">
+    <div className="lineage-form-grid lineage-form-grid--3">
+      <label className="field">
         <span>接続</span>
         <select name="connectionId" required defaultValue="">
           <option value="" disabled>接続を選択</option>
           {connections.map(connection => <option key={connection.id} value={connection.id}>{connection.name}</option>)}
         </select>
       </label>
-      <label className="manual-field">
+      <label className="field">
         <span>バケット</span>
         <input name="bucket" required placeholder="dataset" />
       </label>
-      <label className="manual-field">
+      <label className="field">
         <span>パス</span>
         <input name="key" placeholder="podcast/raw/" />
       </label>
-      <label className="manual-field">
+      <label className="field">
         <span>状態</span>
         <select name="status" defaultValue="available">
           <option value="available">利用可能</option>
@@ -87,24 +94,35 @@ function ConnectionLocationFields({ connections }: { connections: Connection[] }
           <option value="unknown">不明</option>
         </select>
       </label>
-      <label className="manual-check"><input name="isPrimary" type="checkbox" /> 主な保存場所にする</label>
+      <label className="checkbox-field lineage-form-wide"><input name="isPrimary" type="checkbox" /> 主な保存場所にする</label>
     </div>
   )
 }
 
 function EvidenceField() {
   return (
-    <label className="manual-field manual-field--wide">
+    <label className="field">
       <span>根拠URL</span>
       <textarea name="evidenceRefs" rows={3} placeholder={'READMEやNotion、購入記録などを1行に1件'} />
     </label>
   )
 }
 
+// 登録の種類ごとの使いどころ。フォームの先頭に出す。
+function Guidance({ title, children }: { title: string; children: string }) {
+  return (
+    <div className="notice lineage-guidance">
+      <Info size={16} aria-hidden="true" />
+      <span><strong>{title}</strong>{children}</span>
+    </div>
+  )
+}
+
 function ResultNotice({ message, to }: { message: string; to?: string }) {
   return (
-    <div className="manual-success" role="status">
-      <strong>{message}</strong>
+    <div className="notice success" role="status">
+      <CircleCheck size={16} aria-hidden="true" />
+      <span>{message}</span>
       {to && <Link to={to}>登録内容を見る</Link>}
     </div>
   )
@@ -170,92 +188,90 @@ function DatasetRegistrationForm({ connections }: { connections: Connection[] })
   }
 
   return (
-    <form className="manual-form" onSubmit={submit}>
-      <section className="manual-section">
-        <header><span>01</span><h3>データセット</h3></header>
-        <div className="manual-segmented" role="group" aria-label="データセットの登録方法">
-          <button type="button" data-active={target === 'new' || undefined} onClick={() => { setTarget('new'); setDataset(null) }}>新しく作る</button>
-          <button type="button" data-active={target === 'existing' || undefined} onClick={() => setTarget('existing')}>既存にバージョンを追加</button>
+    <form className="lineage-register-form" onSubmit={submit}>
+      <section className="lineage-form-section">
+        <div className="section-heading"><h2>データセット</h2></div>
+        <div className="lineage-segmented lineage-form-switch" role="group" aria-label="データセットの登録方法">
+          <button type="button" aria-pressed={target === 'new'} onClick={() => { setTarget('new'); setDataset(null) }}>新しく作る</button>
+          <button type="button" aria-pressed={target === 'existing'} onClick={() => setTarget('existing')}>既存にバージョンを追加</button>
         </div>
         {target === 'existing' ? <DatasetPicker value={dataset} onChange={setDataset} /> : (
-          <div className="manual-grid manual-grid--2">
-            <label className="manual-field"><span>表示名</span><input name="displayName" required placeholder="Podcast 日本語 原本" /></label>
-            <label className="manual-field"><span>データセットキー</span><input name="datasetKey" required placeholder="podcast/ja/raw" /></label>
-            <label className="manual-field"><span>名前空間</span><input name="namespace" required placeholder="mdx-speech" /></label>
-            <label className="manual-field"><span>技術名</span><input name="name" required placeholder="podcast/ja/raw" /></label>
-            <label className="manual-field"><span>データ形式</span><input name="mediaType" placeholder="audio" /></label>
-            <label className="manual-field"><span>管理者</span><input name="owner" /></label>
-            <label className="manual-field manual-field--wide"><span>別名</span><input name="aliases" placeholder="Podcast JA, 日本語Podcast" /></label>
-            <label className="manual-field manual-field--wide"><span>説明</span><textarea name="description" rows={3} /></label>
+          <div className="lineage-form-grid">
+            <label className="field"><span>表示名</span><input name="displayName" required placeholder="Podcast 日本語 原本" /></label>
+            <label className="field"><span>データセットキー</span><input name="datasetKey" required placeholder="podcast/ja/raw" /></label>
+            <label className="field"><span>名前空間</span><input name="namespace" required placeholder="mdx-speech" /></label>
+            <label className="field"><span>技術名</span><input name="name" required placeholder="podcast/ja/raw" /></label>
+            <label className="field"><span>データ形式</span><input name="mediaType" placeholder="audio" /></label>
+            <label className="field"><span>管理者</span><input name="owner" /></label>
+            <label className="field lineage-form-wide"><span>別名</span><input name="aliases" placeholder="Podcast JA, 日本語Podcast" /></label>
+            <label className="field lineage-form-wide"><span>説明</span><textarea name="description" rows={3} /></label>
           </div>
         )}
       </section>
 
-      <section className="manual-section">
-        <header><span>02</span><h3>バージョン</h3></header>
-        <div className="manual-grid manual-grid--2">
-          <label className="manual-field"><span>バージョン</span><input name="version" required placeholder="2026-08-27" /></label>
-          <label className="manual-field"><span>内容のハッシュ</span><input name="contentHash" placeholder="sha256:..." /></label>
-          <label className="manual-field"><span>ファイル一覧URI</span><input name="manifestUri" placeholder="s3://.../manifest.jsonl" /></label>
-          <label className="manual-field"><span>ファイル一覧のハッシュ</span><input name="manifestHash" placeholder="sha256:..." /></label>
-          <label className="manual-field manual-field--wide"><span>スキーマURI</span><input name="schemaUri" /></label>
+      <section className="lineage-form-section">
+        <div className="section-heading"><h2>バージョン</h2></div>
+        <div className="lineage-form-grid">
+          <label className="field"><span>バージョン</span><input name="version" required placeholder="2026-08-27" /></label>
+          <label className="field"><span>内容のハッシュ</span><input name="contentHash" placeholder="sha256:..." /></label>
+          <label className="field"><span>ファイル一覧URI</span><input name="manifestUri" placeholder="s3://.../manifest.jsonl" /></label>
+          <label className="field"><span>ファイル一覧のハッシュ</span><input name="manifestHash" placeholder="sha256:..." /></label>
+          <label className="field lineage-form-wide"><span>スキーマURI</span><input name="schemaUri" /></label>
         </div>
       </section>
 
-      <section className="manual-section">
-        <header><span>03</span><h3>保存場所</h3></header>
-        <label className="manual-check"><input type="checkbox" checked={withLocation} onChange={event => setWithLocation(event.target.checked)} /> 保存場所も登録する</label>
-        {withLocation && <ConnectionLocationFields connections={connections} />}
+      <section className="lineage-form-section">
+        <div className="section-heading"><h2>保存場所</h2></div>
+        <label className="checkbox-field"><input type="checkbox" checked={withLocation} onChange={event => setWithLocation(event.target.checked)} /> 保存場所も登録する</label>
+        {withLocation && <div className="lineage-form-subsection"><ConnectionLocationFields connections={connections} /></div>}
       </section>
 
-      <section className="manual-section">
-        <header><span>04</span><h3>由来と処理</h3></header>
-        <div className="manual-options">
-          <label className="manual-check"><input type="checkbox" checked={withSource} onChange={event => setWithSource(event.target.checked)} /> 購入元・収集元を記録する</label>
-          <label className="manual-check"><input type="checkbox" checked={withProcessing} onChange={event => setWithProcessing(event.target.checked)} /> このバージョンを作った処理を記録する</label>
-        </div>
+      <section className="lineage-form-section">
+        <div className="section-heading"><h2>由来と処理</h2></div>
+        <label className="checkbox-field"><input type="checkbox" checked={withSource} onChange={event => setWithSource(event.target.checked)} /> 購入元・収集元を記録する</label>
         {withSource && (
-          <div className="manual-subsection">
-            <div className="manual-grid manual-grid--2">
-              <label className="manual-field"><span>入手元キー</span><input name="sourceKey" required placeholder="vendor/corpus-name" /></label>
-              <label className="manual-field"><span>種類</span><select name="sourceKind" defaultValue="purchased"><option value="purchased">購入</option><option value="crawled">収集</option><option value="provided">提供</option><option value="database">データベース</option><option value="generated">生成</option><option value="other">その他</option></select></label>
-              <label className="manual-field"><span>名称</span><input name="sourceName" required /></label>
-              <label className="manual-field"><span>URI</span><input name="sourceUri" placeholder="https://..." /></label>
-              <label className="manual-field"><span>提供元</span><input name="vendor" /></label>
-              <label className="manual-field"><span>製品名</span><input name="product" /></label>
-              <label className="manual-field"><span>ライセンス参照</span><input name="licenseRef" /></label>
-              <label className="manual-field"><span>契約参照</span><input name="contractRef" /></label>
+          <div className="lineage-form-subsection">
+            <div className="lineage-form-grid">
+              <label className="field"><span>入手元キー</span><input name="sourceKey" required placeholder="vendor/corpus-name" /></label>
+              <label className="field"><span>種類</span><select name="sourceKind" defaultValue="purchased"><option value="purchased">購入</option><option value="crawled">収集</option><option value="provided">提供</option><option value="database">データベース</option><option value="generated">生成</option><option value="other">その他</option></select></label>
+              <label className="field"><span>名称</span><input name="sourceName" required /></label>
+              <label className="field"><span>URI</span><input name="sourceUri" placeholder="https://..." /></label>
+              <label className="field"><span>提供元</span><input name="vendor" /></label>
+              <label className="field"><span>製品名</span><input name="product" /></label>
+              <label className="field"><span>ライセンス参照</span><input name="licenseRef" /></label>
+              <label className="field"><span>契約参照</span><input name="contractRef" /></label>
             </div>
           </div>
         )}
+        <label className="checkbox-field"><input type="checkbox" checked={withProcessing} onChange={event => setWithProcessing(event.target.checked)} /> このバージョンを作った処理を記録する</label>
         {withProcessing && (
-          <div className="manual-subsection">
+          <div className="lineage-form-subsection">
             <VersionListPicker values={inputs} onChange={setInputs} label="入力データ" />
-            <div className="manual-grid manual-grid--2">
-              <label className="manual-field"><span>処理名</span><input name="transformationName" required placeholder="NeMo Curator 品質フィルタ" /></label>
-              <label className="manual-field"><span>処理キー</span><input name="transformationKey" required placeholder="nemo-curator-quality-filter" /></label>
-              <label className="manual-field"><span>処理の名前空間</span><input name="jobNamespace" required placeholder="mdx-speech" /></label>
-              <label className="manual-field"><span>処理の技術名</span><input name="jobName" required placeholder="nemo-curator-quality-filter" /></label>
-              <label className="manual-field"><span>コード置き場</span><input name="codeRepository" placeholder="https://github.com/..." /></label>
-              <label className="manual-field"><span>既定のコード参照</span><input name="defaultCodeRef" placeholder="commit / tag" /></label>
-              <label className="manual-field"><span>Git SHA</span><input name="gitSha" /></label>
-              <label className="manual-field"><span>コンテナイメージ</span><input name="containerDigest" /></label>
-              <label className="manual-field"><span>設定ファイルURI</span><input name="configUri" /></label>
-              <label className="manual-field"><span>設定ファイルのハッシュ</span><input name="configHash" /></label>
-              <label className="manual-field"><span>実行日時</span><select value={timeStatus} onChange={event => setTimeStatus(event.target.value as 'known' | 'unknown')}><option value="unknown">不明</option><option value="known">判明している</option></select></label>
-              {timeStatus === 'known' && <label className="manual-field"><span>日時</span><input name="occurredAt" type="datetime-local" required /></label>}
+            <div className="lineage-form-grid">
+              <label className="field"><span>処理名</span><input name="transformationName" required placeholder="NeMo Curator 品質フィルタ" /></label>
+              <label className="field"><span>処理キー</span><input name="transformationKey" required placeholder="nemo-curator-quality-filter" /></label>
+              <label className="field"><span>処理の名前空間</span><input name="jobNamespace" required placeholder="mdx-speech" /></label>
+              <label className="field"><span>処理の技術名</span><input name="jobName" required placeholder="nemo-curator-quality-filter" /></label>
+              <label className="field"><span>コード置き場</span><input name="codeRepository" placeholder="https://github.com/..." /></label>
+              <label className="field"><span>既定のコード参照</span><input name="defaultCodeRef" placeholder="commit / tag" /></label>
+              <label className="field"><span>Git SHA</span><input name="gitSha" /></label>
+              <label className="field"><span>コンテナイメージ</span><input name="containerDigest" /></label>
+              <label className="field"><span>設定ファイルURI</span><input name="configUri" /></label>
+              <label className="field"><span>設定ファイルのハッシュ</span><input name="configHash" /></label>
+              <label className="field"><span>実行日時</span><select value={timeStatus} onChange={event => setTimeStatus(event.target.value as 'known' | 'unknown')}><option value="unknown">不明</option><option value="known">判明している</option></select></label>
+              {timeStatus === 'known' && <label className="field"><span>日時</span><input name="occurredAt" type="datetime-local" required /></label>}
             </div>
           </div>
         )}
         <EvidenceField />
       </section>
 
-      <section className="manual-section manual-review">
-        <header><span>05</span><h3>確認</h3></header>
-        <p>保存するとデータ台帳へ登録され、処理履歴がある場合はグラフにも反映されます。</p>
-        {error && <p className="error" role="alert">{error}</p>}
+      <section className="lineage-form-section">
+        <div className="section-heading"><h2>確認</h2></div>
+        <p className="muted">保存するとデータ台帳へ登録され、処理履歴がある場合はグラフにも反映されます。</p>
+        {error && <p className="notice error" role="alert">{error}</p>}
         {resultVersionId && <ResultNotice message="データのバージョンを登録しました。" to={`/lineage?mode=versions&versionId=${encodeURIComponent(resultVersionId)}`} />}
-        <button className="manual-submit" type="submit" disabled={saving}>{saving ? '登録中…' : '登録する'}</button>
+        <button className="button primary" type="submit" disabled={saving}>{saving ? '登録中…' : '登録する'}</button>
       </section>
     </form>
   )
@@ -279,15 +295,15 @@ function LocationRegistrationForm({ connections }: { connections: Connection[] }
     } finally { setSaving(false) }
   }
   return (
-    <form className="manual-form" onSubmit={submit}>
-      <div className="manual-guidance"><strong>同じ内容を別の場所へコピーした場合はこちら</strong><span>新しいバージョンや処理履歴は作らず、同じバージョンへ保存場所だけを追加します。</span></div>
-      <section className="manual-section"><header><span>01</span><h3>バージョン</h3></header><VersionPicker value={version} onChange={setVersion} /></section>
-      <section className="manual-section"><header><span>02</span><h3>保存場所</h3></header><ConnectionLocationFields connections={connections} /></section>
-      <section className="manual-section"><header><span>03</span><h3>根拠</h3></header><EvidenceField /></section>
-      <section className="manual-section manual-review"><header><span>04</span><h3>確認</h3></header>
-        {error && <p className="error" role="alert">{error}</p>}
+    <form className="lineage-register-form" onSubmit={submit}>
+      <Guidance title="同じ内容を別の場所へコピーした場合はこちら">新しいバージョンや処理履歴は作らず、同じバージョンへ保存場所だけを追加します。</Guidance>
+      <section className="lineage-form-section"><div className="section-heading"><h2>バージョン</h2></div><VersionPicker value={version} onChange={setVersion} /></section>
+      <section className="lineage-form-section"><div className="section-heading"><h2>保存場所</h2></div><ConnectionLocationFields connections={connections} /></section>
+      <section className="lineage-form-section"><div className="section-heading"><h2>根拠</h2></div><EvidenceField /></section>
+      <section className="lineage-form-section"><div className="section-heading"><h2>確認</h2></div>
+        {error && <p className="notice error" role="alert">{error}</p>}
         {done && <ResultNotice message="保存場所を追加しました。" to={version ? `/lineage?mode=versions&versionId=${encodeURIComponent(version.id)}` : undefined} />}
-        <button className="manual-submit" type="submit" disabled={saving}>{saving ? '登録中…' : '保存場所を追加'}</button>
+        <button className="button primary" type="submit" disabled={saving}>{saving ? '登録中…' : '保存場所を追加'}</button>
       </section>
     </form>
   )
@@ -321,32 +337,32 @@ function RunRegistrationForm() {
   }
   const outputLink = outputs[0] ? `/lineage?mode=versions&versionId=${encodeURIComponent(outputs[0].id)}` : undefined
   return (
-    <form className="manual-form" onSubmit={submit}>
-      <div className="manual-guidance"><strong>既存データ同士の処理履歴を補完します</strong><span>不明な実行時刻は不明のまま保存し、根拠のない親子関係は登録しないでください。</span></div>
-      <section className="manual-section"><header><span>01</span><h3>入出力</h3></header>
-        <div className="manual-grid manual-grid--2 manual-grid--top"><VersionListPicker values={inputs} onChange={setInputs} label="入力データ" /><VersionListPicker values={outputs} onChange={setOutputs} label="出力データ" /></div>
+    <form className="lineage-register-form" onSubmit={submit}>
+      <Guidance title="既存データ同士の処理履歴を補完します">不明な実行時刻は不明のまま保存し、根拠のない親子関係は登録しないでください。</Guidance>
+      <section className="lineage-form-section"><div className="section-heading"><h2>入出力</h2></div>
+        <div className="lineage-form-grid lineage-form-grid--top"><VersionListPicker values={inputs} onChange={setInputs} label="入力データ" /><VersionListPicker values={outputs} onChange={setOutputs} label="出力データ" /></div>
       </section>
-      <section className="manual-section"><header><span>02</span><h3>処理</h3></header>
-        <div className="manual-grid manual-grid--2">
-          <label className="manual-field"><span>処理名</span><input name="transformationName" required /></label>
-          <label className="manual-field"><span>処理キー</span><input name="transformationKey" required /></label>
-          <label className="manual-field"><span>処理の名前空間</span><input name="jobNamespace" required /></label>
-          <label className="manual-field"><span>処理の技術名</span><input name="jobName" required /></label>
-          <label className="manual-field"><span>コード置き場</span><input name="codeRepository" /></label>
-          <label className="manual-field"><span>既定のコード参照</span><input name="defaultCodeRef" /></label>
-          <label className="manual-field"><span>Git SHA</span><input name="gitSha" /></label>
-          <label className="manual-field"><span>コンテナイメージ</span><input name="containerDigest" /></label>
-          <label className="manual-field"><span>設定ファイルURI</span><input name="configUri" /></label>
-          <label className="manual-field"><span>設定ファイルのハッシュ</span><input name="configHash" /></label>
-          <label className="manual-field"><span>実行日時</span><select value={timeStatus} onChange={event => setTimeStatus(event.target.value as 'known' | 'unknown')}><option value="unknown">不明</option><option value="known">判明している</option></select></label>
-          {timeStatus === 'known' && <label className="manual-field"><span>日時</span><input name="occurredAt" type="datetime-local" required /></label>}
+      <section className="lineage-form-section"><div className="section-heading"><h2>処理</h2></div>
+        <div className="lineage-form-grid">
+          <label className="field"><span>処理名</span><input name="transformationName" required /></label>
+          <label className="field"><span>処理キー</span><input name="transformationKey" required /></label>
+          <label className="field"><span>処理の名前空間</span><input name="jobNamespace" required /></label>
+          <label className="field"><span>処理の技術名</span><input name="jobName" required /></label>
+          <label className="field"><span>コード置き場</span><input name="codeRepository" /></label>
+          <label className="field"><span>既定のコード参照</span><input name="defaultCodeRef" /></label>
+          <label className="field"><span>Git SHA</span><input name="gitSha" /></label>
+          <label className="field"><span>コンテナイメージ</span><input name="containerDigest" /></label>
+          <label className="field"><span>設定ファイルURI</span><input name="configUri" /></label>
+          <label className="field"><span>設定ファイルのハッシュ</span><input name="configHash" /></label>
+          <label className="field"><span>実行日時</span><select value={timeStatus} onChange={event => setTimeStatus(event.target.value as 'known' | 'unknown')}><option value="unknown">不明</option><option value="known">判明している</option></select></label>
+          {timeStatus === 'known' && <label className="field"><span>日時</span><input name="occurredAt" type="datetime-local" required /></label>}
         </div>
       </section>
-      <section className="manual-section"><header><span>03</span><h3>根拠</h3></header><EvidenceField /></section>
-      <section className="manual-section manual-review"><header><span>04</span><h3>確認</h3></header>
-        {error && <p className="error" role="alert">{error}</p>}
+      <section className="lineage-form-section"><div className="section-heading"><h2>根拠</h2></div><EvidenceField /></section>
+      <section className="lineage-form-section"><div className="section-heading"><h2>確認</h2></div>
+        {error && <p className="notice error" role="alert">{error}</p>}
         {runId && <ResultNotice message="処理履歴を登録しました。" to={outputLink} />}
-        <button className="manual-submit" type="submit" disabled={saving}>{saving ? '登録中…' : '処理履歴を登録'}</button>
+        <button className="button primary" type="submit" disabled={saving}>{saving ? '登録中…' : '処理履歴を登録'}</button>
       </section>
     </form>
   )
@@ -365,18 +381,37 @@ export default function LineageRegisterPage() {
   }, [allowed])
 
   if (!allowed) {
-    return <section><header className="page-head"><h2>DataLineage</h2></header><p className="error">手動登録の権限がありません。</p></section>
+    return (
+      <section className="lineage-register-page">
+        <header className="page-header"><div><h1>DataLineage</h1></div></header>
+        <p className="notice error">手動登録の権限がありません。</p>
+      </section>
+    )
   }
 
   return (
-    <section className="manual-lineage-page">
-      <header className="page-head"><h2>DataLineage</h2><Link className="ghost" to="/lineage">一覧に戻る</Link></header>
-      <nav className="manual-kind-nav" aria-label="登録種別">
-        <button type="button" data-active={kind === 'dataset' || undefined} onClick={() => setKind('dataset')}>データセット</button>
-        <button type="button" data-active={kind === 'location' || undefined} onClick={() => setKind('location')}>保存場所</button>
-        <button type="button" data-active={kind === 'run' || undefined} onClick={() => setKind('run')}>処理履歴</button>
+    <section className="lineage-register-page touch-targets">
+      <header className="page-header">
+        <div><h1>DataLineage</h1></div>
+        <div className="page-actions">
+          <Link className="button" to="/lineage">
+            <ArrowLeft size={16} aria-hidden="true" />
+            一覧に戻る
+          </Link>
+        </div>
+      </header>
+      <nav className="tabs" aria-label="登録種別">
+        {REGISTRATION_KINDS.map(item => (
+          <button
+            key={item.value}
+            type="button"
+            className={kind === item.value ? 'tab active' : 'tab'}
+            aria-pressed={kind === item.value}
+            onClick={() => setKind(item.value)}
+          >{item.label}</button>
+        ))}
       </nav>
-      {connectionError && <p className="error" role="alert">{connectionError}</p>}
+      {connectionError && <p className="notice error" role="alert">{connectionError}</p>}
       {kind === 'dataset' && <DatasetRegistrationForm connections={connections} />}
       {kind === 'location' && <LocationRegistrationForm connections={connections} />}
       {kind === 'run' && <RunRegistrationForm />}

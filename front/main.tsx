@@ -15,7 +15,10 @@ import '@mado/design-tokens/tokens.css'
 
 import App from './App.tsx'
 import { AuthGate } from './lib/auth.tsx'
-import './index.css'
+import { initialTheme } from './lib/useTheme'
+
+// ログイン画面も含め、最初の描画から保存したテーマ (無ければ OS の設定) で出す。
+document.documentElement.dataset.theme = initialTheme()
 
 // React Router v7 の data router を使う (createBrowserRouter + RouterProvider)。
 // 単純な BrowserRouter だと useBlocker (編集ページの離脱警告) が動かないため。

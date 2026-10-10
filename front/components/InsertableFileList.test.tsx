@@ -101,7 +101,7 @@ describe('InsertableFileList', () => {
     })
   })
 
-  it('navigates into a subdirectory when "↓ 開く" is clicked, refetching with new prefix', async () => {
+  it('ディレクトリの「開く」を押すと、その中を新しい prefix で取り直す', async () => {
     const listMock = api.list as ReturnType<typeof vi.fn>
     listMock.mockResolvedValueOnce({
       directories: ['docs/sub/'],
@@ -128,14 +128,14 @@ describe('InsertableFileList', () => {
     )
 
     await screen.findByRole('button', { name: /sub\// })
-    // 「↓ 開く」 を押す → prefix='docs/sub/' で再 fetch
+    // 「開く」を押す → prefix='docs/sub/' で再 fetch
     await user.click(screen.getByRole('button', { name: 'sub を開く' }))
     await waitFor(() => expect(listMock).toHaveBeenCalledTimes(2))
     expect(listMock.mock.calls[1]).toEqual([{ connectionId: 'c1', bucket: 'b1', prefix: 'docs/sub/', recursive: false }])
 
     // 中身が新しいリストに置き換わる
     await screen.findByText(/inside\.md/)
-    // 「↓ 開く」 は副作用として prefix を変えるだけ — onInsert は発火していない
+    // 「開く」は副作用として prefix を変えるだけ — onInsert は発火していない
     expect(onInsert).not.toHaveBeenCalled()
   })
 

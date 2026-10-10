@@ -1,7 +1,11 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type FormEvent, type MouseEvent } from 'react'
 import { Navigate, NavLink, Route, Routes } from 'react-router-dom'
+import { ChevronDown, ChevronUp, Copy, RefreshCw } from 'lucide-react'
+import { DeleteConfirmDialog } from '../components/DeleteConfirmDialog'
 import { fetchApi } from '../lib/api/http'
 import { useAuth } from '../lib/auth-context'
+import { narrowerThan } from '../lib/breakpoints'
+import { useMediaQuery } from '../lib/useMediaQuery'
 
 interface UserRow {
   id: string
@@ -144,6 +148,85 @@ async function jsonRequest<T>(url: string, init?: RequestInit): Promise<T> {
   return response.json() as Promise<T>
 }
 
+const OUTCOME_BADGES: Record<AuditEventRow['outcome'], string> = {
+  pending: 'status-attention',
+  success: 'status-finished',
+  denied: 'status-failed',
+  failure: 'status-failed',
+}
+
+const STATUS_BADGES: Record<'active' | 'disabled', string> = {
+  active: 'status-finished',
+  disabled: 'status-queued',
+}
+
+// 行のクリックで詳細を開く。行の中のボタンや入力欄は、それぞれの操作だけをする。
+const INTERACTIVE_SELECTOR = 'a, button, input, select, textarea, label, summary'
+
+function isFromControl(event: MouseEvent<HTMLElement>) {
+  const control = (event.target as Element).closest(INTERACTIVE_SELECTOR)
+  return control !== null && event.currentTarget.contains(control)
+}
+
+/** 開いている行の key の集合と、その開け閉め。 */
+function useOpenRows<K>() {
+  const [open, setOpen] = useState<ReadonlySet<K>>(() => new Set())
+  const toggle = useCallback((key: K) => setOpen(current => {
+    const next = new Set(current)
+    if (!next.delete(key)) next.add(key)
+    return next
+  }), [])
+  return [open, toggle] as const
+}
+
+/** 表の右端の、行の下に詳細を開くボタン。 */
+function RowToggle({ open, controls, onToggle }: { open: boolean; controls: string; onToggle: () => void }) {
+  const label = open ? '詳細を閉じる' : '詳細を表示'
+  return (
+    <button
+      type="button"
+      className="icon-button"
+      aria-expanded={open}
+      aria-controls={controls}
+      aria-label={label}
+      title={label}
+      onClick={onToggle}
+    >
+      {open ? <ChevronUp size={18} aria-hidden="true" /> : <ChevronDown size={18} aria-hidden="true" />}
+    </button>
+  )
+}
+
+/** 一度だけ表示する秘密の値 (一時パスワード・API key)。閉じたら二度と出ない。 */
+function SecretNotice({ secret, note, onClose }: {
+  secret: { label: string; value: string }
+  note: string
+  onClose: () => void
+}) {
+  const ref = useRef<HTMLDivElement>(null)
+  // 一覧の下の行やフォームから発行すると、ここは画面の外にあることが多い。見えるところまで送る。
+  useEffect(() => {
+    ref.current?.scrollIntoView?.({ block: 'nearest' })
+  }, [secret.value])
+  return (
+    <div ref={ref} className="secret-notice" role="status">
+      <strong>{secret.label} — {note}</strong>
+      <code>{secret.value}</code>
+      <span className="secret-notice__actions">
+        <button type="button" className="button small" onClick={() => void navigator.clipboard.writeText(secret.value)}>
+          <Copy size={14} aria-hidden="true" />
+          コピー
+        </button>
+        <button type="button" className="button small" onClick={onClose}>閉じる</button>
+      </span>
+    </div>
+  )
+}
+
+function StatusBadge({ status }: { status: 'active' | 'disabled' }) {
+  return <span className={`status-badge ${STATUS_BADGES[status]}`}>{status}</span>
+}
+
 function UsersPage() {
   const { user: currentUser } = useAuth()
   const [users, setUsers] = useState<UserRow[]>([])
@@ -152,6 +235,12 @@ function UsersPage() {
   const [error, setError] = useState<string | null>(null)
   const [role, setRole] = useState<RoleId>('viewer')
   const [secret, setSecret] = useState<{ label: string; value: string } | null>(null)
+  const [deleting, setDeleting] = useState<UserRow | null>(null)
+  const [query, setQuery] = useState('')
+  const [statusFilter, setStatusFilter] = useState<'' | UserRow['status']>('')
+  const [openIds, toggleRow] = useOpenRows<string>()
+  // 狭い画面ではメール・権限・認証の列を省く。どれも行を開いた編集欄に出ている。
+  const isNarrow = useMediaQuery(narrowerThan('md'))
 
   const reload = useCallback(async () => {
     setError(null)
@@ -245,97 +334,205 @@ function UsersPage() {
     }
   }
 
+  // 失敗したときは確認のダイアログに理由を出し、閉じずに残す。
   const deleteUser = async (user: UserRow) => {
-    if (!window.confirm(`${user.displayName}を削除しますか？この操作は取り消せません。`)) return
     setError(null)
     setNotice(null)
-    try {
-      await jsonRequest(`/api/internal/users/${encodeURIComponent(user.id)}`, { method: 'DELETE' })
-      setNotice(`${user.displayName}を削除しました。`)
-      await reload()
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : '削除できませんでした')
-    }
+    await jsonRequest(`/api/internal/users/${encodeURIComponent(user.id)}`, { method: 'DELETE' })
+    setDeleting(null)
+    setNotice(`${user.displayName}を削除しました。`)
+    await reload()
   }
 
+  const needle = query.trim().toLowerCase()
+  const visibleUsers = users.filter(user =>
+    (!statusFilter || user.status === statusFilter)
+    && (!needle || [user.displayName, user.username, user.email]
+      .some(value => value?.toLowerCase().includes(needle))))
+  const columnCount = isNarrow ? 3 : 6
+
   return (
-    <section className="admin-card admin-card--standalone">
-      {error && <p className="error" role="alert">{error}</p>}
-      {notice && <div className="admin-notice">{notice}</div>}
-      {secret && (
-        <div className="admin-secret" role="status">
-          <strong>{secret.label} — 今だけ表示されます</strong>
-          <code>{secret.value}</code>
-          <button type="button" onClick={() => void navigator.clipboard.writeText(secret.value)}>コピー</button>
-          <button type="button" onClick={() => setSecret(null)}>閉じる</button>
-        </div>
-      )}
+    <section className="admin-users">
+      {error && <p className="notice error" role="alert">{error}</p>}
+      {notice && <p className="notice success" role="status">{notice}</p>}
+      {secret && <SecretNotice secret={secret} note="今だけ表示されます" onClose={() => setSecret(null)} />}
       {users.length > 0 && (
-        <div className="admin-user-list">{users.map(user => (
-          <details className="admin-user" key={user.id}>
-            <summary>
-              <span><strong>{user.displayName}</strong><small>{user.username ?? 'ユーザーID未設定'}{user.email ? ` · ${user.email}` : ''}</small></span>
-              <span className="admin-badges">{user.roles.map(role => <em key={role}>{role}</em>)}<em>{user.status}</em></span>
-            </summary>
-            <form className="admin-form admin-user__form" onSubmit={event => void updateUser(event, user)}>
-              <label className="admin-field"><span>表示名</span><input name="displayName" defaultValue={user.displayName} maxLength={128} required /></label>
-              <label className="admin-field"><span>ユーザーID（ログインID）</span><input name="username" defaultValue={user.username ?? ''} pattern="[A-Za-z0-9][A-Za-z0-9_.-]{0,63}" required /></label>
-              {user.email && <div className="account-readonly"><span>メールアドレス</span><strong>{user.email}</strong><small>{user.authMethods.includes('sso') ? 'SSO側を正本とし、Madoからは変更できません。' : '認証識別子のため、Madoからは変更できません。'}</small></div>}
-              <label className="admin-field">
-                <span>権限</span>
-                <select
-                  name="role"
-                  defaultValue={user.roles[0] ?? 'viewer'}
-                  disabled={user.authMethods.includes('sso')}
-                  aria-describedby={user.authMethods.includes('sso') ? `sso-role-help-${user.id}` : undefined}
-                >
-                  {ROLE_OPTIONS.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}
-                </select>
-                {user.authMethods.includes('sso') && (
-                  <small id={`sso-role-help-${user.id}`} className="admin-field__help">
-                    SSO側で管理されるため、Madoからは変更できません。
-                  </small>
-                )}
-              </label>
-              <label className="admin-field"><span>状態</span><select name="status" defaultValue={user.status}><option value="active">Active</option><option value="disabled">Disabled</option></select></label>
-              <div className="admin-user__meta"><span>内部ID</span><code>{user.id}</code><span>認証</span><strong>{user.authMethods.join(' + ') || '未設定'}</strong></div>
-              <div className="admin-user__actions">
-                <button type="submit">保存</button>
-                {!(user.authMethods.includes('sso') && !user.authMethods.includes('local')) && <button type="button" className="ghost" onClick={() => void resetPassword(user)}>パスワードを再発行</button>}
-                {user.id !== currentUser?.id && <button type="button" className="ghost connection-row__danger" onClick={() => void deleteUser(user)}>削除</button>}
-              </div>
-            </form>
-          </details>
-        ))}</div>
+        <>
+          <div className="admin-toolbar" role="search">
+            <input
+              type="search"
+              aria-label="ユーザーを検索"
+              placeholder="表示名・ユーザーID・メールアドレス"
+              value={query}
+              onChange={event => setQuery(event.target.value)}
+            />
+            <select
+              aria-label="状態で絞り込む"
+              value={statusFilter}
+              onChange={event => setStatusFilter(event.target.value as '' | UserRow['status'])}
+            >
+              <option value="">すべての状態</option>
+              <option value="active">Active</option>
+              <option value="disabled">Disabled</option>
+            </select>
+          </div>
+          {visibleUsers.length === 0 ? (
+            <p className="state-message">条件に合うユーザーはいません。</p>
+          ) : (
+            <div className="table-scroll">
+              <table className="responsive-table admin-users-table">
+                <thead>
+                  <tr>
+                    <th scope="col">表示名</th>
+                    {!isNarrow && <th scope="col">メールアドレス</th>}
+                    {!isNarrow && <th scope="col">権限</th>}
+                    {!isNarrow && <th scope="col">認証</th>}
+                    <th scope="col">状態</th>
+                    <th scope="col" className="responsive-table-toggle"><span className="sr-only">詳細を表示</span></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibleUsers.map(user => {
+                    const isOpen = openIds.has(user.id)
+                    const detailId = `admin-user-${user.id}`
+                    const sso = user.authMethods.includes('sso')
+                    return [
+                      <tr
+                        key={user.id}
+                        className={isOpen ? 'clickable-row selected' : 'clickable-row'}
+                        onClick={event => { if (!isFromControl(event)) toggleRow(user.id) }}
+                      >
+                        <td>
+                          <span className="user-name">
+                            <strong>{user.displayName}</strong>
+                            <span className="muted mono">{user.username ?? 'ユーザーID未設定'}</span>
+                          </span>
+                        </td>
+                        {!isNarrow && <td className="break-word">{user.email ?? '—'}</td>}
+                        {!isNarrow && <td>{user.roles.join(', ') || '—'}</td>}
+                        {!isNarrow && <td>{user.authMethods.join(' + ') || '未設定'}</td>}
+                        <td><StatusBadge status={user.status} /></td>
+                        <td className="responsive-table-toggle">
+                          <RowToggle open={isOpen} controls={detailId} onToggle={() => toggleRow(user.id)} />
+                        </td>
+                      </tr>,
+                      isOpen && (
+                        <tr key={`${user.id}-details`} id={detailId} className="responsive-table-details">
+                          <td colSpan={columnCount}>
+                            <form
+                              className="admin-user-form"
+                              aria-label={`${user.displayName}を編集`}
+                              onSubmit={event => void updateUser(event, user)}
+                            >
+                              <label className="field">
+                                <span>表示名</span>
+                                <input name="displayName" defaultValue={user.displayName} maxLength={128} required />
+                              </label>
+                              <label className="field">
+                                <span>ユーザーID（ログインID）</span>
+                                <input name="username" defaultValue={user.username ?? ''} pattern="[A-Za-z0-9][A-Za-z0-9_.-]{0,63}" required />
+                              </label>
+                              {user.email && (
+                                <div className="field readonly-field admin-user-form__wide">
+                                  <span>メールアドレス</span>
+                                  <strong className="mono">{user.email}</strong>
+                                  <small className="muted">
+                                    {sso ? 'SSO側を正本とし、Madoからは変更できません。' : '認証識別子のため、Madoからは変更できません。'}
+                                  </small>
+                                </div>
+                              )}
+                              <label className="field">
+                                <span>権限</span>
+                                <select
+                                  name="role"
+                                  defaultValue={user.roles[0] ?? 'viewer'}
+                                  disabled={sso}
+                                  aria-describedby={sso ? `sso-role-help-${user.id}` : undefined}
+                                >
+                                  {ROLE_OPTIONS.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}
+                                </select>
+                                {sso && (
+                                  <small id={`sso-role-help-${user.id}`} className="muted">
+                                    SSO側で管理されるため、Madoからは変更できません。
+                                  </small>
+                                )}
+                              </label>
+                              <label className="field">
+                                <span>状態</span>
+                                <select name="status" defaultValue={user.status}>
+                                  <option value="active">Active</option>
+                                  <option value="disabled">Disabled</option>
+                                </select>
+                              </label>
+                              <dl className="admin-user-meta admin-user-form__wide">
+                                <div><dt>内部ID</dt><dd className="mono">{user.id}</dd></div>
+                                <div><dt>認証</dt><dd>{user.authMethods.join(' + ') || '未設定'}</dd></div>
+                              </dl>
+                              <div className="admin-user-form__actions admin-user-form__wide">
+                                <button type="submit" className="button primary">保存</button>
+                                {!(sso && !user.authMethods.includes('local')) && (
+                                  <button type="button" className="button" onClick={() => void resetPassword(user)}>パスワードを再発行</button>
+                                )}
+                                {user.id !== currentUser?.id && (
+                                  <button type="button" className="button danger" onClick={() => setDeleting(user)}>削除</button>
+                                )}
+                              </div>
+                            </form>
+                          </td>
+                        </tr>
+                      ),
+                    ]
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
       )}
-      <form className={`admin-form admin-form--limited${users.length === 0 ? ' admin-form--flush' : ''}`} onSubmit={createUser}>
-        <h4>ユーザーを追加</h4>
-        <label className="admin-field"><span>表示名</span><input name="displayName" placeholder="例: Mado Curator" required /></label>
-        <label className="admin-field"><span>ユーザーID（ログインID）</span><input name="username" placeholder="例: curator" pattern="[A-Za-z0-9][A-Za-z0-9_.-]{0,63}" required /></label>
-        <label className="admin-field"><span>メールアドレス（任意）</span><input name="email" type="email" placeholder="email@example.jp" /></label>
-        <label className="admin-field"><span>初回パスワード（12文字以上）</span><input name="password" type="password" minLength={12} autoComplete="new-password" required /></label>
-        <label className="admin-field">
-          <span>権限</span>
-          <select name="role" value={role} onChange={event => setRole(event.target.value as RoleId)}>
-            {ROLE_OPTIONS.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}
-          </select>
-          <small className="admin-field__help">{ROLE_OPTIONS.find(option => option.id === role)?.help}</small>
-        </label>
-        <button type="submit">作成</button>
-      </form>
-      <blockquote className="admin-sso-guidance">
-        <p>SSOの場合、以下のAuthentikグループがMadoの権限と対応しています。権限はログイン時に同期されます。</p>
-        <ul>
-          {ssoRoleMappings.map(({ group, role }) => (
-            <li key={group}>
-              <code>{group}</code>
-              <span aria-hidden="true">→</span>
-              <strong>{ROLE_OPTIONS.find(option => option.id === role)?.label}</strong>
-            </li>
-          ))}
-          {ssoRoleMappings.length === 0 && <li>SSO権限マッピングは設定されていません。</li>}
-        </ul>
-      </blockquote>
+
+      <section className="admin-section">
+        <form className="admin-create-form" onSubmit={createUser} aria-labelledby="admin-create-user-title">
+          <div className="section-heading"><h2 id="admin-create-user-title">ユーザーを追加</h2></div>
+          <div className="admin-form-grid">
+            <label className="field"><span>表示名</span><input name="displayName" placeholder="例: Mado Curator" required /></label>
+            <label className="field"><span>ユーザーID（ログインID）</span><input name="username" placeholder="例: curator" pattern="[A-Za-z0-9][A-Za-z0-9_.-]{0,63}" required /></label>
+            <label className="field"><span>メールアドレス（任意）</span><input name="email" type="email" placeholder="email@example.jp" /></label>
+            <label className="field"><span>初回パスワード（12文字以上）</span><input name="password" type="password" minLength={12} autoComplete="new-password" required /></label>
+            <label className="field admin-form-grid__wide">
+              <span>権限</span>
+              <select name="role" value={role} onChange={event => setRole(event.target.value as RoleId)}>
+                {ROLE_OPTIONS.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}
+              </select>
+              <small className="muted">{ROLE_OPTIONS.find(option => option.id === role)?.help}</small>
+            </label>
+          </div>
+          <button type="submit" className="button primary">作成</button>
+        </form>
+        <blockquote className="sso-guidance">
+          <p>SSOの場合、以下のAuthentikグループがMadoの権限と対応しています。権限はログイン時に同期されます。</p>
+          <ul>
+            {ssoRoleMappings.map(({ group, role }) => (
+              <li key={group}>
+                <code>{group}</code>
+                <span aria-hidden="true">→</span>
+                <strong>{ROLE_OPTIONS.find(option => option.id === role)?.label}</strong>
+              </li>
+            ))}
+            {ssoRoleMappings.length === 0 && <li className="sso-guidance__empty">SSO権限マッピングは設定されていません。</li>}
+          </ul>
+        </blockquote>
+      </section>
+
+      {deleting && (
+        <DeleteConfirmDialog
+          titleId="admin-user-delete-title"
+          title="ユーザーを削除"
+          onConfirm={() => deleteUser(deleting)}
+          onCancel={() => setDeleting(null)}
+        >
+          {deleting.displayName}を削除しますか？この操作は取り消せません。
+        </DeleteConfirmDialog>
+      )}
     </section>
   )
 }
@@ -412,48 +609,72 @@ function ServiceAccountsPage() {
   }
 
   return (
-    <section className="admin-card admin-card--standalone">
-      {error && <p className="error" role="alert">{error}</p>}
-      {notice && <div className="admin-notice">{notice}</div>}
-      {secret && (
-        <div className="admin-secret" role="status">
-          <strong>{secret.label} — このkeyは今だけ表示されます</strong>
-          <code>{secret.value}</code>
-          <button type="button" onClick={() => void navigator.clipboard.writeText(secret.value)}>コピー</button>
-          <button type="button" onClick={() => setSecret(null)}>閉じる</button>
+    <section className="admin-accounts">
+      {error && <p className="notice error" role="alert">{error}</p>}
+      {notice && <p className="notice success" role="status">{notice}</p>}
+      {secret && <SecretNotice secret={secret} note="このkeyは今だけ表示されます" onClose={() => setSecret(null)} />}
+      {accounts.length > 0 && (
+        <div className="table-scroll">
+          <table className="admin-accounts-table">
+            <thead>
+              <tr>
+                <th scope="col">名前</th>
+                <th scope="col">用途</th>
+                <th scope="col">状態</th>
+              </tr>
+            </thead>
+            <tbody>
+              {accounts.map(account => (
+                <tr key={account.id}>
+                  <td className="break-word"><strong>{account.name}</strong></td>
+                  <td className={account.description ? undefined : 'muted'}>{account.description || '説明なし'}</td>
+                  <td><StatusBadge status={account.status} /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
-      {accounts.length > 0 && (
-        <div className="admin-list">{accounts.map(account => (
-          <div key={account.id}><span><strong>{account.name}</strong><small>{account.description || '説明なし'}</small></span><em>{account.status}</em></div>
-        ))}</div>
-      )}
-      <div className="admin-forms-grid admin-forms-grid--flush">
-        <form className="admin-form" onSubmit={createAccount}>
-          <h4>Service Accountを追加</h4>
-          <label className="admin-field"><span>Service Account名</span><input name="name" placeholder="例: nemo-curator-production" required /></label>
-          <label className="admin-field"><span>用途（任意）</span><input name="description" placeholder="例: 音声前処理の本番Pipeline" /></label>
-          <button type="submit">作成</button>
-        </form>
-        <form className="admin-form" onSubmit={issueKey}>
-          <h4>APIキーを発行</h4>
-          <label className="admin-field"><span>Service Account</span><select name="accountId" required defaultValue=""><option value="" disabled>選択してください</option>{accounts.filter(a => a.status === 'active').map(account => <option key={account.id} value={account.id}>{account.name}</option>)}</select></label>
-          <label className="admin-field">
-            <span>用途</span>
-            <select name="scope" value={keyScope} onChange={event => setKeyScope(event.target.value as KeyScope)}>
-              {KEY_SCOPE_OPTIONS.map(option => <option key={option.scope} value={option.scope}>{option.label}</option>)}
-            </select>
-            <small className="admin-field__help">{KEY_SCOPE_OPTIONS.find(option => option.scope === keyScope)?.help}</small>
-          </label>
-          <label className="admin-field"><span>Key名</span><input name="name" placeholder="例: production-2026-08" required /></label>
-          {keyScope === 'lineage:write' && (
-            <label className="admin-field"><span>許可するNamespace</span><input name="namespaces" placeholder="speech,podcast（カンマ区切り）" required /></label>
-          )}
-          <button type="submit">一度だけkeyを表示</button>
-        </form>
+      <div className="admin-forms">
+        <section className="admin-section">
+          <form onSubmit={createAccount} aria-labelledby="admin-create-account-title">
+            <div className="section-heading"><h2 id="admin-create-account-title">Service Accountを追加</h2></div>
+            <label className="field"><span>Service Account名</span><input name="name" placeholder="例: nemo-curator-production" required /></label>
+            <label className="field"><span>用途（任意）</span><input name="description" placeholder="例: 音声前処理の本番Pipeline" /></label>
+            <button type="submit" className="button primary">作成</button>
+          </form>
+        </section>
+        <section className="admin-section">
+          <form onSubmit={issueKey} aria-labelledby="admin-issue-key-title">
+            <div className="section-heading"><h2 id="admin-issue-key-title">APIキーを発行</h2></div>
+            <label className="field">
+              <span>Service Account</span>
+              <select name="accountId" required defaultValue="">
+                <option value="" disabled>選択してください</option>
+                {accounts.filter(a => a.status === 'active').map(account => <option key={account.id} value={account.id}>{account.name}</option>)}
+              </select>
+            </label>
+            <label className="field">
+              <span>用途</span>
+              <select name="scope" value={keyScope} onChange={event => setKeyScope(event.target.value as KeyScope)}>
+                {KEY_SCOPE_OPTIONS.map(option => <option key={option.scope} value={option.scope}>{option.label}</option>)}
+              </select>
+              <small className="muted">{KEY_SCOPE_OPTIONS.find(option => option.scope === keyScope)?.help}</small>
+            </label>
+            <label className="field"><span>Key名</span><input name="name" placeholder="例: production-2026-08" required /></label>
+            {keyScope === 'lineage:write' && (
+              <label className="field"><span>許可するNamespace</span><input name="namespaces" placeholder="speech,podcast（カンマ区切り）" required /></label>
+            )}
+            <button type="submit" className="button primary">一度だけkeyを表示</button>
+          </form>
+        </section>
       </div>
     </section>
   )
+}
+
+function AuditTarget({ event }: { event: AuditEventRow }) {
+  return <>{event.details?.target?.displayName ?? event.resource_id ?? event.resource_type ?? '—'}</>
 }
 
 function AuditPageView() {
@@ -461,6 +682,9 @@ function AuditPageView() {
   const [nextBeforeId, setNextBeforeId] = useState<number | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [openIds, toggleRow] = useOpenRows<number>()
+  // 狭い画面では時刻・操作・結果だけを行に残し、操作者と対象は開いた詳細に出す。
+  const isNarrow = useMediaQuery(narrowerThan('md'))
 
   const reload = useCallback(async () => {
     setError(null)
@@ -501,42 +725,99 @@ function AuditPageView() {
     }
   }
 
+  const columnCount = isNarrow ? 4 : 6
+
   return (
-    <section className="admin-card admin-card--standalone admin-audit">
-      <div className="admin-audit__actions">
-        <button type="button" className="ghost" onClick={() => void reload()}>更新</button>
+    <section className="admin-audit">
+      <div className="admin-toolbar admin-toolbar--end">
+        <button type="button" className="button small" onClick={() => void reload()}>
+          <RefreshCw size={14} aria-hidden="true" />
+          更新
+        </button>
       </div>
-      {error && <p className="error" role="alert">{error}</p>}
-      <div className="admin-audit__columns" aria-hidden="true">
-        <span>時刻</span><span>ユーザー</span><span>操作</span><span>対象</span><span>結果</span>
-      </div>
-      <div className="admin-audit__list">
-        {auditEvents.map(event => (
-          <details key={event.id} className="admin-audit__event" data-outcome={event.outcome}>
-            <summary>
-              <time dateTime={event.occurred_at}>{new Date(event.occurred_at).toLocaleString('ja-JP', { hour12: false })}</time>
-              <strong>{event.actor_label}</strong>
-              <span>{ACTION_LABELS[event.action] ?? event.action}</span>
-              <code>{event.details?.target?.displayName ?? event.resource_id ?? event.resource_type ?? '—'}</code>
-              <em>{OUTCOME_LABELS[event.outcome]}</em>
-            </summary>
-            <div className="admin-audit__detail">
-              {event.details?.changes?.map((change, index) => (
-                <div key={`${change.field}-${index}`}>
-                  <strong>{change.label ?? change.field}</strong>
-                  <span><del>{formatAuditValue(change.before)}</del><i>→</i><ins>{formatAuditValue(change.after)}</ins></span>
-                </div>
-              ))}
-              {(!event.details?.changes || event.details.changes.length === 0) && (
-                <dl>{Object.entries(event.details ?? {}).filter(([key]) => key !== 'target').map(([key, value]) => <div key={key}><dt>{key}</dt><dd>{formatAuditValue(value)}</dd></div>)}</dl>
-              )}
-              {(!event.details || Object.keys(event.details).length === 0) && <p>詳細はありません。</p>}
-            </div>
-          </details>
-        ))}
-        {auditEvents.length === 0 && <p>記録はまだありません。</p>}
-      </div>
-      {nextBeforeId && <button type="button" className="ghost admin-audit__more" disabled={loading} onClick={() => void loadMore()}>{loading ? '読み込み中…' : 'さらに表示'}</button>}
+      {error && <p className="notice error" role="alert">{error}</p>}
+      {auditEvents.length === 0 ? (
+        <p className="state-message">記録はまだありません。</p>
+      ) : (
+        <div className="table-scroll">
+          <table className="responsive-table audit-table">
+            <thead>
+              <tr>
+                <th scope="col">時刻</th>
+                {!isNarrow && <th scope="col">操作者</th>}
+                <th scope="col">操作</th>
+                {!isNarrow && <th scope="col">対象</th>}
+                <th scope="col">結果</th>
+                <th scope="col" className="responsive-table-toggle"><span className="sr-only">詳細を表示</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              {auditEvents.map(event => {
+                const isOpen = openIds.has(event.id)
+                const detailId = `audit-event-${event.id}`
+                const changes = event.details?.changes ?? []
+                return [
+                  <tr
+                    key={event.id}
+                    className={isOpen ? 'clickable-row selected' : 'clickable-row'}
+                    onClick={clickEvent => { if (!isFromControl(clickEvent)) toggleRow(event.id) }}
+                  >
+                    <td>
+                      <time dateTime={event.occurred_at}>{new Date(event.occurred_at).toLocaleString('ja-JP', { hour12: false })}</time>
+                    </td>
+                    {!isNarrow && <td className="audit-label">{event.actor_label}</td>}
+                    <td><span title={event.action}>{ACTION_LABELS[event.action] ?? event.action}</span></td>
+                    {!isNarrow && <td className="mono break-word"><AuditTarget event={event} /></td>}
+                    <td><span className={`status-badge ${OUTCOME_BADGES[event.outcome]}`}>{OUTCOME_LABELS[event.outcome]}</span></td>
+                    <td className="responsive-table-toggle">
+                      <RowToggle open={isOpen} controls={detailId} onToggle={() => toggleRow(event.id)} />
+                    </td>
+                  </tr>,
+                  isOpen && (
+                    <tr key={`${event.id}-details`} id={detailId} className="responsive-table-details">
+                      <td colSpan={columnCount}>
+                        <dl className="audit-detail">
+                          {isNarrow && (
+                            <>
+                              <div><dt>操作者</dt><dd>{event.actor_label}</dd></div>
+                              <div><dt>対象</dt><dd className="mono"><AuditTarget event={event} /></dd></div>
+                            </>
+                          )}
+                          {changes.map((change, index) => (
+                            <div key={`${change.field}-${index}`}>
+                              <dt>{change.label ?? change.field}</dt>
+                              <dd className="audit-change">
+                                <del>{formatAuditValue(change.before)}</del>
+                                <span aria-hidden="true">→</span>
+                                <ins>{formatAuditValue(change.after)}</ins>
+                              </dd>
+                            </div>
+                          ))}
+                          {changes.length === 0 && Object.entries(event.details ?? {})
+                            .filter(([key]) => key !== 'target')
+                            .map(([key, value]) => (
+                              <div key={key}><dt>{key}</dt><dd className="mono">{formatAuditValue(value)}</dd></div>
+                            ))}
+                        </dl>
+                        {(!event.details || Object.keys(event.details).length === 0) && (
+                          <p className="muted audit-detail__empty">詳細はありません。</p>
+                        )}
+                      </td>
+                    </tr>
+                  ),
+                ]
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {nextBeforeId && (
+        <div className="admin-more">
+          <button type="button" className="button small" disabled={loading} onClick={() => void loadMore()}>
+            {loading ? '読み込み中…' : 'さらに表示'}
+          </button>
+        </div>
+      )}
     </section>
   )
 }
@@ -553,21 +834,19 @@ export default function AdminPage() {
   }
 
   return (
-    <section className="admin-page admin-page--embedded">
-      <nav className="access-tabs" aria-label="Access">
-        {canUsers && <NavLink to="/settings/access/users" className={({ isActive }) => `access-tabs__link${isActive ? ' is-active' : ''}`}>Users</NavLink>}
-        {canAccounts && <NavLink to="/settings/access/service-accounts" className={({ isActive }) => `access-tabs__link${isActive ? ' is-active' : ''}`}>Service Accounts</NavLink>}
-        {canAudit && <NavLink to="/settings/access/audit" className={({ isActive }) => `access-tabs__link${isActive ? ' is-active' : ''}`}>Audit</NavLink>}
+    <div className="admin-page">
+      <nav className="tabs access-tabs" aria-label="Access">
+        {canUsers && <NavLink to="/settings/access/users" className="tab">Users</NavLink>}
+        {canAccounts && <NavLink to="/settings/access/service-accounts" className="tab">Service Accounts</NavLink>}
+        {canAudit && <NavLink to="/settings/access/audit" className="tab">Audit</NavLink>}
       </nav>
-      <div className="access-content">
-          <Routes>
-            <Route index element={<Navigate to={defaultPath} replace />} />
-            <Route path="users" element={canUsers ? <UsersPage /> : <Navigate to={defaultPath} replace />} />
-            <Route path="service-accounts" element={canAccounts ? <ServiceAccountsPage /> : <Navigate to={defaultPath} replace />} />
-            <Route path="audit" element={canAudit ? <AuditPageView /> : <Navigate to={defaultPath} replace />} />
-            <Route path="*" element={<Navigate to={defaultPath} replace />} />
-          </Routes>
-      </div>
-    </section>
+      <Routes>
+        <Route index element={<Navigate to={defaultPath} replace />} />
+        <Route path="users" element={canUsers ? <UsersPage /> : <Navigate to={defaultPath} replace />} />
+        <Route path="service-accounts" element={canAccounts ? <ServiceAccountsPage /> : <Navigate to={defaultPath} replace />} />
+        <Route path="audit" element={canAudit ? <AuditPageView /> : <Navigate to={defaultPath} replace />} />
+        <Route path="*" element={<Navigate to={defaultPath} replace />} />
+      </Routes>
+    </div>
   )
 }

@@ -1,7 +1,7 @@
 import { useCallback } from 'react'
 import { Link, Navigate, useParams, useSearchParams } from 'react-router-dom'
+import { Gauge } from 'lucide-react'
 import { Breadcrumb } from '../components/Breadcrumb'
-import { ConnectionSwitcher } from '../components/ConnectionSwitcher'
 import { StorageBrowser } from '../components/StorageBrowser'
 import { ReadmeView } from '../components/ReadmeView'
 import { PreviewDrawer } from '../components/PreviewDrawer'
@@ -57,7 +57,7 @@ export default function StorageBucket({ connectionId }: Props) {
     )
   }, [setSearchParams])
 
-  // preview drawer の幅をリサイズ可能にする (≥1024px のみ実効。CSS 側で gate)。
+  // preview drawer の幅をリサイズ可能にする (一覧とドロワーが横に並ぶ 900px 以上だけ。CSS 側で gate)。
   const { containerRef, onResizeStart, onResizeKeyDown, resetWidth, widthCustomized } =
     useDrawerResize(selected != null)
 
@@ -73,10 +73,23 @@ export default function StorageBucket({ connectionId }: Props) {
 
   return (
     <section className="storage-bucket">
-      <div className="flex items-center justify-between gap-3">
-        <Breadcrumb connectionId={connectionId} bucket={bucket} prefix={prefix} />
-        <ConnectionSwitcher />
-      </div>
+      {/* 見出し: パンくず (接続先 › バケット › 親のフォルダ…)、今いるフォルダの名前、
+          右に接続先の切り替え・URL のコピー・上の階層へ。バケットの直下では
+          容量メトリクスへの導線を補足に添える。 */}
+      <Breadcrumb
+        connectionId={connectionId}
+        bucket={bucket}
+        prefix={prefix}
+        description={prefix === '' && (
+          <Link
+            className="storage-header-link"
+            to={`/storage/${encodeURIComponent(connectionId)}/?view=capacity&bucket=${encodeURIComponent(bucket)}`}
+          >
+            <Gauge size={14} aria-hidden="true" />
+            バケットの容量メトリクスを見る
+          </Link>
+        )}
+      />
       {/* README はリスト幅に依存させない (常に full width)。identity を key にして、
           ディレクトリ遷移時は旧 README の取得・展開状態をまとめて破棄する。 */}
       <ReadmeView
@@ -85,16 +98,6 @@ export default function StorageBucket({ connectionId }: Props) {
         bucket={bucket}
         prefix={prefix}
       />
-      {prefix === '' && (
-        <nav className="mt-2 mb-4 text-[12px]">
-          <Link
-            className="text-link no-underline hover:text-link-hover hover:underline"
-            to={`/storage/${encodeURIComponent(connectionId)}/?view=capacity&bucket=${encodeURIComponent(bucket)}`}
-          >
-            バケットの容量メトリクスを見る →
-          </Link>
-        </nav>
-      )}
       {/* 保存場所から解決したDatasetはREADMEの補足情報として、その直後に置く。
           選択中のファイルがあればそのファイル、なければ現在prefixを解決する。 */}
       <StorageLineagePanel connectionId={connectionId} bucket={bucket} path={selected ?? prefix} />
@@ -102,7 +105,13 @@ export default function StorageBucket({ connectionId }: Props) {
           リサイズでき、広げるとリストを圧縮せず上に重なる (useDrawerResize)。
           ハンドルは drawer 内に置き、その高さに収める。README には影響しない。 */}
       <div className="storage-list" ref={containerRef}>
-        <StorageBrowser connectionId={connectionId} bucket={bucket} prefix={prefix} onSelectFile={setSelected} />
+        <StorageBrowser
+          connectionId={connectionId}
+          bucket={bucket}
+          prefix={prefix}
+          onSelectFile={setSelected}
+          selectedKey={selected}
+        />
         <PreviewDrawer
           connectionId={connectionId}
           bucket={bucket}

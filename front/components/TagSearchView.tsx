@@ -1,8 +1,9 @@
-import { useEffect, useReducer, useState } from 'react'
+import { useEffect, useId, useReducer, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../lib/api/client'
 import type { Tag, TagSearchResult } from '../lib/api/types'
 import { encPath, fileLinkToDirRedirect, parseS3Path } from '../lib/route'
+import { Dialog } from './Dialog'
 import { TagToggleChips } from './TagToggleChips'
 import { ImportExportButtons } from './ImportExportButtons'
 import { downloadJson, type ImportMode, type ImportSummary } from '../lib/jsonFile'
@@ -91,6 +92,7 @@ const KIND_LABEL: Record<Hit['kind'], string> = {
 // S3 パス貼付と並んで一覧の前に積み上がり、ページが混み合っていた。
 // 選んだタグのいずれかが付いた bucket/ディレクトリ/ファイルを列挙する (OR)。
 export function TagSearchView({ connectionId }: Props) {
+  const missingTitleId = useId()
   const [allTags, setAllTags] = useState<Tag[]>([])
   const [selected, setSelected] = useState<Set<string>>(() => new Set())
   const [search, dispatch] = useReducer(searchReducer, initialSearch)
@@ -227,98 +229,95 @@ export function TagSearchView({ connectionId }: Props) {
   }
 
   return (
-    <section>
-      <div className="mt-1 flex flex-wrap items-center justify-end">
-        <ImportExportButtons
-          what="タグ割り当て"
-          onExport={() => { void handleExport() }}
-          onImport={handleImport}
-          onDone={() => setSelected(new Set(selected))}
-        />
-      </div>
-
-      {pendingMissing && (
-        <div className="modal-backdrop" role="presentation">
-          <button
-            type="button"
-            className="modal-backdrop__close-overlay"
-            onClick={() => answerMissing(false)}
-            aria-label="モーダルを閉じる"
-            tabIndex={-1}
-          />
-          <div className="modal modal--narrow" role="dialog" aria-modal="true" aria-labelledby="tag-missing-title">
-            <h3 id="tag-missing-title" className="modal-prompt__title">未登録のタグがあります</h3>
-            <p className="modal-prompt__target">{pendingMissing.names.join(' / ')}</p>
-            <p className="text-[12px] text-ink-7">
-              作成すると、これらのタグを登録したうえで割り当てを取り込みます。
-              作成しない場合、このタグの割り当ては取り込まれません。
-            </p>
-            <div className="modal-actions">
-              <button type="button" onClick={() => answerMissing(false)}>作成しない</button>
-              <button type="button" onClick={() => answerMissing(true)}>作成して取り込む</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {allTags.length === 0 ? (
-        <p className="mt-4 text-[13px] text-ink-7">
-          タグがまだありません。<Link to="/settings/features">Settings</Link> で作成してください。
-        </p>
-      ) : (
-        <>
-          <div className="mt-1 flex flex-wrap items-center gap-2">
+    <section className="tag-search">
+      {/* 一覧の上の帯と同じ形: 左にタグの選択、右に割り当ての入出力。 */}
+      <div className="storage-toolbar">
+        {allTags.length > 0 && (
+          <div className="storage-toolbar-item">
             <TagToggleChips
               tags={allTags} selected={selected} onToggle={toggle} onClear={() => setSelected(new Set())}
             />
-            {loading && <span className="text-[11px] text-ink-7">検索中…</span>}
+            {loading && <span className="muted">検索中…</span>}
           </div>
+        )}
+        <div className="storage-toolbar-item storage-toolbar-end">
+          <ImportExportButtons
+            what="タグ割り当て"
+            onExport={() => { void handleExport() }}
+            onImport={handleImport}
+            onDone={() => setSelected(new Set(selected))}
+          />
+        </div>
+      </div>
 
-          {error && <p className="error mt-3">{error}</p>}
+      {pendingMissing && (
+        <Dialog
+          titleId={missingTitleId}
+          title="未登録のタグがあります"
+          subtitle={pendingMissing.names.join(' / ')}
+          onClose={() => answerMissing(false)}
+          narrowLayout="sheet"
+          footer={(
+            <>
+              <button type="button" className="button" onClick={() => answerMissing(false)}>作成しない</button>
+              <button type="button" className="button primary" onClick={() => answerMissing(true)}>作成して取り込む</button>
+            </>
+          )}
+        >
+          <div className="dialog-body">
+            <p className="tag-search-prompt">
+              作成すると、これらのタグを登録したうえで割り当てを取り込みます。
+              作成しない場合、このタグの割り当ては取り込まれません。
+            </p>
+          </div>
+        </Dialog>
+      )}
+
+      {allTags.length === 0 ? (
+        <p className="state-message">
+          <span>タグがまだありません。<Link to="/settings/features">Settings</Link> で作成してください。</span>
+        </p>
+      ) : (
+        <>
+          {error && <p className="notice error">{error}</p>}
 
           {selected.size === 0 && !error && (
-            <p className="mt-4 text-[13px] text-ink-7">タグを選ぶと、付いている場所を一覧します。</p>
+            <p className="state-message">タグを選ぶと、付いている場所を一覧します。</p>
           )}
 
           {hits !== null && hits.length === 0 && !loading && !error && (
-            <p className="mt-4 text-[13px] text-ink-7">この接続にヒットなし。</p>
+            <p className="state-message">この接続にヒットなし。</p>
           )}
 
           {hits !== null && hits.length > 0 && (
-            <>
-              <p className="mt-5 text-[12px] font-semibold text-ink-7">
-                {hits.length} 件
-              </p>
-              <ul className="m-0 mt-2 list-none p-0" style={{ borderTop: '1px solid var(--rule)' }}>
-                {hits.map(h => (
-                  <li
-                    key={`${h.tagId}|${h.bucket}|${h.kind}|${h.path}`}
-                    className="px-1 py-2.5 transition-colors hover:bg-ink-0"
-                    style={{ borderBottom: '1px solid var(--rule)' }}
-                  >
-                    <Link to={hrefFor(connectionId, h)} className="block text-ink-12 no-underline">
-                      <span className="wrap-anywhere">
-                        <span
-                          className="text-[12.5px] text-ink-7"
-                          style={{ fontFamily: 'var(--font-mono)', letterSpacing: '0.005em' }}
-                        >
-                          {h.bucket}<span>/</span>
-                        </span>
-                        <span
-                          className="text-[12.5px] font-medium text-ink-12"
-                          style={{ fontFamily: 'var(--font-mono)', letterSpacing: '0.005em' }}
-                        >
-                          {h.kind === 'bucket' ? '(bucket root)' : h.path}
-                        </span>
-                      </span>
-                      <span className="mt-0.5 block text-[11px] text-ink-7">
-                        {KIND_LABEL[h.kind]}
-                      </span>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </>
+            <div>
+              <div className="table-scroll">
+                <table>
+                  <thead>
+                    <tr>
+                      <th scope="col">場所</th>
+                      <th scope="col" className="tag-search-kind">種別</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {hits.map(h => (
+                      <tr key={`${h.tagId}|${h.bucket}|${h.kind}|${h.path}`}>
+                        <td>
+                          <Link to={hrefFor(connectionId, h)} className="tag-search-path">
+                            <span className="muted">{h.bucket}/</span>
+                            <span>{h.kind === 'bucket' ? '(bucket root)' : h.path}</span>
+                          </Link>
+                        </td>
+                        <td className="tag-search-kind">{KIND_LABEL[h.kind]}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="table-footer">
+                <span>{hits.length} 件</span>
+              </div>
+            </div>
           )}
         </>
       )}

@@ -1,9 +1,10 @@
 // 編集ページ (NoteEditPage / ReadmeEditPage) の共通レイアウト + 動作。
 //
-// - 上部: kicker + h2 (タイトル)
-// - 中央: 「左サイドバー (optional) + Monaco エディタ」 — leftPane が undefined のときは
-//   1-pane (エディタのみ全幅)、指定されたときは 2-pane
-// - 下部: アカウント署名 (認証時はread-only) + 保存/キャンセル + エラー表示
+// - 上部: ページの見出し (h1) と、何を編集しているかの補足
+// - 中央: 枠の中に「左サイドバー (optional) + Monaco エディタ」 — leftPane が undefined のときは
+//   1-pane (エディタのみ全幅)、指定されたときは 2-pane。900px 未満は縦に積み、
+//   サイドバーは開閉ボタンで出す
+// - 下部: エラー表示 + アカウント署名 (認証時はread-only) + キャンセル/保存
 //
 // 離脱警告:
 //   - dirty (= 本文、または認証無効時の編集者名が変わった) のとき、ブラウザ閉じ・リロード時に
@@ -13,13 +14,15 @@
 //   - 保存成功直後は justSavedRef で 1 度だけ素通しさせる (保存→ホーム遷移を阻害しない)
 
 import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { ChevronDown, ChevronUp, Folder } from 'lucide-react'
 import { getEditorName, setEditorName } from '../lib/editorName'
 import { useAuth } from '../lib/auth-context'
 import { useBlocker } from 'react-router-dom'
 
 interface Props {
-  kicker?: string
   title: string
+  /** 見出しの下の補足 (何を編集しているか。README なら場所)。 */
+  description?: ReactNode
   initialBody: string
   onSave: (body: string, editor: string) => Promise<void>
   onSaved: () => void
@@ -29,8 +32,20 @@ interface Props {
   children: (api: { body: string; setBody: (v: string) => void }) => ReactNode
 }
 
+/** 編集ページの見出し。読み込み中や取得の失敗で EditorShell を出せない間も、同じ見出しを出すのに使う。 */
+export function EditorPageHeader({ title, description }: { title: string; description?: ReactNode }) {
+  return (
+    <header className="page-header">
+      <div>
+        <h1>{title}</h1>
+        {description && <p className="page-description">{description}</p>}
+      </div>
+    </header>
+  )
+}
+
 export function EditorShell({
-  kicker, title, initialBody,
+  title, description, initialBody,
   onSave, onSaved, onCancel,
   leftPane, children,
 }: Props) {
@@ -104,44 +119,43 @@ export function EditorShell({
 
   return (
     <section className={leftPane ? 'editpage editpage--two-pane' : 'editpage'}>
-      <header className="editpage__head">
-        <div className="editpage__head-text">
-          {kicker && <p className="kicker editpage__kicker">{kicker}</p>}
-          <h2 className="editpage__title">{title}</h2>
-        </div>
-        {/* sidebar toggle はモバイルのみ (CSS で制御)。leftPane が無いノート編集では出さない。 */}
+      <EditorPageHeader title={title} description={description} />
+
+      <div className="editpage__frame">
+        {/* サイドバーの開閉は 900px 未満でだけ見える (CSS)。leftPane が無いノート編集では出さない。 */}
         {leftPane && (
           <button
             type="button"
-            className="editpage__sidebar-toggle ghost"
+            className="editpage__sidebar-toggle"
             onClick={() => setSidebarOpen(o => !o)}
             aria-expanded={sidebarOpen}
             aria-controls="editpage-sidebar"
           >
-            <span aria-hidden>📁</span>
+            <Folder size={14} aria-hidden="true" />
             {sidebarOpen ? '閉じる' : 'ファイル参照'}
+            {sidebarOpen ? <ChevronUp size={14} aria-hidden="true" /> : <ChevronDown size={14} aria-hidden="true" />}
           </button>
         )}
-      </header>
-
-      <div className="editpage__body">
-        {leftPane && (
-          <aside
-            id="editpage-sidebar"
-            className="editpage__sidebar"
-            data-mobile-open={sidebarOpen}
-          >
-            {leftPane}
-          </aside>
-        )}
-        <div className="editpage__editor-area">
-          {children({ body, setBody })}
+        <div className="editpage__body">
+          {leftPane && (
+            <aside
+              id="editpage-sidebar"
+              className="editpage__sidebar"
+              data-mobile-open={sidebarOpen}
+            >
+              {leftPane}
+            </aside>
+          )}
+          <div className="editpage__editor-area">
+            {children({ body, setBody })}
+          </div>
         </div>
       </div>
 
+      {error && <p className="notice error editpage__error" role="alert">{error}</p>}
       <footer className="editpage__bar">
-        <label className="editpage__name">
-          <span className="label">編集者名</span>
+        <label className="field editpage__name">
+          <span>編集者名</span>
           <input
             value={editor}
             onChange={e => setLocalEditor(e.target.value)}
@@ -152,15 +166,15 @@ export function EditorShell({
             aria-label="編集者名"
           />
         </label>
-        {error && <p className="editpage__error" aria-live="polite">{error}</p>}
         <div className="editpage__actions">
-          <button onClick={handleCancel} disabled={saving} className="ghost">
+          <button type="button" onClick={handleCancel} disabled={saving} className="button">
             キャンセル
           </button>
           <button
+            type="button"
             onClick={save}
             disabled={saving || !editor}
-            className="editpage__save"
+            className="button primary"
           >
             {saving ? '保存中…' : '保存'}
           </button>

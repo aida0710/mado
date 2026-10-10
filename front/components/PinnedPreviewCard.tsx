@@ -1,3 +1,4 @@
+import { Download, X } from 'lucide-react'
 import { api } from '../lib/api/client'
 import { classify, classifyEntry } from '../lib/api/mime'
 import { basename, fullEntryLabel, prettyPrintJson } from '../lib/format'
@@ -19,42 +20,11 @@ import { UnsupportedPreview } from './UnsupportedPreview'
 function PinnedTextBody({ name, url }: { name: string; url: string }) {
   const sniffed = useSniffedText(url)
 
-  if (sniffed.status === 'error') return <p className="error">{sniffed.message}</p>
-  if (sniffed.status === 'loading') return <p className="text-[13px] text-ink-7">loading…</p>
+  if (sniffed.status === 'error') return <p className="notice error">{sniffed.message}</p>
+  if (sniffed.status === 'loading') return <p className="muted">読み込み中…</p>
   if (sniffed.status === 'binary') return <UnsupportedPreview />
 
-  const display = prettyPrintJson(name, sniffed.text)
-  return (
-    <pre
-      className="m-0 h-[280px] overflow-auto whitespace-pre p-3 text-[12px] leading-snug"
-      style={{
-        fontFamily: 'var(--font-mono)',
-        background: 'var(--ink-0)',
-        border: '1px solid var(--rule)',
-        borderRadius: 'var(--radius-2)',
-        color: 'var(--ink-11)',
-      }}
-    >
-      {display}
-    </pre>
-  )
-}
-
-function PinnedEntryImage({ connectionId, bucket, archiveKey, entry }: {
-  connectionId: string; bucket: string; archiveKey: string; entry: string
-}) {
-  return (
-    <img
-      className="mx-auto block h-auto max-w-full"
-      style={{
-        borderRadius: 'var(--radius-2)',
-        border: '1px solid var(--rule)',
-        boxShadow: '0 1px 4px rgba(10, 9, 4, 0.06)',
-      }}
-      src={api.tarEntryUrl({ connectionId, bucket, key: archiveKey, entry })}
-      alt={entry}
-    />
-  )
+  return <pre className="preview-code pinned-text">{prettyPrintJson(name, sniffed.text)}</pre>
 }
 
 function PinnedPreviewBody({ item }: { item: PinnedItem }) {
@@ -65,7 +35,13 @@ function PinnedPreviewBody({ item }: { item: PinnedItem }) {
       return <PreviewAudio connectionId={connectionId} bucket={bucket} k={key} entryPath={entryPath} />
     }
     if (kind === 'image') {
-      return <PinnedEntryImage connectionId={connectionId} bucket={bucket} archiveKey={key} entry={entryPath} />
+      return (
+        <img
+          className="preview-image"
+          src={api.tarEntryUrl({ connectionId, bucket, key, entry: entryPath })}
+          alt={entryPath}
+        />
+      )
     }
     if (kind === 'video') {
       return <PreviewVideo connectionId={connectionId} bucket={bucket} k={key} entryPath={entryPath} />
@@ -89,6 +65,7 @@ function PinnedPreviewBody({ item }: { item: PinnedItem }) {
   return <PinnedTextBody name={key} url={api.textPreviewUrl(connectionId, bucket, key)} />
 }
 
+/** 画面下のドックに並べる、ピン留めしたプレビューのカード。上の帯にファイル名と操作。 */
 export function PinnedPreviewCard({ item }: { item: PinnedItem }) {
   const { removePin } = usePinnedPreviews()
   const { connectionId, bucket, key, entryPath } = item
@@ -101,41 +78,32 @@ export function PinnedPreviewCard({ item }: { item: PinnedItem }) {
     : api.downloadUrl(connectionId, bucket, key)
 
   return (
-    <div
-      className="flex flex-col gap-2 p-3"
-      style={{ border: '1px solid var(--rule)', borderRadius: 'var(--radius-2)' }}
-    >
-      <header className="flex items-center gap-2">
-        <CopyablePath
-          text={filename}
-          fullPath={fullPath}
-          className="min-w-0 flex-1 text-[12px] text-ink-11"
-          style={{ fontFamily: 'var(--font-mono)' }}
-        />
+    <div className="pinned-card">
+      <header className="pinned-card-header">
+        <CopyablePath text={filename} fullPath={fullPath} />
         {/* tar エントリのダウンロードは archive 権限側 (中身の取り出し) が担当する。 */}
         {(entryPath != null ? caps.archive : caps.download) && (
           <a
-            className="ghost no-underline"
+            className="icon-button"
             href={downloadUrl}
             download={filename}
             aria-label={`${filename} をダウンロード`}
             title="ダウンロード"
           >
-            <span aria-hidden>↓</span>
-            <span className="text-[12px] font-semibold">DL</span>
+            <Download size={16} aria-hidden="true" />
           </a>
         )}
         <button
           type="button"
-          className="ghost"
+          className="icon-button"
           onClick={() => removePin(item.id)}
           aria-label={`${filename} のピン留めを解除`}
           title="ピン留めを解除"
         >
-          <span aria-hidden>✕</span>
+          <X size={16} aria-hidden="true" />
         </button>
       </header>
-      <div>
+      <div className="pinned-card-body">
         <PinnedPreviewBody item={item} />
       </div>
     </div>

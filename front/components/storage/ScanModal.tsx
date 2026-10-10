@@ -1,7 +1,7 @@
 // ディレクトリ配下のオブジェクト数・サイズの内訳
 // (spec: 2026-08-18-directory-scan-design.md)。
 //
-// 走査はキューで走るので、モーダルを閉じても止まらない。閉じて後から見に来れば
+// 走査はキューで走るので、ダイアログを閉じても止まらない。閉じて後から見に来れば
 // 結果がある。止めたいときは「中止」を押す。
 //
 // 進捗にパーセンテージは出ない。S3 には件数を返す API が無く、初回の走査では
@@ -10,10 +10,12 @@
 // 走査中と結果で骨格 (.scan-figures) を保つ。完了時に「走査済み」が
 // 「オブジェクト / 合計サイズ」へ置き換わるだけで、レイアウトが飛ばない。
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useRef, useState } from 'react'
+import { RefreshCw } from 'lucide-react'
 import { api } from '../../lib/api/client'
 import { ScanResult as ScanResultSchema, type ScanResult } from '../../lib/api/types'
 import { fmtCacheAge, fmtSize } from '../../lib/format'
+import { Dialog } from '../Dialog'
 import { EstimatePanel } from './EstimatePanel'
 
 interface Props {
@@ -27,7 +29,7 @@ interface Props {
 
 const POLL_MS = 1000
 
-/** 内訳の 1 行。棒はサイズ基準 (最大値を 100%)。件数より偏りが実務に効く。 */
+/** 内訳の表。棒はサイズ基準 (最大値を 100%)。件数より偏りが実務に効く。 */
 function Breakdown({ title, rows }: {
   title: string
   rows: Array<{ label: string; objectCount: number; totalBytes: number }>
@@ -35,25 +37,37 @@ function Breakdown({ title, rows }: {
   if (rows.length === 0) return null
   const max = Math.max(...rows.map(r => r.totalBytes), 1)
   return (
-    <div className="scan-brk">
-      <span className="scan-brk__k">{title}</span>
-      {rows.map(r => (
-        <div key={r.label}>
-          <div className="scan-row">
-            <span className="scan-row__nm">{r.label}</span>
-            <span className="scan-row__ct">{r.objectCount.toLocaleString()}</span>
-            <span className="scan-row__sz">{fmtSize(r.totalBytes)}</span>
-          </div>
-          <div className="scan-meter">
-            <i style={{ width: `${Math.max(1, (r.totalBytes / max) * 100)}%` }} />
-          </div>
-        </div>
-      ))}
+    <div className="table-scroll">
+      <table className="scan-table">
+        <thead>
+          <tr>
+            <th scope="col">{title}</th>
+            <th scope="col" className="numeric scan-col-count">件数</th>
+            <th scope="col" className="numeric scan-col-size">サイズ</th>
+            <th scope="col" className="scan-col-meter"><span className="sr-only">サイズの割合</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(r => (
+            <tr key={r.label}>
+              <td className="mono break-word">{r.label}</td>
+              <td className="numeric mono">{r.objectCount.toLocaleString()}</td>
+              <td className="numeric mono nowrap">{fmtSize(r.totalBytes)}</td>
+              <td className="scan-col-meter">
+                <span className="storage-meter" aria-hidden="true">
+                  <span style={{ width: `${Math.max(1, (r.totalBytes / max) * 100)}%` }} />
+                </span>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   )
 }
 
 export function ScanModal({ connectionId, bucket, prefix, onClose, onResult }: Props) {
+  const titleId = useId()
   const [result, setResult] = useState<ScanResult | null>(null)
   const [scannedAt, setScannedAt] = useState<string | null>(null)
   const [jobId, setJobId] = useState<number | null>(null)
@@ -130,30 +144,55 @@ export function ScanModal({ connectionId, bucket, prefix, onClose, onResult }: P
     if (jobId !== null) api.cancelJob(jobId).catch(() => {})
   }, [jobId])
 
-  return (
-    <div className="modal-backdrop" role="presentation">
-      <button
-        type="button"
-        className="modal-backdrop__close-overlay"
-        tabIndex={-1}
-        aria-label="閉じる"
-        onClick={onClose}
-      />
-      <div className="modal scan-modal" role="dialog" aria-modal="true" aria-label="配下の集計">
-        <h3>配下の集計</h3>
-        <p className="scan-modal__path">{bucket} / {prefix || '(バケット直下)'}</p>
+  // 走査の操作は内訳タブのときだけ下に出す (見積もりタブは自分の導線を持つ)。
+  let footer = null
+  if (tab === 'breakdown') {
+    footer = running ? (
+      <>
+        <span className="scan-dialog-status">
+          <span className="storage-pulse-dot" aria-hidden="true" />
+          走査中…
+        </span>
+        <button type="button" className="button" onClick={cancel}>中止</button>
+      </>
+    ) : (
+      <>
+        {scannedAt && (
+          <span className="scan-dialog-status">{fmtCacheAge(new Date(scannedAt))} に走査</span>
+        )}
+        {result ? (
+          <button type="button" className="button" onClick={start}>
+            <RefreshCw size={14} aria-hidden="true" />
+            再走査
+          </button>
+        ) : (
+          <button type="button" className="button primary" onClick={start}>走査する</button>
+        )}
+      </>
+    )
+  }
 
+  return (
+    <Dialog
+      titleId={titleId}
+      title="配下の集計"
+      subtitle={`${bucket} / ${prefix || '(バケット直下)'}`}
+      onClose={onClose}
+      size="wide"
+      footer={footer}
+    >
+      <div className="dialog-body">
         {/* 「配下に何が何 TB あるか」を見ている文脈は、そのまま「で、どこへ
-            移すか」につながる。新しい導線を作らずこのモーダルを広げる
+            移すか」につながる。新しい導線を作らずこのダイアログを広げる
             (spec: 2026-08-22-transfer-estimate-design.md)。 */}
-        <div className="scan-modal__tabs" role="tablist">
+        <div className="tabs scan-tabs" role="tablist">
           <button
             type="button"
             role="tab"
             id="scan-tab-breakdown"
             aria-selected={tab === 'breakdown'}
             aria-controls="scan-panel-breakdown"
-            className={tab === 'breakdown' ? 'is-on' : ''}
+            className="tab"
             onClick={() => setTab('breakdown')}
           >
             内訳
@@ -164,7 +203,7 @@ export function ScanModal({ connectionId, bucket, prefix, onClose, onResult }: P
             id="scan-tab-estimate"
             aria-selected={tab === 'estimate'}
             aria-controls="scan-panel-estimate"
-            className={tab === 'estimate' ? 'is-on' : ''}
+            className="tab"
             onClick={() => setTab('estimate')}
           >
             移送の見積もり
@@ -183,90 +222,75 @@ export function ScanModal({ connectionId, bucket, prefix, onClose, onResult }: P
             />
           </div>
         ) : (
-        <div role="tabpanel" id="scan-panel-breakdown" aria-labelledby="scan-tab-breakdown">
-
-        {/* 走査中も結果も同じ枠。完了時にレイアウトが飛ばない。 */}
-        {(running || result) && (
-          <div className="scan-figures">
-            {running ? (
-              <div className="scan-fig">
-                <span className="scan-fig__k">走査済み</span>
-                <span className="scan-fig__v">
-                  {scanned.toLocaleString()}<small>件</small>
-                </span>
+          <div
+            role="tabpanel"
+            id="scan-panel-breakdown"
+            aria-labelledby="scan-tab-breakdown"
+            className="scan-panel"
+          >
+            {/* 走査中も結果も同じ枠。完了時にレイアウトが飛ばない。 */}
+            {(running || result) && (
+              <div className="scan-figures">
+                {running ? (
+                  <div className="scan-figure">
+                    <span className="muted">走査済み</span>
+                    <span className="scan-figure-value">
+                      {scanned.toLocaleString()}<small>件</small>
+                    </span>
+                  </div>
+                ) : result && (
+                  <>
+                    <div className="scan-figure">
+                      <span className="muted">オブジェクト</span>
+                      <span className="scan-figure-value">
+                        {result.objectCount.toLocaleString()}<small>件</small>
+                      </span>
+                    </div>
+                    <div className="scan-figure">
+                      <span className="muted">合計サイズ</span>
+                      <span className="scan-figure-value">{fmtSize(result.totalBytes)}</span>
+                    </div>
+                  </>
+                )}
               </div>
-            ) : result && (
+            )}
+
+            {running && (
+              <div className="storage-busy-track">
+                <div role="progressbar" aria-label="走査中" className="storage-busy-bar" />
+              </div>
+            )}
+
+            {!running && result && (
               <>
-                <div className="scan-fig">
-                  <span className="scan-fig__k">オブジェクト</span>
-                  <span className="scan-fig__v">
-                    {result.objectCount.toLocaleString()}<small>件</small>
-                  </span>
-                </div>
-                <div className="scan-fig">
-                  <span className="scan-fig__k">合計サイズ</span>
-                  <span className="scan-fig__v">{fmtSize(result.totalBytes)}</span>
-                </div>
+                {result.partial && (
+                  <p className="notice storage-warning">
+                    走査中にエラーが出たため、集計は途中までです。
+                  </p>
+                )}
+                <Breakdown
+                  title="サブディレクトリ"
+                  rows={result.children.map(c => ({
+                    label: c.name, objectCount: c.objectCount, totalBytes: c.totalBytes,
+                  }))}
+                />
+                <Breakdown
+                  title="拡張子"
+                  rows={result.extensions.map(e => ({
+                    label: e.ext, objectCount: e.objectCount, totalBytes: e.totalBytes,
+                  }))}
+                />
               </>
             )}
-          </div>
-        )}
 
-        {running && (
-          <div className="cache-banner__track" style={{ marginTop: 14 }}>
-            <div role="progressbar" aria-label="走査中" className="cache-banner__bar" />
-          </div>
-        )}
-
-        {!running && result && (
-          <>
-            {result.partial && (
-              <p className="scan-modal__note">
-                走査中にエラーが出たため、集計は途中までです。
-              </p>
+            {canceled && <p className="muted">中止しました。</p>}
+            {error && <p className="notice error">{error}</p>}
+            {loaded && !result && !running && !error && (
+              <p className="state-message">まだ走査していません。</p>
             )}
-            <Breakdown
-              title="サブディレクトリ"
-              rows={result.children.map(c => ({
-                label: c.name, objectCount: c.objectCount, totalBytes: c.totalBytes,
-              }))}
-            />
-            <Breakdown
-              title="拡張子"
-              rows={result.extensions.map(e => ({
-                label: e.ext, objectCount: e.objectCount, totalBytes: e.totalBytes,
-              }))}
-            />
-          </>
-        )}
-
-        {canceled && <p className="scan-modal__note">中止しました。</p>}
-        {error && <p className="error">{error}</p>}
-        {loaded && !result && !running && !error && (
-          <p className="scan-modal__note">まだ走査していません。</p>
-        )}
-
-        <div className="scan-modal__foot">
-          {running ? (
-            <>
-              <button type="button" className="ghost" onClick={cancel}>中止</button>
-              <span className="cache-banner__dot" aria-hidden />
-              <span>走査中…</span>
-            </>
-          ) : (
-            <>
-              <button type="button" className="ghost" onClick={start}>
-                {result ? '↻ 再走査' : '走査する'}
-              </button>
-              {scannedAt && (
-                <span>{fmtCacheAge(new Date(scannedAt))} に走査</span>
-              )}
-            </>
-          )}
-        </div>
-        </div>
+          </div>
         )}
       </div>
-    </div>
+    </Dialog>
   )
 }

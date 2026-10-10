@@ -31,6 +31,31 @@ export function lineageStatusLabel(value: string | null | undefined): string | n
   return STATUS_LABELS[value.toLowerCase()] ?? value
 }
 
+/** 状態の色。共通の部品の .status-badge に `status-${tone}` として付ける。 */
+export type LineageStatusTone = 'finished' | 'running' | 'failed' | 'canceled' | 'queued'
+
+const STATUS_TONES: Record<string, LineageStatusTone> = {
+  start: 'running',
+  starting: 'running',
+  running: 'running',
+  complete: 'finished',
+  completed: 'finished',
+  available: 'finished',
+  fail: 'failed',
+  failed: 'failed',
+  missing: 'failed',
+  abort: 'canceled',
+  aborted: 'canceled',
+  archived: 'canceled',
+  deleted: 'canceled',
+}
+
+/** 知らない値は中立の色 (queued) にする。 */
+export function lineageStatusTone(value: string | null | undefined): LineageStatusTone | null {
+  if (!value) return null
+  return STATUS_TONES[value.toLowerCase()] ?? 'queued'
+}
+
 export function lineageCompletenessLabel(value: string | null | undefined): string | null {
   if (value === 'complete') return '台帳登録済み'
   if (value === 'partial') return '一部のみ台帳登録済み'

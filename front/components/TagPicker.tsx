@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../lib/api/client'
 import type { Tag, TargetKind } from '../lib/api/types'
+import { Dialog } from './Dialog'
 import { TagBadge } from './TagBadge'
 
 interface Props {
@@ -16,12 +17,14 @@ interface Props {
   onClose: () => void
 }
 
-// 対象 1 件 (bucket/prefix/file) へのタグ割り当てを編集するモーダル。
+// 対象 1 件 (bucket/prefix/file) へのタグ割り当てを編集するダイアログ。
+// チェックを切り替えるたびにその場で保存するので、下のボタンは「閉じる」だけ。
 // 新規タグの作成はここではできない (Settings の TagsSettings のみ) —
 // 一覧作業中に語彙が無秩序に増えるのを防ぐため。
 export function TagPicker({
   connectionId, bucket, kind, path, label, allTags, assignedTagIds, onChange, onClose,
 }: Props) {
+  const titleId = useId()
   const [assigned, setAssigned] = useState<Set<string>>(new Set(assignedTagIds))
   const [busyId, setBusyId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -62,25 +65,26 @@ export function TagPicker({
   }
 
   return (
-    <div className="modal-backdrop">
-      <div
-        className="modal modal--narrow"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="tag-picker-title"
-      >
-        <p className="kicker">タグ</p>
-        <h3 id="tag-picker-title">{label}</h3>
-
+    <Dialog
+      titleId={titleId}
+      title="タグを編集"
+      subtitle={label}
+      onClose={onClose}
+      // 下の「閉じる」ボタンと読み上げの名前が重ならないよう、×と背景には別の名前を付ける。
+      closeLabel="タグの編集を閉じる"
+      narrowLayout="sheet"
+      footer={<button type="button" className="button" onClick={onClose}>閉じる</button>}
+    >
+      <div className="dialog-body">
         {allTags.length === 0 ? (
-          <p className="text-[13px] text-ink-7">
+          <p className="muted">
             タグがまだありません。<Link to="/settings/features">Settings</Link> で作成してください。
           </p>
         ) : (
-          <ul className="m-0 list-none p-0">
+          <ul className="tag-picker-list">
             {allTags.map(tag => (
-              <li key={tag.id} className="flex items-center gap-3 py-2">
-                <label className="flex flex-1 items-center gap-2 text-[13px]">
+              <li key={tag.id}>
+                <label className="checkbox-field">
                   <input
                     type="checkbox"
                     aria-label={tag.name}
@@ -95,11 +99,8 @@ export function TagPicker({
           </ul>
         )}
 
-        {error && <p className="error" aria-live="polite">{error}</p>}
-        <div className="modal-actions">
-          <button onClick={onClose}>閉じる</button>
-        </div>
+        {error && <p className="notice error" aria-live="polite">{error}</p>}
       </div>
-    </div>
+    </Dialog>
   )
 }

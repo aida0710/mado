@@ -1,0 +1,555 @@
+/* Team note・README・編集画面・編集履歴。
+   見出し・ボタン・ダイアログ・表・入力欄は共通の部品 (@mado/design-tokens) に任せ、ここには
+   この領域に固有の指定だけを書く。 */
+
+/* ── Markdown の本文 (.markdown-body) ───────────────────────────────
+   react-markdown の出力を包む。Team note・README・編集履歴で同じ文字組みにする
+   (Mado Model Tracking の Markdown 表示と同じ: 本文 13px、行間 1.7)。
+   Tailwind の preflight が余白とリストの印を消すので、ここで付け直す。 */
+.markdown-body {
+  min-width: 0;
+  max-width: 100%;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+.markdown-body > :first-child {
+  margin-top: 0;
+}
+.markdown-body > :last-child {
+  margin-bottom: 0;
+}
+.markdown-body :is(h1, h2, h3, h4, h5, h6) {
+  margin: 1.4em 0 0.5em;
+  line-height: 1.35;
+  letter-spacing: normal;
+}
+/* 見出しは共通の h2 (18px)・h3 (14px) に合わせる。h1 はページの見出し (28px) より控えめにする。 */
+.markdown-body h1 {
+  font-size: 22px;
+  font-weight: 550;
+}
+.markdown-body h2 {
+  font-size: 18px;
+  font-weight: 550;
+}
+.markdown-body h3 {
+  font-size: 14px;
+  font-weight: 600;
+}
+.markdown-body :is(h4, h5, h6) {
+  font-size: 13px;
+  font-weight: 600;
+}
+.markdown-body :is(p, ul, ol, blockquote, pre, table) {
+  margin: 0 0 0.8em;
+}
+.markdown-body :is(ul, ol) {
+  padding-left: 1.6em;
+}
+.markdown-body ul {
+  list-style: disc;
+}
+.markdown-body ul ul {
+  list-style: circle;
+}
+.markdown-body ol {
+  list-style: decimal;
+}
+.markdown-body li + li,
+.markdown-body li > :is(ul, ol) {
+  margin-top: 0.2em;
+}
+.markdown-body li > :is(ul, ol) {
+  margin-bottom: 0;
+}
+/* GFM のタスクリストは印の代わりにチェックボックスを持つ。 */
+.markdown-body li.task-list-item {
+  list-style: none;
+  margin-left: -1.3em;
+}
+.markdown-body li.task-list-item input {
+  margin: 0 6px 0 0;
+  vertical-align: -2px;
+}
+.markdown-body strong {
+  font-weight: 600;
+}
+/* 本文中のリンクは色だけでなく下線でも見分けられるようにする。 */
+.markdown-body a {
+  color: var(--link);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+.markdown-body blockquote {
+  padding-left: 12px;
+  border-left: 3px solid var(--border-strong);
+  color: var(--muted);
+}
+.markdown-body code {
+  padding: 1px 4px;
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  font-family: var(--mono);
+  font-size: 12px;
+}
+/* コードの塊はログと同じく両方のテーマで暗い地にする。折り返さず横にスクロールする。 */
+.markdown-body pre {
+  padding: 12px 14px;
+  background: var(--code-background);
+  color: var(--code-text);
+  line-height: 1.6;
+  white-space: pre;
+  overflow-wrap: normal;
+  overflow-x: auto;
+}
+.markdown-body pre code {
+  padding: 0;
+  background: transparent;
+  color: inherit;
+}
+.markdown-body hr {
+  margin: 1.6em 0;
+  border: 0;
+  border-top: 1px solid var(--border);
+}
+/* 表の見た目は共通の表のまま。中身の幅に合わせ、収まらなければ表の中だけ横にスクロールする。 */
+.markdown-body table {
+  display: block;
+  width: max-content;
+  max-width: 100%;
+  overflow-x: auto;
+}
+.markdown-body img,
+.markdown-body video {
+  max-width: 100%;
+  height: auto;
+}
+
+/* 長い README は 15 行で畳む (ReadmeView が is-collapsed を付ける)。
+   下端のもや (is-faded) は、実際にあふれているときだけ付く。 */
+.markdown-body.is-collapsed {
+  position: relative;
+  max-height: 15lh;
+  overflow: hidden;
+}
+.markdown-body.is-faded::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 56px;
+  background: linear-gradient(to bottom, transparent, var(--background));
+  pointer-events: none;
+}
+
+/* ── ホームの Team note ─────────────────────────────────────────────── */
+/* 一行が長くなりすぎないよう、本文は読みやすい幅で止める。 */
+.home-note {
+  max-width: 80ch;
+}
+
+/* ── 取得の失敗 (LoadFailedNotice) ──────────────────────────────────── */
+.load-failed__note {
+  display: block;
+  margin-top: 4px;
+}
+
+/* ── フォルダの README (ReadmeView) ─────────────────────────────────
+   枠の上端に見出しと操作 (編集・履歴・再読み込みと取得時刻)、その下に本文。
+   前後の間隔は置く側 (フォルダの画面の縦の並び) が決める。 */
+.readme-panel {
+  border: 1px solid var(--border);
+  background: var(--background);
+}
+.readme-panel > .section-heading {
+  min-height: 46px;
+  margin: 0;
+  padding: 4px 10px 4px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.readme-panel > .section-heading h2 {
+  font-size: 14px;
+  font-weight: 600;
+}
+.readme-panel__title {
+  align-items: baseline;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.readme-panel__actions {
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.readme-panel__icons {
+  display: flex;
+  gap: 2px;
+}
+/* 編集はリンクだが、隣のボタンと同じ文字色のアイコンにする。 */
+.readme-panel__icons > a.icon-button {
+  color: var(--text);
+}
+.readme-panel__body {
+  padding: 14px 16px 16px;
+}
+.readme-panel__body > .notice {
+  margin: 0;
+}
+.readme-panel__expand {
+  margin-top: 10px;
+}
+
+/* ── README の全文検索 (ReadmeSearchPanel) ────────────────────────── */
+/* 入力の帯は「S3 パスで移動」と同じ .storage-search (storage.css)。 */
+.readme-search {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0 16px;
+}
+.readme-search > .notice,
+.readme-search__message {
+  margin: 0;
+}
+.readme-search__hits {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--border);
+}
+.readme-search__hits > li {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.readme-search__hits > li:hover {
+  background: var(--surface-hover);
+}
+.readme-search__path {
+  align-self: flex-start;
+  font-family: var(--mono);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.readme-search__path .muted {
+  font-size: inherit;
+}
+
+/* ── 編集画面 (EditorShell) ──────────────────────────────────────────
+   上に見出し、中の枠に挿入用のファイル一覧 (README のときだけ) と Monaco、下に編集者名と
+   保存の操作。枠の中だけがスクロールするよう、全体の高さを画面に合わせて止める。 */
+.editpage {
+  display: flex;
+  flex-direction: column;
+  /* 上部バーと .page の上下の余白 (26px + 40px) を除いた高さ。 */
+  height: calc(100dvh - var(--topbar-height) - 66px);
+  min-height: 420px;
+}
+.editpage > .page-header {
+  flex: 0 0 auto;
+  margin-bottom: 16px;
+}
+.editpage__frame {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border: 1px solid var(--border);
+  background: var(--background);
+}
+/* 一覧の開閉は 900px 未満でだけ出す。 */
+.editpage__sidebar-toggle {
+  display: none;
+}
+/* min-height: 0 と overflow: hidden で枠の高さを中へ伝え、Monaco が伸び続けないようにする。 */
+.editpage__body {
+  flex: 1 1 auto;
+  display: flex;
+  min-height: 0;
+  overflow: hidden;
+}
+.editpage__sidebar {
+  flex: 0 0 260px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  border-right: 1px solid var(--border);
+}
+.editpage__editor-area {
+  flex: 1 1 auto;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+.editpage__editor-area > * {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.editpage__error {
+  flex: 0 0 auto;
+  margin: 12px 0 0;
+}
+.editpage__bar {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px 16px;
+  padding-top: 16px;
+}
+.editpage__name {
+  flex: 0 1 280px;
+  margin-bottom: 0;
+}
+.editpage__actions {
+  display: flex;
+  gap: 10px;
+  margin-left: auto;
+}
+
+/* ── 挿入用のファイル一覧 (InsertableFileList) ──────────────────────
+   上にパンくず、その下にファイルツリー風の行。行を押すと本文へリンクを挿入し、
+   フォルダの右の矢印でその中へ移る。 */
+.filelist {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+.filelist__crumbs {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  font-family: var(--mono);
+  font-size: 12px;
+}
+.filelist__crumb-wrap {
+  display: contents;
+}
+.filelist__crumb {
+  padding: 2px 4px;
+  border: 0;
+  background: transparent;
+  color: var(--link);
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+.filelist__crumb:hover:not(:disabled) {
+  background: var(--surface-hover);
+}
+/* 今いる場所 (押せない) は本文の色で太くする。 */
+.filelist__crumb:disabled {
+  opacity: 1;
+  color: var(--text);
+  font-weight: 600;
+}
+.filelist__crumb-sep {
+  color: var(--muted);
+}
+.filelist__rows {
+  flex: 1 1 auto;
+  margin: 0;
+  padding: 6px 0;
+  overflow-y: auto;
+  list-style: none;
+}
+.filelist__row {
+  display: flex;
+  align-items: center;
+}
+.filelist__row:hover {
+  background: var(--surface-hover);
+}
+.filelist__name {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  min-height: 32px;
+  padding: 6px 8px 6px 12px;
+  border: 0;
+  background: transparent;
+  font-family: var(--mono);
+  font-size: 12px;
+  text-align: left;
+}
+.filelist__name > svg {
+  flex-shrink: 0;
+  color: var(--muted);
+}
+.filelist__name > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.filelist__open {
+  flex: 0 0 auto;
+  color: var(--muted);
+}
+.filelist__open:hover:not(:disabled) {
+  color: var(--text);
+}
+.filelist__message {
+  padding: 12px;
+}
+.filelist__error {
+  color: var(--error);
+  font-size: 12px;
+}
+.filelist__hint {
+  flex: 0 0 auto;
+  padding: 10px 12px;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+
+/* ── 編集履歴 (HistoryModal) ─────────────────────────────────────────
+   左に版の一覧、右に選んだ版の本文。それぞれの中でスクロールする。 */
+.history-layout {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  height: min(64dvh, 680px);
+  border: 1px solid var(--border);
+}
+.history-versions {
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+  border-right: 1px solid var(--border);
+}
+.history-versions > li + li {
+  border-top: 1px solid var(--border);
+}
+.history-version {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+  padding: 10px 12px 10px 11px;
+  border: 0;
+  border-left: 3px solid transparent;
+  background: transparent;
+  text-align: left;
+}
+.history-version:hover {
+  background: var(--surface-hover);
+}
+.history-version[aria-current='true'] {
+  border-left-color: var(--accent);
+  background: var(--selected);
+}
+.history-version__editor {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.history-version[aria-current='true'] .history-version__editor {
+  font-weight: 600;
+}
+.history-version .muted {
+  font-variant-numeric: tabular-nums;
+}
+/* 最新の版の印。Mado Model Tracking の Reports の「最新」と同じ色。 */
+.status-badge.history-latest {
+  padding: 2px 7px;
+  background: var(--accent-tint);
+  color: var(--link);
+}
+.history-preview {
+  min-width: 0;
+  overflow-y: auto;
+  padding: 16px 20px;
+}
+.history-preview > .state-message {
+  min-height: 0;
+}
+.history-match {
+  margin: 0 0 14px;
+}
+
+/* ── 900px 未満: 縦に積む (タッチ前提で押す物は --tap-target 以上) ─── */
+@media (width < 900px) {
+  .readme-panel > .section-heading {
+    padding-left: 12px;
+  }
+  .readme-panel__body {
+    padding: 12px;
+  }
+  .readme-search__path {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    min-height: var(--tap-target);
+  }
+
+  .editpage__sidebar-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    min-height: var(--tap-target);
+    padding: 0 12px;
+    border: 0;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    font-size: 12px;
+    text-align: left;
+  }
+  .editpage__sidebar-toggle:hover {
+    background: var(--surface-hover);
+  }
+  .editpage__sidebar-toggle > svg:last-child {
+    margin-left: auto;
+  }
+  .editpage--two-pane .editpage__body {
+    flex-direction: column;
+  }
+  .editpage__sidebar {
+    flex: 0 0 auto;
+    max-height: 240px;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .editpage__sidebar[data-mobile-open='false'] {
+    display: none;
+  }
+  .editpage__name {
+    flex: 1 1 100%;
+  }
+
+  .filelist__crumb,
+  .filelist__name {
+    min-height: var(--tap-target);
+  }
+
+  .history-layout {
+    grid-template-columns: minmax(0, 1fr);
+    height: auto;
+  }
+  .history-versions {
+    max-height: 220px;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .history-version {
+    min-height: var(--tap-target);
+  }
+  .history-preview {
+    overflow: visible;
+    padding: 14px;
+  }
+}

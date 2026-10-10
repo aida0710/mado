@@ -8,8 +8,8 @@ import { usePinnedPreviews } from '../../lib/pinnedPreviews'
 import { useCapabilities } from '../../lib/useCapabilities'
 import type { MenuItem } from '../CopyMenu'
 
-// 一覧の行 (table) とカード (phone) は見た目だけが違い、URL・メニュー・タグ・
-// 選択の扱いは同じ。ここに寄せて、描画側は tr / li の組み立てだけにする。
+// 一覧の行の URL・メニュー・タグ・選択の扱い。ここに寄せて、描画側 (EntryTable) は
+// 行の組み立てだけにする。
 
 export interface EntryTagProps {
   allTags: Tag[]
@@ -75,7 +75,10 @@ export function useFileEntryActions({
   const [pickerOpen, setPickerOpen] = useState(false)
   const select = useCallback(() => onSelectFile?.(file.key), [onSelectFile, file.key])
   // Enter / Space で preview を開く。dir 行は <Link> がネイティブで処理する。
+  // 行そのものにフォーカスがあるときだけ。行の中のボタン (操作のメニュー) で押した
+  // キーまで拾うと、そのボタンの操作が打ち消されてプレビューが開いてしまう。
   const onKeyDown = useCallback((e: KeyboardEvent<HTMLElement>) => {
+    if (e.target !== e.currentTarget) return
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault()
       select()

@@ -1,0 +1,49 @@
+/* ログインの前後。ログイン画面とパスワード変更画面そのものは @mado/design-tokens/shell.css の
+   .login-page / .login-card を使う。 */
+
+/* session が切れたとき、開いていた画面を残したまま上に重ねるログイン画面 (AuthOverlay)。
+   ダイアログより上に出す。前の User の画面が次にこのブラウザを使う人に見えないよう、
+   地は透かさない。 */
+.auth-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  overflow-y: auto;
+  background: var(--background);
+}
+.auth-overlay:focus {
+  outline: none;
+}
+.login-card .login-lead {
+  margin: -16px 0 24px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.7;
+}
+.login-card .login-lead > p {
+  margin: 0;
+}
+.login-card .login-note {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.7;
+}
+.login-card .field {
+  margin-bottom: 18px;
+}
+.login-card .field input {
+  min-height: 40px;
+}
+
+/* セッションを確かめている間と、確かめられなかったとき。 */
+.auth-splash {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 32px;
+  color: var(--muted);
+}
+.auth-splash.error {
+  color: var(--error);
+}

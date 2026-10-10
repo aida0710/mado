@@ -1,3 +1,5 @@
+import { ChevronLeft, ChevronRight } from 'lucide-react'
+
 type Cursor = { continuation?: string; startAfter?: string }
 
 interface Props {
@@ -14,9 +16,8 @@ interface Props {
   onGoto: (idx: number) => void
 }
 
-// ページャ + 件数表示 + cursor stuck 案内。
-// 戻る / 訪問済みページ番号 / 次 を一列に並べる。
-// 再読み込みはテーブルヘッダ上の CacheBanner が持つ (取得時刻と同じ場所に集約)。
+// 表の下の帯 (.table-footer): 左に現ページと件数、右に 前 / 訪問済みのページ番号 / 次。
+// 再読み込みは表の上の CacheBanner が持つ (取得時刻と同じ場所に集約)。
 // S3 は前方向 cursor しか返さないので任意ページジャンプは「訪問済み」のみ。
 export function Pager({
   pageIdx, history, hasNext, cursorStuck, loading, isEmpty,
@@ -24,96 +25,68 @@ export function Pager({
 }: Props) {
   return (
     <>
-      <nav
-        className="flex flex-wrap items-center justify-center gap-1.5 py-3"
-        aria-label="ページ送り"
-      >
-        <button
-          type="button"
-          onClick={onPrev}
-          disabled={pageIdx === 0 || loading}
-          className={
-            'cursor-pointer rounded-1 bg-paper px-2.5 py-1 text-[11.5px] text-ink-9 ' +
-            'transition-colors hover:bg-ink-1 hover:text-ink-11 ' +
-            'disabled:cursor-default disabled:opacity-40'
-          }
-          style={{ border: '1px solid var(--color-rule-strong)' }}
-          aria-label="前のページへ"
-        >
-          ← 戻る
-        </button>
+      <div className="table-footer storage-pager">
+        {/* 空のディレクトリのときは件数を出さない。 */}
+        <span className="storage-pager-summary">
+          ページ {totalLabel}
+          {!isEmpty && ` · ${entryCount} 件`}
+        </span>
+        <nav className="storage-pager-nav" aria-label="ページ送り">
+          <button
+            type="button"
+            className="icon-button"
+            onClick={onPrev}
+            disabled={pageIdx === 0 || loading}
+            aria-label="前のページへ"
+            title="前のページへ"
+          >
+            <ChevronLeft size={16} aria-hidden="true" />
+          </button>
 
-        {history.map((cursor, i) => {
-          const current = i === pageIdx
-          // append-only history では continuation / startAfter のいずれかが
-          // ページごとにユニーク。1 ページ目は cursor が空 ({}) なので sentinel。
-          const key = cursor.continuation ?? cursor.startAfter ?? '__first'
-          return (
-            <button
-              key={key}
-              type="button"
-              onClick={() => onGoto(i)}
-              disabled={loading || current}
-              aria-current={current ? 'page' : undefined}
-              className={
-                'cursor-pointer rounded-1 px-2.5 py-1 text-[11.5px] tabular-nums ' +
-                'transition-colors disabled:cursor-default ' +
-                (current
-                  ? 'bg-accent-strong text-on-accent'
-                  : 'bg-paper text-ink-9 hover:bg-ink-1 hover:text-ink-11 disabled:opacity-40')
-              }
-              style={{ border: '1px solid var(--color-rule-strong)' }}
-            >
-              {i + 1}
-            </button>
-          )
-        })}
+          {history.map((cursor, i) => {
+            const current = i === pageIdx
+            // append-only history では continuation / startAfter のいずれかが
+            // ページごとにユニーク。1 ページ目は cursor が空 ({}) なので sentinel。
+            const key = cursor.continuation ?? cursor.startAfter ?? '__first'
+            return (
+              <button
+                key={key}
+                type="button"
+                className="storage-pager-page"
+                onClick={() => onGoto(i)}
+                disabled={loading || current}
+                aria-current={current ? 'page' : undefined}
+              >
+                {i + 1}
+              </button>
+            )
+          })}
 
-        <button
-          type="button"
-          onClick={onNext}
-          disabled={!hasNext || loading}
-          className={
-            'cursor-pointer rounded-1 bg-paper px-2.5 py-1 text-[11.5px] text-ink-9 ' +
-            'transition-colors hover:bg-ink-1 hover:text-ink-11 ' +
-            'disabled:cursor-default disabled:opacity-40'
-          }
-          style={{ border: '1px solid var(--color-rule-strong)' }}
-          aria-label="次のページへ"
-        >
-          次 →
-        </button>
-
-      </nav>
-
-      {/* 件数 / 現ページ表示。空ディレクトリのときは件数を出さない。
-          キャッシュ取得時刻はここではなくテーブルヘッダ上の CacheBanner が出す。 */}
-      <p
-        className="text-center text-[11px] text-ink-7 tabular-nums"
-        style={{ letterSpacing: '0.02em' }}
-      >
-        <span style={{ fontFamily: 'var(--font-mono)' }}>ページ {totalLabel}</span>
-        {!isEmpty && (
-          <>
-            {' · '}
-            <span style={{ fontFamily: 'var(--font-mono)' }}>
-              {entryCount} 件
-            </span>
-          </>
-        )}
-      </p>
+          <button
+            type="button"
+            className="icon-button"
+            onClick={onNext}
+            disabled={!hasNext || loading}
+            aria-label="次のページへ"
+            title="次のページへ"
+          >
+            <ChevronRight size={16} aria-hidden="true" />
+          </button>
+        </nav>
+      </div>
 
       {/* server が IsTruncated=true なのに cursor を進めずに返してきた場合の案内。
           よくある原因は ListObjects v2 を理解しないサーバ
           (V1 only の S3 互換実装) で、設定 → 接続 →
           ListObjects API バージョンを v1 に切り替えると直る。 */}
       {cursorStuck && (
-        <p className="mt-1 text-center text-[11px] text-ink-7">
-          次へ進めません: server が cursor を進めずに同じトークンを返しています。
-          <br />
-          設定の <strong>ListObjects API バージョン</strong>{' '}
-          を <span className="font-mono">v1</span> に切り替えてみてください
-          (V1 only の S3 互換サーバで起こります)。
+        <p className="notice storage-warning">
+          <span>
+            次へ進めません: server が cursor を進めずに同じトークンを返しています。
+            設定の <strong>ListObjects API バージョン</strong>{' '}
+            を <span className="mono">v1</span> に切り替えてみてください
+            (V1 only の S3 互換サーバで起こります)。
+          </span>
         </p>
       )}
     </>

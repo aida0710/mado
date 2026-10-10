@@ -1,6 +1,8 @@
 import { Handle, Position, type Node, type NodeProps } from '@xyflow/react'
 import type { LineageNodeData } from '../../lib/lineage/graphModel'
 import { LINEAGE_KIND_LABEL } from '../../lib/lineage/labels'
+
+// グラフの 1 項目。左の帯の色で種類 (data-kind) を、枠の色で選択中かを見分ける (lineage.css)。
 export function LineageNode({ data, selected }: NodeProps<Node<LineageNodeData, 'lineage'>>) {
   return (
     <div
@@ -10,13 +12,15 @@ export function LineageNode({ data, selected }: NodeProps<Node<LineageNodeData, 
       aria-label={`${LINEAGE_KIND_LABEL[data.kind]}: ${data.title}`}
     >
       <Handle type="target" position={Position.Left} isConnectable={false} />
-      <span className="lineage-node-card__kind">{LINEAGE_KIND_LABEL[data.kind]}</span>
+      <span className="lineage-node-card__head">
+        <span className="lineage-node-card__kind">{LINEAGE_KIND_LABEL[data.kind]}</span>
+        {data.status && (
+          <span className={`status-badge status-${data.statusTone ?? 'queued'}`}>{data.status}</span>
+        )}
+      </span>
       <strong className="lineage-node-card__title" title={data.title}>{data.title}</strong>
       {data.subtitle && <span className="lineage-node-card__subtitle" title={data.subtitle}>{data.subtitle}</span>}
-      <span className="lineage-node-card__foot">
-        {data.status && <span className="lineage-node-card__status">{data.status}</span>}
-        {data.meta && <span>{data.meta}</span>}
-      </span>
+      {data.meta && <span className="lineage-node-card__meta">{data.meta}</span>}
       <Handle type="source" position={Position.Right} isConnectable={false} />
     </div>
   )

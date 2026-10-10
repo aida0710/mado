@@ -1,4 +1,5 @@
-import { useEffect, useReducer, useState } from 'react'
+import { useEffect, useId, useReducer, useState, type ReactNode } from 'react'
+import { Eye, EyeOff } from 'lucide-react'
 import { CAPABILITY_UI, PROVIDER_LABELS, STORAGE_CLASS_OPTIONS } from '../lib/api/types'
 import { api } from '../lib/api/client'
 import type {
@@ -12,6 +13,7 @@ import type {
 import {
   initialState, reducer, toCreateInput, toUpdateInput, validateForm, type FormState,
 } from '../lib/connectionFormState'
+import { Dialog } from './Dialog'
 
 const CAPACITY_INTERVALS = [
   [21600, '6時間'], [43200, '12時間'], [86400, '24時間'],
@@ -25,12 +27,40 @@ type Mode =
 interface Props {
   mode: Mode
   onClose: () => void
+  /** page = 設定の中に一つの画面として出す。modal = ダイアログに重ねて出す。 */
   presentation?: 'modal' | 'page'
+}
+
+/** 説明つきの選択肢の一行。チェックボックス・ラジオは左、文言は右。 */
+function Choice({ control, title, help }: { control: ReactNode; title: ReactNode; help?: ReactNode }) {
+  return (
+    <label className="choice">
+      {control}
+      <span>
+        <strong>{title}</strong>
+        {help && <small>{help}</small>}
+      </span>
+    </label>
+  )
+}
+
+/** 値を選ぶ・入れる設定の一行。文言は左、選択肢や数値の欄は右 (狭い画面では下)。 */
+function ValueChoice({ control, title, help }: { control: ReactNode; title: ReactNode; help?: ReactNode }) {
+  return (
+    <label className="choice choice--value">
+      <span>
+        <strong>{title}</strong>
+        {help && <small>{help}</small>}
+      </span>
+      {control}
+    </label>
+  )
 }
 
 export function ConnectionForm({ mode, onClose, presentation = 'modal' }: Props) {
   const isEdit = mode.kind === 'edit'
   const current = mode.kind === 'edit' ? mode.current : null
+  const ids = useId()
 
   const [state, dispatch] = useReducer(reducer, current, initialState)
   const [accessUsers, setAccessUsers] = useState<ConnectionAccessUser[]>([])
@@ -59,6 +89,7 @@ export function ConnectionForm({ mode, onClose, presentation = 'modal' }: Props)
   }, [])
 
   const titleId = 'connection-form-title'
+  const title = isEdit ? '接続を編集' : '接続を追加'
 
   const submit = async () => {
     const clientError = validateForm(state, isEdit)
@@ -82,283 +113,301 @@ export function ConnectionForm({ mode, onClose, presentation = 'modal' }: Props)
     : ''
   const secretPlaceholder = isEdit ? '空のままで変更しない' : ''
 
-  const form = (
-      <div
-        className={presentation === 'page' ? 'modal connection-form--page' : 'modal'}
-        role={presentation === 'modal' ? 'dialog' : undefined}
-        aria-modal={presentation === 'modal' ? 'true' : undefined}
-        aria-labelledby={titleId}
-      >
-        <p className="kicker">Settings · 接続</p>
-        <h3 id={titleId}>{isEdit ? '接続を編集' : '接続を追加'}</h3>
+  const fields = (
+    <>
+      <h3 className="form-section-heading">基本情報</h3>
+      <label className="field">
+        <span>名前</span>
+        <input
+          value={name}
+          onChange={e => dispatch({ type: 'setField', field: 'name', value: e.target.value })}
+          placeholder="例: production"
+          autoComplete="off"
+          spellCheck={false}
+        />
+      </label>
+      <label className="field">
+        <span>エンドポイント</span>
+        <input
+          type="url"
+          value={endpoint}
+          onChange={e => dispatch({ type: 'setField', field: 'endpoint', value: e.target.value })}
+          placeholder="https://s3.example.com"
+          autoComplete="off"
+          spellCheck={false}
+        />
+      </label>
+      <label className="field">
+        <span>リージョン</span>
+        <input
+          value={region}
+          onChange={e => dispatch({ type: 'setField', field: 'region', value: e.target.value })}
+          placeholder="auto"
+          autoComplete="off"
+          spellCheck={false}
+        />
+      </label>
 
-        <h4 className="connection-form__section-title">基本情報</h4>
-        <label className="modal-field">
-          <span className="label">名前</span>
+      <h3 className="form-section-heading">認証情報</h3>
+      <label className="field">
+        <span>アクセスキー ID</span>
+        <input
+          value={accessKeyId}
+          onChange={e => dispatch({ type: 'setField', field: 'accessKeyId', value: e.target.value })}
+          placeholder={accessKeyPlaceholder}
+          autoComplete="off"
+          spellCheck={false}
+        />
+      </label>
+      <div className="field">
+        <label htmlFor={`${ids}-secret`}>シークレットアクセスキー</label>
+        <div className="input-with-button">
           <input
-            value={name}
-            onChange={e => dispatch({ type: 'setField', field: 'name', value: e.target.value })}
-            placeholder="例: production"
+            id={`${ids}-secret`}
+            type={showSecret ? 'text' : 'password'}
+            value={secretAccessKey}
+            onChange={e => dispatch({ type: 'setField', field: 'secretAccessKey', value: e.target.value })}
+            placeholder={secretPlaceholder}
             autoComplete="off"
             spellCheck={false}
           />
-        </label>
-        <label className="modal-field">
-          <span className="label">エンドポイント</span>
-          <input
-            type="url"
-            value={endpoint}
-            onChange={e => dispatch({ type: 'setField', field: 'endpoint', value: e.target.value })}
-            placeholder="https://s3.example.com"
-            autoComplete="off"
-            spellCheck={false}
-          />
-        </label>
-        <label className="modal-field">
-          <span className="label">リージョン</span>
-          <input
-            value={region}
-            onChange={e => dispatch({ type: 'setField', field: 'region', value: e.target.value })}
-            placeholder="auto"
-            autoComplete="off"
-            spellCheck={false}
-          />
-        </label>
-        <h4 className="connection-form__section-title">認証情報</h4>
-        <label className="modal-field">
-          <span className="label">アクセスキー ID</span>
-          <input
-            value={accessKeyId}
-            onChange={e => dispatch({ type: 'setField', field: 'accessKeyId', value: e.target.value })}
-            placeholder={accessKeyPlaceholder}
-            autoComplete="off"
-            spellCheck={false}
-          />
-        </label>
-        <label className="modal-field">
-          <span className="label">シークレットアクセスキー</span>
-          <div className="relative flex items-stretch gap-2">
-            <input
-              className="flex-1"
-              type={showSecret ? 'text' : 'password'}
-              value={secretAccessKey}
-              onChange={e => dispatch({ type: 'setField', field: 'secretAccessKey', value: e.target.value })}
-              placeholder={secretPlaceholder}
-              autoComplete="off"
-              spellCheck={false}
-            />
-            <button
-              type="button"
-              className="ghost shrink-0"
-              onClick={() => dispatch({ type: 'setField', field: 'showSecret', value: !showSecret })}
-              aria-label={showSecret ? 'シークレットを隠す' : 'シークレットを表示'}
-            >
-              {showSecret ? '隠す' : '表示'}
-            </button>
-          </div>
-        </label>
+          <button
+            type="button"
+            className="button"
+            onClick={() => dispatch({ type: 'setField', field: 'showSecret', value: !showSecret })}
+            aria-label={showSecret ? 'シークレットを隠す' : 'シークレットを表示'}
+          >
+            {showSecret ? <EyeOff size={14} aria-hidden="true" /> : <Eye size={14} aria-hidden="true" />}
+            {showSecret ? '隠す' : '表示'}
+          </button>
+        </div>
+      </div>
 
-        <fieldset className="modal-field">
-          <legend className="label">ユーザーからの表示</legend>
-          <small className="mb-1 block text-ink-7">
-            通常は全員に表示します。ホワイトリストでは、選択したユーザーと接続管理者だけが利用できます。
-            許可されていないユーザーには接続自体が表示されず、URLを直接開いても404になります。
-          </small>
-          <label className="modal-choice">
-            <input
-              type="radio"
-              name="visibilityMode"
-              aria-label="全員に表示"
-              checked={visibilityMode === 'public'}
-              onChange={() => dispatch({ type: 'setField', field: 'visibilityMode', value: 'public' })}
-            />
-            <div><strong>全員に表示</strong><small>既定。ログインできる全ユーザーがこの接続を利用できます。</small></div>
-          </label>
-          <label className="modal-choice">
-            <input
-              type="radio"
-              name="visibilityMode"
-              aria-label="ホワイトリスト"
-              checked={visibilityMode === 'whitelist'}
-              onChange={() => dispatch({ type: 'setField', field: 'visibilityMode', value: 'whitelist' })}
-            />
-            <div><strong>ホワイトリスト</strong><small>下で選択したユーザーだけに表示します。接続管理者は常にアクセスできます。</small></div>
-          </label>
-          {visibilityMode === 'whitelist' && (
-            <div className="mt-2 grid gap-1" aria-label="接続を許可するユーザー">
-              {accessUsersError && <p className="error" role="alert">{accessUsersError}</p>}
-              {!accessUsersError && accessUsers.length === 0 && (
-                <small className="text-ink-7">選択できるユーザーがいません。接続管理者だけが利用できます。</small>
-              )}
-              {accessUsers.map(user => (
-                <label className="modal-choice" key={user.id}>
-                  <input
-                    type="checkbox"
-                    aria-label={`${user.displayName}を許可`}
-                    checked={allowedUserIds.includes(user.id)}
-                    onChange={event => dispatch({
-                      type: 'toggleAllowedUser', userId: user.id, value: event.target.checked,
-                    })}
+      <fieldset className="choice-group">
+        <legend>ユーザーからの表示</legend>
+        <p className="muted">
+          通常は全員に表示します。ホワイトリストでは、選択したユーザーと接続管理者だけが利用できます。
+          許可されていないユーザーには接続自体が表示されず、URLを直接開いても404になります。
+        </p>
+        <div className="choice-list">
+          <Choice
+            control={
+              <input
+                type="radio"
+                name="visibilityMode"
+                aria-label="全員に表示"
+                checked={visibilityMode === 'public'}
+                onChange={() => dispatch({ type: 'setField', field: 'visibilityMode', value: 'public' })}
+              />
+            }
+            title="全員に表示"
+            help="既定。ログインできる全ユーザーがこの接続を利用できます。"
+          />
+          <Choice
+            control={
+              <input
+                type="radio"
+                name="visibilityMode"
+                aria-label="ホワイトリスト"
+                checked={visibilityMode === 'whitelist'}
+                onChange={() => dispatch({ type: 'setField', field: 'visibilityMode', value: 'whitelist' })}
+              />
+            }
+            title="ホワイトリスト"
+            help="下で選択したユーザーだけに表示します。接続管理者は常にアクセスできます。"
+          />
+        </div>
+        {visibilityMode === 'whitelist' && (
+          <div className="choice-users" role="group" aria-label="接続を許可するユーザー">
+            {accessUsersError && <p className="notice error" role="alert">{accessUsersError}</p>}
+            {!accessUsersError && accessUsers.length === 0 && (
+              <p className="muted">選択できるユーザーがいません。接続管理者だけが利用できます。</p>
+            )}
+            {accessUsers.length > 0 && (
+              <div className="choice-list">
+                {accessUsers.map(user => (
+                  <Choice
+                    key={user.id}
+                    control={
+                      <input
+                        type="checkbox"
+                        aria-label={`${user.displayName}を許可`}
+                        checked={allowedUserIds.includes(user.id)}
+                        onChange={event => dispatch({
+                          type: 'toggleAllowedUser', userId: user.id, value: event.target.checked,
+                        })}
+                      />
+                    }
+                    title={<>{user.displayName}{user.status === 'disabled' ? '（無効）' : ''}</>}
+                    help={user.username ?? user.email ?? user.id}
                   />
-                  <div>
-                    <strong>{user.displayName}{user.status === 'disabled' ? '（無効）' : ''}</strong>
-                    <small>{user.username ?? user.email ?? user.id}</small>
-                  </div>
-                </label>
-              ))}
-              {allowedUserIds.length === 0 && (
-                <small className="text-ink-7">誰も選択しない場合、接続管理者だけが利用できます。</small>
-              )}
-            </div>
-          )}
-        </fieldset>
+                ))}
+              </div>
+            )}
+            {allowedUserIds.length === 0 && (
+              <p className="muted">誰も選択しない場合、接続管理者だけが利用できます。</p>
+            )}
+          </div>
+        )}
+      </fieldset>
 
-        <h4 className="connection-form__section-title">互換性</h4>
-        {/* Path-style URL: 単一の選択肢として ListObjects と同じ構造で扱う。 */}
-        <fieldset className="modal-field">
-          <legend className="label">Path-style URL</legend>
-          <label className="modal-choice">
-            <input
-              type="checkbox"
-              aria-label="Path-style URL を使用する"
-              checked={forcePathStyle}
-              onChange={e => dispatch({ type: 'setField', field: 'forcePathStyle', value: e.target.checked })}
-            />
-            <div>
-              <strong>Path-style URL を使用する</strong>
-              <small>
+      <h3 className="form-section-heading">互換性</h3>
+      {/* Path-style URL: 単一の選択肢として ListObjects と同じ構造で扱う。 */}
+      <fieldset className="choice-group">
+        <legend>Path-style URL</legend>
+        <div className="choice-list">
+          <Choice
+            control={
+              <input
+                type="checkbox"
+                aria-label="Path-style URL を使用する"
+                checked={forcePathStyle}
+                onChange={e => dispatch({ type: 'setField', field: 'forcePathStyle', value: e.target.checked })}
+              />
+            }
+            title="Path-style URL を使用する"
+            help={
+              <>
                 MinIO や自前の S3 互換サーバはこれを ON にしないと動かないことが
                 多いです。AWS S3 / Cloudflare R2 などはどちらでも OK。迷ったら
                 ON のままで大丈夫。
-              </small>
-            </div>
-          </label>
-        </fieldset>
+              </>
+            }
+          />
+        </div>
+      </fieldset>
 
-        {/* ListObjects API バージョン: V2 を理解しないサーバ
-            (V1 only の S3 互換実装) は v1 を選ぶ。 */}
-        <fieldset className="modal-field">
-          <legend className="label">ListObjects API バージョン</legend>
-          <label className="modal-choice">
-            <input
-              type="radio"
-              name="listObjectsVersion"
-              value="v2"
-              aria-label="ListObjects v2"
-              checked={listObjectsVersion === 'v2'}
-              onChange={() => dispatch({ type: 'setField', field: 'listObjectsVersion', value: 'v2' })}
-            />
-            <div>
-              <strong>v2</strong>
-              <small>AWS S3 / Cloudflare R2 / MinIO など、新しい実装向け (既定)。</small>
-            </div>
-          </label>
-          <label className="modal-choice">
-            <input
-              type="radio"
-              name="listObjectsVersion"
-              value="v1"
-              aria-label="ListObjects v1"
-              checked={listObjectsVersion === 'v1'}
-              onChange={() => dispatch({ type: 'setField', field: 'listObjectsVersion', value: 'v1' })}
-            />
-            <div>
-              <strong>v1</strong>
-              <small>
+      {/* ListObjects API バージョン: V2 を理解しないサーバ
+          (V1 only の S3 互換実装) は v1 を選ぶ。 */}
+      <fieldset className="choice-group">
+        <legend>ListObjects API バージョン</legend>
+        <div className="choice-list">
+          <Choice
+            control={
+              <input
+                type="radio"
+                name="listObjectsVersion"
+                value="v2"
+                aria-label="ListObjects v2"
+                checked={listObjectsVersion === 'v2'}
+                onChange={() => dispatch({ type: 'setField', field: 'listObjectsVersion', value: 'v2' })}
+              />
+            }
+            title="v2"
+            help="AWS S3 / Cloudflare R2 / MinIO など、新しい実装向け (既定)。"
+          />
+          <Choice
+            control={
+              <input
+                type="radio"
+                name="listObjectsVersion"
+                value="v1"
+                aria-label="ListObjects v1"
+                checked={listObjectsVersion === 'v1'}
+                onChange={() => dispatch({ type: 'setField', field: 'listObjectsVersion', value: 'v1' })}
+              />
+            }
+            title="v1"
+            help={
+              <>
                 ListObjectsV2 を理解しない古い S3 互換実装、
                 V2 を理解しないサーバ向け (ページが進まないときに切り替え)。
-              </small>
-            </div>
-          </label>
-        </fieldset>
+              </>
+            }
+          />
+        </div>
+      </fieldset>
 
-        {/* 接続ごとの権限。認証のあるツールではないのでアクセス制御ではなく
-            誤操作の防止 — Deep Archive のように「一覧は見たいが本体には触りたく
-            ない」接続で危険な導線を閉じるためのもの。UI で隠すだけでなく API 側も
-            403 で止める。 */}
-        <fieldset className="modal-field">
-          <legend className="label">この接続で許可する操作</legend>
-          <small className="mb-1 block text-ink-7">
-            オフにすると画面から導線が消え、共有 URL を直接開いても 403 になります。
-            既定はすべて許可です。
-          </small>
-          {CAPABILITY_UI.map(({ key, label, help }) => {
-            // README 編集は読み込みが前提 (API も 400 で弾く)。
-            const disabled = key === 'readmeWrite' && !capabilities.readmeRead
-            return (
-              <label className="modal-choice" key={key}>
+      {/* 接続ごとの権限。認証のあるツールではないのでアクセス制御ではなく
+          誤操作の防止 — Deep Archive のように「一覧は見たいが本体には触りたく
+          ない」接続で危険な導線を閉じるためのもの。UI で隠すだけでなく API 側も
+          403 で止める。 */}
+      <h3 id={`${ids}-capabilities`} className="form-section-heading">この接続で許可する操作</h3>
+      <fieldset className="choice-group" aria-labelledby={`${ids}-capabilities`}>
+        <p className="muted">
+          オフにすると画面から導線が消え、共有 URL を直接開いても 403 になります。
+          既定はすべて許可です。
+        </p>
+        <div className="choice-list">
+          {CAPABILITY_UI.map(({ key, label, help }) => (
+            <Choice
+              key={key}
+              control={
                 <input
                   type="checkbox"
                   aria-label={label}
                   checked={capabilities[key]}
-                  disabled={disabled}
+                  // README 編集は読み込みが前提 (API も 400 で弾く)。
+                  disabled={key === 'readmeWrite' && !capabilities.readmeRead}
                   onChange={e => dispatch({ type: 'toggleCapability', cap: key, value: e.target.checked })}
                 />
-                <div>
-                  <strong>{label}</strong>
-                  <small>{help}</small>
-                </div>
-              </label>
-            )
-          })}
-        </fieldset>
-
-        <fieldset className="modal-field">
-          <legend>この接続の動作</legend>
-          <label className="modal-choice">
-            <input
-              type="checkbox"
-              aria-label="配下の走査を許可する"
-              checked={scanEnabled}
-              onChange={e => dispatch({ type: 'setField', field: 'scanEnabled', value: e.target.checked })}
+              }
+              title={label}
+              help={help}
             />
-            <div>
-              <strong>配下の走査を許可する</strong>
-              <small>
-                ディレクトリ配下のオブジェクト数・サイズを数えます。54 万キー規模の
-                バケットでは数分かかるので、走らせたくない接続ではオフに。
-              </small>
-            </div>
-          </label>
-          {isEdit && (
-            <label className={`modal-choice ${!scanEnabled ? 'opacity-50' : ''}`}>
-              <select
-                aria-label="走査のページサイズ"
-                value={scanPageSize}
-                disabled={!scanEnabled}
-                onChange={e => dispatch({
-                  type: 'setField', field: 'scanPageSize', value: Number(e.target.value) as FormState['scanPageSize'],
-                })}
-              >
-                <option value={100}>100件</option>
-                <option value={250}>250件</option>
-                <option value={500}>500件</option>
-                <option value={1000}>1,000件</option>
-              </select>
-              <div>
-                <strong>走査のページサイズ</strong>
-                <small>1回のS3一覧取得件数。既定は1,000件。応答が遅い接続では小さくします。</small>
-              </div>
-            </label>
-          )}
-          {isEdit && (
-            <label className="modal-choice">
+          ))}
+        </div>
+      </fieldset>
+
+      <h3 id={`${ids}-behavior`} className="form-section-heading">この接続の動作</h3>
+      <fieldset className="choice-group" aria-labelledby={`${ids}-behavior`}>
+        <div className="choice-list">
+          <Choice
+            control={
               <input
                 type="checkbox"
-                aria-label="バケットのメトリクス集計を許可する"
-                checked={capacityMetricsEnabled}
-                disabled={!scanEnabled}
-                onChange={e => dispatch({ type: 'setField', field: 'capacityMetricsEnabled', value: e.target.checked })}
+                aria-label="配下の走査を許可する"
+                checked={scanEnabled}
+                onChange={e => dispatch({ type: 'setField', field: 'scanEnabled', value: e.target.checked })}
               />
-              <div>
-                <strong>バケットのメトリクス集計を許可する</strong>
-                <small>全バケットの容量とオブジェクト数を集計する操作を許可します。</small>
-              </div>
-            </label>
+            }
+            title="配下の走査を許可する"
+            help={
+              <>
+                ディレクトリ配下のオブジェクト数・サイズを数えます。54 万キー規模の
+                バケットでは数分かかるので、走らせたくない接続ではオフに。
+              </>
+            }
+          />
+          {isEdit && (
+            <ValueChoice
+              control={
+                <select
+                  aria-label="走査のページサイズ"
+                  value={scanPageSize}
+                  disabled={!scanEnabled}
+                  onChange={e => dispatch({
+                    type: 'setField', field: 'scanPageSize', value: Number(e.target.value) as FormState['scanPageSize'],
+                  })}
+                >
+                  <option value={100}>100件</option>
+                  <option value={250}>250件</option>
+                  <option value={500}>500件</option>
+                  <option value={1000}>1,000件</option>
+                </select>
+              }
+              title="走査のページサイズ"
+              help="1回のS3一覧取得件数。既定は1,000件。応答が遅い接続では小さくします。"
+            />
           )}
           {isEdit && (
-            <div className="mt-3 border-t border-rule pt-3">
-              <label className={`modal-choice ${!scanEnabled || !capacityMetricsEnabled ? 'opacity-50' : ''}`}>
+            <Choice
+              control={
+                <input
+                  type="checkbox"
+                  aria-label="バケットのメトリクス集計を許可する"
+                  checked={capacityMetricsEnabled}
+                  disabled={!scanEnabled}
+                  onChange={e => dispatch({ type: 'setField', field: 'capacityMetricsEnabled', value: e.target.checked })}
+                />
+              }
+              title="バケットのメトリクス集計を許可する"
+              help="全バケットの容量とオブジェクト数を集計する操作を許可します。"
+            />
+          )}
+          {isEdit && (
+            <Choice
+              control={
                 <input
                   type="checkbox"
                   aria-label="全バケットの容量を定期計測する"
@@ -366,12 +415,14 @@ export function ConnectionForm({ mode, onClose, presentation = 'modal' }: Props)
                   disabled={!scanEnabled || !capacityMetricsEnabled}
                   onChange={e => dispatch({ type: 'setField', field: 'capacityTrackingEnabled', value: e.target.checked })}
                 />
-                <div>
-                  <strong>全バケットの容量を定期計測する</strong>
-                  <small>このコネクションにある全バケットの容量とオブジェクト数を記録します。</small>
-                </div>
-              </label>
-              <label className={`modal-choice ${!scanEnabled || !capacityMetricsEnabled || !capacityTrackingEnabled ? 'opacity-50' : ''}`}>
+              }
+              title="全バケットの容量を定期計測する"
+              help="このコネクションにある全バケットの容量とオブジェクト数を記録します。"
+            />
+          )}
+          {isEdit && (
+            <ValueChoice
+              control={
                 <select
                   aria-label="容量の計測周期"
                   value={capacityTrackingIntervalSeconds}
@@ -382,190 +433,197 @@ export function ConnectionForm({ mode, onClose, presentation = 'modal' }: Props)
                 >
                   {CAPACITY_INTERVALS.map(([seconds, label]) => <option key={seconds} value={seconds}>{label}</option>)}
                 </select>
-                <div>
-                  <strong>容量の計測周期</strong>
-                  <small>既定は24時間。すべてのバケットへ同じ周期を適用します。</small>
-                </div>
-              </label>
-            </div>
-          )}
-          <label className="modal-choice">
-            <input
-              type="number"
-              min={1}
-              aria-label="一覧キャッシュの保持秒数"
-              value={listCacheTtlSec}
-              onChange={e => dispatch({
-                type: 'setField', field: 'listCacheTtlSec', value: Number(e.target.value),
-              })}
+              }
+              title="容量の計測周期"
+              help="既定は24時間。すべてのバケットへ同じ周期を適用します。"
             />
-            <div>
-              <strong>一覧キャッシュの保持 (秒)</strong>
-              <small>
+          )}
+          <ValueChoice
+            control={
+              <input
+                type="number"
+                min={1}
+                aria-label="一覧キャッシュの保持秒数"
+                value={listCacheTtlSec}
+                onChange={e => dispatch({
+                  type: 'setField', field: 'listCacheTtlSec', value: Number(e.target.value),
+                })}
+              />
+            }
+            title="一覧キャッシュの保持 (秒)"
+            help={
+              <>
                 既定 86400 (24 時間)。この接続の一覧をサーバー側で何秒保持するか。
                 更新が激しい接続は短くします。
-              </small>
-            </div>
-          </label>
-        </fieldset>
+              </>
+            }
+          />
+        </div>
+      </fieldset>
 
-        {/* 転送見積もりのプロファイル (spec: 2026-08-22-transfer-estimate-design.md)。
-            作成時は出さない — 既定 (エンドポイントからの推定) で見積もりは出るので、
-            接続を足す時点で決めさせる必要が無い。 */}
-        {isEdit && current && (
-          <fieldset className="modal-field">
-            <legend>転送の見積もり</legend>
-            <small className="mb-1 block text-ink-7">
+      {/* 転送見積もりのプロファイル (spec: 2026-08-22-transfer-estimate-design.md)。
+          作成時は出さない — 既定 (エンドポイントからの推定) で見積もりは出るので、
+          接続を足す時点で決めさせる必要が無い。 */}
+      {isEdit && current && (
+        <>
+          <h3 id={`${ids}-pricing`} className="form-section-heading">転送の見積もり</h3>
+          <fieldset className="choice-group" aria-labelledby={`${ids}-pricing`}>
+            <p className="muted">
               「配下の集計 → 移送の見積もり」で使う値です。触らなくても見積もりは出ます。
-            </small>
-
-            <label className="modal-choice">
-              <select
-                aria-label="プロバイダ"
-                value={pricingProvider}
-                onChange={e => dispatch({
-                  type: 'setField',
-                  field: 'pricingProvider',
-                  value: e.target.value as Provider | '',
-                })}
-              >
-                <option value="">
-                  自動判定 ({PROVIDER_LABELS[current.pricing.provider]})
-                </option>
-                {(Object.keys(PROVIDER_LABELS) as Provider[]).map(p => (
-                  <option key={p} value={p}>{PROVIDER_LABELS[p]}</option>
-                ))}
-              </select>
-              <div>
-                <strong>プロバイダ</strong>
-                <small>
-                  料金の計算方法。既定はエンドポイントのホスト名からの推定で、
-                  社内ストレージは費用 0 として扱います。
-                </small>
-              </div>
-            </label>
-
-            {(pricingProvider || current.pricing.provider) === 'aws' && (
-              <label className="modal-choice">
-                <select
-                  aria-label="ストレージクラス"
-                  value={pricingStorageClass}
-                  onChange={e => dispatch({
-                    type: 'setField',
-                    field: 'pricingStorageClass',
-                    value: e.target.value as StorageClassKey,
-                  })}
-                >
-                  {STORAGE_CLASS_OPTIONS.map(o => (
-                    <option key={o.key} value={o.key}>{o.label}</option>
-                  ))}
-                </select>
-                <div>
-                  <strong>ストレージクラス</strong>
-                  <small>
-                    {STORAGE_CLASS_OPTIONS.find(o => o.key === pricingStorageClass)?.help}
-                  </small>
-                </div>
-              </label>
-            )}
-
-            <label className="modal-choice">
-              <input
-                type="number"
-                min={1}
-                aria-label="読み出し帯域 (MB/s)"
-                value={pricingReadMbps}
-                onChange={e => dispatch({
-                  type: 'setField', field: 'pricingReadMbps', value: Number(e.target.value),
-                })}
+            </p>
+            <div className="choice-list">
+              <ValueChoice
+                control={
+                  <select
+                    aria-label="プロバイダ"
+                    value={pricingProvider}
+                    onChange={e => dispatch({
+                      type: 'setField',
+                      field: 'pricingProvider',
+                      value: e.target.value as Provider | '',
+                    })}
+                  >
+                    <option value="">
+                      自動判定 ({PROVIDER_LABELS[current.pricing.provider]})
+                    </option>
+                    {(Object.keys(PROVIDER_LABELS) as Provider[]).map(p => (
+                      <option key={p} value={p}>{PROVIDER_LABELS[p]}</option>
+                    ))}
+                  </select>
+                }
+                title="プロバイダ"
+                help={
+                  <>
+                    料金の計算方法。既定はエンドポイントのホスト名からの推定で、
+                    社内ストレージは費用 0 として扱います。
+                  </>
+                }
               />
-              <div>
-                <strong>読み出し帯域 (MB/s)</strong>
-                <small>ここから出すときの速度。実測値を入れると所要時間の精度が上がります。</small>
-              </div>
-            </label>
 
-            <label className="modal-choice">
-              <input
-                type="number"
-                min={1}
-                aria-label="書き込み帯域 (MB/s)"
-                value={pricingWriteMbps}
-                onChange={e => dispatch({
-                  type: 'setField', field: 'pricingWriteMbps', value: Number(e.target.value),
-                })}
+              {(pricingProvider || current.pricing.provider) === 'aws' && (
+                <ValueChoice
+                  control={
+                    <select
+                      aria-label="ストレージクラス"
+                      value={pricingStorageClass}
+                      onChange={e => dispatch({
+                        type: 'setField',
+                        field: 'pricingStorageClass',
+                        value: e.target.value as StorageClassKey,
+                      })}
+                    >
+                      {STORAGE_CLASS_OPTIONS.map(o => (
+                        <option key={o.key} value={o.key}>{o.label}</option>
+                      ))}
+                    </select>
+                  }
+                  title="ストレージクラス"
+                  help={STORAGE_CLASS_OPTIONS.find(o => o.key === pricingStorageClass)?.help}
+                />
+              )}
+
+              <ValueChoice
+                control={
+                  <input
+                    type="number"
+                    min={1}
+                    aria-label="読み出し帯域 (MB/s)"
+                    value={pricingReadMbps}
+                    onChange={e => dispatch({
+                      type: 'setField', field: 'pricingReadMbps', value: Number(e.target.value),
+                    })}
+                  />
+                }
+                title="読み出し帯域 (MB/s)"
+                help="ここから出すときの速度。実測値を入れると所要時間の精度が上がります。"
               />
-              <div>
-                <strong>書き込み帯域 (MB/s)</strong>
-                <small>ここへ入れるときの速度。両端の遅い方が律速になります。</small>
-              </div>
-            </label>
 
-            <label className="modal-choice">
-              <input
-                type="number"
-                min={0}
-                step={0.1}
-                aria-label="不安定さ"
-                value={pricingInstability}
-                onChange={e => dispatch({
-                  type: 'setField', field: 'pricingInstability', value: Number(e.target.value),
-                })}
+              <ValueChoice
+                control={
+                  <input
+                    type="number"
+                    min={1}
+                    aria-label="書き込み帯域 (MB/s)"
+                    value={pricingWriteMbps}
+                    onChange={e => dispatch({
+                      type: 'setField', field: 'pricingWriteMbps', value: Number(e.target.value),
+                    })}
+                  />
+                }
+                title="書き込み帯域 (MB/s)"
+                help="ここへ入れるときの速度。両端の遅い方が律速になります。"
               />
-              <div>
-                <strong>不安定さ</strong>
-                <small>
-                  所要時間の上振れ率。0.5 なら悲観側が 1.5 倍になります。
-                  よく落ちる接続ほど大きく。
-                </small>
-              </div>
-            </label>
 
-            <label className="modal-choice">
-              <input
-                type="number"
-                min={0}
-                step={1}
-                placeholder="未設定"
-                aria-label="容量 (TB)"
-                value={pricingCapacityTb}
-                onChange={e => dispatch({
-                  type: 'setField',
-                  field: 'pricingCapacityTb',
-                  value: e.target.value === '' ? '' : Number(e.target.value),
-                })}
+              <ValueChoice
+                control={
+                  <input
+                    type="number"
+                    min={0}
+                    step={0.1}
+                    aria-label="不安定さ"
+                    value={pricingInstability}
+                    onChange={e => dispatch({
+                      type: 'setField', field: 'pricingInstability', value: Number(e.target.value),
+                    })}
+                  />
+                }
+                title="不安定さ"
+                help={
+                  <>
+                    所要時間の上振れ率。0.5 なら悲観側が 1.5 倍になります。
+                    よく落ちる接続ほど大きく。
+                  </>
+                }
               />
-              <div>
-                <strong>容量 (TB)</strong>
-                <small>入れておくと、収まらない移送に警告が出ます。空なら警告しません。</small>
-              </div>
-            </label>
 
-            <label className="modal-choice">
-              <input
-                type="number"
-                min={0}
-                step={0.001}
-                placeholder="カタログに従う"
-                aria-label="ストレージ単価の上書き ($/GB-月)"
-                value={pricingStoragePerGbMonth}
-                onChange={e => dispatch({
-                  type: 'setField',
-                  field: 'pricingStoragePerGbMonth',
-                  value: e.target.value === '' ? '' : Number(e.target.value),
-                })}
+              <ValueChoice
+                control={
+                  <input
+                    type="number"
+                    min={0}
+                    step={1}
+                    placeholder="未設定"
+                    aria-label="容量 (TB)"
+                    value={pricingCapacityTb}
+                    onChange={e => dispatch({
+                      type: 'setField',
+                      field: 'pricingCapacityTb',
+                      value: e.target.value === '' ? '' : Number(e.target.value),
+                    })}
+                  />
+                }
+                title="容量 (TB)"
+                help="入れておくと、収まらない移送に警告が出ます。空なら警告しません。"
               />
-              <div>
-                <strong>ストレージ単価の上書き ($/GB-月)</strong>
-                <small>
-                  実際の契約単価があれば入れてください。空ならカタログの値を使います。
-                  Wasabi のように料金 API を公開していないプロバイダでは、
-                  カタログの値は手入力なので、ここを入れたほうが正確です。
-                </small>
-              </div>
-            </label>
 
-            <small className="block text-ink-7">
+              <ValueChoice
+                control={
+                  <input
+                    type="number"
+                    min={0}
+                    step={0.001}
+                    placeholder="カタログに従う"
+                    aria-label="ストレージ単価の上書き ($/GB-月)"
+                    value={pricingStoragePerGbMonth}
+                    onChange={e => dispatch({
+                      type: 'setField',
+                      field: 'pricingStoragePerGbMonth',
+                      value: e.target.value === '' ? '' : Number(e.target.value),
+                    })}
+                  />
+                }
+                title="ストレージ単価の上書き ($/GB-月)"
+                help={
+                  <>
+                    実際の契約単価があれば入れてください。空ならカタログの値を使います。
+                    Wasabi のように料金 API を公開していないプロバイダでは、
+                    カタログの値は手入力なので、ここを入れたほうが正確です。
+                  </>
+                }
+              />
+            </div>
+
+            <p className="muted choice-group__note">
               {current.pricing.ratesResolved ? (
                 current.pricing.effective.storagePerGbMonth === null
                   ? '費用のかからない接続として計算します。'
@@ -586,21 +644,46 @@ export function ConnectionForm({ mode, onClose, presentation = 'modal' }: Props)
                 `リージョン ${current.pricing.region ?? '(不明)'} の単価が料金カタログにありません。`
                 + '費用は 0 と表示されますが、無料という意味ではありません。'
               )}
-            </small>
+            </p>
           </fieldset>
-        )}
+        </>
+      )}
 
-        {error && <p className="error" aria-live="polite">{error}</p>}
-        <div className="modal-actions">
-          <button onClick={onClose} disabled={saving}>キャンセル</button>
-          <button onClick={submit} disabled={saving}>
-            {saving ? '保存中…' : '保存'}
-          </button>
-        </div>
-      </div>
+      {error && <p className="notice error" aria-live="polite">{error}</p>}
+    </>
   )
 
-  return presentation === 'modal'
-    ? <div className="modal-backdrop">{form}</div>
-    : form
+  const actions = (
+    <>
+      <button type="button" className="button" onClick={onClose} disabled={saving}>キャンセル</button>
+      <button type="button" className="button primary" onClick={() => void submit()} disabled={saving}>
+        {saving ? '保存中…' : '保存'}
+      </button>
+    </>
+  )
+
+  if (presentation === 'page') {
+    return (
+      <section className="connection-form" aria-labelledby={titleId}>
+        <div className="section-heading">
+          <h2 id={titleId}>{title}</h2>
+        </div>
+        <div className="connection-form__body">{fields}</div>
+        <div className="connection-form__actions">{actions}</div>
+      </section>
+    )
+  }
+
+  return (
+    <Dialog
+      titleId={titleId}
+      title={title}
+      onClose={onClose}
+      dismissible={!saving}
+      size="wide"
+      footer={actions}
+    >
+      <div className="dialog-body connection-form__body">{fields}</div>
+    </Dialog>
+  )
 }

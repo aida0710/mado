@@ -1,8 +1,9 @@
-import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeSanitize from 'rehype-sanitize'
+import { ChevronDown, ChevronUp, History, Pencil, Plus } from 'lucide-react'
 import { api } from '../lib/api/client'
 import type { z } from 'zod'
 import { Readme } from '../lib/api/types'
@@ -38,9 +39,9 @@ export function ReadmeView({ connectionId, bucket, prefix }: Props) {
   // 描かないための gate。SWR で応答が数十秒後に届きうるので必須。
   const sessionRef = useRef(0)
   const [historyOpen, setHistoryOpen] = useState(false)
-  // README プレビューは普段は 15 行で打ち切り。長い時だけ「すべて表示」が出る。
-  // フォントサイズは HomePage と同じ (`.markdown-body` のベース 17px) — ここでは
-  // 折りたたみ機能だけ載せる。
+  const headingId = useId()
+  // README は普段は 15 行で打ち切り。長い時だけ「すべて表示」が出る。
+  // 文字組みは HomePage と同じ `.markdown-body`。ここでは折りたたみだけを足す。
   // 親が README の identity を key にしているため、別ディレクトリへ移れば
   // component ごと再生成され、展開状態も自然に初期値へ戻る。
   const [expanded, setExpanded] = useState(false)
@@ -48,7 +49,7 @@ export function ReadmeView({ connectionId, bucket, prefix }: Props) {
   const bodyRef = useRef<HTMLDivElement>(null)
 
   // refresh: 通常のリロード。キャッシュが効いていれば即時に解決する。
-  // forceRefresh: 🔄 ボタンから呼ぶ。キャッシュを破棄してから fetch する
+  // forceRefresh: 再読み込みのボタンから呼ぶ。キャッシュを破棄してから fetch する
   // (例: 他人がダッシュボード経由で編集した、aws cli で直接書き換えた、等)。
   const refresh = useCallback(() => {
     // 読み込みが無効な接続では GET すら投げない (投げても 403)。
@@ -112,75 +113,81 @@ export function ReadmeView({ connectionId, bucket, prefix }: Props) {
   // prefix は `/` を含み得るので encPath で path segment ごとに encode。
   const editHref = `/storage/${encodeURIComponent(connectionId)}/edit-readme/${encodeURIComponent(bucket)}/${encPath(prefix)}`
 
+  const editLabel = data?.exists ? '編集' : '作成'
+
   return (
-    <section
-      className="pb-5"
-      style={{ borderBottom: '1px solid var(--rule)' }}
-      data-color-mode="light"
-    >
-      <header className="flex flex-wrap items-baseline gap-x-4 gap-y-2 mb-3">
-        <p className="kicker m-0">S3 README</p>
-        <span className="ml-auto flex items-center gap-2">
-          {caps.readmeWrite && data && (
-            <Link className="ghost" to={editHref}>
-              <span aria-hidden>✎</span>
-              {data.exists ? '編集' : '作成'}
-            </Link>
+    <section className="readme-panel" aria-labelledby={headingId}>
+      <div className="section-heading">
+        <div className="readme-panel__title">
+          <h2 id={headingId}>README</h2>
+          {data?.exists && data.last_editor && (
+            <span className="muted">last by {data.last_editor}</span>
           )}
-          <button
-            className="ghost"
-            onClick={() => setHistoryOpen(true)}
-            title="編集履歴を表示"
-          >
-            <span aria-hidden>⏱</span>
-            履歴
-          </button>
+        </div>
+        <div className="readme-panel__actions">
+          <span className="readme-panel__icons">
+            {caps.readmeWrite && data && (
+              <Link
+                className="icon-button"
+                to={editHref}
+                aria-label={editLabel}
+                title={`README を${editLabel}`}
+              >
+                {data.exists ? <Pencil size={16} aria-hidden="true" /> : <Plus size={16} aria-hidden="true" />}
+              </Link>
+            )}
+            <button
+              type="button"
+              className="icon-button"
+              onClick={() => setHistoryOpen(true)}
+              aria-label="履歴"
+              title="編集履歴を表示"
+            >
+              <History size={16} aria-hidden="true" />
+            </button>
+          </span>
           <CacheBanner
             fetchedAt={api.lastFetched.readme(connectionId, bucket, prefix)}
             revalidating={revalidating}
             onRefresh={forceRefresh}
             compact
           />
-          {data?.exists && data.last_editor && (
-            <span className="text-[12px] text-ink-7">
-              last by <span className="font-medium text-ink-11">{data.last_editor}</span>
-            </span>
-          )}
-        </span>
-      </header>
-      {readmeState.status === 'failed' ? (
-        <LoadFailedNotice subject="README" reason={readmeState.reason} onRetry={retryAfterFailure} />
-      ) : data?.exists ? (
-        <article className="article mt-1">
-          <div
-            ref={bodyRef}
-            // is-collapsed: max-height でクリップ (高さ判定に必須なので未展開なら常時付与)。
-            // is-faded: 下端のもや。実際にあふれている時だけ — 短い README には出さない。
-            className={`markdown-body${expanded ? '' : ' is-collapsed'}${needsExpand && !expanded ? ' is-faded' : ''}`}
-          >
-            <ReactMarkdown
-              remarkPlugins={[remarkGfm]}
-              rehypePlugins={[rehypeSanitize]}
+        </div>
+      </div>
+      <div className="readme-panel__body">
+        {readmeState.status === 'failed' ? (
+          <LoadFailedNotice subject="README" reason={readmeState.reason} onRetry={retryAfterFailure} />
+        ) : data?.exists ? (
+          <>
+            <div
+              ref={bodyRef}
+              // is-collapsed: max-height でクリップ (高さ判定に必須なので未展開なら常時付与)。
+              // is-faded: 下端のもや。実際にあふれている時だけ — 短い README には出さない。
+              className={`markdown-body${expanded ? '' : ' is-collapsed'}${needsExpand && !expanded ? ' is-faded' : ''}`}
             >
-              {data.body}
-            </ReactMarkdown>
-          </div>
-          {(needsExpand || expanded) && (
-            <button
-              type="button"
-              className="markdown-body__expand"
-              onClick={() => setExpanded(current => !current)}
-              aria-expanded={expanded}
-            >
-              {expanded ? '▲ 折りたたむ' : '▼ すべて表示'}
-            </button>
-          )}
-        </article>
-      ) : (
-        <p className="text-[13px] text-ink-7">
-          README なし
-        </p>
-      )}
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                rehypePlugins={[rehypeSanitize]}
+              >
+                {data.body}
+              </ReactMarkdown>
+            </div>
+            {(needsExpand || expanded) && (
+              <button
+                type="button"
+                className="button small readme-panel__expand"
+                onClick={() => setExpanded(current => !current)}
+                aria-expanded={expanded}
+              >
+                {expanded ? <ChevronUp size={14} aria-hidden="true" /> : <ChevronDown size={14} aria-hidden="true" />}
+                {expanded ? '折りたたむ' : 'すべて表示'}
+              </button>
+            )}
+          </>
+        ) : (
+          <p className="muted">README なし</p>
+        )}
+      </div>
       {historyOpen && (
         <Suspense fallback={null}>
           <ReadmeHistoryModal

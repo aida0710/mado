@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest'
 import ConnectionsPage from './ConnectionsPage'
 import { api } from '../lib/api/client'
 import { ALL_CAPABILITIES_ON } from '../lib/api/types'
@@ -18,6 +18,18 @@ vi.mock('../lib/api/client', async importOriginal => {
 })
 
 afterEach(() => vi.clearAllMocks())
+
+// 広い画面の形 (操作のボタンが行に並ぶ) で描く。テストの matchMedia は既定でどのクエリにも
+// 一致する (= 狭い画面) ので、幅のクエリに一致しないようにする。
+let matchMedia: MockInstance<typeof window.matchMedia>
+beforeEach(() => {
+  matchMedia = vi.spyOn(window, 'matchMedia').mockImplementation(query => ({
+    matches: false, media: query, onchange: null,
+    addListener: () => {}, removeListener: () => {},
+    addEventListener: () => {}, removeEventListener: () => {}, dispatchEvent: () => false,
+  }))
+})
+afterEach(() => matchMedia.mockRestore())
 
 const connection = (id: string, isDefault: boolean) => ({
   id, name: id, endpoint: 'http://e', region: 'r', accessKeyIdMasked: 'x…y',

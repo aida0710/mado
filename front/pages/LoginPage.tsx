@@ -53,13 +53,13 @@ export function LoginPage({
   const oidcUrl = `/api/auth/oidc/start?returnTo=${encodeURIComponent(returnTo)}`
 
   return (
-    <main className="auth-page">
-      <section className="auth-card auth-card--login" aria-labelledby={AUTH_TITLE_ID}>
-        <div className="auth-card__mark">Mado</div>
-        <p className="auth-card__eyebrow">Data catalog</p>
+    <main className="login-page">
+      <section className="login-card" aria-labelledby={AUTH_TITLE_ID}>
+        <div className="login-mark">Mado</div>
+        <p className="login-eyebrow">Data catalog</p>
         <h1 id={AUTH_TITLE_ID}>ログイン</h1>
         {(sessionExpired || idpLogoutIncomplete || overlay) && (
-          <div className="auth-card__lead">
+          <div className="login-lead">
             {sessionExpired && <p role="status">セッションが切れました。もう一度ログインしてください。</p>}
             {idpLogoutIncomplete && (
               <p role="status">
@@ -73,7 +73,7 @@ export function LoginPage({
         {config.oidc.enabled && (
           <>
             <a
-              className="auth-card__sso"
+              className="button primary"
               href={oidcUrl}
               target={overlay ? '_blank' : undefined}
               rel={overlay ? 'noopener' : undefined}
@@ -81,18 +81,18 @@ export function LoginPage({
               {config.oidc.label ?? 'SSO'}で続行
             </a>
             {overlay && (
-              <p className="auth-card__note">新しいタブでログインします。ログインが済んだら、このタブに戻ってください。</p>
+              <p className="login-note">新しいタブでログインします。ログインが済んだら、このタブに戻ってください。</p>
             )}
           </>
         )}
-        {config.oidc.enabled && config.localEnabled && <div className="auth-card__or"><span>または</span></div>}
+        {config.oidc.enabled && config.localEnabled && <div className="login-or"><span>または</span></div>}
 
         {config.localEnabled && (
-          <form onSubmit={login} className="auth-form">
-            <label><span>ユーザー名またはメールアドレス</span><input name="identifier" autoComplete="username" required /></label>
-            <label><span>パスワード</span><input name="password" type="password" autoComplete="current-password" required /></label>
-            {error && <p className="auth-form__error" role="alert">{error}</p>}
-            <button type="submit" disabled={busy}>{busy ? '確認中…' : 'ログイン'}</button>
+          <form onSubmit={login}>
+            <label className="field"><span>ユーザー名またはメールアドレス</span><input name="identifier" autoComplete="username" required /></label>
+            <label className="field"><span>パスワード</span><input name="password" type="password" autoComplete="current-password" required /></label>
+            {error && <p className="notice error" role="alert">{error}</p>}
+            <button type="submit" className="button primary" disabled={busy}>{busy ? '確認中…' : 'ログイン'}</button>
           </form>
         )}
       </section>
@@ -132,18 +132,18 @@ export function ChangePasswordPage({ onChanged }: { onChanged(): Promise<void> }
     }
   }
   return (
-    <main className="auth-page">
-      <section className="auth-card" aria-labelledby={AUTH_TITLE_ID}>
-        <div className="auth-card__mark">Mado</div>
-        <p className="auth-card__eyebrow">First sign-in</p>
+    <main className="login-page">
+      <section className="login-card" aria-labelledby={AUTH_TITLE_ID}>
+        <div className="login-mark">Mado</div>
+        <p className="login-eyebrow">First sign-in</p>
         <h1 id={AUTH_TITLE_ID}>パスワードを変更</h1>
-        <p className="auth-card__lead">初回ログイン用パスワードはこの画面で更新してください。</p>
-        <form onSubmit={submit} className="auth-form">
-          <label><span>現在のパスワード</span><input name="currentPassword" type="password" autoComplete="current-password" required /></label>
-          <label><span>新しいパスワード（12文字以上）</span><input name="newPassword" type="password" autoComplete="new-password" minLength={12} required /></label>
-          <label><span>新しいパスワード（確認）</span><input name="confirmation" type="password" autoComplete="new-password" minLength={12} required /></label>
-          {error && <p className="auth-form__error" role="alert">{error}</p>}
-          <button type="submit" disabled={busy}>{busy ? '更新中…' : '変更して続行'}</button>
+        <div className="login-lead"><p>初回ログイン用パスワードはこの画面で更新してください。</p></div>
+        <form onSubmit={submit}>
+          <label className="field"><span>現在のパスワード</span><input name="currentPassword" type="password" autoComplete="current-password" required /></label>
+          <label className="field"><span>新しいパスワード（12文字以上）</span><input name="newPassword" type="password" autoComplete="new-password" minLength={12} required /></label>
+          <label className="field"><span>新しいパスワード（確認）</span><input name="confirmation" type="password" autoComplete="new-password" minLength={12} required /></label>
+          {error && <p className="notice error" role="alert">{error}</p>}
+          <button type="submit" className="button primary" disabled={busy}>{busy ? '更新中…' : '変更して続行'}</button>
         </form>
       </section>
     </main>

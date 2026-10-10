@@ -1,4 +1,5 @@
 import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from 'react'
+import { Download, Pin, RotateCcw, X } from 'lucide-react'
 import { api } from '../lib/api/client'
 import { classify } from '../lib/api/mime'
 import { usePinnedPreviews } from '../lib/pinnedPreviews'
@@ -19,7 +20,7 @@ interface Props {
   onResizeStart?: (e: ReactPointerEvent) => void
   onResizeKeyDown?: (e: ReactKeyboardEvent) => void
   // 幅を既定 (画面追従) に戻す。widthCustomized=true (= ユーザが幅変更済) の時だけ
-  // ヘッダにリセットボタンを出す。CSS 側で <1024px は非表示。
+  // ヘッダにリセットボタンを出す。一覧と並ばない 900px 未満は CSS で隠す。
   onResetWidth?: () => void
   widthCustomized?: boolean
   // tar アーカイブを開いているときに、その中のどのエントリを開くか (URL の ?entry=)。
@@ -28,6 +29,10 @@ interface Props {
   onEntryChange?: (entryPath: string | null) => void
 }
 
+/**
+ * 一覧の右に出すプレビュー。上の帯にファイルのパスと操作 (幅を戻す・ピン留め・
+ * ダウンロード・閉じる)、その下に種別ごとのプレビューを置く。
+ */
 export function PreviewDrawer({
   connectionId, bucket, k, onClose,
   onResizeStart, onResizeKeyDown, onResetWidth, widthCustomized,
@@ -38,16 +43,17 @@ export function PreviewDrawer({
   if (!k) return null
   const kind = classify(k)
   const filename = k.split('/').pop() ?? 'file'
-  // ドロワーの 📌 は「今開いている k」だけを対象にする (tar 内エントリは扱わない
-  // — それは TarEntryModal 側の 📌 が担当する) ので entryPath なしで比較する。
+  // ドロワーのピン留めは「今開いている k」だけを対象にする (tar 内エントリは扱わない
+  // — それは TarEntryModal 側のピン留めが担当する) ので entryPath なしで比較する。
   const alreadyPinned = pins.some(
     p => p.connectionId === connectionId && p.bucket === bucket && p.key === k && p.entryPath === undefined,
   )
+  const pinLabel = alreadyPinned ? 'ピン留め済み' : 'ピン留め'
   return (
     <aside className="drawer">
       {onResizeStart && (
         <div
-          className="drawer__resize"
+          className="drawer-resize-handle"
           role="separator"
           aria-orientation="vertical"
           aria-label="プレビュー幅を変更 (左右キーで調整)"
@@ -56,62 +62,65 @@ export function PreviewDrawer({
           onKeyDown={onResizeKeyDown}
         />
       )}
-      <header className="drawer__head">
-        <p className="drawer__title">{k}</p>
-        {onResetWidth && widthCustomized && (
+      <header className="drawer-header">
+        <p className="drawer-path mono">{k}</p>
+        <div className="drawer-actions">
+          {onResetWidth && widthCustomized && (
+            <button
+              type="button"
+              className="icon-button drawer-reset"
+              onClick={onResetWidth}
+              aria-label="プレビュー幅を既定に戻す"
+              title="プレビュー幅を既定に戻す"
+            >
+              <RotateCcw size={16} aria-hidden="true" />
+            </button>
+          )}
+          {/* tar アーカイブ自体はピン留め対象外 (個々のエントリのみピン留め可能)。 */}
+          {kind !== 'archive' && (
+            <button
+              type="button"
+              className="icon-button"
+              onClick={() => addPin({ connectionId, bucket, key: k })}
+              disabled={alreadyPinned}
+              data-pinned={alreadyPinned ? 'true' : undefined}
+              aria-label={pinLabel}
+              title={pinLabel}
+            >
+              <Pin size={16} fill={alreadyPinned ? 'currentColor' : 'none'} aria-hidden="true" />
+            </button>
+          )}
+          {caps.download && (
+            <a
+              className="icon-button"
+              href={api.downloadUrl(connectionId, bucket, k)}
+              download={filename}
+              aria-label={`${filename} をダウンロード`}
+              title="ダウンロード"
+            >
+              <Download size={16} aria-hidden="true" />
+            </a>
+          )}
           <button
             type="button"
-            className="ghost drawer__reset"
-            onClick={onResetWidth}
-            aria-label="プレビュー幅を既定に戻す"
-            title="プレビュー幅を既定に戻す"
+            className="icon-button"
+            onClick={onClose}
+            aria-label="Close preview"
+            title="閉じる"
           >
-            <span aria-hidden>↔</span>
+            <X size={18} aria-hidden="true" />
           </button>
-        )}
-        {/* tar アーカイブ自体はピン留め対象外 (個々のエントリのみピン留め可能)。 */}
-        {kind !== 'archive' && (
-          <button
-            type="button"
-            className="ghost"
-            onClick={() => addPin({ connectionId, bucket, key: k })}
-            disabled={alreadyPinned}
-            aria-label={alreadyPinned ? 'ピン留め済み' : 'ピン留め'}
-            title={alreadyPinned ? 'ピン留め済み' : 'ピン留め'}
-          >
-            <span aria-hidden>📌</span>
-          </button>
-        )}
-        {caps.download && (
-          <a
-            className="ghost no-underline"
-            href={api.downloadUrl(connectionId, bucket, k)}
-            download={filename}
-            aria-label={`${filename} をダウンロード`}
-            title="ダウンロード"
-          >
-            <span aria-hidden>↓</span>
-            <span className="text-[12px] font-semibold">DL</span>
-          </a>
-        )}
-        <button
-          className="ghost"
-          onClick={onClose}
-          aria-label="Close preview"
-          title="閉じる"
-        >
-          <span aria-hidden>✕</span>
-        </button>
+        </div>
       </header>
-      <div className="drawer__body">
-        {/* ファイル切替でコピー完了トーストをリセットするため key で再マウントする。
+      <div className="drawer-body">
+        {/* ファイル切替でコピー完了の表示をリセットするため key で再マウントする。
             本文の切り替えは useSniffedText が url をキーに持つので key に依存しない。 */}
         {/* 画像 / 音声 / アーカイブ以外はすべてテキストとして開こうとする。
             中身がバイナリなら PreviewText 側が「プレビュー非対応」を出す。 */}
         {/* 権限で閉じられている種別は理由を出す。無言で空になると
             「壊れている」と誤解されるため。 */}
         {((kind === 'archive' && !caps.archive) || (kind !== 'archive' && !caps.preview)) && (
-          <p className="p-3 text-[13px] text-ink-7">
+          <p className="muted">
             この接続では{kind === 'archive' ? '圧縮ファイルを開くこと' : 'ファイルのプレビュー'}が
             無効になっています (Settings → 接続で変更できます)。
           </p>

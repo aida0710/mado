@@ -1,12 +1,12 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
+import { ArrowRight, RefreshCw } from 'lucide-react'
 import { api } from '../lib/api/client'
 import type { CapacityBucketHistory, CapacityOverview, CapacityScanJob } from '../lib/api/types'
 import { useAuth } from '../lib/auth-context'
 import { useConnection } from '../lib/connectionContext'
 import { fmtCapacityBytes, fmtCapacityDelta } from '../lib/format'
 import { storageDirectoryHref } from '../lib/route'
-import { ConnectionSwitcher } from '../components/ConnectionSwitcher'
 import { ViewBreadcrumb } from '../components/ViewBreadcrumb'
 import { BucketPrefixCapacity } from '../components/storage/BucketPrefixCapacity'
 
@@ -115,63 +115,72 @@ export default function CapacityMetricsPage({ connectionId }: { connectionId: st
 
   return (
     <section>
-      <div className="flex items-center justify-between gap-3">
-        <ViewBreadcrumb connectionId={connectionId} label="容量メトリクス" href={`/storage/${encodeURIComponent(connectionId)}/?view=capacity`} />
-        <ConnectionSwitcher />
-      </div>
-      <header className="mt-7 mb-5">
-        <p className="text-[12px] font-semibold text-ink-7">Bucket capacity</p>
-        <div className="mt-1 flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <h2 className="text-[27px] font-semibold">バケット容量メトリクス</h2>
-            <p className="mt-1 text-[13px] text-ink-7">このコネクションにある全バケットの完全走査結果をまとめて表示します。</p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <button type="button" className="ghost" disabled={loading} onClick={() => void refresh()}>表示を更新</button>
-            {canManage && (
-              <button type="button" className="ghost" disabled={scanning || scanActive || !connection.scanEnabled || connection.capacityMetricsEnabled === false} onClick={() => void scanAll()}>
-                {scanning ? '開始中…' : scanActive ? '計測中…' : '今すぐ全バケットを計測'}
-              </button>
-            )}
-          </div>
-        </div>
-      </header>
+      <ViewBreadcrumb
+        connectionId={connectionId}
+        label="バケット容量メトリクス"
+        href={`/storage/${encodeURIComponent(connectionId)}/?view=capacity`}
+        description="このコネクションにある全バケットの完全走査結果をまとめて表示します。"
+      />
 
       {scanActive && <ScanActivity jobs={scanJobs} now={clock} />}
 
       {overview && (
-        <div className="mb-5 grid gap-px border border-rule bg-rule sm:grid-cols-3">
+        <dl className="capacity-summary">
           <Metric label="全バケットの容量" value={measuredCount ? fmtCapacityBytes(totalBytes) : '—'} />
           <Metric label="全バケットのオブジェクト数" value={measuredCount ? totalObjects.toLocaleString('ja-JP') : '—'} />
           <Metric label="集計範囲" value={`${measuredCount.toLocaleString('ja-JP')} / ${bucketCount.toLocaleString('ja-JP')} バケット`} />
-        </div>
+        </dl>
       )}
 
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-3 border-y border-rule py-3">
-        <div className="flex gap-2">
+      {/* 期間の切り替えと、計測の予定・今すぐ計測・表示の更新。一覧の上の帯と同じ形。
+          見出しの右はどの Storage の画面でも同じ (接続先・コピー・上へ) にしておく。 */}
+      <div className="capacity-toolbar">
+        <div className="capacity-period" role="group" aria-label="表示する期間">
           {DAYS.map(value => (
-            <button key={value} type="button" className="ghost" aria-pressed={days === value} onClick={() => updateDays(value)}>
+            <button key={value} type="button" className="button small" aria-pressed={days === value} onClick={() => updateDays(value)}>
               {value === 400 ? '全期間' : `${value}日`}
             </button>
           ))}
         </div>
-        {overview && (
-          <p className="text-[12px] text-ink-7">
-            {overview.tracking.enabled
-              ? `${Math.round(overview.tracking.intervalSeconds / 3600)}時間ごとに全バケットを計測`
-              : '定期計測は停止中'}
-            {canManage && <> · <Link className="text-link hover:text-link-hover" to={`/settings/connections/${encodeURIComponent(connectionId)}`}>コネクション設定</Link></>}
-          </p>
-        )}
+        <div className="capacity-toolbar-end">
+          {overview && (
+            <p className="muted">
+              {overview.tracking.enabled
+                ? `${Math.round(overview.tracking.intervalSeconds / 3600)}時間ごとに全バケットを計測`
+                : '定期計測は停止中'}
+              {canManage && <> · <Link to={`/settings/connections/${encodeURIComponent(connectionId)}`}>コネクション設定</Link></>}
+            </p>
+          )}
+          {canManage && (
+            <button
+              type="button"
+              className="button small"
+              disabled={scanning || scanActive || !connection.scanEnabled || connection.capacityMetricsEnabled === false}
+              onClick={() => void scanAll()}
+            >
+              {scanning ? '開始中…' : scanActive ? '計測中…' : '今すぐ全バケットを計測'}
+            </button>
+          )}
+          <button
+            type="button"
+            className="icon-button"
+            disabled={loading}
+            onClick={() => void refresh()}
+            aria-label="表示を更新"
+            title="表示を更新"
+          >
+            <RefreshCw size={16} aria-hidden="true" className={loading ? 'spin' : undefined} />
+          </button>
+        </div>
       </div>
 
-      {notice && <p className="mb-4 border border-rule bg-ink-1 px-3 py-2 text-[12px]">{notice}</p>}
-      {error && <p className="error">{error}</p>}
-      {loading && !overview && <p className="text-[13px] text-ink-7">読み込み中…</p>}
-      {!loading && overview?.buckets.length === 0 && <p className="empty-state">バケットが見つかりません。</p>}
+      {notice && <p className="notice">{notice}</p>}
+      {error && <p className="notice error">{error}</p>}
+      {loading && !overview && <p className="state-message">読み込み中…</p>}
+      {!loading && overview?.buckets.length === 0 && <p className="state-message">バケットが見つかりません。</p>}
 
       {overview && (
-        <div className="space-y-4" aria-busy={loading}>
+        <div className="capacity-buckets" aria-busy={loading}>
           {sortedBuckets.map(bucket => (
             <BucketMetrics
               key={bucket.bucket}
@@ -207,21 +216,24 @@ function ScanActivity({ jobs, now }: { jobs: CapacityScanJob[]; now: number }) {
   const queuedCount = jobs.filter(job => job.status === 'queued').length
   if (!running) {
     return (
-      <div className="mb-5 border border-rule-strong bg-ink-1 px-4 py-3" role="status" aria-live="polite">
-        <p className="text-[13px] font-semibold">計測の開始を待っています…</p>
-        <p className="mt-0.5 text-[12px] text-ink-7">{queuedCount.toLocaleString('ja-JP')}バケットが待機中です。</p>
+      <div className="notice capacity-activity" role="status" aria-live="polite">
+        <span className="storage-pulse-dot" aria-hidden="true" />
+        <div>
+          <p className="capacity-activity-title">計測の開始を待っています…</p>
+          <p className="muted">{queuedCount.toLocaleString('ja-JP')}バケットが待機中です。</p>
+        </div>
       </div>
     )
   }
   return (
-    <div className="mb-5 border border-rule-strong bg-ink-1 px-4 py-3" role="status" aria-live="polite">
-      <div className="flex items-center gap-2">
-        <span className="h-2 w-2 animate-pulse rounded-full bg-link" aria-hidden="true" />
-        <p className="min-w-0 truncate text-[13px] font-semibold" title={running.bucket}>{running.bucket} を走査中…</p>
+    <div className="notice capacity-activity" role="status" aria-live="polite">
+      <span className="storage-pulse-dot" aria-hidden="true" />
+      <div>
+        <p className="capacity-activity-title" title={running.bucket}>{running.bucket} を走査中…</p>
+        <p className="muted mono">
+          現在 {elapsedMinute(running.startedAt ?? running.createdAt, now)} · {running.objectCount.toLocaleString('ja-JP')} オブジェクト目 · 残り {queuedCount.toLocaleString('ja-JP')} バケット
+        </p>
       </div>
-      <p className="mt-1 font-mono text-[12px] tabular-nums text-ink-7">
-        現在 {elapsedMinute(running.startedAt ?? running.createdAt, now)} · {running.objectCount.toLocaleString('ja-JP')} オブジェクト目 · 残り {queuedCount.toLocaleString('ja-JP')} バケット
-      </p>
     </div>
   )
 }
@@ -236,32 +248,35 @@ function BucketMetrics({ connectionId, history, days, intervalSeconds, scanJob }
   const latest = history.points.at(-1)
   const previous = history.points.at(-2)
   return (
-    <article className="border border-rule-strong bg-paper px-4 py-3">
-      <div className="mb-2 flex items-center justify-between gap-3">
-        <h3 className="min-w-0 truncate font-mono text-[14px] font-semibold" title={history.bucket}>{history.bucket}</h3>
-        <div className="flex shrink-0 items-center gap-3">
+    <article className="capacity-bucket">
+      <div className="capacity-bucket-heading">
+        <h3 title={history.bucket}>{history.bucket}</h3>
+        <div className="capacity-bucket-actions">
           {scanJob && (
-            <span className="text-[11px] font-medium text-link">
+            <span className={`status-badge ${scanJob.status === 'running' ? 'status-running' : 'status-queued'}`}>
               {scanJob.status === 'running' ? `走査中 · ${scanJob.objectCount.toLocaleString('ja-JP')}件` : '計測待ち'}
             </span>
           )}
-          <Link className="text-[11px] text-link hover:text-link-hover" to={storageDirectoryHref(connectionId, history.bucket, '')}>開く →</Link>
+          <Link className="capacity-open-link" to={storageDirectoryHref(connectionId, history.bucket, '')}>
+            開く
+            <ArrowRight size={12} aria-hidden="true" />
+          </Link>
         </div>
       </div>
-      <div className="grid gap-px bg-rule sm:grid-cols-4">
+      <dl className="capacity-metrics">
         <CompactMetric label="現在の容量" value={latest ? fmtCapacityBytes(latest.totalBytes) : '—'} />
         <CompactMetric label="前回から" value={latest && previous ? fmtCapacityDelta({ current: latest.totalBytes, previous: previous.totalBytes }) : '—'} />
         <CompactMetric label="オブジェクト数" value={latest ? latest.objectCount.toLocaleString('ja-JP') : '—'} />
         <CompactMetric label="最終取得" value={latest ? new Date(latest.collectedAt).toLocaleString('ja-JP') : '—'} />
-      </div>
-      {history.lastError && !scanJob && <p className="mt-2 text-[11px] text-danger">{history.lastError}</p>}
-      <div className="mt-2 border-t border-rule pt-1">
+      </dl>
+      {history.lastError && !scanJob && <p className="notice error">{history.lastError}</p>}
+      <div className="capacity-chart">
         {history.points.length >= 2 ? (
-          <Suspense fallback={<div className="h-[120px] pt-4 text-[12px] text-ink-7">グラフを読み込み中…</div>}>
+          <Suspense fallback={<p className="capacity-chart-placeholder">グラフを読み込み中…</p>}>
             <CapacityHistoryChart points={history.points} intervalSeconds={intervalSeconds} capacityBytes={null} label={history.bucket} />
           </Suspense>
         ) : (
-          <div className="flex h-14 items-center justify-center text-[12px] text-ink-7">2回計測するとグラフを表示します</div>
+          <p className="capacity-chart-empty">2回計測するとグラフを表示します</p>
         )}
       </div>
       {latest && (
@@ -279,10 +294,22 @@ function BucketMetrics({ connectionId, history, days, intervalSeconds, scanJob }
   )
 }
 
+/** 見出しの下の合計。数字は h2 程度の大きさで出す。 */
 function Metric({ label, value }: { label: string; value: string }) {
-  return <div className="bg-paper px-4 py-3"><p className="text-[11px] text-ink-7">{label}</p><p className="mt-0.5 font-mono text-[17px] font-semibold tabular-nums">{value}</p></div>
+  return (
+    <div>
+      <dt>{label}</dt>
+      <dd>{value}</dd>
+    </div>
+  )
 }
 
+/** バケットごとの値。幅が狭いときは 1 行に収まらない分を省略し、title で全部を見せる。 */
 function CompactMetric({ label, value }: { label: string; value: string }) {
-  return <div className="bg-paper px-3 py-2"><p className="text-[11px] text-ink-7">{label}</p><p className="mt-0.5 truncate font-mono text-[13px] font-semibold tabular-nums" title={value}>{value}</p></div>
+  return (
+    <div>
+      <dt>{label}</dt>
+      <dd title={value}>{value}</dd>
+    </div>
+  )
 }

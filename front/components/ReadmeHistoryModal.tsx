@@ -12,7 +12,7 @@ interface Props {
   onClose: () => void
 }
 
-// S3 README の編集履歴モーダル。
+// S3 README の編集履歴ダイアログ。
 // 取得元と見出しだけがここの責務で、表示は HistoryModal と共通。
 export function ReadmeHistoryModal({ connectionId, bucket, prefix, currentBody, onClose }: Props) {
   const loadVersions = useCallback(
@@ -25,13 +25,9 @@ export function ReadmeHistoryModal({ connectionId, bucket, prefix, currentBody, 
   )
   return (
     <HistoryModal
-      kicker="S3 README · 履歴"
+      title="README の履歴"
       titleId="readme-history-title"
-      title={
-        <span style={{ fontFamily: 'var(--font-mono)', fontSize: '17px', fontWeight: 500, letterSpacing: '0' }}>
-          {prefix || '(root)'}
-        </span>
-      }
+      subtitle={`${bucket} / ${prefix || '(root)'}`}
       currentBody={currentBody}
       onClose={onClose}
       loadVersions={loadVersions}

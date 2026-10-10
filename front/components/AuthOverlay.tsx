@@ -13,7 +13,7 @@ const keepKeyInOverlay = (event: KeyboardEvent) => event.stopPropagation()
 
 /**
  * session が切れたとき、開いていた画面の上にログイン画面（または初回のパスワード変更画面）を
- * 重ねる。背後の画面は AuthGate が inert にして残す。入り直すまで閉じられないので、ModalShell と
+ * 重ねる。背後の画面は AuthGate が inert にして残す。入り直すまで閉じられないので、Dialog と
  * 違って Escape や背景のクリックでは閉じない。
  */
 export function AuthOverlay({ titleId, children }: Props) {

@@ -1,21 +1,16 @@
 import type { ReactNode } from 'react'
 
-const titleClass =
-  'm-0 text-[12px] font-semibold text-ink-7'
-
 interface SettingsSectionHeaderProps {
   title: string
   actions?: ReactNode
 }
 
+/** 設定の各タブの区切りの見出し。右に一覧の操作 (追加・エクスポートなど) を並べる。 */
 export function SettingsSectionHeader({ title, actions }: SettingsSectionHeaderProps) {
   return (
-    <header
-      className="mb-3 flex flex-wrap items-baseline justify-between gap-3 pb-2"
-      style={{ borderBottom: '1px solid var(--rule)' }}
-    >
-      <h3 className={titleClass}>{title}</h3>
-      {actions}
-    </header>
+    <div className="section-heading">
+      <h2>{title}</h2>
+      {actions && <div>{actions}</div>}
+    </div>
   )
 }

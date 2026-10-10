@@ -88,6 +88,8 @@ interface DrawerResize {
 // `.storage-list` に containerRef を付け、左端ハンドルに onResizeStart /
 // onResizeKeyDown を渡す。幅は CSS 変数 (--drawer-track / --drawer-w / --drawer-ml)
 // を直接書き込んで反映する (ドラッグ中は再レンダせず滑らかに動かすため)。
+// ドラッグ中はハンドルに data-dragging="true" を付ける (境目の線を出し続けるため。
+// これも再レンダせず属性を直接書く)。
 // enabled=false (preview 未選択) の間は何もしない。
 export function useDrawerResize(enabled: boolean): DrawerResize {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -123,6 +125,7 @@ export function useDrawerResize(enabled: boolean): DrawerResize {
     const el = containerRef.current
     if (!el) return
     e.preventDefault()
+    const handle = e.currentTarget instanceof HTMLElement ? e.currentTarget : null
     const cw = el.clientWidth
     const { base } = computeDrawerVars(cw, widthRef.current)
     const startX = e.clientX
@@ -130,6 +133,7 @@ export function useDrawerResize(enabled: boolean): DrawerResize {
     // ドラッグ中の文字選択を抑止。
     const prevUserSelect = document.body.style.userSelect
     document.body.style.userSelect = 'none'
+    if (handle) handle.dataset.dragging = 'true'
     const onMove = (ev: PointerEvent) => {
       const cwNow = el.clientWidth || cw
       // 左へドラッグ (clientX 減) で拡大。
@@ -140,7 +144,9 @@ export function useDrawerResize(enabled: boolean): DrawerResize {
     const onUp = () => {
       window.removeEventListener('pointermove', onMove)
       window.removeEventListener('pointerup', onUp)
+      window.removeEventListener('pointercancel', onUp)
       document.body.style.userSelect = prevUserSelect
+      if (handle) delete handle.dataset.dragging
       if (widthRef.current != null) {
         writeStored(widthRef.current)
         setWidthCustomized(true)
@@ -148,6 +154,7 @@ export function useDrawerResize(enabled: boolean): DrawerResize {
     }
     window.addEventListener('pointermove', onMove)
     window.addEventListener('pointerup', onUp)
+    window.addEventListener('pointercancel', onUp)
   }, [apply])
 
   const onResizeKeyDown = useCallback((e: ReactKeyboardEvent) => {

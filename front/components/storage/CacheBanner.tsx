@@ -1,20 +1,20 @@
-// 一覧の「いま見ているデータがいつのものか」と、その場で取り直す ↻ を
-// テーブルヘッダの直上に並べた帯。
+// 一覧の「いま見ているデータがいつのものか」と、その場で取り直す再読み込みを
+// 表の見出しの直上に並べた帯。
 //
 // ページャの隅に "取得 22:13" と添えていた頃は視線が届かず、古いキャッシュを
 // 最新だと思って見てしまう事故があった。Name / Size / Modified の真上に置き、
-// 更新操作 ↻ も同じ場所に集める。
+// 再読み込みも同じ場所に集める。
 //
-// 2 状態:
-//   更新中 (revalidating) — 地色を敷き、下端で不定長 progress を走らせる。
-//   最新                   — 地色を落として 1 行に退く。消してしまうと
-//                            「いつのデータか」が分からなくなるので残す。
+// 取得からの経過時間の段階 (lib/cacheAgeLevel.ts) を data-age に持たせ、帯の左の線・
+// 淡い地・文字の色を段階ごとに変える (色は styles/storage.css の --cache-age-*)。
+// 一覧では同じ線を表の左端にも引くので、下へスクロールしても古さが目に入る。
 //
-// progress は S3 の list では残り時間が出せないので不定長。0.1 秒で終わる
-// バケットではバーが一瞬光るだけでちらつくため、200ms 遅れて現れるように
-// CSS の animation-delay で伏せている (JS タイマーを持たない = 後始末も不要)。
+// 更新中 (revalidating) は「更新しています」と不定長の進捗を出す。S3 の list では
+// 残り時間が出せないので割合は出さない。0.1 秒で終わるバケットでは一瞬光るだけで
+// ちらつくため、CSS の animation-delay で 200ms 伏せている (JS タイマーを持たない)。
 
 import { useEffect, useState, type ReactNode } from 'react'
+import { RefreshCw } from 'lucide-react'
 import { cacheAgeLevel } from '../../lib/cacheAgeLevel'
 import { fmtCacheAge } from '../../lib/format'
 
@@ -23,9 +23,9 @@ interface Props {
   fetchedAt: Date | null
   /** 期限切れキャッシュを表示したまま裏で再取得中か。 */
   revalidating: boolean
-  /** ↻ を押したとき。キャッシュを破棄してサーバーごと取り直す。 */
+  /** 再読み込みを押したとき。キャッシュを破棄してサーバーごと取り直す。 */
   onRefresh: () => void
-  /** 狭いヘッダ行に収める形。文言を落として時刻だけにする。
+  /** 狭い見出しの中に収める形。帯を敷かず、文言を落として時刻だけにする。
    *  README / バケット一覧 / tar プレビューで使う。 */
   compact?: boolean
   /** 右端に差し込む内容。一覧では配下の集計の要約が入る。
@@ -50,19 +50,17 @@ export function CacheBanner({ fetchedAt, revalidating, onRefresh, compact, trail
   const age = fetchedAt ? cacheAgeLevel(fetchedAt, now) : null
 
   return (
-    <div className={
-      `cache-banner${revalidating ? ' cache-banner--stale' : ''}${compact ? ' cache-banner--compact' : ''}`
-    }>
-      <p className="cache-banner__body">
+    <div className={compact ? 'cache-banner cache-banner-compact' : 'cache-banner'} data-age={age?.level}>
+      <p className="cache-banner-body">
         <button
           type="button"
-          className="cache-banner__refresh"
+          className="icon-button cache-banner-refresh"
           onClick={onRefresh}
           disabled={revalidating}
           title="キャッシュを破棄して再読み込み"
           aria-label="再読み込み"
         >
-          <span aria-hidden>↻</span>
+          <RefreshCw size={14} aria-hidden="true" className={revalidating ? 'spin' : undefined} />
         </button>
         {/* fetchedAt が無いのは初回ロード中や invalidate 直後。日時は出せないが
             ボタンは残す — ここで更新手段が消えると詰まったときに何もできない。 */}
@@ -70,7 +68,7 @@ export function CacheBanner({ fetchedAt, revalidating, onRefresh, compact, trail
           <span>
             <time
               dateTime={fetchedAt.toISOString()}
-              className="cache-banner__at"
+              className="cache-banner-at"
               data-age={age.level}
               title={age.label}
             >
@@ -80,16 +78,16 @@ export function CacheBanner({ fetchedAt, revalidating, onRefresh, compact, trail
           </span>
         )}
         {revalidating && (
-          <span className="cache-banner__status" aria-live="polite">
-            <span className="cache-banner__dot" aria-hidden />
+          <span className="cache-banner-status" aria-live="polite">
+            <span className="storage-pulse-dot" aria-hidden="true" />
             {compact ? '更新中' : '最新の情報に更新しています'}
           </span>
         )}
-        {trailing && <span className="cache-banner__trailing">{trailing}</span>}
+        {trailing && <span className="cache-banner-trailing">{trailing}</span>}
       </p>
       {revalidating && (
-        <div className="cache-banner__track">
-          <div role="progressbar" aria-label="最新の情報を取得中" className="cache-banner__bar" />
+        <div className="storage-busy-track cache-banner-track">
+          <div role="progressbar" aria-label="最新の情報を取得中" className="storage-busy-bar" />
         </div>
       )}
     </div>

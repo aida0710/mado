@@ -16,13 +16,13 @@ export function PreviewVideo({ connectionId, bucket, k, entryPath }: Props) {
   const label = entryPath ?? k
 
   return (
-    <div className="flex flex-col gap-2">
-      {loading && <p className="m-0 text-[12px] text-ink-7">動画を取得中…</p>}
-      {error && <p className="m-0 text-[12px] text-ink-7">動画を取得できません: {error}</p>}
+    <div className="preview-stack">
+      {loading && <p className="muted">動画を取得中…</p>}
+      {error && <p className="notice error">動画を取得できません: {error}</p>}
       {src && (
         <video
           aria-label={`${label} の動画プレビュー`}
-          className="block max-h-[70vh] w-full bg-black"
+          className="preview-video"
           src={src}
           controls
           playsInline

@@ -10,7 +10,8 @@
 // - **移動元から出す費用 (egress) を畳んだ行にも出す。** 移動先の月額だけを見て
 //   決めると桁を間違える。AWS から 40TB 出すと、置き続けるより高くつくことがある。
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type MouseEvent } from 'react'
+import { ChevronDown, ChevronRight, TriangleAlert } from 'lucide-react'
 import { api } from '../../lib/api/client'
 import { PROVIDER_LABELS, type TransferCandidate, type TransferEstimate } from '../../lib/api/types'
 import { fmtCacheAge, fmtDurationRange, fmtSize, fmtUsd } from '../../lib/format'
@@ -47,10 +48,10 @@ function sourceLabel(url: string): string {
 /** 内訳の 1 行。0 の項目も出す — 「かからない」ことが分かるのが大事。 */
 function CostRow({ label, value, note }: { label: string; value: number; note?: string }) {
   return (
-    <div className="est-brk__row">
-      <span className="est-brk__k">{label}</span>
-      <span className="est-brk__v">{fmtUsd(value)}</span>
-      {note && <small className="est-brk__note">{note}</small>}
+    <div>
+      <dt>{label}</dt>
+      <dd className="mono">{fmtUsd(value)}</dd>
+      <dd className="muted">{note}</dd>
     </div>
   )
 }
@@ -60,67 +61,87 @@ function CandidateRow({ c, expanded, onToggle }: {
   expanded: boolean
   onToggle: () => void
 }) {
+  const detailId = useId()
   const label = c.storageClassLabel && c.provider === 'aws'
     ? `${c.name} · ${c.storageClassLabel}`
     : c.name
+  // 行のどこを押しても開閉する。名前のボタンは自分で開閉するので、二重に数えない。
+  const toggleFromRow = (e: MouseEvent<HTMLTableRowElement>) => {
+    if ((e.target as Element).closest('button, a')) return
+    onToggle()
+  }
 
   return (
     <>
-      <button
-        type="button"
-        className={`est-row${expanded ? ' est-row--open' : ''}`}
-        onClick={onToggle}
-        aria-expanded={expanded}
-      >
-        <span className="est-row__nm">
-          <span className="est-row__caret" aria-hidden>{expanded ? '▾' : '▸'}</span>
-          {label}
-          {c.sameConnection && <span className="est-row__here">現在地</span>}
-        </span>
-        <span className="est-row__dur">
+      <tr className={expanded ? 'est-row selected' : 'est-row'} onClick={toggleFromRow}>
+        <td>
+          <div className="est-name">
+            <button
+              type="button"
+              className="est-toggle"
+              onClick={onToggle}
+              aria-expanded={expanded}
+              aria-controls={detailId}
+            >
+              {expanded
+                ? <ChevronDown size={14} aria-hidden="true" />
+                : <ChevronRight size={14} aria-hidden="true" />}
+              <span className="est-toggle-label">
+                <span>{label}</span>
+                {c.sameConnection && <span className="status-badge status-queued">現在地</span>}
+              </span>
+            </button>
+            {/* 警告は件数だけを名前の横に出し、全文は開いた行で読む。 */}
+            {c.warnings.length > 0 && (
+              <span className="est-warn" role="img" aria-label={`注意 ${c.warnings.length} 件`}>
+                <TriangleAlert size={13} aria-hidden="true" />
+                {c.warnings.length}
+              </span>
+            )}
+          </div>
+        </td>
+        <td className="numeric mono">
           {fmtDurationRange(c.durationSec.optimistic, c.durationSec.pessimistic)}
-        </span>
-        <span className="est-row__up">{fmtUsd(c.upfront.total)}</span>
-        <span className="est-row__mo">{fmtUsd(c.monthlyUsd)}</span>
-        {/* 警告が無くても列を残す。省くと grid が詰まって右 3 列がずれる。 */}
-        <span
-          className="est-row__warn"
-          aria-label={c.warnings.length > 0 ? `注意 ${c.warnings.length} 件` : undefined}
-        >
-          {c.warnings.length > 0 ? `⚠ ${c.warnings.length}` : ''}
-        </span>
-      </button>
+        </td>
+        <td className="numeric mono">{fmtUsd(c.upfront.total)}</td>
+        <td className="numeric mono">{fmtUsd(c.monthlyUsd)}</td>
+      </tr>
 
       {expanded && (
-        <div className="est-brk">
-          <div className="est-brk__grid">
-            <CostRow
-              label="移動元から出す (egress)"
-              value={c.upfront.egress}
-              note={c.sameConnection ? '同じ接続内なので回線を通らない' : undefined}
-            />
-            <CostRow label="取り出し" value={c.upfront.retrieval} />
-            <CostRow label="GET リクエスト" value={c.upfront.getRequests} />
-            <CostRow
-              label="PUT リクエスト"
-              value={c.upfront.putRequests}
-              note={`${c.putRequestCount.toLocaleString()} 回`}
-            />
-            <CostRow
-              label="月額"
-              value={c.monthlyUsd}
-              note={`課金対象 ${fmtSize(c.billableBytes)}`}
-            />
-          </div>
+        <tr id={detailId} className="est-detail">
+          <td colSpan={4}>
+            <dl className="est-costs">
+              <CostRow
+                label="移動元から出す (egress)"
+                value={c.upfront.egress}
+                note={c.sameConnection ? '同じ接続内なので回線を通らない' : undefined}
+              />
+              <CostRow label="取り出し" value={c.upfront.retrieval} />
+              <CostRow label="GET リクエスト" value={c.upfront.getRequests} />
+              <CostRow
+                label="PUT リクエスト"
+                value={c.upfront.putRequests}
+                note={`${c.putRequestCount.toLocaleString()} 回`}
+              />
+              <CostRow
+                label="月額"
+                value={c.monthlyUsd}
+                note={`課金対象 ${fmtSize(c.billableBytes)}`}
+              />
+            </dl>
 
-          {c.warnings.length > 0 && (
-            <ul className="est-warns">
-              {c.warnings.map(w => (
-                <li key={w.kind} className="est-warns__item">{w.message}</li>
-              ))}
-            </ul>
-          )}
-        </div>
+            {c.warnings.length > 0 && (
+              <ul className="est-warns">
+                {c.warnings.map(w => (
+                  <li key={w.kind}>
+                    <TriangleAlert size={14} aria-hidden="true" />
+                    <span>{w.message}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </td>
+        </tr>
       )}
     </>
   )
@@ -199,82 +220,89 @@ export function EstimatePanel({ connectionId, bucket, prefix, onNeedScan }: Prop
   }, [state])
 
   if (state.kind === 'loading') {
-    return <p className="scan-modal__note">見積もり中…</p>
+    return <p className="state-message">見積もり中…</p>
   }
 
   if (state.kind === 'unscanned') {
     return (
-      <p className="scan-modal__note">
+      <div className="state-message">
         見積もりには配下の集計が要ります。
-        <button type="button" className="ghost" onClick={onNeedScan}>走査する</button>
-      </p>
+        <button type="button" className="button small" onClick={onNeedScan}>走査する</button>
+      </div>
     )
   }
 
   if (state.kind === 'error') {
-    return <p className="error">{state.message}</p>
+    return <p className="notice error">{state.message}</p>
   }
 
   const { source, scan, catalog } = state.data
   const avg = scan.objectCount > 0 ? scan.totalBytes / scan.objectCount : 0
 
   return (
-    <div className="est">
-      <div className="est-head">
+    <div>
+      <div className="est-summary">
         <span>
           <strong>{scan.objectCount.toLocaleString()}</strong> 件 /{' '}
           <strong>{fmtSize(scan.totalBytes)}</strong>
-          <small>（平均 {fmtSize(avg)}）</small>
+          <span className="muted">（平均 {fmtSize(avg)}）</span>
         </span>
-        <small className="est-head__src">
+        <span className="muted">
           移動元 {source.name}
           {source.provider !== 'aws' && `（${PROVIDER_LABELS[source.provider]}）`}
-        </small>
+        </span>
       </div>
 
-      <div className="est-table">
-        <div className="est-table__head">
-          <span className="est-row__nm">移動先</span>
-          <span className="est-row__dur">所要</span>
-          <span className="est-row__up">初期</span>
-          <span className="est-row__mo">月額</span>
-          <span className="est-row__warn" />
-        </div>
-        {rows.map(c => (
-          <CandidateRow
-            key={c.connectionId}
-            c={c}
-            expanded={openId === c.connectionId}
-            onToggle={() => toggle(c.connectionId)}
-          />
-        ))}
+      <div className="table-scroll">
+        <table className="est-table">
+          <thead>
+            <tr>
+              <th scope="col">移動先</th>
+              <th scope="col" className="numeric">所要</th>
+              <th scope="col" className="numeric">初期</th>
+              <th scope="col" className="numeric">月額</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(c => (
+              <CandidateRow
+                key={c.connectionId}
+                c={c}
+                expanded={openId === c.connectionId}
+                onToggle={() => toggle(c.connectionId)}
+              />
+            ))}
+          </tbody>
+        </table>
       </div>
 
-      <p className="est-foot">
-        {catalog.source === 'fetched' && catalog.fetchedAt
-          ? `単価は ${fmtCacheAge(new Date(catalog.fetchedAt))} に取得`
-          // 「取得できていない」と「無料」を取り違えさせない。
-          : `単価は同梱の ${catalog.asOf} 版（まだ取得していません）`}
-        {' '}
-        <button type="button" className="ghost" onClick={refreshPricing} disabled={refreshing}>
+      <div className="est-foot">
+        <span>
+          {catalog.source === 'fetched' && catalog.fetchedAt
+            ? `単価は ${fmtCacheAge(new Date(catalog.fetchedAt))} に取得`
+            // 「取得できていない」と「無料」を取り違えさせない。
+            : `単価は同梱の ${catalog.asOf} 版（まだ取得していません）`}
+        </span>
+        <button type="button" className="button small" onClick={refreshPricing} disabled={refreshing}>
           {refreshing ? '更新中…' : '単価を更新'}
         </button>
         {catalog.stale && !refreshing && !refreshError && (
-          <strong className="est-foot__stale">{' '}単価が古くなっています。</strong>
+          <strong>単価が古くなっています。</strong>
         )}
-        {refreshError && <span className="error">{' '}{refreshError}</span>}
-      </p>
+        {refreshError && <span className="est-foot-error">{refreshError}</span>}
+      </div>
       {/* 「単価を更新」で新しくなるのは AWS の単価だけ。最小保存期間や
           Wasabi は料金 API が無く手で持っているので、取得日とは別に
           確認日を出す — 取得日が新しい = 全部新しい、と読み違えさせない。 */}
       <details className="est-manual">
         <summary>
+          <ChevronRight size={14} aria-hidden="true" />
           一部の値は料金 API から取れないため手入力です（{catalog.manualFacts.verifiedOn} 確認）
         </summary>
         <ul>
           {catalog.manualFacts.notes.map(n => <li key={n}>{n}</li>)}
         </ul>
-        <p className="est-manual__src">
+        <p className="est-manual-sources">
           出典:{' '}
           {catalog.manualFacts.sources.map(u => (
             <a key={u} href={u} target="_blank" rel="noreferrer noopener">{sourceLabel(u)}</a>
@@ -282,7 +310,7 @@ export function EstimatePanel({ connectionId, bucket, prefix, onNeedScan }: Prop
         </p>
       </details>
 
-      <p className="est-foot">
+      <p className="muted est-note">
         所要時間は接続ごとの帯域設定から出しています。
         実測を入れると精度が上がります（Settings → 接続）。
       </p>

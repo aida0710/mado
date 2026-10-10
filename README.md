@@ -417,7 +417,22 @@ cd front && npm test && npm run lint
 
 ### 画面の見た目 (Mado Model Tracking と共通)
 
-色・書体・角丸の値は `@mado/design-tokens` (Mado Model Tracking の `packages/design-tokens`) が持ち、`front/App.css` の `@theme` はその変数を参照するだけです。パッケージは `front/vendor/` の tarball から入れています。値を変えるときはパッケージ側で版を上げ、次の手順で取り込みます。
+画面の部品と枠は Mado Model Tracking と同じものを使います。CSS は `@mado/design-tokens` (Mado Model Tracking の `packages/design-tokens`) にあり、`front/` は次の順に読み込みます。
+
+| 読み込む物 | 中身 |
+|---|---|
+| `main.tsx` の `fonts.css` と `tokens.css` | 書体と、ライト・ダークの色・角丸・書体の変数 |
+| `App.css` の Tailwind | preflight とユーティリティ class |
+| `App.css` の `base.css`・`components.css`・`shell.css` (3 つとも `@layer components`) | 要素の既定 (本文 13px、入力欄、リンク、見出し)、ボタン・表・入力欄・ダイアログ・タブ・状態バッジ、上部バー・サイドバー・ドロワー・ログイン画面 |
+| `front/styles/*.css` (layer の外) | 画面ごとの指定 (保存先の一覧、プレビュー、メモ・README、設定、DataLineage) |
+
+- 共通の CSS は Tailwind の preflight より強く、ユーティリティ class より弱い層に入ります。共通の CSS どうしの優先順位は Mado Model Tracking と同じです。
+- 部品は共通の class 名 (`.button`、`.page-header`、`.tabs`、`.field`、`.dialog` など) で使い、領域のファイルにはその画面に固有の指定だけを書きます。ダイアログは `components/Dialog.tsx` を使います。
+- 色は `tokens.css` の変数で書き、値を直接書きません。ダークテーマは上部バーのボタンで切り替え (`localStorage` の `mado.theme`。切り替えるまでは OS の設定に合わせます)、`<html data-theme="dark">` で効きます。
+- 画面幅の切り替え点は 640px・900px・1200px の 3 つです (Tailwind の `sm`・`md`・`lg` も同じ値)。左のサイドバーは 1200px 以上で名前つき (下のボタンでアイコンだけに畳め、右の境目のドラッグで幅を変えられます)、900px 以上でアイコンだけ、それ未満は上部バーのメニューボタンから開くドロワーです。
+- アイコンは [Lucide](https://lucide.dev/) (`lucide-react`) を使います。
+
+パッケージは `front/vendor/` の tarball から入れています。値を変えるときはパッケージ側で版を上げ、次の手順で取り込みます。
 
 ```bash
 # Mado Model Tracking の作業ツリーで
@@ -432,6 +447,7 @@ npm install ./vendor/mado-design-tokens-<version>.tgz
 
 - ロゴ (`front/public/mado-icon.png`): "Window" icon by [Inmotus Design](https://icons8.com/icon/set/window/external-others-inmotus-design) on [Icons8](https://icons8.com/)。Icons8 の無料利用規約により attribution を明記。
 - 書体: [IBM Plex](https://github.com/IBM/plex) (`@mado/design-tokens` に同梱) と [Noto Sans JP](https://fonts.google.com/noto/specimen/Noto+Sans+JP)。どちらも SIL Open Font License 1.1。
+- アイコン: [Lucide](https://lucide.dev/) (`lucide-react`)。ISC License。
 
 ---
 

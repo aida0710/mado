@@ -67,7 +67,7 @@ describe('PreviewAudio', () => {
     })
     const { container } = render(<PreviewAudio connectionId="c" bucket="b" k="a.wav" />)
     await waitFor(() => expect(screen.getByRole('slider', { name: '再生位置' })).toBeInTheDocument())
-    expect(container.querySelector('.font-mono')).toBeNull()
+    expect(container.querySelector('.preview-audio-info')).toBeNull()
   })
 
   it('解析失敗は小さくエラー表示、再生 UI は残る', async () => {

@@ -8,15 +8,13 @@ interface Props {
   onClear: () => void
 }
 
-// 一覧上部の絞り込みチップ。選んだタグのいずれかを含む行だけに絞る (OR)。
+// 一覧の上の帯に並べる、タグの絞り込み。選んだタグのいずれかを含む行だけに絞る (OR)。
 // クライアント側フィルタ — 取得済みの一覧データに対して行う。
 export function TagFilterBar({ tags, selected, onToggle, onClear }: Props) {
   if (tags.length === 0) return null
   return (
-    <div className="flex flex-wrap items-center gap-2 py-2">
-      <span className="text-[12px] font-semibold text-ink-7">
-        タグで絞り込み
-      </span>
+    <div className="storage-toolbar-item">
+      <span className="muted">タグで絞り込み</span>
       <TagToggleChips tags={tags} selected={selected} onToggle={onToggle} onClear={onClear} />
     </div>
   )

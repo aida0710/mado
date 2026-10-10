@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react'
+import { useDocumentTheme } from '../lib/useDocumentTheme'
 
 interface Props {
   peaks: Array<[number, number]>
@@ -12,14 +13,20 @@ interface Props {
   durationRatio?: number
 }
 
-// CSS 変数を解決する。テスト (jsdom) や変数未定義時はフォールバック。
-function cssVar(el: HTMLElement, name: string, fallback: string): string {
-  const v = getComputedStyle(el).getPropertyValue(name).trim()
-  return v || fallback
+// canvas は CSS の変数を使えないので、描くたびに値を読む。値が無い環境 (jsdom) では
+// 要素の文字色に落とす。
+function cssColor(el: HTMLElement, name: string): string {
+  const style = getComputedStyle(el)
+  return style.getPropertyValue(name).trim() || style.color
 }
 
+/**
+ * 音声の波形。再生済みは --accent、残りは --muted、中心線は --border、再生ヘッドは
+ * --error (Mado Model Tracking の音声プレビューと同じ配色)。テーマを切り替えたら描き直す。
+ */
 export function Waveform({ peaks, progress, onSeek, height = 64, durationRatio = 1 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const theme = useDocumentTheme()
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current
@@ -37,9 +44,12 @@ export function Waveform({ peaks, progress, onSeek, height = 64, durationRatio =
     ctx.clearRect(0, 0, w, h)
     if (peaks.length === 0 || w === 0) return
 
-    const played = cssVar(canvas, '--color-ink-11', '#444')
-    const rest = cssVar(canvas, '--color-ink-6', '#999')
+    const played = cssColor(canvas, '--accent')
+    const rest = cssColor(canvas, '--muted')
     const mid = h / 2
+    // 中心線は全幅に引く。トラックが短いときの右側 (0 パディング) は無音の線として見える。
+    ctx.fillStyle = cssColor(canvas, '--border')
+    ctx.fillRect(0, Math.floor(mid), w, 1)
     // ピークは全幅 × durationRatio の範囲に描く (残りは 0 パディングの空白)。
     const peaksW = w * Math.min(1, Math.max(0, durationRatio))
     const barW = peaksW / peaks.length
@@ -50,16 +60,17 @@ export function Waveform({ peaks, progress, onSeek, height = 64, durationRatio =
       // min/max は -1〜1。高さ 1px 未満でも点として見えるように clamp。
       const top = mid - mx * mid
       const bh = Math.max(1, (mx - mn) * mid)
-      ctx.fillStyle = x <= playedX ? played : rest
+      ctx.fillStyle = x < playedX ? played : rest
       ctx.fillRect(x, top, Math.max(1, barW - 0.5), bh)
     }
     // 再生ヘッド線
     if (progress > 0) {
-      ctx.fillStyle = played
+      ctx.fillStyle = cssColor(canvas, '--error')
       ctx.fillRect(playedX - 0.5, 0, 1, h)
     }
   }, [peaks, progress, height, durationRatio])
 
+  // テーマが変わると CSS の変数の値が変わるので、theme も描き直すきっかけにする。
   useEffect(() => {
     draw()
     const canvas = canvasRef.current
@@ -67,7 +78,7 @@ export function Waveform({ peaks, progress, onSeek, height = 64, durationRatio =
     const ro = new ResizeObserver(draw)
     ro.observe(canvas)
     return () => ro.disconnect()
-  }, [draw])
+  }, [draw, theme])
 
   const handleClick = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!onSeek) return
@@ -86,7 +97,7 @@ export function Waveform({ peaks, progress, onSeek, height = 64, durationRatio =
       aria-valuemax={100}
       aria-valuenow={Math.round(progress * 100)}
       tabIndex={onSeek ? 0 : -1}
-      className="block w-full cursor-pointer"
+      className="waveform"
       style={{ height }}
       onClick={handleClick}
     />

@@ -107,16 +107,17 @@ describe('StorageIndex バケット行の ⋯ メニュー', () => {
     expect(await screen.findByRole('dialog')).toBeInTheDocument()
   })
 
-  // 名前の文字列だけが当たり判定だと狭くて押しづらいので、行全体をリンクにしている。
-  it('バケット名のリンクが行全体を覆う当たり判定を持つ', async () => {
+  // 名前の文字列だけが当たり判定だと狭くて押しづらいので、名前の列全体をリンクにしている
+  // (ほかの列は行のクリックで開く)。
+  it('バケット名のリンクが名前の列全体を覆う当たり判定を持つ', async () => {
     mountWithOneBucket()
     await waitFor(() => expect(screen.getByText('bkt-1')).toBeInTheDocument())
 
     const link = screen.getByRole('link', { name: 'bkt-1' })
     expect(link.className).toContain('after:absolute')
     expect(link.className).toContain('after:inset-0')
-    // 行は positioning context を持つ (でないと after:inset-0 が行に届かない)。
-    expect((link.closest('li') as HTMLElement).className).toContain('relative')
+    // 名前の列は positioning context を持つ (でないと after:inset-0 が列に届かない)。
+    expect((link.closest('td') as HTMLElement).className).toContain('relative')
   })
 
   it('独立した 🏷 ボタンは廃止して ⋯ に統合されている', async () => {

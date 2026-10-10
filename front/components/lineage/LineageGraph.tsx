@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  Background, BackgroundVariant, Controls, MiniMap, ReactFlow, ReactFlowProvider,
+  Background, BackgroundVariant, Controls, MarkerType, MiniMap, ReactFlow, ReactFlowProvider,
   type NodeMouseHandler, useReactFlow,
 } from '@xyflow/react'
+import { Search } from 'lucide-react'
 import type { LineageGraph as LineageGraphDto, LineageNodeSummary } from '../../lib/api/types'
+import { narrowerThan } from '../../lib/breakpoints'
+import { useMediaQuery } from '../../lib/useMediaQuery'
 import { toFlowElements, type LineageFlowNode } from '../../lib/lineage/graphModel'
 import {
   searchLineageNodes, traceLineagePath, type LineageDirection,
@@ -13,6 +16,27 @@ import { layoutLineage } from '../../lib/lineage/layout'
 import { LineageNode } from './LineageNode'
 
 const nodeTypes = { lineage: LineageNode }
+
+// 強調した経路の矢印の色。矢印は辺ごとではなく共有の <marker> なので、色ごとに別の marker を使う。
+// 色は CSS の変数で渡し、テーマの切り替えに追従させる。ほかの矢印は --xy-edge-stroke (lineage.css)。
+const PATH_MARKER_COLOR = 'var(--link)'
+
+// ミニマップの四角の色を種類ごとに変えるための class (lineage.css)。
+const minimapNodeClass = (node: LineageFlowNode) => `lineage-minimap-node--${node.data.kind}`
+
+// 最初に全体を収める表示。狭い画面では全体が入らなくても項目の文字が読める大きさ (0.5 倍、
+// Mado Model Tracking の Lineage と同じ) で開き、残りは動かして見る。
+const WIDE_FIT_VIEW = { padding: 0.2, maxZoom: 1.15 }
+const NARROW_FIT_VIEW = { ...WIDE_FIT_VIEW, minZoom: 0.5 }
+
+// グラフの操作ボタンとミニマップの名前 (ツールチップにも出る)。React Flow の既定は英語。
+const ARIA_LABELS = {
+  'controls.ariaLabel': 'グラフの表示の操作',
+  'controls.zoomIn.ariaLabel': '拡大',
+  'controls.zoomOut.ariaLabel': '縮小',
+  'controls.fitView.ariaLabel': '全体を表示',
+  'minimap.ariaLabel': 'グラフの全体図',
+}
 
 interface Props {
   graph: LineageGraphDto
@@ -33,6 +57,7 @@ const DIRECTIONS: Array<{ value: LineageDirection; label: string }> = [
 
 function Canvas({ graph, selectedId, direction, onSelect, onClearSelection }: CanvasProps) {
   const { fitView } = useReactFlow<LineageFlowNode>()
+  const narrow = useMediaQuery(narrowerThan('md'))
   const focusedSelection = useRef('')
   const { nodes, edges } = useMemo(() => {
     const elements = toFlowElements(graph)
@@ -47,12 +72,18 @@ function Canvas({ graph, selectedId, direction, onSelect, onClearSelection }: Ca
           ? activePath.nodeIds.has(node.id) ? 'lineage-flow-node--path' : 'lineage-flow-node--muted'
           : undefined,
       })),
-      elements.edges.map(edge => ({
-        ...edge,
-        className: activePath
-          ? activePath.edgeIds.has(edge.id) ? 'lineage-flow-edge--path' : 'lineage-flow-edge--muted'
-          : undefined,
-      })),
+      elements.edges.map(edge => {
+        const onPath = activePath?.edgeIds.has(edge.id) ?? false
+        return {
+          ...edge,
+          className: activePath
+            ? onPath ? 'lineage-flow-edge--path' : 'lineage-flow-edge--muted'
+            : undefined,
+          markerEnd: onPath
+            ? { type: MarkerType.ArrowClosed, width: 15, height: 15, color: PATH_MARKER_COLOR }
+            : edge.markerEnd,
+        }
+      }),
     )
     return {
       nodes: layout.nodes.map(node => ({ ...node, selected: node.id === selectedId })),
@@ -96,14 +127,16 @@ function Canvas({ graph, selectedId, direction, onSelect, onClearSelection }: Ca
         edgesFocusable={false}
         edgesReconnectable={false}
         deleteKeyCode={null}
+        defaultMarkerColor={null}
         fitView
-        fitViewOptions={{ padding: 0.2, maxZoom: 1.15 }}
+        fitViewOptions={narrow ? NARROW_FIT_VIEW : WIDE_FIT_VIEW}
         minZoom={0.18}
         maxZoom={2}
+        ariaLabelConfig={ARIA_LABELS}
       >
         <Background variant={BackgroundVariant.Dots} gap={22} size={1} />
         <Controls showInteractive={false} />
-        {nodes.length > 8 && <MiniMap pannable zoomable />}
+        {nodes.length > 8 && <MiniMap<LineageFlowNode> pannable zoomable nodeClassName={minimapNodeClass} />}
       </ReactFlow>
     </div>
   )
@@ -118,10 +151,11 @@ export function LineageGraph(props: Props) {
 
   return (
     <div className="lineage-graph">
-      <div className="lineage-graph__tools">
+      <div className="lineage-toolbar lineage-graph__tools">
         <div className="lineage-graph__search">
-          <label>
-            <span>グラフ内検索</span>
+          <label className="lineage-search-field">
+            <Search size={16} aria-hidden="true" />
+            <span className="sr-only">グラフ内検索</span>
             <input
               type="search"
               value={query}
@@ -131,33 +165,36 @@ export function LineageGraph(props: Props) {
             />
           </label>
           {searching && (
-            <div className="lineage-graph__search-results">
+            <div className="popover lineage-graph__results">
               {visibleResults.length === 0 ? (
-                <p>該当する項目はありません。</p>
+                <p className="muted">該当する項目はありません。</p>
               ) : (
                 <ul>
                   {visibleResults.map(node => (
                     <li key={node.id}>
                       <button type="button" onClick={() => { props.onSelect(node); setQuery('') }}>
                         <strong>{node.label}</strong>
-                        <span>{LINEAGE_KIND_LABEL[node.kind]}{node.namespace ? ` · ${node.namespace}` : ''}</span>
+                        <span className="lineage-kind" data-kind={node.kind}>
+                          {LINEAGE_KIND_LABEL[node.kind]}{node.namespace ? ` · ${node.namespace}` : ''}
+                        </span>
                       </button>
                     </li>
                   ))}
                 </ul>
               )}
-              {results.length > visibleResults.length && <small>ほか{results.length - visibleResults.length}件</small>}
+              {results.length > visibleResults.length && (
+                <p className="muted">ほか{results.length - visibleResults.length}件</p>
+              )}
             </div>
           )}
         </div>
-        <div className="lineage-graph__direction-picker">
+        <div className="lineage-toolbar__item">
           <span>たどる方向</span>
-          <div className="lineage-graph__directions" role="group" aria-label="選択項目から辿る方向">
+          <div className="lineage-segmented" role="group" aria-label="選択項目から辿る方向">
             {DIRECTIONS.map(option => (
               <button
                 key={option.value}
                 type="button"
-                data-active={direction === option.value || undefined}
                 aria-pressed={direction === option.value}
                 onClick={() => setDirection(option.value)}
               >{option.label}</button>

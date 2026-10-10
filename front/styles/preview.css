@@ -1,0 +1,496 @@
+/* プレビュー (一覧の右のドロワー、tar の中身)、同期プレイヤーとピン留め (画面下のドック)。
+   ボタン・表・ダイアログなどの部品は @mado/design-tokens にあるので、ここにはこの領域に
+   固有の配置と見た目だけを書く。 */
+
+/* ── 一覧とプレビューを左右に並べる (900px 以上) ──────────────────────
+   既定の幅は画面に合わせる (clamp)。左端の境目をドラッグして広げると、一覧 (1fr) は
+   既定の幅のまま、ドロワーが負の margin-left で一覧の上に重なる。狭めると列も縮めて
+   一覧を広げる。実際の値は useDrawerResize が px の変数で書き込み、localStorage に覚える。
+   900〜1199px はサイドバーがアイコンだけなので、この幅でも一覧が狭くなりすぎない。
+   900px 未満は 1 列のまま、ドロワーを一覧の下に全幅で積む。 */
+.storage-list:has(.drawer) {
+  grid-template-columns: minmax(0, 1fr) var(--drawer-track, clamp(320px, 36%, 840px));
+}
+
+/* ── プレビューのドロワー ─────────────────────────────────────────────
+   上の帯 (パスと操作) は固定し、本文だけをスクロールする。広げたときは一覧の上に重なるので
+   一覧より手前に描く。スクロールしても上部バー (sticky) の下に貼り付き、画面下のドックが
+   出ている間はその高さ (BottomDock が書く --bottom-dock-height) だけ低くして、下端を
+   ドックの裏に隠さない。 */
+.drawer {
+  position: sticky;
+  top: calc(var(--topbar-height) + 16px);
+  z-index: 2;
+  align-self: start;
+  display: flex;
+  flex-direction: column;
+  width: var(--drawer-w, auto);
+  min-width: 0;
+  max-height: calc(100vh - var(--topbar-height) - 32px - var(--bottom-dock-height, 0px));
+  margin-left: var(--drawer-ml, 0px);
+  border: 1px solid var(--border);
+  background: var(--background);
+}
+.drawer-header {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 6px 6px 16px;
+  border-bottom: 1px solid var(--border);
+}
+/* 長いパスは途中でも折り返し、全部を見せる。ボタン (32px) と 1 行目の高さを揃える。 */
+.drawer-path {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  padding: 8px 0;
+  line-height: 16px;
+  overflow-wrap: anywhere;
+}
+.drawer-actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.drawer-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px;
+}
+.drawer-body > p {
+  margin: 0;
+}
+
+/* 左端の幅を変える境目。サイドバーの右の境目 (.navigation-resize-handle) と同じく、普段は
+   線を出さず、hover・focus・ドラッグ中だけ枠線の上に --accent の線を引く。 */
+.drawer-resize-handle {
+  position: absolute;
+  top: 0;
+  left: -4px;
+  z-index: 1;
+  width: 8px;
+  height: 100%;
+  cursor: col-resize;
+  touch-action: none;
+}
+.drawer-resize-handle::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 3px;
+  width: 2px;
+}
+.drawer-resize-handle:hover::after,
+.drawer-resize-handle:focus-visible::after,
+.drawer-resize-handle[data-dragging='true']::after {
+  background: var(--accent);
+}
+.drawer-resize-handle:focus-visible {
+  outline: none;
+}
+
+/* ── 操作のボタン (ドロワー・ピン留め・tar の中身で共通) ───────────────── */
+/* ダウンロードは <a> だが、並ぶほかのアイコンのボタンと同じ文字色にする。 */
+.drawer-actions a.icon-button,
+.preview-actions a.icon-button,
+.pinned-card-header a.icon-button {
+  color: var(--text);
+}
+/* ピン留め済みは押せないが、薄くせず --accent の塗りのピンで「留めてある」と示す。 */
+.icon-button[data-pinned='true']:disabled {
+  opacity: 1;
+  color: var(--accent);
+}
+
+/* ── プレビューの中身 ─────────────────────────────────────────────── */
+/* 上から順に積む。段落と通知の余白は gap に任せる。 */
+.preview-stack {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+.preview-stack > p,
+.preview-stack > .notice {
+  margin: 0;
+}
+/* 左に情報 (行数など)、右に操作。 */
+.preview-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+.preview-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  margin-left: auto;
+}
+.preview-error {
+  color: var(--error);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+/* テキスト。ログや端末の出力と同じく、どちらのテーマでも暗い面に置く。整形を崩さないよう
+   折り返さず、縦横にスクロールさせる。 */
+.preview-code {
+  max-height: 70vh;
+  overflow: auto;
+  padding: 12px 14px;
+  background: var(--code-background);
+  color: var(--code-text);
+  color-scheme: dark;
+  line-height: 1.6;
+  white-space: pre;
+  overflow-wrap: normal;
+  scrollbar-width: thin;
+}
+
+.preview-image {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+.preview-video {
+  display: block;
+  width: 100%;
+  max-height: 70vh;
+  background: var(--code-background);
+}
+
+/* 音声: 再生の操作、波形とスペクトログラムを 1 つの枠に重ねた時間軸、情報の行。 */
+.preview-audio audio {
+  display: block;
+  width: 100%;
+}
+.preview-audio-timeline {
+  display: grid;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+.preview-spectrogram {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.waveform + .preview-spectrogram {
+  border-top: 1px solid var(--border);
+}
+.preview-audio-info {
+  display: grid;
+  gap: 2px;
+}
+.preview-audio-info > p {
+  margin: 0;
+}
+
+/* 波形 (canvas)。色は Waveform.tsx が CSS の変数から読んで描く。 */
+.waveform {
+  display: block;
+  width: 100%;
+}
+.waveform[tabindex='0'] {
+  cursor: pointer;
+}
+.waveform:focus-visible {
+  outline-offset: -2px;
+}
+
+/* ── tar の中身 ───────────────────────────────────────────────────── */
+.preview-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.preview-select select {
+  width: auto;
+  min-height: 29px;
+  padding: 2px 8px;
+}
+.preview-archive-table th,
+.preview-archive-table td {
+  padding: 8px 10px;
+}
+.preview-archive-table tbody tr {
+  cursor: pointer;
+}
+.preview-archive-table tbody tr:focus-visible {
+  outline-offset: -2px;
+}
+.preview-archive-table tbody tr:focus-visible td {
+  background: var(--surface-hover);
+}
+.preview-archive-name {
+  overflow-wrap: anywhere;
+}
+.preview-archive-actions {
+  width: 1%;
+  padding-block: 4px;
+  text-align: right;
+}
+
+/* ── 画面下のドック (同期プレイヤーとピン留め) ─────────────────────────
+   左のサイドバーには重ねない。900px 未満 (サイドバーはドロワー) は画面いっぱいの幅。 */
+.bottom-dock {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 40;
+  border-top: 1px solid var(--border);
+  background: var(--background);
+  box-shadow: var(--shadow-drawer);
+}
+.app-shell[data-navigation='sidebar'] .bottom-dock {
+  left: var(--navigation-width);
+}
+.app-shell[data-navigation='rail'] .bottom-dock {
+  left: var(--navigation-rail-width);
+}
+.app-shell[data-navigation='drawer'] .bottom-dock {
+  left: 0;
+}
+/* ピンを積んでも本文を覆い尽くさないよう、高さを抑えて中をスクロールする。 */
+.bottom-dock-scroll {
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: 6px var(--page-padding) 10px;
+  scrollbar-width: thin;
+}
+.dock-section + .dock-section {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+}
+.dock-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+/* 区切りを畳む・開くボタン。見出しとして読める太さにし、枠は付けない。 */
+.dock-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 4px 10px 4px 4px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font-weight: 600;
+}
+.dock-toggle:hover {
+  background: var(--surface-hover);
+}
+.dock-toggle > svg {
+  flex: none;
+  color: var(--muted);
+}
+
+/* 同期プレイヤーのトラック: 名前、波形、チャンネル・ミュート・ソロ・削除。 */
+.deck-tracks {
+  max-height: 12rem;
+  overflow-y: auto;
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+  scrollbar-width: thin;
+}
+.deck-track {
+  display: grid;
+  grid-template-columns: minmax(6rem, 14rem) minmax(0, 1fr) auto;
+  grid-template-areas: 'name wave controls';
+  align-items: center;
+  gap: 6px 12px;
+  padding: 6px 0;
+  border-top: 1px solid var(--border);
+}
+.deck-track-name {
+  grid-area: name;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.deck-track-status {
+  flex: none;
+}
+.deck-track-wave {
+  grid-area: wave;
+  min-width: 0;
+}
+.deck-track-controls {
+  grid-area: controls;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+/* L / R / ミュート / ソロの切り替え。押している間は --accent-strong の塗りで示す
+   (太さや濃さだけでは押しているか見分けにくい)。 */
+.deck-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--border);
+  background: var(--background);
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 600;
+}
+.deck-button:hover:not(:disabled) {
+  background: var(--surface-hover);
+}
+.deck-button[aria-pressed='true'],
+.deck-button[aria-pressed='true']:hover:not(:disabled) {
+  border-color: var(--accent-strong);
+  background: var(--accent-strong);
+  color: var(--on-accent);
+}
+/* 全トラックをまとめて動かす行: 再生・停止、時刻、位置のスライダー。 */
+.deck-transport {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+}
+.deck-time {
+  flex: none;
+}
+.deck-seek {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  accent-color: var(--accent-strong);
+}
+
+/* ピン留めしたプレビューのカード。tar の一覧は表とページャを持つので全幅にする。 */
+.pinned-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
+  gap: 12px;
+  padding-top: 6px;
+}
+.pinned-card-wide {
+  grid-column: 1 / -1;
+}
+.pinned-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 6px 6px 12px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.pinned-card-header {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+.pinned-card-header .copyable-path {
+  flex: 1 1 auto;
+  margin-right: 6px;
+}
+.pinned-card-body {
+  min-width: 0;
+  padding-right: 6px;
+}
+/* 1 行に詰めた JSON でも潰れないよう、高さを決めて縦横にスクロールさせる。 */
+.pinned-text {
+  height: 280px;
+  max-height: none;
+}
+
+/* ファイル名。押すとフルパスをコピーする。枠は付けず、hover の下線だけを手掛かりにする。 */
+.copyable-path {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 12px;
+  text-align: left;
+}
+.copyable-path-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.copyable-path:hover .copyable-path-text {
+  text-decoration: underline;
+}
+.copyable-path > svg {
+  flex: none;
+  color: var(--success);
+}
+
+/* ── 幅ごとの調整 ─────────────────────────────────────────────────── */
+/* 900px 未満はタッチ前提: 一覧とプレビューは縦に積み、押す物は --tap-target 以上にする。 */
+@media (width < 900px) {
+  .storage-list:has(.drawer) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .drawer {
+    position: static;
+    width: auto;
+    max-height: none;
+    margin-left: 0;
+  }
+  .drawer-header {
+    padding-block: 0;
+  }
+  .drawer-path {
+    padding-block: 12px;
+  }
+  .drawer-resize-handle,
+  .drawer-reset {
+    display: none;
+  }
+  .preview-select select,
+  .dock-toggle,
+  .copyable-path {
+    min-height: var(--tap-target);
+  }
+  .deck-button {
+    width: var(--tap-target);
+    height: var(--tap-target);
+  }
+}
+/* スマホ幅では、トラックの名前と操作を 1 行目、波形を 2 行目に置く。 */
+@media (width < 640px) {
+  .deck-track {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'name controls'
+      'wave wave';
+  }
+}

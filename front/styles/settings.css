@@ -1,0 +1,507 @@
+/* Settings (/settings) の画面: 接続・タグ・機能・アカウント・Access・About。
+   見出し・タブ・表・入力欄・ダイアログ・状態の印そのものは @mado/design-tokens の共通の部品。
+   ここには設定の画面に固有の並べ方だけを書く。 */
+
+/* ── タブの中身 ───────────────────────────────────────────────────── */
+/* 一つのタブに区切りが複数あるとき (Features) は、間を罫で分ける。 */
+.settings-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+.settings-stack > section + section {
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+}
+/* 横に伸ばしても読みにくくなるだけの一覧とフォームは、この幅で止める。 */
+.settings-column {
+  max-width: 760px;
+}
+
+/* ── インポート・エクスポート (見出しの右に置く) ─────────────────── */
+.import-export {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+/* 取り込んだ結果は、ボタンの下に一行で出す。 */
+.import-export__result {
+  flex-basis: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 2px 10px;
+  margin: 0;
+  font-size: 12px;
+  text-align: right;
+}
+.import-export__error,
+.import-export__warning {
+  color: var(--error);
+}
+.import-export__choices p {
+  margin: 0 0 10px;
+  line-height: 1.6;
+}
+.import-export__choices p:last-child {
+  margin-bottom: 0;
+}
+.import-export__warning {
+  font-size: 12px;
+}
+
+/* ── 一覧の表 (接続・タグ) ─────────────────────────────────────────── */
+.connection-name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+}
+.connection-name strong {
+  font-size: 13px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+/* 既定の接続の印。Mado Model Tracking の既定のストレージと同じ色。 */
+.status-badge.connection-default {
+  background: var(--accent-tint);
+  color: var(--link);
+}
+.connection-endpoint {
+  display: block;
+}
+.connection-region,
+.connection-restrictions {
+  display: block;
+  margin-top: 4px;
+}
+/* 行の操作のボタン。表では右端の列を中身の幅にして一行に並べ、
+   狭い画面で開いた詳細の中では左から折り返して並べる。 */
+.row-actions {
+  text-align: right;
+}
+td.row-actions {
+  width: 1%;
+  white-space: nowrap;
+}
+.row-actions__buttons {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+td.row-actions .row-actions__buttons {
+  flex-wrap: nowrap;
+}
+.responsive-table-details .row-actions {
+  text-align: left;
+}
+.responsive-table-details .row-actions__buttons {
+  justify-content: flex-start;
+}
+/* 接続の行を開いた詳細: 長い項目名 (エンドポイント・リージョン) は折り返して値の幅を残し、
+   操作のボタンは一行を使って並べる。 */
+.connections-table .responsive-table-details dl {
+  grid-template-columns: minmax(0, 8em) minmax(0, 1fr);
+}
+.connections-table .responsive-table-details dd.row-actions {
+  grid-column: 1 / -1;
+}
+
+/* ── 接続のフォーム ─────────────────────────────────────────────────── */
+.connection-form {
+  max-width: 760px;
+}
+.connection-form__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 22px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+/* 欄の横に「表示」などのボタンを並べる。 */
+.input-with-button {
+  display: flex;
+  gap: 8px;
+}
+.input-with-button > input {
+  flex: 1;
+  min-width: 0;
+}
+
+/* 説明つきの選択肢のまとまり。Mado Model Tracking の Artifact 保存先と同じく、
+   枠の中に一行ずつ罫で区切って並べ、選んだラジオの行は面の色で示す。 */
+.choice-group {
+  margin-bottom: 16px;
+}
+.choice-group > legend {
+  padding: 0;
+  margin-bottom: 7px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.choice-group > p {
+  margin: 0 0 8px;
+}
+.choice-group > .choice-group__note {
+  margin: 8px 0 0;
+}
+.choice-list {
+  border: 1px solid var(--border);
+}
+.choice-list > * + * {
+  border-top: 1px solid var(--border);
+}
+.choice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  cursor: pointer;
+}
+.choice > input[type='checkbox'],
+.choice > input[type='radio'] {
+  flex: none;
+  margin: 3px 0 0;
+}
+.choice > span {
+  min-width: 0;
+}
+.choice strong {
+  display: block;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.choice small {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+.choice:has(input[type='radio']:checked) {
+  background: var(--surface);
+}
+/* 前提の設定が切れていて選べない行は薄くする。 */
+.choice:has(:disabled) {
+  cursor: default;
+}
+.choice:has(:disabled) > * {
+  opacity: 0.55;
+}
+/* 値を選ぶ・入れる行: 文言を左、欄を右に置く。 */
+.choice--value {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 16px;
+}
+.choice--value > input {
+  width: 11em;
+}
+.choice--value > select {
+  max-width: 100%;
+}
+/* チェックボックスの行と混ざる一覧では、文言の左端をチェックボックスの行の文言に揃える。 */
+.choice-list:has(> .choice > input[type='checkbox'], > .choice > input[type='radio']) > .choice--value {
+  padding-left: 36px;
+}
+/* ホワイトリストで許可するユーザーの一覧。 */
+.choice-users {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+.choice-users > p {
+  margin: 0;
+}
+
+/* ── タグ・削除の確認のダイアログ ─────────────────────────────────── */
+.tag-form input[type='color'] {
+  width: 72px;
+  height: 36px;
+  padding: 3px;
+  cursor: pointer;
+}
+.delete-confirm__message {
+  margin: 0;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+/* ── アカウント ─────────────────────────────────────────────────────── */
+.account-form {
+  max-width: 480px;
+}
+/* 変えられない値 (メールアドレス) を欄の代わりに文字で出す。 */
+.readonly-field > strong {
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.form-submit-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+.form-submit-row__status {
+  color: var(--success);
+  font-size: 12px;
+}
+.account-password {
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+.account-password > summary {
+  width: fit-content;
+  font-weight: 600;
+}
+.account-password[open] > summary {
+  margin-bottom: 16px;
+}
+.account-signout {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+}
+
+/* ── Access (ユーザー・Service Account・監査ログ) ─────────────────── */
+.admin-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.admin-toolbar input[type='search'] {
+  flex: 1;
+  min-width: 200px;
+  max-width: 420px;
+}
+.admin-toolbar--end {
+  justify-content: flex-end;
+}
+.user-name {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.user-name strong {
+  overflow-wrap: anywhere;
+}
+/* 行を開いた中の、ユーザーの編集欄。 */
+.admin-user-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 20px;
+  max-width: 760px;
+  padding: 6px 0 2px;
+}
+.admin-user-form__wide {
+  grid-column: 1 / -1;
+}
+/* 表の中の small に付く共通の上の余白を外し、欄の説明を表の外のフォームと同じ間隔にする。 */
+.admin-user-form small {
+  margin-top: 0;
+}
+.admin-user-meta {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 4px 14px;
+  margin: 0 0 16px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.admin-user-meta > div {
+  display: contents;
+}
+.admin-user-meta dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.admin-user-form__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+/* 一覧の下の、追加・発行のフォーム。 */
+.admin-section {
+  margin-top: 28px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+}
+.admin-section:first-child {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+.admin-create-form {
+  max-width: 760px;
+}
+.admin-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 20px;
+}
+.admin-form-grid__wide {
+  grid-column: 1 / -1;
+}
+/* Service Account の追加と API key の発行を横に並べる。 */
+.admin-forms {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 28px 40px;
+  margin-top: 28px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+}
+.admin-forms:first-child {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+.admin-forms > .admin-section {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+/* 一度だけ表示する一時パスワード・API key。 */
+.secret-notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 12px 0;
+  padding: 12px;
+  background: var(--surface);
+  border-left: 3px solid var(--accent);
+  font-size: 12px;
+}
+.secret-notice > strong {
+  flex-basis: 100%;
+  font-weight: 600;
+}
+.secret-notice > code {
+  flex: 1 1 240px;
+  min-width: 0;
+  padding: 6px 10px;
+  background: var(--background);
+  border: 1px solid var(--border);
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+.secret-notice__actions {
+  display: flex;
+  gap: 8px;
+}
+/* SSO のグループと Mado の権限の対応。 */
+.sso-guidance {
+  max-width: 760px;
+  margin: 28px 0 0;
+  padding: 12px 16px;
+  background: var(--surface);
+  border-left: 3px solid var(--border-strong);
+  color: var(--muted);
+  font-size: 12px;
+}
+.sso-guidance p {
+  margin: 0;
+  line-height: 1.6;
+}
+.sso-guidance ul {
+  display: grid;
+  gap: 6px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.sso-guidance li {
+  display: grid;
+  grid-template-columns: minmax(120px, 180px) 16px minmax(0, 1fr);
+  align-items: baseline;
+  gap: 8px;
+}
+.sso-guidance li.sso-guidance__empty {
+  display: block;
+}
+.sso-guidance code {
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.sso-guidance strong {
+  color: var(--text);
+  font-weight: 500;
+}
+/* 監査ログ: 名前は一行に収め、対象と詳細の側で折り返す。 */
+.audit-label {
+  white-space: nowrap;
+}
+.audit-change {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
+.audit-change del,
+.audit-change ins {
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+.audit-change del,
+.audit-change > span {
+  color: var(--muted);
+}
+.audit-detail__empty {
+  margin: 0;
+}
+.admin-more {
+  margin-top: 12px;
+}
+
+/* ── 幅 ─────────────────────────────────────────────────────────────── */
+@media (width < 900px) {
+  .admin-forms {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  /* 指で押す物は --tap-target の高さにする。 */
+  .account-password > summary {
+    padding-block: 11px;
+  }
+  .account-password[open] > summary {
+    margin-bottom: 8px;
+  }
+}
+@media (width < 640px) {
+  .admin-toolbar input[type='search'] {
+    flex-basis: 100%;
+    max-width: none;
+  }
+  /* Settings の五つのタブが 390px 幅に収まるよう、左右の余白を詰める。
+     もっと狭いときはタブの列が横に送られ、選んでいるタブを見せる (SettingsPage)。 */
+  .settings-page > .tabs .tab {
+    padding-inline: 8px;
+  }
+  .choice--value {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 8px;
+  }
+  .choice--value > :is(input, select) {
+    justify-self: start;
+  }
+  .connection-form__actions .button {
+    flex: 1 1 auto;
+  }
+  .admin-user-form,
+  .admin-form-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .sso-guidance li {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px 8px;
+  }
+}

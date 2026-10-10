@@ -35,7 +35,7 @@ describe('PreviewText - copy', () => {
     vi.mocked(api.readHead).mockReturnValue(new Promise<Uint8Array>(() => {}))
     render(<PreviewText connectionId="c" bucket="b" k="x.txt" />)
     expect(screen.queryByRole('button', { name: '内容をコピー' })).toBeNull()
-    expect(screen.getByText('loading…')).toBeInTheDocument()
+    expect(screen.getByText('読み込み中…')).toBeInTheDocument()
   })
 })
 

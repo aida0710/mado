@@ -1,4 +1,5 @@
 import { useEffect, useReducer, useState, type KeyboardEvent } from 'react'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { api } from '../lib/api/client'
 import type { z } from 'zod'
 import { classify } from '../lib/api/mime'
@@ -20,13 +21,6 @@ type OpenedEntry = { name: string; size?: number; type?: string }
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const
 const DEFAULT_PAGE_SIZE = 10
-
-const tableHeadClass =
-  'px-2 py-2 text-left text-[12px] font-semibold text-ink-7'
-const rowClass = 'cursor-pointer transition-colors hover:bg-ink-0 focus-visible:bg-ink-1'
-const pagerBtnClass =
-  'cursor-pointer bg-paper px-3 py-1 text-[12px] transition-colors ' +
-  'hover:bg-ink-1 disabled:cursor-default disabled:opacity-40'
 
 interface Progress {
   entries: number
@@ -190,19 +184,11 @@ export function PreviewArchive({ connectionId, bucket, k, initialEntry = null, o
     return () => clearInterval(t)
   }, [data, error, progress.startedAt])
 
-  const ruleStyle = { border: '1px solid var(--color-rule-strong)', borderRadius: 'var(--radius-1)' } as const
-
   const sizeSelect = (
-    <div className="flex items-center gap-2">
-      <label className="flex items-center gap-2">
-        <span
-          className="text-[12px] font-semibold text-ink-7"
-        >
-          表示件数
-        </span>
+    <div className="preview-toolbar">
+      <label className="preview-select">
+        表示件数
         <select
-          className="cursor-pointer bg-paper px-2 py-1 text-[12px] disabled:cursor-default disabled:opacity-50"
-          style={ruleStyle}
           value={pageSize}
           onChange={e => dispatch({ type: 'setPageSize', size: Number(e.target.value) })}
           disabled={loading}
@@ -221,32 +207,23 @@ export function PreviewArchive({ connectionId, bucket, k, initialEntry = null, o
     </div>
   )
 
-  if (error) return <p className="error">{error}</p>
+  if (error) return <p className="notice error">{error}</p>
   if (!data) {
     const modeLabel =
       progress.mode === 'range'  ? 'range request'
       : progress.mode === 'stream' ? 'streaming decode'
       : 'connecting'
     return (
-      <div>
-        <div className="mb-3 flex items-center justify-between">{sizeSelect}</div>
-        <p
-          className="text-[13px] text-ink-7"
-          style={{ fontFamily: 'var(--font-mono)' }}
-        >
-          <span>{modeLabel}…</span>{' '}
-          <span className="tabular-nums">{progress.entries}</span>
+      <div className="preview-stack">
+        {sizeSelect}
+        <p className="muted mono">
+          {modeLabel}…{' '}
+          {progress.entries}
           {' 件 · '}
-          <span className="tabular-nums">{fmtSize(progress.bytes)}</span>
-          {progress.requests > 0 && (
-            <>
-              {' · '}
-              <span className="tabular-nums">{progress.requests}</span>
-              {' req'}
-            </>
-          )}
+          {fmtSize(progress.bytes)}
+          {progress.requests > 0 && <>{' · '}{progress.requests}{' req'}</>}
           {' · '}
-          <span className="tabular-nums">{progress.elapsed.toFixed(1)}</span>
+          {progress.elapsed.toFixed(1)}
           {'s'}
         </p>
       </div>
@@ -272,124 +249,114 @@ export function PreviewArchive({ connectionId, bucket, k, initialEntry = null, o
     : clicked
 
   return (
-    <div>
-      <div className="mb-3 flex items-center justify-between">{sizeSelect}</div>
+    <div className="preview-stack">
+      {sizeSelect}
       {data.truncated && (
-        <p className="text-[12px] text-ink-7">
-          バイト上限に到達しました。これ以降は読み込めません。
-        </p>
+        <p className="notice">バイト上限に到達しました。これ以降は読み込めません。</p>
       )}
-      <div className="overflow-x-auto">
-        <table className="w-full border-collapse text-[13px]">
-          <thead>
-            <tr style={{ borderBottom: '1px solid var(--color-rule-strong)' }}>
-              <th className={tableHeadClass}>Name</th>
-              <th className={`${tableHeadClass} w-px whitespace-nowrap text-right`}>Size</th>
-              <th className={`${tableHeadClass} w-px`}></th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.entries.map(e => {
-              const items: MenuItem[] = [
-                ...(classify(e.name) === 'audio' ? [{
-                  kind: 'action' as const,
-                  label: 'デッキに追加',
-                  onSelect: () => deck.addTrack({
-                    label: e.name,
-                    connectionId, bucket, key: k, entryPath: e.name,
-                  }),
-                }] : []),
-                // 種別で出し分けない (EntryTable と同じ理由)。
-                {
-                  kind: 'action' as const,
-                  label: 'ピン留め',
-                  onSelect: () => addPin({ connectionId, bucket, key: k, entryPath: e.name }),
-                },
-                {
-                  kind: 'download',
-                  label: 'このエントリをダウンロード',
-                  href: api.tarEntryUrl({ connectionId, bucket, key: k, entry: e.name }),
-                  filename: e.name.split('/').pop() ?? e.name,
-                },
-                // 人に送る用 (このエントリを開いた状態で復元される) と、
-                // curl / VLC / <audio src> にそのまま食わせる生データ用。
-                // どちらもクリップボードに載せるので絶対 URL にする。
-                {
-                  kind: 'copy',
-                  label: 'Web URL をコピー',
-                  value: absoluteUrl(tarEntryWebUrl({ connectionId, bucket, tarKey: k, entryPath: e.name })),
-                },
-                {
-                  kind: 'copy',
-                  label: '生データ URL をコピー',
-                  value: absoluteUrl(api.tarEntryUrl({ connectionId, bucket, key: k, entry: e.name })),
-                },
-              ]
-              return (
-                <tr
-                  key={e.name}
-                  className={rowClass}
-                  role="button"
-                  tabIndex={0}
-                  style={{ borderBottom: '1px solid var(--rule)' }}
-                  onClick={() => openEntry(e)}
-                  onKeyDown={(ev: KeyboardEvent<HTMLTableRowElement>) => {
-                    if (ev.key === 'Enter' || ev.key === ' ') {
-                      ev.preventDefault()
-                      openEntry(e)
-                    }
-                  }}
-                >
-                  <td
-                    className="p-2"
-                    style={{ fontFamily: 'var(--font-mono)', fontSize: '12.5px' }}
+      <div>
+        <div className="table-scroll">
+          <table className="preview-archive-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th className="numeric">Size</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.entries.map(e => {
+                const items: MenuItem[] = [
+                  ...(classify(e.name) === 'audio' ? [{
+                    kind: 'action' as const,
+                    label: 'デッキに追加',
+                    onSelect: () => deck.addTrack({
+                      label: e.name,
+                      connectionId, bucket, key: k, entryPath: e.name,
+                    }),
+                  }] : []),
+                  // 種別で出し分けない (EntryTable と同じ理由)。
+                  {
+                    kind: 'action' as const,
+                    label: 'ピン留め',
+                    onSelect: () => addPin({ connectionId, bucket, key: k, entryPath: e.name }),
+                  },
+                  {
+                    kind: 'download',
+                    label: 'このエントリをダウンロード',
+                    href: api.tarEntryUrl({ connectionId, bucket, key: k, entry: e.name }),
+                    filename: e.name.split('/').pop() ?? e.name,
+                  },
+                  // 人に送る用 (このエントリを開いた状態で復元される) と、
+                  // curl / VLC / <audio src> にそのまま食わせる生データ用。
+                  // どちらもクリップボードに載せるので絶対 URL にする。
+                  {
+                    kind: 'copy',
+                    label: 'Web URL をコピー',
+                    value: absoluteUrl(tarEntryWebUrl({ connectionId, bucket, tarKey: k, entryPath: e.name })),
+                  },
+                  {
+                    kind: 'copy',
+                    label: '生データ URL をコピー',
+                    value: absoluteUrl(api.tarEntryUrl({ connectionId, bucket, key: k, entry: e.name })),
+                  },
+                ]
+                return (
+                  <tr
+                    key={e.name}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => openEntry(e)}
+                    onKeyDown={(ev: KeyboardEvent<HTMLTableRowElement>) => {
+                      if (ev.key === 'Enter' || ev.key === ' ') {
+                        ev.preventDefault()
+                        openEntry(e)
+                      }
+                    }}
                   >
-                    <span className="flex items-baseline gap-2">
-                      <span className="min-w-0 flex-1 truncate">{e.name}</span>
-                    </span>
-                  </td>
-                  <td
-                    className="w-px whitespace-nowrap p-2 text-right text-ink-7 tabular-nums"
-                    style={{ fontFamily: 'var(--font-mono)', fontSize: '12px' }}
-                  >
-                    {fmtSize(e.size)}
-                  </td>
-                  <td className="w-px p-2 text-right">
-                    <CopyMenu items={items} />
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-      </div>
-      <div
-        className="flex items-center justify-center gap-3 py-3 text-[12px] tabular-nums text-ink-7"
-        style={{ fontFamily: 'var(--font-mono)' }}
-      >
-        <button
-          className={pagerBtnClass}
-          style={ruleStyle}
-          onClick={() => dispatch({ type: 'pagePrev' })}
-          disabled={offset === 0 || loading}
-        >
-          ← Prev
-        </button>
-        <span>
-          {data.entries.length > 0
-            ? `${start}-${end}`
-            : 'no entries'}
-          {' / page '}{page}
-          {data.hasMore || data.truncated ? '+' : ''}
-        </span>
-        <button
-          className={pagerBtnClass}
-          style={ruleStyle}
-          onClick={() => dispatch({ type: 'pageNext' })}
-          disabled={data.truncated || loading || data.entries.length === 0}
-        >
-          Next →
-        </button>
+                    <td className="preview-archive-name mono">{e.name}</td>
+                    <td className="numeric nowrap muted">{fmtSize(e.size)}</td>
+                    <td className="preview-archive-actions">
+                      <CopyMenu items={items} />
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+        <div className="table-footer">
+          <span className="mono">
+            {data.entries.length > 0
+              ? `${start}-${end}`
+              : 'no entries'}
+            {' / page '}{page}
+            {data.hasMore || data.truncated ? '+' : ''}
+          </span>
+          {/* 一覧のページャ (storage/Pager.tsx) と同じく、前後はアイコンのボタン。 */}
+          <span>
+            <button
+              type="button"
+              className="icon-button"
+              onClick={() => dispatch({ type: 'pagePrev' })}
+              disabled={offset === 0 || loading}
+              aria-label="前のページへ"
+              title="前のページへ"
+            >
+              <ChevronLeft size={16} aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              className="icon-button"
+              onClick={() => dispatch({ type: 'pageNext' })}
+              disabled={data.truncated || loading || data.entries.length === 0}
+              aria-label="次のページへ"
+              title="次のページへ"
+            >
+              <ChevronRight size={16} aria-hidden="true" />
+            </button>
+          </span>
+        </div>
       </div>
       {openedEntry && (
         <TarEntryModal

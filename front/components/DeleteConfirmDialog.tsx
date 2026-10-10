@@ -1,9 +1,8 @@
 import { useState, type ReactNode } from 'react'
+import { Dialog } from './Dialog'
 
 interface Props {
   titleId: string
-  /** 見出し上の小さなラベル ("Settings · 削除" など)。どこの操作かを示す。 */
-  kicker: string
   title: string
   /** 何を削除するかの説明。名前を強調したいときは呼び出し側で JSX にする。 */
   children: ReactNode
@@ -12,8 +11,8 @@ interface Props {
 }
 
 /** 「〜を削除します。よろしいですか?」の確認ダイアログ。
- *  削除中はボタンを止め、失敗したら理由をダイアログ内に出して閉じない。 */
-export function DeleteConfirmDialog({ titleId, kicker, title, children, onConfirm, onCancel }: Props) {
+ *  削除中はボタンと閉じる操作を止め、失敗したら理由をダイアログ内に出して閉じない。 */
+export function DeleteConfirmDialog({ titleId, title, children, onConfirm, onCancel }: Props) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -30,23 +29,25 @@ export function DeleteConfirmDialog({ titleId, kicker, title, children, onConfir
   }
 
   return (
-    <div className="modal-backdrop">
-      <div className="modal modal--narrow" role="dialog" aria-modal="true" aria-labelledby={titleId}>
-        <p className="kicker">{kicker}</p>
-        <h3 id={titleId}>{title}</h3>
-        <p className="text-[14px] leading-relaxed text-ink-9">{children}</p>
-        {error && <p className="error" aria-live="polite">{error}</p>}
-        <div className="modal-actions">
-          <button onClick={onCancel} disabled={busy}>キャンセル</button>
-          <button
-            onClick={submit}
-            disabled={busy}
-            style={{ background: 'var(--danger)', borderColor: 'var(--danger)', color: 'var(--paper)' }}
-          >
+    <Dialog
+      titleId={titleId}
+      title={title}
+      onClose={onCancel}
+      dismissible={!busy}
+      narrowLayout="sheet"
+      footer={
+        <>
+          <button type="button" className="button" onClick={onCancel} disabled={busy}>キャンセル</button>
+          <button type="button" className="button danger" onClick={() => void submit()} disabled={busy}>
             {busy ? '削除中…' : '削除'}
           </button>
-        </div>
+        </>
+      }
+    >
+      <div className="dialog-body">
+        <p className="delete-confirm__message">{children}</p>
+        {error && <p className="notice error" aria-live="polite">{error}</p>}
       </div>
-    </div>
+    </Dialog>
   )
 }
