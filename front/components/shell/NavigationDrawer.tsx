@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState, type MouseEvent } from 'react'
 import { Menu, X } from 'lucide-react'
 import { NavigationLinkList } from './NavigationLinkList'
+import { ProductName } from './ProductName'
 
 /**
  * md (900px) 未満の画面の切り替え。上部バーのメニューボタンで左からドロワーを開く。
@@ -48,7 +49,7 @@ export function NavigationDrawer() {
       >
         <div className="navigation-drawer-panel">
           <div className="navigation-drawer-header">
-            <span>Mado</span>
+            <span><ProductName /></span>
             <button
               type="button"
               className="icon-button"

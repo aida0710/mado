@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react'
+import { ProductName } from '../components/shell/ProductName'
 import { fetchApi } from '../lib/api/http'
 
 /** ログイン画面とパスワード変更画面の見出しの id。重ねて出すときの dialog の名前にも使う。 */
@@ -55,8 +56,7 @@ export function LoginPage({
   return (
     <main className="login-page">
       <section className="login-card" aria-labelledby={AUTH_TITLE_ID}>
-        <div className="login-mark">Mado</div>
-        <p className="login-eyebrow">Data catalog</p>
+        <div className="login-mark"><ProductName /></div>
         <h1 id={AUTH_TITLE_ID}>ログイン</h1>
         {(sessionExpired || idpLogoutIncomplete || overlay) && (
           <div className="login-lead">
@@ -134,7 +134,7 @@ export function ChangePasswordPage({ onChanged }: { onChanged(): Promise<void> }
   return (
     <main className="login-page">
       <section className="login-card" aria-labelledby={AUTH_TITLE_ID}>
-        <div className="login-mark">Mado</div>
+        <div className="login-mark"><ProductName /></div>
         <p className="login-eyebrow">First sign-in</p>
         <h1 id={AUTH_TITLE_ID}>パスワードを変更</h1>
         <div className="login-lead"><p>初回ログイン用パスワードはこの画面で更新してください。</p></div>

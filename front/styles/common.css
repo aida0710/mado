@@ -6,6 +6,16 @@
   margin: 0;
 }
 
+/* 製品名 (ProductName)。前の mado は通常の太さ、製品の部分は上部バーの .brand strong と同じ 600。
+   ログイン画面の .login-mark は全体が 600 なので、前の部分だけ通常の太さに戻す。 */
+.product-prefix {
+  font-weight: 400;
+}
+.navigation-drawer-header strong,
+.login-mark strong {
+  font-weight: 600;
+}
+
 /* 同期プレイヤーとピン留め (BottomDock) が画面の下に出ている間は、本文の下端が隠れないよう
    ドックの高さ (BottomDock が <html> に書く --bottom-dock-height) だけ余白を広げる。 */
 .page[data-docked='true'] {

@@ -6,6 +6,7 @@ import { initials } from '../../lib/initials'
 import type { Navigation } from '../../lib/useNavigation'
 import { useTheme } from '../../lib/useTheme'
 import { NavigationDrawer } from './NavigationDrawer'
+import { PRODUCT_FULL_NAME, ProductName } from './ProductName'
 
 /**
  * 上部バー: アプリ名、テーマの切り替え、ログイン中の利用者とサインアウト。画面の切り替えは
@@ -33,7 +34,7 @@ export function TopBar({ navigation }: { navigation: Navigation }) {
       <a className="skip-link" href="#content">本文へ移動</a>
       <header className="topbar">
         {navigation.mode === 'drawer' && <NavigationDrawer />}
-        <Link to="/" className="brand" aria-label="Mado ホームへ">Mado</Link>
+        <Link to="/" className="brand" aria-label={`${PRODUCT_FULL_NAME} ホームへ`}><ProductName /></Link>
         <div className="topbar-actions">
           <button
             type="button"
