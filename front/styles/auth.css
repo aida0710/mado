@@ -1,4 +1,4 @@
-/* ログインの前後。ログイン画面とパスワード変更画面そのものは @mado/design-tokens/shell.css の
+/* ログインの前後。ログイン画面とパスワード変更画面そのものは @mado/design-system/shell.css の
    .login-page / .login-card を使う。 */
 
 /* session が切れたとき、開いていた画面を残したまま上に重ねるログイン画面 (AuthOverlay)。

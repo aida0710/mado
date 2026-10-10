@@ -4,14 +4,14 @@ import { createBrowserRouter, RouterProvider } from 'react-router-dom'
 
 // ── 書体と色の変数 (Mado Model Tracking と共通) ─────────────────────
 // LAN/VPN 内ツールなので CDN には依存させず、Vite のバンドルに同梱する。
-// ・英字: IBM Plex Sans / IBM Plex Mono (@mado/design-tokens に同梱)。
+// ・英字: IBM Plex Sans / IBM Plex Mono (@mado/design-system に同梱)。
 // ・日本語: Noto Sans JP。
-// 色・角丸・書体の変数も @mado/design-tokens から読み、App.css の @theme がそれを参照する。
+// 色・角丸・書体の変数も @mado/design-system から読み、App.css の @theme がそれを参照する。
 import '@fontsource/noto-sans-jp/japanese-400.css'
 import '@fontsource/noto-sans-jp/japanese-500.css'
 import '@fontsource/noto-sans-jp/japanese-700.css'
-import '@mado/design-tokens/fonts.css'
-import '@mado/design-tokens/tokens.css'
+import '@mado/design-system/fonts.css'
+import '@mado/design-system/tokens.css'
 
 import App from './App.tsx'
 import { AuthGate } from './lib/auth.tsx'

@@ -418,7 +418,7 @@ cd front && npm test && npm run lint
 
 ### 画面の見た目 (Mado Model Tracking と共通)
 
-画面の部品と枠は Mado Model Tracking と同じものを使います。CSS は `@mado/design-tokens` (Mado Model Tracking の `packages/design-tokens`) にあり、`front/` は次の順に読み込みます。
+画面の部品と枠は Mado Model Tracking と同じものを使います。CSS はデザインシステム `@mado/design-system` ([aida0710/mado-design-systems](https://github.com/aida0710/mado-design-systems)) にあり、`front/` は次の順に読み込みます。
 
 | 読み込む物 | 中身 |
 |---|---|
@@ -432,15 +432,13 @@ cd front && npm test && npm run lint
 - 色は `tokens.css` の変数で書き、値を直接書きません。ダークテーマは上部バーのボタンで切り替え (`localStorage` の `mado.theme`。切り替えるまでは OS の設定に合わせます)、`<html data-theme="dark">` で効きます。
 - 画面幅の切り替え点は 640px・900px・1200px の 3 つです (Tailwind の `sm`・`md`・`lg` も同じ値)。左のサイドバーは 1200px 以上で名前つき (下のボタンでアイコンだけに畳め、右の境目のドラッグで幅を変えられます)、900px 以上でアイコンだけ、それ未満は上部バーのメニューボタンから開くドロワーです。
 - アイコンは [Lucide](https://lucide.dev/) (`lucide-react`) を使います。
-- テキストのプレビューの形式の推測と色付けは、パッケージの `@mado/design-tokens/code` ([highlight.js](https://highlightjs.org/) と、CSV・TSV・ログの色付け) を Mado Model Tracking と共有します。画面の部品は `components/CodeView.tsx`、形式の記憶は `lib/useCodeLanguage.ts` です。本文はどちらのテーマでも暗い面に置き、色はどれも面に対して 4.5:1 以上です。
+- テキストのプレビューの形式の推測と色付けは、デザインシステムの `@mado/design-system/code` ([highlight.js](https://highlightjs.org/) と、CSV・TSV・ログの色付け) を Mado Model Tracking と共有します。画面の部品は `components/CodeView.tsx`、形式の記憶は `lib/useCodeLanguage.ts` です。本文はどちらのテーマでも暗い面に置き、色はどれも面に対して 4.5:1 以上です。
 
-パッケージは `front/vendor/` の tarball から入れています。値を変えるときはパッケージ側で版を上げ、次の手順で取り込みます。
+デザインシステムは、GitHub Release に添付された tarball に依存しています (`front/package.json`)。見た目を変えるときはデザインシステムのリポジトリで版を上げ (main に入ると Release が作られます)、次の手順で取り込みます。
 
 ```bash
-# Mado Model Tracking の作業ツリーで
-npm pack --workspace @mado/design-tokens --pack-destination <mado>/front/vendor
-# mado の front で (古い tarball は消す)
-npm install ./vendor/mado-design-tokens-<version>.tgz
+# mado の front で
+npm install https://github.com/aida0710/mado-design-systems/releases/download/v<version>/mado-design-system-<version>.tgz
 ```
 
 ---
@@ -448,7 +446,7 @@ npm install ./vendor/mado-design-tokens-<version>.tgz
 ## クレジット
 
 - ロゴ (`front/public/mado-icon.png`): "Window" icon by [Inmotus Design](https://icons8.com/icon/set/window/external-others-inmotus-design) on [Icons8](https://icons8.com/)。Icons8 の無料利用規約により attribution を明記。
-- 書体: [IBM Plex](https://github.com/IBM/plex) (`@mado/design-tokens` に同梱) と [Noto Sans JP](https://fonts.google.com/noto/specimen/Noto+Sans+JP)。どちらも SIL Open Font License 1.1。
+- 書体: [IBM Plex](https://github.com/IBM/plex) (`@mado/design-system` に同梱) と [Noto Sans JP](https://fonts.google.com/noto/specimen/Noto+Sans+JP)。どちらも SIL Open Font License 1.1。
 - アイコン: [Lucide](https://lucide.dev/) (`lucide-react`)。ISC License。
 - テキストの色付け: [highlight.js](https://highlightjs.org/)。BSD 3-Clause License。
 

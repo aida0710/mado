@@ -45,7 +45,7 @@ function MainContent({ children }: { children: ReactNode }) {
 }
 
 /**
- * 画面の枠。Mado Model Tracking と同じ形 (@mado/design-tokens の shell.css):
+ * 画面の枠。Mado Model Tracking と同じ形 (@mado/design-system の shell.css):
  * 上部バー、左のサイドバー (1200px 以上は名前つき、900px 以上はアイコンだけ、
  * それ未満は上部バーのメニューボタンから開くドロワー)、その右に画面。
  */

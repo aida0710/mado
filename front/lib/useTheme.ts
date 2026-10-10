@@ -19,7 +19,7 @@ export function initialTheme(): Theme {
     : 'light'
 }
 
-/** ライトとダークの切り替え。<html data-theme> に書くと @mado/design-tokens の配色が替わる。 */
+/** ライトとダークの切り替え。<html data-theme> に書くと @mado/design-system の配色が替わる。 */
 export function useTheme(): { theme: Theme; toggle: () => void } {
   const [theme, setTheme] = useState<Theme>(initialTheme)
   useEffect(() => {

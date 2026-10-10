@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { CODE_LANGUAGES, detectLanguage, isCodeLanguage, type CodeLanguage } from '@mado/design-tokens/code'
+import { CODE_LANGUAGES, detectLanguage, isCodeLanguage, type CodeLanguage } from '@mado/design-system/code'
 
 /** 'auto' は推測した形式に従う。それ以外は利用者が選んだ形式。 */
 export type CodeLanguageChoice = CodeLanguage | 'auto'
@@ -66,7 +66,7 @@ export interface CodeLanguageState {
 }
 
 /**
- * 表示するテキストの形式。ファイル名、なければ中身から推測し (@mado/design-tokens/code)、
+ * 表示するテキストの形式。ファイル名、なければ中身から推測し (@mado/design-system/code)、
  * 利用者がこの拡張子で選んだ形式があればそちらを使う。
  */
 export function useCodeLanguage(fileName: string, text: string): CodeLanguageState {

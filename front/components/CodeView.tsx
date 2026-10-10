@@ -1,9 +1,9 @@
 import { useId, useMemo } from 'react'
-import { CODE_LANGUAGES, highlightCode, type CodeLanguage } from '@mado/design-tokens/code'
+import { CODE_LANGUAGES, highlightCode, type CodeLanguage } from '@mado/design-system/code'
 import { codeLanguageName, type CodeLanguageState } from '../lib/useCodeLanguage'
 
 /**
- * 形式に合わせて色を付けたテキスト (@mado/design-tokens の code.css)。どちらのテーマでも
+ * 形式に合わせて色を付けたテキスト (@mado/design-system の code.css)。どちらのテーマでも
  * 暗い面に置く。className でプレビューごとの高さを足す。
  */
 export function CodeView({ text, language, className }: { text: string; language: CodeLanguage; className?: string }) {

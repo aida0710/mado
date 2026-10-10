@@ -4,7 +4,7 @@ import { createRequire } from 'node:module'
 import { describe, expect, it } from 'vitest'
 import { BREAKPOINT_PX } from '../lib/breakpoints'
 
-// 色・余白の値は @mado/design-tokens の変数を使い、画面幅の切り替え点も Mado Model Tracking と
+// 色・余白の値は @mado/design-system の変数を使い、画面幅の切り替え点も Mado Model Tracking と
 // 揃える、という決まりを styles/ と App.css に対して確かめる。
 const withoutComments = (css: string) => css.replace(/\/\*[\s\S]*?\*\//g, '')
 const stylesDirectory = new URL('./', import.meta.url)
@@ -16,7 +16,7 @@ const appStylesheets = [
 ]
 const resolvePackageFile = createRequire(import.meta.url).resolve
 const packageCss = ['tokens.css', 'base.css', 'components.css', 'shell.css', 'code.css']
-  .map(name => withoutComments(readFileSync(resolvePackageFile(`@mado/design-tokens/${name}`), 'utf8')))
+  .map(name => withoutComments(readFileSync(resolvePackageFile(`@mado/design-system/${name}`), 'utf8')))
   .join('\n')
 
 // 画面の部品が style 属性で書く変数: ドックの高さ (BottomDock)、プレビューのドロワーの幅 (useDrawerResize)。
