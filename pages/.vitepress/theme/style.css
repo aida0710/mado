@@ -83,10 +83,14 @@ body {
 .VPNavBar .divider-line {
   background: var(--header-border) !important;
 }
-.VPNavBar .title,
-.VPNavBar.has-sidebar .title {
+.VPNavBar .title {
   color: var(--header-text);
   border-bottom: 0 !important;
+}
+/* サイドバーの真上の、名前の欄 (サイドバーと同じ幅)。下端に上部バーとの境目の線を引く。
+   サイドバー自身の上端は上部バーの裏に隠れるので、線はこちらに置く。 */
+.VPNavBar.has-sidebar .title {
+  border-bottom: 1px solid var(--header-border) !important;
 }
 .VPNavBarMenuLink {
   color: var(--header-text-muted) !important;
@@ -129,10 +133,7 @@ body {
   color: var(--header-text) !important;
 }
 
-/* ── サイドバー: アプリと同じく、暗い地に上部バーとの境目の線 ────────── */
-.VPSidebar {
-  border-top: 1px solid var(--header-border);
-}
+/* ── サイドバー: アプリと同じ暗い地。上部バーとの境目の線は上の .title に引く ── */
 .VPSidebar .group + .group {
   border-top: 1px solid var(--header-border) !important;
 }
@@ -142,11 +143,12 @@ body {
   font-size: 11px;
   font-weight: 400;
 }
-.VPSidebarItem.level-1 .text {
+/* VitePress の既定 (--vp-c-text-2) は明るい地向けの灰色なので、暗い地で読める色に替える。 */
+.VPSidebar .VPSidebarItem.level-1 .text {
   color: var(--header-text-muted);
   font-size: 13px;
 }
-.VPSidebarItem.level-1 .link:hover .text {
+.VPSidebar .VPSidebarItem.level-1 .link:hover .text {
   color: var(--header-text-strong);
 }
 .VPSidebarItem.level-1 > .item {
