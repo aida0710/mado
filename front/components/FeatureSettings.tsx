@@ -1,8 +1,6 @@
 import { useEffect, useReducer } from 'react'
 import { api } from '../lib/api/client'
-
-const sectionTitleClass =
-  'm-0 text-[10.5px] font-semibold uppercase tracking-[0.22em] text-ink-7'
+import { SettingsSectionHeader } from './SettingsSectionHeader'
 
 // 機能の全体トグル。app_settings の 1 行 = 1 機能で、値は 'true' / 'false' の文字列。
 // 「行が無い / 'false' 以外」は有効 — 設定行を消しても既存機能が消えないように。
@@ -85,30 +83,29 @@ export function FeatureSettings() {
   }
 
   return (
-    <section className="mt-7">
-      <div
-        className="mb-3 flex items-baseline justify-between gap-3 pb-2"
-        style={{ borderBottom: '1px solid var(--rule)' }}
-      >
-        <h3 className={sectionTitleClass}>機能</h3>
-      </div>
+    <section className="settings-column">
+      <SettingsSectionHeader title="機能" />
 
-      {state.error && <p className="error">{state.error}</p>}
+      {state.error && <p className="notice error">{state.error}</p>}
 
-      {FEATURES.map(({ key, label, help }) => (
-        <div key={key} className="mb-2">
-          <label className="flex items-center gap-2 px-1 py-2 text-[13px] text-ink-11">
+      <div className="choice-list">
+        {FEATURES.map(({ key, label, help }) => (
+          <label key={key} className="choice">
             <input
               type="checkbox"
+              aria-label={label}
+              aria-describedby={`feature-${key}-help`}
               checked={state.enabled[key]}
               disabled={state.loading}
               onChange={e => void toggle(key, e.target.checked)}
             />
-            <span>{label}</span>
+            <span>
+              <strong>{label}</strong>
+              <small id={`feature-${key}-help`}>{help}</small>
+            </span>
           </label>
-          <p className="px-1 text-[12px] text-ink-7">{help}</p>
-        </div>
-      ))}
+        ))}
+      </div>
     </section>
   )
 }

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import ConnectionsPage from './ConnectionsPage'
@@ -28,38 +28,64 @@ const connection = {
   pricing: PRICING_FIXTURE,
 }
 
-// jsdom はレイアウトを行わないので「実際にはみ出すか」は測れない。ここでは
-// はみ出しを防いでいる指定が消えていないことだけを固定する (実レンダリングでの
-// 確認はスマホ幅のスクリーンショットで実施済み)。
-describe('ConnectionsPage の狭い画面向けレイアウト', () => {
-  it('長い endpoint を語中で折り返せるようにしている', async () => {
+// 画面幅を決めて描く。テストの matchMedia は既定でどのクエリにも一致する (= 狭い画面)。
+function setScreenWidth(width: 'wide' | 'narrow') {
+  vi.spyOn(window, 'matchMedia').mockImplementation(query => ({
+    matches: width === 'narrow', media: query, onchange: null,
+    addListener: () => {}, removeListener: () => {},
+    addEventListener: () => {}, removeEventListener: () => {}, dispatchEvent: () => false,
+  }))
+}
+
+describe('ConnectionsPage の一覧の表', () => {
+  afterEach(() => vi.mocked(window.matchMedia).mockRestore?.())
+
+  it('広い画面では名前・エンドポイント・リージョン・操作を一行に並べる', async () => {
+    setScreenWidth('wide')
     vi.mocked(api.listConnections).mockResolvedValue([connection])
     render(<MemoryRouter><ConnectionsPage /></MemoryRouter>)
 
-    await waitFor(() => expect(screen.getByText('cloudflare r2')).toBeInTheDocument())
-    const row = screen.getByText('cloudflare r2').closest('li') as HTMLElement
-
-    // endpoint は ` · ` 区切りの meta 行に他の項目と混在するので、テキストではなく
-    // 「折り返し指定を持つ要素が endpoint を含んでいる」ことで引く。
-    // wrap-anywhere が無いと、空白を含まない endpoint は折り返せず画面外へ出る。
-    const meta = row.querySelector('.wrap-anywhere')
-    expect(meta).not.toBeNull()
-    expect(meta?.textContent).toContain(LONG_ENDPOINT)
+    const row = (await screen.findByText('cloudflare r2')).closest('tr') as HTMLElement
+    expect(within(row).getByText(LONG_ENDPOINT)).toBeInTheDocument()
+    expect(within(row).getByText('auto')).toBeInTheDocument()
+    expect(within(row).getByRole('link', { name: '開く' })).toHaveAttribute('href', '/storage/r2/')
+    expect(within(row).getByRole('button', { name: 'デフォルトにする' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '詳細を表示' })).not.toBeInTheDocument()
   })
 
-  it('狭い画面では行を縦積みにし、ボタン群も折り返せるようにしている', async () => {
+  // jsdom はレイアウトを行わないので「実際にはみ出すか」は測れない。ここでは
+  // はみ出しを防いでいる指定が消えていないことだけを固定する (実際の幅での確認は
+  // スクリーンショットで行う)。
+  it('長い endpoint を語中で折り返せるようにしている', async () => {
+    setScreenWidth('wide')
     vi.mocked(api.listConnections).mockResolvedValue([connection])
     render(<MemoryRouter><ConnectionsPage /></MemoryRouter>)
-    await waitFor(() => expect(screen.getByText('cloudflare r2')).toBeInTheDocument())
 
-    const row = screen.getByText('cloudflare r2').closest('li') as HTMLElement
-    // 既定は縦積み、sm 以上で従来の横並びに戻す。
-    expect(row.className).toContain('flex-col')
-    expect(row.className).toContain('sm:flex-row')
+    // 空白を含まない endpoint は、語中で折り返せないと表の幅を押し広げる。
+    expect(await screen.findByText(LONG_ENDPOINT)).toHaveClass('break-word')
+  })
 
-    // 4 ボタンが 360px に収まらないので折り返しを許可する。
-    const buttons = screen.getByText('削除').closest('div') as HTMLElement
-    expect(buttons.className).toContain('flex-wrap')
+  it('狭い画面では名前だけを行に残し、エンドポイントと操作は行の下に開く', async () => {
+    setScreenWidth('narrow')
+    vi.mocked(api.listConnections).mockResolvedValue([connection])
+    render(<MemoryRouter><ConnectionsPage /></MemoryRouter>)
+
+    await screen.findByText('cloudflare r2')
+    expect(screen.queryByText(LONG_ENDPOINT)).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: '開く' })).not.toBeInTheDocument()
+
+    const toggle = screen.getByRole('button', { name: '詳細を表示' })
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    fireEvent.click(toggle)
+
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    expect(toggle).toHaveAccessibleName('詳細を閉じる')
+    expect(screen.getByText(LONG_ENDPOINT)).toHaveClass('break-word')
+    expect(screen.getByRole('link', { name: '開く' })).toHaveAttribute('href', '/storage/r2/')
+    expect(screen.getByRole('button', { name: '削除' })).toBeInTheDocument()
+
+    fireEvent.click(toggle)
+    expect(screen.queryByText(LONG_ENDPOINT)).not.toBeInTheDocument()
   })
 })
 

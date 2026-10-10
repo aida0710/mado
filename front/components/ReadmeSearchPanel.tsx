@@ -1,5 +1,6 @@
 import { useEffect, useReducer, useRef } from 'react'
 import { Link } from 'react-router-dom'
+import { Search } from 'lucide-react'
 import { api } from '../lib/api/client'
 import { encPath } from '../lib/route'
 import { useCapabilities } from '../lib/useCapabilities'
@@ -107,68 +108,41 @@ export function ReadmeSearchPanel({ connectionId }: Props) {
   if (!caps.readmeRead) return null
 
   return (
-    <section className="mt-3 mb-4">
-      <div className="flex items-center gap-2">
+    <section className="readme-search">
+      {/* 隣の「S3 パスで移動」と同じ、虫眼鏡と枠の無い入力の帯 (storage.css の .storage-search)。 */}
+      <div className="storage-search" role="search">
+        <Search size={16} aria-hidden="true" />
         <input
           type="search"
-          className="flex-1 max-w-[480px] rounded-1 bg-paper px-3 py-1.5 text-[13px] focus:outline-none"
-          style={{
-            border: '1px solid var(--color-rule-strong)',
-            fontFamily: 'var(--font-sans)',
-          }}
           placeholder="README 全文検索 (2 文字以上)"
           value={q}
           onChange={e => onChangeQ(e.target.value)}
           aria-label="README 全文検索"
         />
-        {loading && (
-          <span className="text-[11px] text-ink-7">検索中…</span>
-        )}
+        {loading && <span className="muted nowrap">検索中…</span>}
       </div>
 
-      {error && <p className="error mt-2">{error}</p>}
+      {error && <p className="notice error">{error}</p>}
 
       {hits !== null && hits.length === 0 && !loading && !error && (
-        <p className="mt-3 text-[12px] text-ink-7">ヒットなし。</p>
+        <p className="muted readme-search__message">ヒットなし。</p>
       )}
 
       {hits !== null && hits.length > 0 && (
-        <ul
-          className="m-0 mt-3 list-none p-0"
-          style={{ borderTop: '1px solid var(--rule)' }}
-        >
+        <ul className="readme-search__hits">
           {hits.map(h => {
             const to =
               `/storage/${encodeURIComponent(connectionId)}` +
               `/${encodeURIComponent(h.bucket)}/${encPath(h.prefix)}`
             return (
-              <li
-                key={`${h.bucket}/${h.prefix}`}
-                className="py-2.5 px-1 transition-colors hover:bg-ink-0"
-                style={{ borderBottom: '1px solid var(--rule)' }}
-              >
-                <Link to={to} className="block text-ink-12 no-underline">
-                  <span
-                    className="text-[12.5px] text-ink-7"
-                    style={{ fontFamily: 'var(--font-mono)', letterSpacing: '0.005em' }}
-                  >
-                    {h.bucket}/
-                  </span>
-                  <span
-                    className="text-[12.5px] font-medium text-ink-12"
-                    style={{ fontFamily: 'var(--font-mono)', letterSpacing: '0.005em' }}
-                  >
-                    {h.prefix || '(root)'}
-                  </span>
+              <li key={`${h.bucket}/${h.prefix}`}>
+                <Link to={to} className="readme-search__path">
+                  <span className="muted">{h.bucket}/</span>
+                  {h.prefix || '(root)'}
                 </Link>
-                <div
-                  className="mt-0.5 text-[10.5px] text-ink-7 tabular-nums"
-                  style={{ fontFamily: 'var(--font-mono)', letterSpacing: '0.02em' }}
-                >
-                  last by <span className="text-ink-9">{h.editor}</span>{' '}
-                  <span className="text-ink-3">·</span>{' '}
-                  {fmtTime(h.edited_at)}
-                </div>
+                <span className="muted">
+                  last by {h.editor} · {fmtTime(h.edited_at)}
+                </span>
               </li>
             )
           })}

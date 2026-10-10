@@ -63,19 +63,24 @@ export default function StoragePage({ connectionId }: Props) {
   }, [connectionId])
 
   if (loading) {
-    return <p className="text-[13px] text-ink-7">読み込み中…</p>
+    return <p className="state-message">読み込み中…</p>
   }
   if (error || !connection) {
     return (
-      <div className="empty-state">
-        <h2>{error ?? 'unknown'}</h2>
-        <Link className="empty-state__cta" to="/storage">接続一覧へ</Link>
-      </div>
+      <>
+        <header className="page-header">
+          <div><h1>Storage</h1></div>
+        </header>
+        <div className="empty-state">
+          <h2>{error ?? 'unknown'}</h2>
+          <Link className="button primary" to="/storage">接続一覧へ</Link>
+        </div>
+      </>
     )
   }
   return (
     <ConnectionContext.Provider value={connection}>
-      <Suspense fallback={<p className="text-[13px] text-ink-7">読み込み中…</p>}>
+      <Suspense fallback={<p className="state-message">読み込み中…</p>}>
         <Routes>
           <Route path="/"                       element={<StorageIndexRoute connectionId={connectionId} />} />
           {/* edit-readme は固定セグメントから始まるので :bucket/* より specificity が高く、

@@ -1,9 +1,6 @@
 import { APP_VERSION, GIT_COMMIT, GIT_DATE, REPO_URL, commitUrl } from '../lib/buildInfo'
 import { SettingsSectionHeader } from './SettingsSectionHeader'
 
-const dtClass = 'text-ink-7'
-const ddClass = 'm-0 text-ink-11'
-
 export function About() {
   // コミット日時は YYYY-MM-DD だけ見せる (ISO の先頭 10 文字)。
   const date = GIT_DATE ? GIT_DATE.slice(0, 10) : ''
@@ -11,31 +8,35 @@ export function About() {
   const hasCommit = GIT_COMMIT !== 'dev' && GIT_COMMIT !== ''
 
   return (
-    <section className="mt-10">
+    <section className="settings-column">
       <SettingsSectionHeader title="アプリケーション情報" />
 
-      <dl className="m-0 grid w-fit grid-cols-[auto_1fr] gap-x-5 gap-y-2 font-mono text-[12px]">
-        <dt className={dtClass}>Version</dt>
-        <dd className={`${ddClass} tabular-nums`}>v{APP_VERSION}</dd>
-
-        <dt className={dtClass}>Commit</dt>
-        <dd className={ddClass}>
-          {hasCommit ? (
-            <a className="about-link" href={commitUrl(GIT_COMMIT)} target="_blank" rel="noreferrer">
-              {GIT_COMMIT.slice(0, 7)}
+      <dl className="details-list">
+        <div>
+          <dt>Version</dt>
+          <dd className="mono">v{APP_VERSION}</dd>
+        </div>
+        <div>
+          <dt>Commit</dt>
+          <dd className="mono">
+            {hasCommit ? (
+              <a href={commitUrl(GIT_COMMIT)} target="_blank" rel="noreferrer">
+                {GIT_COMMIT.slice(0, 7)}
+              </a>
+            ) : (
+              <span className="muted">dev</span>
+            )}
+            {date && <span className="muted">{' · '}{date}</span>}
+          </dd>
+        </div>
+        <div>
+          <dt>Repository</dt>
+          <dd className="mono">
+            <a href={REPO_URL} target="_blank" rel="noreferrer">
+              {REPO_URL.replace(/^https?:\/\//, '')}
             </a>
-          ) : (
-            <span className="text-ink-7">dev</span>
-          )}
-          {date && <span className="text-ink-7">{' · '}{date}</span>}
-        </dd>
-
-        <dt className={dtClass}>Repository</dt>
-        <dd className={ddClass}>
-          <a className="about-link" href={REPO_URL} target="_blank" rel="noreferrer">
-            {REPO_URL.replace(/^https?:\/\//, '')}
-          </a>
-        </dd>
+          </dd>
+        </div>
       </dl>
     </section>
   )

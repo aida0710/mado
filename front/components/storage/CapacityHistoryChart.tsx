@@ -5,9 +5,27 @@ import {
 import type { CapacityPoint } from '../../lib/api/types'
 import { capacityChartData, type CapacityChartPoint } from '../../lib/capacityChart'
 import { fmtCapacityBytes } from '../../lib/format'
+import { useDocumentTheme } from '../../lib/useDocumentTheme'
 
 // 軸と tooltip は幅が狭いので、表や見出しより 1 桁少なく丸める。
 const CHART_FRACTION_DIGITS = 1
+
+// recharts は色を SVG の属性に書くので、CSS の変数がテーマで切り替わっても自分では
+// 追従しない。描くたびに今のテーマの値を読み、テーマが変わったら描き直す。
+// 値を読めない環境 (テスト) では変数の参照のまま渡す。
+function readChartColors() {
+  const style = getComputedStyle(document.documentElement)
+  const read = (name: string) => style.getPropertyValue(name).trim() || `var(${name})`
+  return {
+    grid: read('--border'),
+    axis: read('--border-strong'),
+    tick: read('--muted'),
+    line: read('--accent'),
+    limit: read('--error'),
+    latest: read('--border-strong'),
+    background: read('--background'),
+  }
+}
 
 function CapacityTooltip({ active, payload, label }: {
   active?: boolean
@@ -17,10 +35,10 @@ function CapacityTooltip({ active, payload, label }: {
   const point = payload?.[0]?.payload
   if (!active || !point || point.totalBytes == null) return null
   return (
-    <div className="border border-rule-strong bg-paper px-3 py-2 text-[12px] shadow-sm">
-      <p className="text-ink-7">{new Date(Number(label)).toLocaleString('ja-JP')}</p>
-      <p className="mt-1 font-semibold">{fmtCapacityBytes(point.totalBytes, CHART_FRACTION_DIGITS)}</p>
-      <p className="text-ink-7">{point.objectCount?.toLocaleString('ja-JP')} objects</p>
+    <div className="capacity-tooltip">
+      <p className="muted">{new Date(Number(label)).toLocaleString('ja-JP')}</p>
+      <p className="capacity-tooltip-value">{fmtCapacityBytes(point.totalBytes, CHART_FRACTION_DIGITS)}</p>
+      <p className="muted">{point.objectCount?.toLocaleString('ja-JP')} objects</p>
     </div>
   )
 }
@@ -32,33 +50,37 @@ export default function CapacityHistoryChart({ points, intervalSeconds, capacity
   capacityBytes: number | null
   label: string
 }) {
+  // テーマが切り替わったら描き直す (下で色を読み直す)。
+  useDocumentTheme()
+  const colors = readChartColors()
   const data = capacityChartData(points, intervalSeconds)
   const latest = points.at(-1)?.totalBytes
   return (
     <div>
-      <div className="h-[120px] w-full" role="img" aria-label={`${label}の容量推移グラフ`}>
+      <div className="capacity-chart-plot" role="img" aria-label={`${label}の容量推移グラフ`}>
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={data} margin={{ top: 8, right: 12, bottom: 2, left: 2 }} accessibilityLayer>
-            <CartesianGrid stroke="var(--rule)" vertical={false} />
+            <CartesianGrid stroke={colors.grid} vertical={false} />
             <XAxis
               dataKey="collectedAt"
               type="number" scale="time" domain={['dataMin', 'dataMax']}
               tickFormatter={value => new Date(Number(value)).toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric' })}
-              tick={{ fontSize: 11, fill: 'var(--ink-7)' }}
-              axisLine={{ stroke: 'var(--rule-strong)' }} tickLine={false}
+              tick={{ fontSize: 11, fill: colors.tick }}
+              axisLine={{ stroke: colors.axis }} tickLine={false}
             />
             <YAxis
               tickFormatter={value => fmtCapacityBytes(Number(value), CHART_FRACTION_DIGITS)}
-              width={70} tick={{ fontSize: 10, fill: 'var(--ink-7)' }}
+              width={70} tick={{ fontSize: 10, fill: colors.tick }}
               axisLine={false} tickLine={false}
             />
-            <Tooltip content={<CapacityTooltip />} />
+            <Tooltip content={<CapacityTooltip />} cursor={{ stroke: colors.axis }} />
             {capacityBytes !== null
-              ? <ReferenceLine y={capacityBytes} stroke="var(--danger)" strokeDasharray="4 4" label="上限" />
-              : latest !== undefined && <ReferenceLine y={latest} stroke="var(--ink-3)" strokeDasharray="3 4" />}
+              ? <ReferenceLine y={capacityBytes} stroke={colors.limit} strokeDasharray="4 4" label="上限" />
+              : latest !== undefined && <ReferenceLine y={latest} stroke={colors.latest} strokeDasharray="3 4" />}
             <Line
               type="linear" dataKey="totalBytes" name="容量" connectNulls={false} isAnimationActive={false}
-              stroke="var(--ink-12)" strokeWidth={1.75} dot={false} activeDot={{ r: 3.5 }}
+              stroke={colors.line} strokeWidth={1.75} dot={false}
+              activeDot={{ r: 3.5, fill: colors.line, stroke: colors.background }}
             />
           </LineChart>
         </ResponsiveContainer>

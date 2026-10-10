@@ -161,6 +161,7 @@ export async function fulfillSampleApi({ route, media, login = false, unhandled 
   if (path === '/api/internal/tags') return sendJson(tags)
   if (path === '/api/internal/notes/home') return sendJson({ exists: true, body: noteBody, last_editor: 'Sample team', last_edited_at: capturedAt })
   if (path.endsWith('/notes/home/history')) return sendJson({ versions: [{ id: 3, editor: 'Sample team', edited_at: capturedAt, size_bytes: 620 }] })
+  if (path.endsWith('/notes/home/history/3')) return sendJson({ id: 3, slug: 'home', body: noteBody, editor: 'Sample team', edited_at: capturedAt, size_bytes: 620 })
   if (path === '/api/internal/users') return sendJson({ users: [user, { ...user, id: 'sample-viewer', username: 'demo-viewer', displayName: 'Sample viewer', email: 'viewer@example.com', roles: ['viewer'], status: 'active' }].map(item => ({ ...item, status: 'active' })) })
   if (path === '/api/internal/service-accounts') return sendJson({ accounts: [{ id: 'sample-pipeline', name: 'audio-pipeline', description: '音声処理のOpenLineage送信', status: 'active' }] })
   if (path === '/api/internal/audit-events') return sendJson({ events: [], nextBeforeId: null })
@@ -173,7 +174,7 @@ export async function fulfillSampleApi({ route, media, login = false, unhandled 
   if (suffix === '/tags') return sendJson(Object.fromEntries(url.searchParams.getAll('paths').map(name => [name, name.includes('audio') || name.endsWith('.wav') ? ['audio'] : ['ready']])))
   if (suffix === '/readme') return sendJson({ exists: true, body: readmeBody, last_editor: 'Sample team', last_edited_at: capturedAt, size_bytes: 620 })
   if (suffix === '/readme/history') return sendJson({ versions: [{ id: 3, editor: 'Sample team', edited_at: capturedAt, size_bytes: 620 }, { id: 2, editor: 'Sample team', edited_at: '2026-10-06T00:00:00Z', size_bytes: 410 }] })
-  if (suffix.startsWith('/readme/history/')) return sendJson({ id: 3, body: readmeBody, editor: 'Sample team', edited_at: capturedAt, size_bytes: 620 })
+  if (suffix.startsWith('/readme/history/')) return sendJson({ id: 3, bucket: SAMPLE_BUCKET, prefix: SAMPLE_PREFIX, body: readmeBody, editor: 'Sample team', edited_at: capturedAt, size_bytes: 620 })
   if (suffix === '/list') {
     const prefix = url.searchParams.get('prefix') ?? ''
     return sendJson({ directories: prefix ? ['samples/train/', 'samples/validation/'] : ['samples/', 'train/', 'validation/', 'test/'], files: prefix ? filenames.map(([name, size]) => ({ key: `${prefix}${name}`, size, lastModified: capturedAt })) : [], nextContinuation: null, nextStartAfter: null, cache: { fetchedAt: capturedAt, expiresAt: new Date(Date.now() + 86400000).toISOString(), hit: false } })

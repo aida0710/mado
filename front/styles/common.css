@@ -1,0 +1,160 @@
+/* 画面の枠まわりの mado だけの指定と、どの画面でも使う小さな部品。
+   上部バー・サイドバー・ページ・ボタン・ダイアログ・表そのものは @mado/design-system にある。 */
+
+/* 上部バーのすぐ下に出す、サインアウトの失敗など。 */
+.topbar-notice {
+  margin: 0;
+}
+
+/* 製品のロゴ (ProductLogo)。窓の印と名前を並べる。名前の前の mado は通常の太さ、製品の部分は
+   上部バーの .brand strong と同じ 600。ログイン画面の .login-mark は全体が 600 なので、
+   前の部分だけ通常の太さに戻す。 */
+.product-logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+.product-prefix {
+  font-weight: 400;
+}
+.navigation-drawer-header strong,
+.login-mark strong {
+  font-weight: 600;
+}
+/* 印の大きさは名前の文字 (14〜16px) より一回り大きく、線は手前と奥で同じ太さ。 */
+.product-mark {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke-width: 1.75;
+}
+.product-mark-front {
+  stroke: currentColor;
+}
+/* 奥の窓の色。黒い上部バーとドロワーでは、上部バーの印と同じ明るい強調色を使う。 */
+.product-mark-back {
+  stroke: var(--accent);
+  stroke-linecap: square;
+}
+.brand .product-mark-back,
+.navigation-drawer-header .product-mark-back {
+  stroke: var(--header-indicator);
+}
+
+/* 同期プレイヤーとピン留め (BottomDock) が画面の下に出ている間は、本文の下端が隠れないよう
+   ドックの高さ (BottomDock が <html> に書く --bottom-dock-height) だけ余白を広げる。 */
+.page[data-docked='true'] {
+  padding-bottom: calc(var(--bottom-dock-height, 16rem) + 24px);
+}
+
+/* ── まだ何も無いときの案内 ─────────────────────────────────────────
+   見出し (h2)、説明、例の箇条書き、最初の操作のボタン (.button.primary) を中央に並べる。
+   一行で足りるときは共通の部品の .state-message を使う。 */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  margin: 24px 0;
+  padding: 40px 24px;
+  background: var(--surface);
+  color: var(--muted);
+  text-align: center;
+}
+.empty-state h2,
+.empty-state h3 {
+  margin: 0;
+  color: var(--text);
+  font-size: 18px;
+  font-weight: 550;
+}
+.empty-state p {
+  max-width: 60ch;
+  margin: 0;
+}
+.empty-state ul {
+  margin: 0;
+  padding-left: 1.4em;
+  list-style: disc;
+  text-align: left;
+}
+.empty-state .button {
+  margin-top: 6px;
+}
+
+/* ── ダイアログ ───────────────────────────────────────────────────────
+   mado のダイアログは <dialog> ではなく、背景を覆う .modal-backdrop の中に .dialog
+   (共通の部品) を置く。Escape と背景のクリックで閉じるのは Dialog.tsx が受け持つ。 */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: var(--backdrop);
+}
+/* プレビューの上に重ねる入れ子のダイアログ (tar の中身など)。 */
+.modal-backdrop.nested {
+  z-index: 60;
+}
+/* 背景のクリックで閉じるための、背景と同じ範囲の見えないボタン。ダイアログを上に重ねるので、
+   ダイアログの中のクリックはここへ届かない。 */
+.modal-backdrop__close-overlay {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  cursor: default;
+}
+.modal-backdrop > .dialog {
+  position: relative;
+  z-index: 1;
+}
+.dialog.extra-wide {
+  width: min(1040px, calc(100vw - 32px));
+}
+.dialog > header .dialog-heading {
+  min-width: 0;
+}
+.dialog > header .dialog-heading > p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.dialog > header .icon-button {
+  flex: 0 0 auto;
+  margin-right: -8px;
+}
+@media (width < 640px) {
+  .modal-backdrop {
+    padding: 0;
+  }
+  .modal-backdrop > .dialog:not(.sheet-on-narrow) {
+    width: 100vw;
+    max-width: 100vw;
+    height: 100dvh;
+    max-height: 100dvh;
+    border: 0;
+    box-shadow: none;
+  }
+  .modal-backdrop > .dialog.sheet-on-narrow {
+    align-self: end;
+    width: 100vw;
+    max-width: 100vw;
+    max-height: 90dvh;
+    border-width: 1px 0 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition-duration: 0.001ms !important; animation-duration: 0.001ms !important; }
+}
+/* 開いたときにフォーカスを受けるダイアログの枠そのものには、フォーカスの枠を出さない。 */
+.modal-backdrop > .dialog:focus-visible {
+  outline: none;
+}

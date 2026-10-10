@@ -84,10 +84,12 @@ describe('compact', () => {
     expect(screen.getByText(/^\d{2}\/\d{2} \d{2}:\d{2}\(|^\d{2}:\d{2}\(/)).toBeInTheDocument()
   })
 
-  it('compact でも ↻ は同じ形で出る', () => {
+  it('compact でも再読み込みは同じ形で出る', () => {
+    const { unmount } = render(<CacheBanner fetchedAt={AT} revalidating={false} onRefresh={noop} />)
+    const full = screen.getByRole('button', { name: '再読み込み' }).className
+    unmount()
     render(<CacheBanner fetchedAt={AT} revalidating={false} onRefresh={noop} compact />)
-    const button = screen.getByRole('button', { name: '再読み込み' })
-    expect(button.className).toContain('cache-banner__refresh')
+    expect(screen.getByRole('button', { name: '再読み込み' }).className).toBe(full)
   })
 })
 

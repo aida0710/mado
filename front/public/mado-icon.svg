@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <!-- ブラウザのタブのアイコン。上部バーの印 (components/shell/ProductLogo.tsx の MadoMark) と同じ形で、
+       16px でも線が消えないよう太くしている。手前の窓はタブの地に合わせて明暗を切り替える。 -->
+  <style>
+    .back { stroke: #008682; }
+    .front { stroke: #161616; }
+    @media (prefers-color-scheme: dark) {
+      .back { stroke: #00b9b1; }
+      .front { stroke: #f4f4f4; }
+    }
+  </style>
+  <g fill="none" stroke-width="2.5">
+    <path class="back" d="M8 2.75H21.25V16" stroke-linecap="square" />
+    <rect class="front" x="2.75" y="7" width="13.5" height="14.25" />
+  </g>
+</svg>

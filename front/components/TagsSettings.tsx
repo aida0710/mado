@@ -1,9 +1,12 @@
 import { useEffect, useReducer } from 'react'
+import { Plus } from 'lucide-react'
 import { api } from '../lib/api/client'
 import type { Tag } from '../lib/api/types'
 import { DeleteConfirmDialog } from './DeleteConfirmDialog'
+import { Dialog } from './Dialog'
 import { TagBadge } from './TagBadge'
 import { ImportExportButtons } from './ImportExportButtons'
+import { SettingsSectionHeader } from './SettingsSectionHeader'
 import { downloadJson, type ImportMode, type ImportSummary } from '../lib/jsonFile'
 
 // エクスポート形式。id は書き出さない — インポート先で採番するため
@@ -13,9 +16,6 @@ interface TagsExport {
   version: 1
   tags: Array<{ name: string; color: string }>
 }
-
-const sectionTitleClass =
-  'm-0 text-[10.5px] font-semibold uppercase tracking-[0.22em] text-ink-7'
 
 interface State {
   tags: Tag[]
@@ -47,7 +47,7 @@ function reducer(s: State, a: Action): State {
   }
 }
 
-// 新規作成・編集共通の小さいインラインフォーム (2 フィールドのみなので
+// 新規作成・編集共通の小さいフォーム (2 フィールドのみなので
 // ConnectionForm のような別ファイルには分けない)。
 function TagForm({
   initialValue, onSubmit, onCancel,
@@ -75,25 +75,33 @@ function TagForm({
   }
 
   return (
-    <div className="modal-backdrop">
-      <div className="modal modal--narrow" role="dialog" aria-modal="true" aria-labelledby="tag-form-title">
-        <p className="kicker">Settings · タグ</p>
-        <h3 id="tag-form-title">{initialValue.name ? 'タグを編集' : 'タグを追加'}</h3>
-        <label className="modal-field">
-          <span className="label">名前</span>
+    <Dialog
+      titleId="tag-form-title"
+      title={initialValue.name ? 'タグを編集' : 'タグを追加'}
+      onClose={onCancel}
+      dismissible={!saving}
+      narrowLayout="sheet"
+      footer={
+        <>
+          <button type="button" className="button" onClick={onCancel} disabled={saving}>キャンセル</button>
+          <button type="button" className="button primary" onClick={() => void submit()} disabled={saving}>
+            {saving ? '保存中…' : '保存'}
+          </button>
+        </>
+      }
+    >
+      <div className="dialog-body tag-form">
+        <label className="field">
+          <span>名前</span>
           <input value={name} onChange={e => setName(e.target.value)} autoComplete="off" spellCheck={false} />
         </label>
-        <label className="modal-field">
-          <span className="label">色</span>
+        <label className="field">
+          <span>色</span>
           <input type="color" value={color} onChange={e => setColor(e.target.value)} />
         </label>
-        {error && <p className="error" aria-live="polite">{error}</p>}
-        <div className="modal-actions">
-          <button onClick={onCancel} disabled={saving}>キャンセル</button>
-          <button onClick={submit} disabled={saving}>{saving ? '保存中…' : '保存'}</button>
-        </div>
+        {error && <p className="notice error" aria-live="polite">{error}</p>}
       </div>
-    </div>
+    </Dialog>
   )
 }
 
@@ -103,7 +111,6 @@ function DeleteConfirm({
   return (
     <DeleteConfirmDialog
       titleId="tag-delete-title"
-      kicker="Settings · タグ · 削除"
       title="タグを削除"
       onConfirm={onConfirm}
       onCancel={onCancel}
@@ -175,55 +182,66 @@ export function TagsSettings() {
   }
 
   return (
-    <section className="mt-7">
-      <div
-        className="mb-3 flex flex-wrap items-baseline justify-between gap-3 pb-2"
-        style={{ borderBottom: '1px solid var(--rule)' }}
-      >
-        <h3 className={sectionTitleClass}>タグの管理</h3>
-        <span className="inline-flex flex-wrap items-center gap-2">
-          <ImportExportButtons
-            what="タグ"
-            replaceWarning="削除されるタグに付いていた割り当ては、まとめて外れます (tag_id の連鎖削除)。"
-            onExport={handleExport}
-            onImport={handleImport}
-            onDone={refresh}
-          />
-          <button className="ghost" onClick={() => dispatch({ type: 'openAdd' })}>
-            <span aria-hidden>+</span> 追加
-          </button>
-        </span>
-      </div>
+    <section className="settings-column">
+      <SettingsSectionHeader
+        title="タグの管理"
+        actions={
+          <>
+            <ImportExportButtons
+              what="タグ"
+              replaceWarning="削除されるタグに付いていた割り当ては、まとめて外れます (tag_id の連鎖削除)。"
+              onExport={handleExport}
+              onImport={handleImport}
+              onDone={refresh}
+            />
+            <button type="button" className="button primary small" onClick={() => dispatch({ type: 'openAdd' })}>
+              <Plus size={14} aria-hidden="true" />
+              追加
+            </button>
+          </>
+        }
+      />
 
-      {loading && <p className="text-[13px] text-ink-7">読み込み中…</p>}
-      {error && <p className="error">{error}</p>}
+      {loading && <p className="muted">読み込み中…</p>}
+      {error && <p className="notice error">{error}</p>}
 
       {!loading && tags.length === 0 && (
-        <p className="text-[13px] text-ink-7">まだタグがありません。</p>
+        <p className="state-message">まだタグがありません。</p>
       )}
 
       {tags.length > 0 && (
-        <ul className="m-0 list-none p-0">
-          {tags.map(tag => (
-            <li
-              key={tag.id}
-              className="flex items-center justify-between gap-3 py-2.5"
-              style={{ borderBottom: '1px solid var(--rule)' }}
-            >
-              <TagBadge tag={tag} />
-              <span className="flex gap-2">
-                <button className="ghost" onClick={() => dispatch({ type: 'openEdit', tag })}>編集</button>
-                <button
-                  className="ghost"
-                  aria-label={`${tag.name} を削除`}
-                  onClick={() => dispatch({ type: 'openDelete', tag })}
-                >
-                  削除
-                </button>
-              </span>
-            </li>
-          ))}
-        </ul>
+        <div className="table-scroll">
+          <table className="tags-table">
+            <thead>
+              <tr>
+                <th scope="col">タグ</th>
+                <th scope="col" className="row-actions"><span className="sr-only">操作</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              {tags.map(tag => (
+                <tr key={tag.id}>
+                  <td><TagBadge tag={tag} /></td>
+                  <td className="row-actions">
+                    <span className="row-actions__buttons">
+                      <button type="button" className="button small" onClick={() => dispatch({ type: 'openEdit', tag })}>
+                        編集
+                      </button>
+                      <button
+                        type="button"
+                        className="button small danger"
+                        aria-label={`${tag.name} を削除`}
+                        onClick={() => dispatch({ type: 'openDelete', tag })}
+                      >
+                        削除
+                      </button>
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
 
       {adding && (

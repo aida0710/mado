@@ -60,7 +60,7 @@ function setup(extra?: React.ReactNode) {
 describe('BottomDock - 表示分岐', () => {
   it('デッキ 0 トラック & ピン 0 件では何も描画しない', () => {
     setup()
-    expect(document.querySelector('.fixed')).toBeNull()
+    expect(document.querySelector('.bottom-dock')).toBeNull()
     expect(screen.queryByText(/同期プレイヤー/)).not.toBeInTheDocument()
     expect(screen.queryByText(/ピン留め \(/)).not.toBeInTheDocument()
   })
@@ -85,8 +85,8 @@ describe('BottomDock - 表示分岐', () => {
     fireEvent.click(screen.getByText('addPin:x.bin'))
     expect(screen.getByText(/同期プレイヤー/)).toBeInTheDocument()
     expect(screen.getByText(/ピン留め \(1\)/)).toBeInTheDocument()
-    // fixed 要素の二重スタックはしない
-    expect(document.querySelectorAll('.fixed')).toHaveLength(1)
+    // 画面下に固定する箱 (.bottom-dock) を二重に重ねない
+    expect(document.querySelectorAll('.bottom-dock')).toHaveLength(1)
   })
 })
 
@@ -98,7 +98,7 @@ describe('BottomDock - ピンセクション操作', () => {
     expect(screen.getByText(/ピン留め \(2\)/)).toBeInTheDocument()
     expect(await screen.findAllByText(/プレビュー非対応/)).toHaveLength(2)
     fireEvent.click(screen.getByText('全部外す'))
-    expect(document.querySelector('.fixed')).toBeNull()
+    expect(document.querySelector('.bottom-dock')).toBeNull()
   })
 
   it('折りたたみトグルでカードが隠れる (ヘッダは残る)', async () => {
@@ -117,6 +117,6 @@ describe('BottomDock - ピンセクション操作', () => {
     setup()
     fireEvent.click(screen.getByText('addPin:x.bin'))
     fireEvent.click(screen.getByRole('button', { name: /ピン留めを解除/ }))
-    expect(document.querySelector('.fixed')).toBeNull()
+    expect(document.querySelector('.bottom-dock')).toBeNull()
   })
 })

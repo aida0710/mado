@@ -60,6 +60,18 @@ describe('TarEntryModal - 全文コピー', () => {
   })
 })
 
+describe('TarEntryModal - 表示形式', () => {
+  it('帯に行数と表示形式を出し、整形した .json に色を付ける', async () => {
+    vi.mocked(api.readHead).mockResolvedValue(utf8('{"a":1}'))
+    renderEntry('meta/x.json')
+    expect(await screen.findByLabelText('表示形式')).toHaveValue('auto')
+    expect(screen.getByRole('option', { name: '自動（JSON）' })).toBeInTheDocument()
+    expect(screen.getByText('3 行')).toBeInTheDocument()
+    const attribute = document.querySelector('pre.code-view .hljs-attr')
+    expect(attribute?.textContent).toBe('"a"')
+  })
+})
+
 describe('TarEntryModal - スニッフ', () => {
   it('拡張子が未知でも中身がテキストなら開ける', async () => {
     vi.mocked(api.readHead).mockResolvedValue(utf8('root:x:0:0'))

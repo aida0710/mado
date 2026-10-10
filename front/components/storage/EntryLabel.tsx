@@ -1,16 +1,16 @@
+import { Link } from 'react-router-dom'
+import { File, FileArchive, FileAudio, FileImage, FileVideo, Folder, type LucideIcon } from 'lucide-react'
+import { classify, type PreviewKind } from '../../lib/api/mime'
 import type { Tag } from '../../lib/api/types'
 import { TagBadge } from '../TagBadge'
 
-// タグは名前の「右」ではなく「下」に別行で出す。右に並べると、長いキーほど
-// 名前側の truncate / break-all が効いてファイル名・ディレクトリ名が読めなく
-// なるため。呼び出し側は glyph の隣の列 (名前と同じ列) に置いて字下げを揃える。
-function TagRow({ tags }: { tags: Tag[] }) {
-  if (tags.length === 0) return null
-  return (
-    <span className="mt-1 flex flex-wrap gap-1">
-      {tags.map(t => <TagBadge key={t.id} tag={t} />)}
-    </span>
-  )
+// ファイルの種類ごとのアイコン。拡張子から分かる種類だけを見分け、ほかは File にする。
+const FILE_ICONS: Record<PreviewKind, LucideIcon> = {
+  image: FileImage,
+  audio: FileAudio,
+  video: FileVideo,
+  archive: FileArchive,
+  unknown: File,
 }
 
 interface Props {
@@ -18,37 +18,32 @@ interface Props {
   /** 現ディレクトリ基準で末尾だけにした名前。 */
   tail: string
   tags: Tag[]
-  /** table は 1 行に収める (truncate)、card は折り返して全部見せる (break-all)。 */
-  overflow: 'truncate' | 'break-all'
+  /** ディレクトリはリンク (中クリックや新しいタブで開けるよう本物の <a>)。 */
+  href?: string
+  /** ファイルの種類のアイコンを決めるためのキー。 */
+  fileKey?: string
 }
 
-/** 一覧の 1 エントリの名前部分。glyph + 名前 + タグ行。
- *  文字色や太さは directory / file で違い、リンクの有無は呼び出し側が決める。 */
-export function EntryLabel({ kind, tail, tags, overflow }: Props) {
-  return (
+/** 一覧の 1 エントリの名前の列: アイコン + 名前、その横にタグ。
+ *  名前が長くて入りきらないときは、タグを次の行へ回す (名前が先に潰れないように)。 */
+export function EntryLabel({ kind, tail, tags, href, fileKey }: Props) {
+  const Icon = kind === 'directory' ? Folder : FILE_ICONS[classify(fileKey ?? tail)]
+  const name = (
     <>
-      {kind === 'directory'
-        // dir glyph: chevron — folder シンボルとしての editorial 表現
-        ? <span aria-hidden className="text-ink-5 select-none text-[10px]">▸</span>
-        // file glyph: 控えめな点 — タイポ的に存在を主張しすぎない
-        : <span aria-hidden className="text-ink-3 select-none text-[10px]">·</span>}
-      <span className="min-w-0 flex-1">
-        {kind === 'directory'
-          ? <span className={`block ${overflow}`}>{tail}</span>
-          : (
-            <span
-              className={`block ${overflow} text-ink-11`}
-              style={{
-                fontFamily: 'var(--font-mono)',
-                fontSize: '12.5px',
-                letterSpacing: '0.005em',
-              }}
-            >
-              {tail}
-            </span>
-          )}
-        <TagRow tags={tags} />
-      </span>
+      <Icon size={15} aria-hidden="true" />
+      <span className="entry-name-text" title={tail}>{tail}</span>
     </>
+  )
+  return (
+    <div className="entry-name">
+      {href
+        ? <Link to={href} className="entry-name-main">{name}</Link>
+        : <span className="entry-name-main">{name}</span>}
+      {tags.length > 0 && (
+        <span className="badge-group">
+          {tags.map(t => <TagBadge key={t.id} tag={t} />)}
+        </span>
+      )}
+    </div>
   )
 }

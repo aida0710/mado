@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useReducer, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
+import { LoaderCircle, Plus } from 'lucide-react'
 import { api } from '../lib/api/client'
 import type {
   DatasetDetail, DatasetVersionDetail, LineageGraph as LineageGraphDto, LineageNodeSummary,
@@ -147,10 +148,19 @@ export default function LineagePage() {
   const detailLoading = !!selectedNode && hasDetailRequest(selectedNode) && detailState.nodeId !== selectedNode.id
 
   return (
-    <section className="lineage-page">
-      <header className="page-head">
-        <h2>DataLineage</h2>
-        {canCurate && <Link className="ghost" to="/lineage/register">手動で登録</Link>}
+    <section className="lineage-page touch-targets">
+      <header className="page-header">
+        <div>
+          <h1>DataLineage</h1>
+        </div>
+        {canCurate && (
+          <div className="page-actions">
+            <Link className="button primary" to="/lineage/register">
+              <Plus size={16} aria-hidden="true" />
+              手動で登録
+            </Link>
+          </div>
+        )}
       </header>
 
       <LineageCatalog
@@ -174,32 +184,42 @@ export default function LineagePage() {
       />
 
       {projectionProblem && (
-        <div className="lineage-notice" role="status">
-          <strong>グラフ反映状態: {projectionStateLabel(projection.state)}</strong>
-          <span>{projection.message ?? `${projection.pendingEvents ?? 0}件のイベントが反映待ちです。`}</span>
+        <div className="notice lineage-warning" role="status">
+          <span>
+            <strong>グラフ反映状態: {projectionStateLabel(projection.state)}</strong>
+            {' '}{projection.message ?? `${projection.pendingEvents ?? 0}件のイベントが反映待ちです。`}
+          </span>
         </div>
       )}
       {graphState.data?.truncated && (
-        <div className="lineage-notice" role="status">
-          グラフの一部のみ表示しています。表示範囲を広げるか、起点を絞ってください。
+        <div className="notice lineage-warning" role="status">
+          <span>グラフの一部のみ表示しています。表示範囲を広げるか、起点を絞ってください。</span>
         </div>
       )}
       {graphState.data?.warnings.map((warning, index) => (
-        <div key={`${warning}:${index}`} className="lineage-notice" role="status">{warning}</div>
+        <div key={`${warning}:${index}`} className="notice lineage-warning" role="status"><span>{warning}</span></div>
       ))}
 
       {!ready && (
-        <div className="empty-state lineage-empty">
-          <h3>{route.mode === 'logical' ? '登録一覧からデータセットを選んでください' : 'データのバージョンを指定してください'}</h3>
+        <div className="empty-state">
+          <h2>{route.mode === 'logical' ? '登録一覧からデータセットを選んでください' : 'データのバージョンを指定してください'}</h2>
           <p>{route.mode === 'logical'
             ? '名前、説明、S3 URIから検索できます。名前空間と技術名は詳細指定に残しています。'
             : 'データセットを選んで「入出力と処理履歴」へ切り替えるか、バージョンIDを入力してください。'}</p>
         </div>
       )}
-      {graphState.loading && <p className="lineage-loading">グラフを読み込み中…</p>}
-      {graphState.error && <p className="error" role="alert">{graphState.error}</p>}
+      {graphState.loading && (
+        <p className="state-message">
+          <LoaderCircle className="spin" size={18} aria-hidden="true" />
+          グラフを読み込み中…
+        </p>
+      )}
+      {graphState.error && <p className="notice error" role="alert">{graphState.error}</p>}
       {graphState.data && graphState.data.nodes.length === 0 && (
-        <div className="empty-state lineage-empty"><h3>処理のつながりがまだありません</h3><p>処理履歴が登録されると、入力から出力への流れがここに表示されます。</p></div>
+        <div className="empty-state">
+          <h2>処理のつながりがまだありません</h2>
+          <p>処理履歴が登録されると、入力から出力への流れがここに表示されます。</p>
+        </div>
       )}
 
       {graphState.data && graphState.data.nodes.length > 0 && (

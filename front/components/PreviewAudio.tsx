@@ -17,6 +17,10 @@ interface Props {
   entryPath?: string
 }
 
+/**
+ * 音声のプレビュー。再生の操作、波形とスペクトログラムを 1 つの枠に重ねた時間軸、
+ * 形式などの情報の行を縦に並べる。
+ */
 export function PreviewAudio({ connectionId, bucket, k, entryPath }: Props) {
   const audioRef = useRef<HTMLAudioElement>(null)
   const [analyze, setAnalyze] = useState<Analyze | null>(null)
@@ -65,28 +69,36 @@ export function PreviewAudio({ connectionId, bucket, k, entryPath }: Props) {
     if (a && Number.isFinite(a.duration)) a.currentTime = ratio * a.duration
   }
 
+  const showWaveform = analyze != null && analyze.peaks.length > 0
+  const showSpectrogram = analyze?.hasSpectrogram === true && caps.audioSpectrogram
+  const lines = analyze ? infoLines(analyze) : []
+
   return (
-    <div className="flex flex-col gap-2">
-      {srcLoading && <p className="m-0 text-[12px] text-ink-7">音声を取得中…</p>}
-      {srcError && <p className="m-0 text-[12px] text-ink-7">音声を取得できません: {srcError}</p>}
-      {src && <audio ref={audioRef} className="w-full" src={src} controls preload="metadata" />}
+    <div className="preview-stack preview-audio">
+      {srcLoading && <p className="muted">音声を取得中…</p>}
+      {srcError && <p className="notice error">音声を取得できません: {srcError}</p>}
+      {src && <audio ref={audioRef} src={src} controls preload="metadata" />}
       {/* analyzing は初期値 true のまま据え置く (effect 内の同期 setState は
           react-hooks/set-state-in-effect に引っかかる) ので、権限側で出し分ける。 */}
-      {analyzing && caps.audioInfo && <p className="m-0 text-[12px] text-ink-7">解析中…</p>}
-      {error && <p className="m-0 text-[12px] text-ink-7">波形を表示できません: {error}</p>}
-      {analyze && analyze.peaks.length > 0 && (
-        <Waveform peaks={analyze.peaks} progress={progress} onSeek={onSeek} />
+      {analyzing && caps.audioInfo && <p className="muted">解析中…</p>}
+      {error && <p className="preview-error">波形を表示できません: {error}</p>}
+      {(showWaveform || showSpectrogram) && (
+        <div className="preview-audio-timeline">
+          {showWaveform && <Waveform peaks={analyze.peaks} progress={progress} onSeek={onSeek} />}
+          {showSpectrogram && (
+            <img
+              className="preview-spectrogram"
+              src={api.spectrogramUrl(connectionId, analyze.cacheKey)}
+              alt="スペクトログラム"
+            />
+          )}
+        </div>
       )}
-      {analyze?.hasSpectrogram && caps.audioSpectrogram && (
-        <img
-          className="w-full"
-          src={api.spectrogramUrl(connectionId, analyze.cacheKey)}
-          alt="スペクトログラム"
-        />
+      {lines.length > 0 && (
+        <div className="preview-audio-info">
+          {lines.map(line => <p key={line} className="muted mono">{line}</p>)}
+        </div>
       )}
-      {analyze && infoLines(analyze).map(line => (
-        <p key={line} className="m-0 font-mono text-[11px] text-ink-7">{line}</p>
-      ))}
     </div>
   )
 }

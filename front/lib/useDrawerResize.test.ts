@@ -1,9 +1,12 @@
-import { describe, expect, it } from 'vitest'
+import type { PointerEvent as ReactPointerEvent } from 'react'
+import { act, renderHook } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vitest'
 import {
   computeDrawerVars,
   DRAWER_MAX_DEFAULT_W,
   DRAWER_MIN_W,
   DRAWER_MIN_LIST_VISIBLE,
+  useDrawerResize,
 } from './useDrawerResize'
 
 describe('computeDrawerVars - 画面幅に応じた既定 (effW = null)', () => {
@@ -58,5 +61,22 @@ describe('computeDrawerVars - 狭めると一覧が広がる (隙間も重なり
 
   it('狭めるのは最小幅で止める', () => {
     expect(computeDrawerVars(1600, 50).width).toBe(DRAWER_MIN_W)
+  })
+})
+
+describe('useDrawerResize - ドラッグ中の印', () => {
+  it('ドラッグしている間だけ境目に data-dragging="true" が付く (境目の線を出し続ける)', () => {
+    const { result } = renderHook(() => useDrawerResize(true))
+    result.current.containerRef.current = document.createElement('div')
+    const handle = document.createElement('div')
+    const down = {
+      clientX: 100, currentTarget: handle, preventDefault: vi.fn(),
+    } as unknown as ReactPointerEvent
+
+    act(() => result.current.onResizeStart(down))
+    expect(handle.dataset.dragging).toBe('true')
+
+    act(() => { window.dispatchEvent(new Event('pointerup')) })
+    expect(handle.dataset.dragging).toBeUndefined()
   })
 })

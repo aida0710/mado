@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useReducer } from 'react'
+import { useCallback, useEffect, useReducer, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
+import { ChevronDown, ChevronUp, Plus } from 'lucide-react'
 import { api } from '../lib/api/client'
 import { ALL_CAPABILITIES_ON, CAPABILITY_UI } from '../lib/api/types'
 import type { Capabilities, Connection } from '../lib/api/types'
@@ -8,6 +9,8 @@ import { ImportExportButtons } from '../components/ImportExportButtons'
 import { SettingsSectionHeader } from '../components/SettingsSectionHeader'
 import { downloadJson, type ImportMode, type ImportSummary } from '../lib/jsonFile'
 import { invalidateCapabilitiesCache } from '../lib/useCapabilities'
+import { narrowerThan } from '../lib/breakpoints'
+import { useMediaQuery } from '../lib/useMediaQuery'
 
 // エクスポート形式。認証情報は空文字で書き出す。
 //
@@ -64,6 +67,15 @@ function sanitizeCapabilities(raw: unknown): Capabilities {
   return out
 }
 
+/** 一覧の表の列。primary の列は狭い画面でも行に残し、ほかは行の下に開く詳細へ移す。 */
+interface Column {
+  key: string
+  header: string
+  primary: boolean
+  className?: string
+  render: (connection: Connection) => ReactNode
+}
+
 interface State {
   connections: Connection[]
   loading: boolean
@@ -103,6 +115,13 @@ function reducer(s: State, a: Action): State {
 export default function ConnectionsPage() {
   const [state, dispatch] = useReducer(reducer, initial)
   const { connections, loading, error, deleting } = state
+  const isNarrow = useMediaQuery(narrowerThan('md'))
+  const [openIds, setOpenIds] = useState<ReadonlySet<string>>(() => new Set())
+  const toggleRow = (id: string) => setOpenIds(current => {
+    const next = new Set(current)
+    if (!next.delete(id)) next.add(id)
+    return next
+  })
 
   const refresh = useCallback(() => {
     dispatch({ type: 'startLoad' })
@@ -215,138 +234,208 @@ export default function ConnectionsPage() {
     return summary
   }
 
-  return (
-    <div>
-      <section>
-        <SettingsSectionHeader
-          title="オブジェクトストレージ接続先の管理"
-          actions={
-            <span className="inline-flex flex-wrap items-center gap-2">
-              <ImportExportButtons
-                what="接続"
-                replaceWarning="削除される接続の README・お気に入り・タグ割り当ても、まとめて消えます (connection_id の連鎖削除)。ファイルに載っている接続は作り直さないので、それらは残ります。"
-                onExport={handleExport}
-                onImport={handleImport}
-                onDone={refresh}
-              />
-              <Link className="ghost" to="/settings/connections/new">
-                <span aria-hidden>+</span> 追加
-              </Link>
-            </span>
-          }
-        />
+  const restrictions = (connection: Connection) =>
+    CAPABILITY_UI.filter(({ key }) => !connection.capabilities[key]).map(({ label }) => label)
 
-        {loading && (
-          <p className="text-[13px] text-ink-7">読み込み中…</p>
-        )}
-        {error && <p className="error">{error}</p>}
-
-        {!loading && connections.length === 0 && (
-          <div className="empty-state">
-            <h3>まだ接続がありません</h3>
-            <p>
-              追加した接続は <code className="font-mono text-[0.92em]">/storage/&lt;id&gt;/</code> でアクセスできます。<br />
-              endpoint / region / アクセスキーをまとめて登録します。
-            </p>
-            <Link className="empty-state__cta" to="/settings/connections/new">
-              最初の接続を追加
-            </Link>
-          </div>
-        )}
-
-        {connections.length > 0 && (
-          <ul className="m-0 list-none p-0">
-            {connections.map(connection => (
-              <li
-                key={connection.id}
-                className={
-                  // 狭い画面では縦積み (名前 + メタ → ボタン行)。横並びのままだと
-                  // shrink-0 のボタン群が幅を取り、左カラムが潰れて meta が細切れに
-                  // 改行される / 行ごとにボタンの折り返し位置が変わって不揃いになる。
-                  'flex flex-col gap-3 p-4 ' +
-                  'sm:flex-row sm:flex-wrap sm:items-baseline sm:justify-between sm:gap-x-6 sm:gap-y-3'
-                }
-                style={{ borderBottom: '1px solid var(--rule)' }}
+  const columns: Column[] = [
+    {
+      key: 'name',
+      header: '名前',
+      primary: true,
+      render: connection => (
+        <>
+          <span className="connection-name">
+            <strong>{connection.name}</strong>
+            {connection.isDefault && (
+              <span className="status-badge connection-default" title="Storage タブはこの接続を開きます">
+                DEFAULT
+              </span>
+            )}
+            {connection.visibility.mode === 'whitelist' && (
+              <span
+                className="status-badge status-queued"
+                title={`${connection.visibility.allowedUsers.length}人を許可`}
               >
-                <div className="min-w-0 sm:flex-1">
-                  <strong className="block text-[15px] font-semibold tracking-[0.005em] text-ink-12">
-                    {connection.name}
-                    {connection.isDefault ? (
-                      <span
-                        className="ml-2 align-middle text-[9.5px] font-semibold uppercase tracking-[0.18em] text-ink-7"
-                        style={{ border: '1px solid var(--rule)', borderRadius: 2, padding: '1px 5px' }}
-                        title="Storage タブはこの接続を開きます"
-                      >
-                        DEFAULT
-                      </span>
-                    ) : null}
-                    {connection.visibility.mode === 'whitelist' ? (
-                      <span
-                        className="ml-2 align-middle text-[9.5px] font-semibold uppercase tracking-[0.12em] text-ink-7"
-                        style={{ border: '1px solid var(--rule)', borderRadius: 2, padding: '1px 5px' }}
-                        title={`${connection.visibility.allowedUsers.length}人を許可`}
-                      >
-                        WHITELIST · {connection.visibility.allowedUsers.length}
-                      </span>
-                    ) : null}
-                  </strong>
-                  {/* endpoint は空白を含まない長い 1 トークン (R2 の
-                      https://<32桁hash>.r2.cloudflarestorage.com 等) になりうる。
-                      既定の overflow-wrap では折り返せず画面外へはみ出すので
-                      wrap-anywhere で語中改行を許可する。 */}
-                  <div
-                    className="mt-1 font-mono text-[12px] text-ink-7 wrap-anywhere"
-                    style={{ letterSpacing: '0.01em' }}
-                  >
-                    {connection.endpoint} <span className="text-ink-3">·</span>{' '}
-                    {connection.region} <span className="text-ink-3">·</span>{' '}
-                    {connection.accessKeyIdMasked}
-                    {connection.forcePathStyle && (
-                      <>
-                        {' '}<span className="text-ink-3">·</span>{' '}
-                        <span className="text-ink-5">path-style</span>
-                      </>
+                WHITELIST · {connection.visibility.allowedUsers.length}
+              </span>
+            )}
+          </span>
+          {/* 制限がかかっている接続は一覧から分かるようにする
+              (編集画面を開かないと分からないと、事故の原因になる)。 */}
+          {restrictions(connection).length > 0 && (
+            <span className="connection-restrictions muted">
+              制限: {restrictions(connection).join(' / ')}
+            </span>
+          )}
+        </>
+      ),
+    },
+    {
+      key: 'endpoint',
+      header: 'エンドポイント・リージョン',
+      primary: false,
+      className: 'mono',
+      render: connection => (
+        <>
+          {/* endpoint は空白を含まない長い 1 トークン (R2 の
+              https://<32桁hash>.r2.cloudflarestorage.com 等) になりうるので、語中で折り返す。 */}
+          <span className="connection-endpoint break-word">{connection.endpoint}</span>
+          <span className="connection-region muted">{connection.region}</span>
+        </>
+      ),
+    },
+    {
+      key: 'other',
+      header: 'その他',
+      primary: false,
+      className: 'mono muted',
+      // 項目の途中 (list-v2 のハイフンなど) では折り返さず、項目の間で折り返す。
+      render: connection => [
+        connection.accessKeyIdMasked,
+        connection.forcePathStyle ? 'path-style' : null,
+        `list-${connection.listObjectsVersion}`,
+      ].filter(item => item !== null).map((item, index) => (
+        <span key={item}>
+          {index > 0 && ' · '}
+          <span className="nowrap">{item}</span>
+        </span>
+      )),
+    },
+    {
+      key: 'actions',
+      header: '操作',
+      primary: false,
+      className: 'row-actions',
+      render: connection => (
+        <span className="row-actions__buttons">
+          {!connection.isDefault && (
+            <button
+              type="button"
+              className="button small"
+              onClick={() => void handleSetDefault(connection.id)}
+              title="Storage タブで開く接続にする"
+            >
+              デフォルトにする
+            </button>
+          )}
+          <Link className="button small" to={`/storage/${encodeURIComponent(connection.id)}/`}>開く</Link>
+          <Link className="button small" to={`/settings/connections/${encodeURIComponent(connection.id)}`}>編集</Link>
+          <button
+            type="button"
+            className="button small danger"
+            onClick={() => dispatch({ type: 'openDelete', connection })}
+          >
+            削除
+          </button>
+        </span>
+      ),
+    },
+  ]
+  // 狭い画面では名前だけを行に残し、ほかは行の下に開く (Mado Model Tracking の表と同じ考え方)。
+  const rowColumns = isNarrow ? columns.filter(column => column.primary) : columns
+  const detailColumns = isNarrow ? columns.filter(column => !column.primary) : []
+
+  return (
+    <section>
+      <SettingsSectionHeader
+        title="オブジェクトストレージ接続先の管理"
+        actions={
+          <>
+            <ImportExportButtons
+              what="接続"
+              replaceWarning="削除される接続の README・お気に入り・タグ割り当ても、まとめて消えます (connection_id の連鎖削除)。ファイルに載っている接続は作り直さないので、それらは残ります。"
+              onExport={handleExport}
+              onImport={handleImport}
+              onDone={refresh}
+            />
+            <Link className="button primary small" to="/settings/connections/new">
+              <Plus size={14} aria-hidden="true" />
+              追加
+            </Link>
+          </>
+        }
+      />
+
+      {loading && <p className="state-message">読み込み中…</p>}
+      {error && <p className="notice error">{error}</p>}
+
+      {!loading && connections.length === 0 && (
+        <div className="empty-state">
+          <h3>まだ接続がありません</h3>
+          <p>
+            追加した接続は <code>/storage/&lt;id&gt;/</code> でアクセスできます。<br />
+            endpoint / region / アクセスキーをまとめて登録します。
+          </p>
+          <Link className="button primary" to="/settings/connections/new">
+            <Plus size={15} aria-hidden="true" />
+            最初の接続を追加
+          </Link>
+        </div>
+      )}
+
+      {connections.length > 0 && (
+        <div className="table-scroll">
+          <table className="responsive-table connections-table">
+            <thead>
+              <tr>
+                {rowColumns.map(column => (
+                  <th key={column.key} scope="col">
+                    {column.key === 'actions' ? <span className="sr-only">{column.header}</span> : column.header}
+                  </th>
+                ))}
+                {isNarrow && (
+                  <th scope="col" className="responsive-table-toggle">
+                    <span className="sr-only">詳細を表示</span>
+                  </th>
+                )}
+              </tr>
+            </thead>
+            <tbody>
+              {connections.map(connection => {
+                const isOpen = isNarrow && openIds.has(connection.id)
+                const detailId = `connection-details-${connection.id}`
+                return [
+                  <tr key={connection.id}>
+                    {rowColumns.map(column => (
+                      <td key={column.key} className={column.className}>{column.render(connection)}</td>
+                    ))}
+                    {isNarrow && (
+                      <td className="responsive-table-toggle">
+                        <button
+                          type="button"
+                          className="icon-button"
+                          aria-expanded={isOpen}
+                          aria-controls={detailId}
+                          aria-label={isOpen ? '詳細を閉じる' : '詳細を表示'}
+                          title={isOpen ? '詳細を閉じる' : '詳細を表示'}
+                          onClick={() => toggleRow(connection.id)}
+                        >
+                          {isOpen ? <ChevronUp size={18} aria-hidden="true" /> : <ChevronDown size={18} aria-hidden="true" />}
+                        </button>
+                      </td>
                     )}
-                    {' '}<span className="text-ink-3">·</span>{' '}
-                    <span className="text-ink-5">list-{connection.listObjectsVersion}</span>
-                  </div>
-                  {/* 制限がかかっている接続は一覧から分かるようにする
-                      (編集モーダルを開かないと分からないと、事故の原因になる)。 */}
-                  {CAPABILITY_UI.some(({ key }) => !connection.capabilities[key]) && (
-                    <div className="mt-1 text-[12px] text-ink-7">
-                      制限:{' '}
-                      {CAPABILITY_UI
-                        .filter(({ key }) => !connection.capabilities[key])
-                        .map(({ label }) => label)
-                        .join(' / ')}
-                    </div>
-                  )}
-                </div>
-                {/* 4 ボタンが 360px 幅に収まらないことがあるので折り返しを許可。 */}
-                <div className="flex flex-wrap gap-2 sm:shrink-0">
-                  {!connection.isDefault && (
-                    <button
-                      className="ghost"
-                      onClick={() => void handleSetDefault(connection.id)}
-                      title="Storage タブで開く接続にする"
-                    >
-                      デフォルトにする
-                    </button>
-                  )}
-                  <Link className="ghost" to={`/storage/${encodeURIComponent(connection.id)}/`}>開く</Link>
-                  <Link className="ghost" to={`/settings/connections/${encodeURIComponent(connection.id)}`}>編集</Link>
-                  <button
-                    className="ghost connection-row__danger"
-                    onClick={() => dispatch({ type: 'openDelete', connection })}
-                  >
-                    削除
-                  </button>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+                  </tr>,
+                  isOpen && (
+                    <tr key={`${connection.id}-details`} id={detailId} className="responsive-table-details">
+                      <td colSpan={rowColumns.length + 1}>
+                        <dl>
+                          {detailColumns.map(column => (
+                            <div key={column.key}>
+                              {/* 操作のボタンは見出しを付けずに一行を使って並べる (名前は読み上げにだけ残す)。 */}
+                              <dt className={column.key === 'actions' ? 'sr-only' : undefined}>{column.header}</dt>
+                              <dd className={column.className}>{column.render(connection)}</dd>
+                            </div>
+                          ))}
+                        </dl>
+                      </td>
+                    </tr>
+                  ),
+                ]
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {deleting && (
         <ConnectionDeleteConfirm
@@ -355,6 +444,6 @@ export default function ConnectionsPage() {
           onCancel={() => dispatch({ type: 'closeDelete' })}
         />
       )}
-    </div>
+    </section>
   )
 }

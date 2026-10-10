@@ -19,6 +19,8 @@ interface Props {
   bucket: string
   prefix: string
   onSelectFile?: (key: string) => void
+  /** プレビューで開いているファイルのキー。表のその行を選択中にする。 */
+  selectedKey?: string | null
 }
 
 type ListResp = z.infer<typeof StorageList>
@@ -101,7 +103,7 @@ function reducer(s: State, a: Action): State {
   }
 }
 
-export function StorageBrowser({ connectionId, bucket, prefix, onSelectFile }: Props) {
+export function StorageBrowser({ connectionId, bucket, prefix, onSelectFile, selectedKey = null }: Props) {
   const tagsEnabled = useTagsEnabled()
   const [state, dispatch] = useReducer(reducer, initial)
   const { q, submittedQ, recursive, page, history, pageIdx, loading, error, revalidating } = state
@@ -237,7 +239,7 @@ export function StorageBrowser({ connectionId, bucket, prefix, onSelectFile }: P
   const [fileTags, setFileTags] = useState<Record<string, string[]>>({})
   const [selectedTagIds, setSelectedTagIds] = useState<Set<string>>(new Set())
   // 走査は「いま開いているディレクトリ」だけを対象にする (README と同じスコープ)。
-  // 行の ⋯ から任意のサブディレクトリを走査する導線は作らない。
+  // 行の操作メニューから任意のサブディレクトリを走査する導線は作らない。
   const [scanOpen, setScanOpen] = useState(false)
   // 走査済みなら数字をバナーにそのまま出す。押すまで見えないのはもったいない。
   const [scanResult, setScanResult] = useState<ScanResult | null>(null)
@@ -337,41 +339,17 @@ export function StorageBrowser({ connectionId, bucket, prefix, onSelectFile }: P
     : `${pageIdx + 1} / ${history.length}`
 
   return (
-    <div>
-      <SearchBar
-        q={q}
-        recursive={recursive}
-        isSearching={isSearching}
-        onChangeQ={onChangeQ}
-        onToggleRecursive={r => dispatch({ type: 'setRecursive', r })}
-        onClear={onClearQ}
-      />
-
-      {/* 進捗バー領域: 高さ 2px を常時確保しレイアウトシフトを避ける。 */}
-      <div
-        className="relative h-px w-full overflow-hidden"
-        style={{ background: 'var(--rule)' }}
-      >
-        {loading && (
-          <div
-            role="progressbar"
-            aria-label="読み込み中"
-            className="storage-progress h-full w-1/3 bg-ink-9"
-          />
-        )}
-      </div>
-
-      {error && <p className="error">{error}</p>}
-
-      {/* 読み込み中も操作は塞がない。↻ はサーバーキャッシュを貫通するので
-          dataset では 35 秒かかり、その間ずっと触れないのは実用に耐えない。
-          表示中の一覧を触っても困らない: プレビューはオブジェクトキーで開くので
-          一覧の入れ替わりと独立で、ディレクトリ遷移は sessionRef が進行中の
-          応答を破棄する。薄さは「更新中である」ことの合図として残す。 */}
-      <div
-        aria-busy={loading}
-        className={`entry-listing ${loading ? 'opacity-60 transition-opacity' : 'transition-opacity'}`}
-      >
+    <div className="storage-browser">
+      {/* 一覧の上の帯: 検索 (前方一致)・再帰検索・タグの絞り込み。 */}
+      <div className="storage-toolbar">
+        <SearchBar
+          q={q}
+          recursive={recursive}
+          isSearching={isSearching}
+          onChangeQ={onChangeQ}
+          onToggleRecursive={r => dispatch({ type: 'setRecursive', r })}
+          onClear={onClearQ}
+        />
         {tagsEnabled && (
           <TagFilterBar
             tags={filterCandidates}
@@ -380,7 +358,22 @@ export function StorageBrowser({ connectionId, bucket, prefix, onSelectFile }: P
             onClear={() => setSelectedTagIds(new Set())}
           />
         )}
-        {/* 「いつのデータか」はテーブルヘッダの真上に置く。ページャの隅では
+      </div>
+
+      {/* 進捗バー領域: 高さ 2px を常時確保しレイアウトシフトを避ける。 */}
+      <div className="storage-busy-track storage-progress">
+        {loading && <div role="progressbar" aria-label="読み込み中" className="storage-busy-bar" />}
+      </div>
+
+      {error && <p className="notice error">{error}</p>}
+
+      {/* 読み込み中も操作は塞がない。再読み込みはサーバーキャッシュを貫通するので
+          dataset では 35 秒かかり、その間ずっと触れないのは実用に耐えない。
+          表示中の一覧を触っても困らない: プレビューはオブジェクトキーで開くので
+          一覧の入れ替わりと独立で、ディレクトリ遷移は sessionRef が進行中の
+          応答を破棄する。薄さは「更新中である」ことの合図として残す。 */}
+      <div aria-busy={loading} className="entry-listing">
+        {/* 「いつのデータか」は表の見出しの真上に置く。ページャの隅では
             視線が届かず、古いキャッシュを最新だと思って見てしまうため。 */}
         <CacheBanner
           fetchedAt={page?.cache ? new Date(page.cache.fetchedAt) : null}
@@ -394,15 +387,6 @@ export function StorageBrowser({ connectionId, bucket, prefix, onSelectFile }: P
             />
           }
         />
-        {scanOpen && (
-          <ScanModal
-            connectionId={connectionId}
-            bucket={bucket}
-            prefix={effectivePrefix}
-            onClose={() => setScanOpen(false)}
-            onResult={r => { setScanResult(r); setScanRunning(false) }}
-          />
-        )}
         <EntryTable
           dirs={visibleDirs}
           files={visibleFiles}
@@ -410,6 +394,7 @@ export function StorageBrowser({ connectionId, bucket, prefix, onSelectFile }: P
           connectionId={connectionId}
           bucket={bucket}
           onSelectFile={onSelectFile}
+          selectedKey={selectedKey}
           allTags={allTags}
           tagsByPath={tagsByPath}
           onTagsChange={handleTagsChange}
@@ -417,7 +402,7 @@ export function StorageBrowser({ connectionId, bucket, prefix, onSelectFile }: P
         />
 
         {isEmpty && !error && (
-          <p className="py-6 text-center text-[13px] text-ink-7">
+          <p className="state-message entry-empty">
             {isSearching
               ? `「${submittedQ}」に一致するエントリはありません${recursive ? ' (再帰)' : ''}。`
               : recursive
@@ -440,6 +425,17 @@ export function StorageBrowser({ connectionId, bucket, prefix, onSelectFile }: P
           onGoto={goto}
         />
       </div>
+
+      {/* 一覧の外に置く。読み込み中の一覧は薄くするので、中に置くとダイアログまで薄くなる。 */}
+      {scanOpen && (
+        <ScanModal
+          connectionId={connectionId}
+          bucket={bucket}
+          prefix={effectivePrefix}
+          onClose={() => setScanOpen(false)}
+          onResult={r => { setScanResult(r); setScanRunning(false) }}
+        />
+      )}
     </div>
   )
 }

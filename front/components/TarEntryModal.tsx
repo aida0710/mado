@@ -1,4 +1,6 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
+import { Download, Link, Pin } from 'lucide-react'
 import { api } from '../lib/api/client'
 import { classifyEntry } from '../lib/api/mime'
 import { fmtSize, prettyPrintJson } from '../lib/format'
@@ -6,12 +8,15 @@ import { absoluteUrl, tarEntryWebUrl } from '../lib/route'
 import { copyToClipboard } from '../lib/clipboard'
 import { usePinnedPreviews } from '../lib/pinnedPreviews'
 import { TEXT_HEAD_BYTES } from '../lib/textSniff'
+import { useCodeLanguage } from '../lib/useCodeLanguage'
 import { useSniffedText } from '../lib/useSniffedText'
+import { CodeFormatSelect, CodeView } from './CodeView'
 import { CopyMenu, type MenuItem } from './CopyMenu'
+import { Dialog } from './Dialog'
 import { PreviewAudio } from './PreviewAudio'
+import { CopyContentButton } from './PreviewText'
 import { PreviewVideo } from './PreviewVideo'
 import { UnsupportedPreview } from './UnsupportedPreview'
-import { ModalShell } from './ModalShell'
 
 interface Props {
   connectionId: string
@@ -24,6 +29,13 @@ interface Props {
   onClose: () => void
 }
 
+/**
+ * tar の中の 1 エントリのプレビュー。プレビューのドロワーやピン留めの上に重ねるダイアログ。
+ * 見出しはエントリ名、その下にどのアーカイブの中か (とサイズ) を出す。
+ *
+ * document.body に portal する。ドロワー (sticky) や画面下のドック (fixed) の中に置くと
+ * それらの重なりの中に閉じ込められ、ドックがダイアログの上に出てしまうため。
+ */
 export function TarEntryModal({ connectionId, bucket, archiveKey, entry, onClose }: Props) {
   const kind = classifyEntry(entry.name)
   // <img src> / DL / 生データ URL は本体を全部要る。
@@ -42,155 +54,136 @@ export function TarEntryModal({ connectionId, bucket, archiveKey, entry, onClose
     },
     { kind: 'copy', label: '生データ URL をコピー', value: absoluteUrl(url) },
   ]
-
-  return (
-    <ModalShell titleId="tar-entry-title" onClose={onClose}>
-      <header
-        className="flex flex-wrap items-center gap-3 pb-3 mb-3"
-        style={{ borderBottom: '1px solid var(--rule)' }}
+  // エントリの操作。本文の種別によらず、本文の上の帯の右端に並べる。
+  const actions = (
+    <>
+      <button
+        type="button"
+        className="icon-button"
+        onClick={() => addPin({ connectionId, bucket, key: archiveKey, entryPath: entry.name })}
+        aria-label="ピン留め"
+        title="ピン留め"
       >
-        <p
-          id="tar-entry-title"
-          className="m-0 flex min-w-0 flex-1 flex-wrap items-center gap-1"
-          style={{ fontFamily: 'var(--font-mono)', fontSize: '12px' }}
-        >
-          <span className="text-ink-7 truncate">{archiveKey}</span>
-          <span className="text-ink-3 px-[2px]" style={{ fontFamily: 'var(--font-serif)' }}>›</span>
-          <span className="text-ink-12">{entry.name}</span>
-        </p>
-        {entry.size != null && (
-          <span
-            className="text-[11px] text-ink-7 tabular-nums"
-            style={{ fontFamily: 'var(--font-mono)' }}
-          >
-            {fmtSize(entry.size)}
-          </span>
-        )}
-        <button
-          type="button"
-          className="ghost"
-          onClick={() => addPin({ connectionId, bucket, key: archiveKey, entryPath: entry.name })}
-          aria-label="ピン留め"
-          title="ピン留め"
-        >
-          <span aria-hidden>📌</span>
-        </button>
-        <CopyMenu items={copyItems} trigger="🔗" ariaLabel="URL をコピー" />
-        <a
-          className="ghost no-underline"
-          href={url}
-          download={entry.name.split('/').pop()}
-          aria-label={`${entry.name} をダウンロード`}
-          title="ダウンロード"
-        >
-          <span aria-hidden>↓</span>
-          <span className="text-[10.5px] font-semibold uppercase tracking-[0.18em]">DL</span>
-        </a>
-        <button
-          type="button"
-          className="ghost"
-          onClick={onClose}
-          aria-label="Close entry"
-        >
-          <span aria-hidden>✕</span>
-        </button>
-      </header>
-      <div className="overflow-auto">
-        {kind === 'image' && <ImageBody url={url} alt={entry.name} />}
-        {kind === 'audio' && (
-          <PreviewAudio
-            key={`${connectionId}|${bucket}|${archiveKey}|${entry.name}`}
-            connectionId={connectionId}
-            bucket={bucket}
-            k={archiveKey}
-            entryPath={entry.name}
-          />
-        )}
-        {kind === 'video' && (
-          <PreviewVideo
-            key={`${connectionId}|${bucket}|${archiveKey}|${entry.name}`}
-            connectionId={connectionId}
-            bucket={bucket}
-            k={archiveKey}
-            entryPath={entry.name}
-          />
-        )}
+        <Pin size={16} aria-hidden="true" />
+      </button>
+      <CopyMenu items={copyItems} trigger={<Link size={16} aria-hidden="true" />} ariaLabel="URL をコピー" />
+      <a
+        className="icon-button"
+        href={url}
+        download={entry.name.split('/').pop()}
+        aria-label={`${entry.name} をダウンロード`}
+        title="ダウンロード"
+      >
+        <Download size={16} aria-hidden="true" />
+      </a>
+    </>
+  )
+
+  return createPortal(
+    <Dialog
+      titleId="tar-entry-title"
+      title={entry.name}
+      subtitle={
+        <>
+          {archiveKey}
+          {entry.size != null && <>{' · '}<span>{fmtSize(entry.size)}</span></>}
+        </>
+      }
+      onClose={onClose}
+      closeLabel="Close entry"
+      size="extra-wide"
+      nested
+    >
+      <div className="dialog-body preview-stack">
         {/* 画像 / 音声 / 動画以外はすべてテキストとして開こうとする。
             中身がバイナリなら TextBody が「プレビュー非対応」を出す。 */}
-        {kind !== 'image' && kind !== 'audio' && kind !== 'video' && (
-          <TextBody url={headUrl} name={entry.name} />
+        {kind !== 'image' && kind !== 'audio' && kind !== 'video' ? (
+          <TextBody url={headUrl} name={entry.name} actions={actions} />
+        ) : (
+          <>
+            <EntryToolbar>{actions}</EntryToolbar>
+            {kind === 'image' && <img className="preview-image" src={url} alt={entry.name} />}
+            {kind === 'audio' && (
+              <PreviewAudio
+                key={`${connectionId}|${bucket}|${archiveKey}|${entry.name}`}
+                connectionId={connectionId}
+                bucket={bucket}
+                k={archiveKey}
+                entryPath={entry.name}
+              />
+            )}
+            {kind === 'video' && (
+              <PreviewVideo
+                key={`${connectionId}|${bucket}|${archiveKey}|${entry.name}`}
+                connectionId={connectionId}
+                bucket={bucket}
+                k={archiveKey}
+                entryPath={entry.name}
+              />
+            )}
+          </>
         )}
       </div>
-    </ModalShell>
+    </Dialog>,
+    document.body,
   )
 }
 
-function ImageBody({ url, alt }: { url: string; alt: string }) {
+/** 本文の上の帯。左に行数などの情報と表示形式、右に操作。 */
+function EntryToolbar({ info, children }: { info?: ReactNode; children: ReactNode }) {
   return (
-    <img
-      className="mx-auto block h-auto max-w-full"
-      style={{
-        borderRadius: 'var(--radius-2)',
-        border: '1px solid var(--rule)',
-        boxShadow: '0 1px 4px rgba(10, 9, 4, 0.06)',
-      }}
-      src={url}
-      alt={alt}
-    />
+    <div className="preview-toolbar">
+      {info != null && <div className="preview-info">{info}</div>}
+      <div className="preview-actions">{children}</div>
+    </div>
   )
 }
 
-function TextBody({ url, name }: { url: string; name: string }) {
+function TextBody({ url, name, actions }: { url: string; name: string; actions: ReactNode }) {
   const sniffed = useSniffedText(url)
-  const [copyMsg, setCopyMsg] = useState<string | null>(null)
 
-  if (sniffed.status === 'error') return <p className="error">{sniffed.message}</p>
-  if (sniffed.status === 'loading') return <p className="text-[13px] text-ink-7">loading…</p>
-  if (sniffed.status === 'binary') return <UnsupportedPreview />
+  // 読み込み中・失敗・バイナリでも、ピン留めとダウンロードは使えるよう帯は出す。
+  if (sniffed.status !== 'text') {
+    return (
+      <>
+        <EntryToolbar>{actions}</EntryToolbar>
+        {sniffed.status === 'error' && <p className="notice error">{sniffed.message}</p>}
+        {sniffed.status === 'loading' && <p className="muted">読み込み中…</p>}
+        {sniffed.status === 'binary' && <UnsupportedPreview />}
+      </>
+    )
+  }
+  return <LoadedText name={name} text={prettyPrintJson(name, sniffed.text)} actions={actions} />
+}
 
-  const display = prettyPrintJson(name, sniffed.text)
+/** 読み込んだテキスト。形式を推測して色を付け、帯の選択欄で形式を選び直せる。 */
+function LoadedText({ name, text, actions }: { name: string; text: string; actions: ReactNode }) {
+  const [copied, setCopied] = useState<boolean | null>(null)
+  const code = useCodeLanguage(name, text)
 
   // 末尾の改行で行数が余分に増えないようにする。
-  const trimmed = display.endsWith('\n') ? display.slice(0, -1) : display
+  const trimmed = text.endsWith('\n') ? text.slice(0, -1) : text
   const lines = trimmed.length === 0 ? 0 : trimmed.split('\n').length
 
   const handleCopy = async () => {
-    const ok = await copyToClipboard(display)
-    setCopyMsg(ok ? 'コピーしました ✓' : 'コピー失敗')
-    setTimeout(() => setCopyMsg(null), 1500)
+    setCopied(await copyToClipboard(text))
+    setTimeout(() => setCopied(null), 1500)
   }
 
   return (
-    <div className="flex flex-col gap-2">
-      <div className="flex items-center justify-between gap-2">
-        <span
-          className="text-[11px] text-ink-7 tabular-nums"
-          style={{ fontFamily: 'var(--font-mono)', letterSpacing: '0.02em' }}
-        >
-          {lines} 行
-        </span>
-        <button
-          type="button"
-          className="ghost text-[11px]"
-          onClick={handleCopy}
-          title="内容をコピー"
-          aria-label="内容をコピー"
-        >
-          {copyMsg ?? '内容をコピー'}
-        </button>
-      </div>
-      <pre
-        className="m-0 max-h-[70vh] overflow-auto whitespace-pre p-3 text-[12px] leading-snug"
-        style={{
-          fontFamily: 'var(--font-mono)',
-          background: 'var(--ink-0)',
-          border: '1px solid var(--rule)',
-          borderRadius: 'var(--radius-2)',
-          color: 'var(--ink-11)',
-        }}
+    <>
+      <EntryToolbar
+        info={
+          <>
+            <span className="muted mono">{`${lines} 行`}</span>
+            <CodeFormatSelect code={code} />
+          </>
+        }
       >
-        {display}
-      </pre>
-    </div>
+        <CopyContentButton copied={copied} onCopy={handleCopy} />
+        {actions}
+      </EntryToolbar>
+      <CodeView text={text} language={code.language} className="preview-code" />
+    </>
   )
 }

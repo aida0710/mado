@@ -51,11 +51,11 @@ export default function ConnectionEditorPage() {
     navigate('/settings/connections')
   }
 
-  if (state.loading) return <p className="text-[13px] text-ink-7">読み込み中…</p>
+  if (state.loading) return <p className="state-message">読み込み中…</p>
   if (state.error) return (
     <div>
-      <p className="error" role="alert">{state.error}</p>
-      <Link className="ghost" to="/settings/connections">接続一覧へ戻る</Link>
+      <p className="notice error" role="alert">{state.error}</p>
+      <Link className="button" to="/settings/connections">接続一覧へ戻る</Link>
     </div>
   )
 

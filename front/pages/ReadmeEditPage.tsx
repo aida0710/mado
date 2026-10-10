@@ -10,7 +10,7 @@ import { api } from '../lib/api/client'
 import { encPath } from '../lib/route'
 import { useCapabilities } from '../lib/useCapabilities'
 import { useRetryableLoad } from '../lib/useRetryableLoad'
-import { EditorShell } from '../components/EditorShell'
+import { EditorPageHeader, EditorShell } from '../components/EditorShell'
 import { InsertableFileList, type InsertableEntry } from '../components/InsertableFileList'
 import { LoadFailedNotice } from '../components/LoadFailedNotice'
 import {
@@ -41,21 +41,42 @@ export default function ReadmeEditPage({ connectionId }: Props) {
   const { state, retry } = useRetryableLoad(bucket && caps.readmeWrite ? loadLatestReadme : null)
 
   if (!bucket) {
-    return <p className="text-[13px] text-ink-7">bucket がありません</p>
+    return <p className="state-message">bucket がありません</p>
   }
+
+  // 見出しの下に出す場所。bucket と prefix を / で繋ぐ。空 prefix は (root) と表記。
+  const readmeLocation = prefix
+    ? `${bucket} / ${prefix.replace(/\/$/, '')}`
+    : `${bucket} / (root)`
+  const title = 'README を編集'
+  const description = <span className="mono">{readmeLocation}</span>
+
   // 導線は ReadmeView 側で隠しているが、URL を直に開かれた場合の受け皿。
   // 実際の遮断は API 側 (PUT が 403) が担う。
   if (!caps.readmeWrite) {
-    return <p className="text-[13px] text-ink-7">この接続では README の編集が無効になっています。</p>
+    return (
+      <>
+        <EditorPageHeader title={title} description={description} />
+        <p className="state-message">この接続では README の編集が無効になっています。</p>
+      </>
+    )
   }
   if (state.status === 'loading') {
-    return <p className="text-[13px] text-ink-7">読み込み中…</p>
+    return (
+      <>
+        <EditorPageHeader title={title} description={description} />
+        <p className="state-message">読み込み中…</p>
+      </>
+    )
   }
   if (state.status === 'failed') {
     return (
-      <LoadFailedNotice subject="README" reason={state.reason} onRetry={retry}>
-        既存の本文を上書きしないよう、読み込めるまで編集できません。
-      </LoadFailedNotice>
+      <>
+        <EditorPageHeader title={title} description={description} />
+        <LoadFailedNotice subject="README" reason={state.reason} onRetry={retry}>
+          既存の本文を上書きしないよう、読み込めるまで編集できません。
+        </LoadFailedNotice>
+      </>
     )
   }
   const data = state.value
@@ -73,15 +94,10 @@ export default function ReadmeEditPage({ connectionId }: Props) {
     navigate(back)
   }
 
-  // kicker は bucket と prefix を / で繋いだもの。空 prefix は (root) と表記。
-  const kickerLocation = prefix
-    ? `${bucket} / ${prefix.replace(/\/$/, '')}`
-    : `${bucket} / (root)`
-
   return (
     <EditorShell
-      kicker={`README — ${kickerLocation}`}
-      title="README を編集"
+      title={title}
+      description={description}
       initialBody={data.exists ? data.body : ''}
       onSave={(body, editor) =>
         api.putReadme({ connectionId, bucket, prefix, body, editor }).then(() => undefined)

@@ -19,9 +19,9 @@ const rect = (top: number, bottom: number): DOMRect =>
   }) as DOMRect
 
 describe('CopyMenu - ダウンロード項目の揃え', () => {
-  // ダウンロード項目 (<a>) は td の text-right を継承して右寄せにならないよう、
-  // コピー項目 (<button>) と同じく text-left を明示している。
-  it('ダウンロードのリンクもコピー項目と同じく左寄せになる', async () => {
+  // ダウンロード項目 (<a>) は親の td の text-align: right を継承して右寄せにならないよう、
+  // コピー項目 (<button>) と同じ項目の形 (左寄せを明示した class) を使う。
+  it('ダウンロードのリンクもコピー項目と同じ形 (左寄せ) になる', async () => {
     const user = userEvent.setup()
     const items: MenuItem[] = [
       { kind: 'download', label: 'このファイルをダウンロード', href: 'http://x/dl', filename: 'f.bin' },
@@ -30,7 +30,9 @@ describe('CopyMenu - ダウンロード項目の揃え', () => {
     render(<CopyMenu items={items} />)
     await user.click(screen.getByRole('button', { name: 'アクション' }))
     const dl = screen.getByRole('menuitem', { name: 'このファイルをダウンロード' })
-    expect(dl.className).toContain('text-left')
+    const copy = screen.getByRole('menuitem', { name: /S3 URL をコピー/ })
+    expect(dl.className).not.toBe('')
+    expect(dl.className).toBe(copy.className)
   })
 })
 

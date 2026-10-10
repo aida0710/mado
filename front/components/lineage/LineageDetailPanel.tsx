@@ -1,11 +1,13 @@
 import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
+import { FolderOpen, Pencil, X } from 'lucide-react'
 import type {
   DatasetDetail, DatasetVersionDetail, LineageNodeSummary, LineageRunDetail,
   LineageStorageLocationDetail, LineageDatasetUpdateInput,
 } from '../../lib/api/types'
 import {
   LINEAGE_KIND_LABEL, lineageCompletenessLabel, lineageSourceKindLabel, lineageStatusLabel,
+  lineageStatusTone,
 } from '../../lib/lineage/labels'
 import { encPath, parseS3Path } from '../../lib/route'
 
@@ -46,6 +48,13 @@ function metadataText(metadata: Record<string, unknown>, key: string): string | 
   return typeof value === 'string' && value.trim() ? value : null
 }
 
+function StatusBadge({ status }: { status: string | null | undefined }) {
+  const label = lineageStatusLabel(status)
+  if (!label) return null
+  return <span className={`status-badge status-${lineageStatusTone(status) ?? 'queued'}`}>{label}</span>
+}
+
+// .details-list の 1 行。JSON は行の幅いっぱいに .json-view で出す。
 function Field({
   label,
   value,
@@ -60,11 +69,11 @@ function Field({
   if (value === null || value === undefined || value === '') return null
   if (json && isEmptyStructuredValue(value)) return null
   return (
-    <div className={`lineage-detail__field${json ? ' lineage-detail__field--json' : ''}`}>
+    <div className={json ? 'lineage-detail__json-field' : undefined}>
       <dt>{label}</dt>
-      <dd className={mono ? 'font-mono wrap-anywhere' : undefined}>
+      <dd className={mono ? 'mono break-word' : undefined}>
         {json
-          ? <pre className="lineage-detail__json" aria-label={`${label} JSON`}><code>{displayJson(value)}</code></pre>
+          ? <pre className="json-view" aria-label={`${label} JSON`}><code>{displayJson(value)}</code></pre>
           : display(value)}
       </dd>
     </div>
@@ -84,13 +93,18 @@ function Location({ location }: { location: LineageStorageLocationDetail }) {
   const to = storagePath(location)
   return (
     <li className="lineage-location">
-      <div className="flex items-center justify-between gap-2">
+      <div className="lineage-location__head">
         <strong>{location.storageKind}</strong>
-        <span data-status={location.status}>{lineageStatusLabel(location.status)}</span>
+        <StatusBadge status={location.status} />
       </div>
-      <p className="font-mono wrap-anywhere">{location.uri}</p>
-      <small>{location.isPrimary ? '主な保存場所 · ' : ''}{formatTime(location.observedAt)}</small>
-      {to && <Link to={to}>この保存場所をStorageで開く</Link>}
+      <p className="mono break-word">{location.uri}</p>
+      <p className="muted">{location.isPrimary ? '主な保存場所 · ' : ''}{formatTime(location.observedAt)}</p>
+      {to && (
+        <Link className="lineage-location__open" to={to}>
+          <FolderOpen size={14} aria-hidden="true" />
+          この保存場所をStorageで開く
+        </Link>
+      )}
     </li>
   )
 }
@@ -98,7 +112,7 @@ function Location({ location }: { location: LineageStorageLocationDetail }) {
 function VersionDetail({ detail }: { detail: DatasetVersionDetail }) {
   return (
     <>
-      <dl className="lineage-detail__fields">
+      <dl className="details-list">
         <Field label="バージョン" value={detail.version} />
         <Field label="内容のハッシュ" value={detail.contentHash} mono />
         <Field label="ファイル一覧URI" value={detail.manifestUri} mono />
@@ -108,10 +122,10 @@ function VersionDetail({ detail }: { detail: DatasetVersionDetail }) {
         <Field label="登録日時" value={formatTime(detail.createdAt)} />
         <Field label="補足情報" value={detail.metadata} json />
       </dl>
-      <h4>保存場所 <span>{detail.locations.length}</span></h4>
+      <h3>保存場所 <span className="muted">{detail.locations.length}</span></h3>
       {detail.locations.length > 0
-        ? <ul className="lineage-detail__locations">{detail.locations.map(location => <Location key={location.id} location={location} />)}</ul>
-        : <p className="lineage-detail__muted">登録された保存場所はありません。</p>}
+        ? <ul className="lineage-location-list">{detail.locations.map(location => <Location key={location.id} location={location} />)}</ul>
+        : <p className="muted">登録された保存場所はありません。</p>}
     </>
   )
 }
@@ -157,15 +171,15 @@ function DatasetEditForm({
 
   return (
     <form className="lineage-detail__edit" onSubmit={event => void submit(event)}>
-      <label className="manual-field"><span>表示名</span><input value={displayName} onChange={event => setDisplayName(event.target.value)} maxLength={512} /></label>
-      <label className="manual-field"><span>別名（改行またはカンマ区切り）</span><textarea value={aliases} onChange={event => setAliases(event.target.value)} /></label>
-      <label className="manual-field"><span>データ形式</span><input value={mediaType} onChange={event => setMediaType(event.target.value)} maxLength={512} /></label>
-      <label className="manual-field"><span>管理者</span><input value={owner} onChange={event => setOwner(event.target.value)} maxLength={512} /></label>
-      <label className="manual-field"><span>説明</span><textarea value={description} onChange={event => setDescription(event.target.value)} maxLength={8192} /></label>
-      {error && <p className="error" role="alert">{error}</p>}
+      <label className="field"><span>表示名</span><input value={displayName} onChange={event => setDisplayName(event.target.value)} maxLength={512} /></label>
+      <label className="field"><span>別名（改行またはカンマ区切り）</span><textarea value={aliases} onChange={event => setAliases(event.target.value)} /></label>
+      <label className="field"><span>データ形式</span><input value={mediaType} onChange={event => setMediaType(event.target.value)} maxLength={512} /></label>
+      <label className="field"><span>管理者</span><input value={owner} onChange={event => setOwner(event.target.value)} maxLength={512} /></label>
+      <label className="field"><span>説明</span><textarea value={description} onChange={event => setDescription(event.target.value)} maxLength={8192} /></label>
+      {error && <p className="notice error" role="alert">{error}</p>}
       <div className="lineage-detail__edit-actions">
-        <button type="button" className="ghost" onClick={onCancel} disabled={saving}>キャンセル</button>
-        <button type="submit" disabled={saving}>{saving ? '保存中…' : '保存'}</button>
+        <button type="button" className="button" onClick={onCancel} disabled={saving}>キャンセル</button>
+        <button type="submit" className="button primary" disabled={saving}>{saving ? '保存中…' : '保存'}</button>
       </div>
     </form>
   )
@@ -190,11 +204,14 @@ function DatasetDetailView({
   return (
     <>
       {canEdit && detail.datasetId && onUpdate && (
-        <div className="lineage-detail__dataset-actions">
-          <button type="button" className="ghost" onClick={() => setEditing(true)}>説明情報を編集</button>
+        <div className="lineage-detail__actions">
+          <button type="button" className="button small" onClick={() => setEditing(true)}>
+            <Pencil size={14} aria-hidden="true" />
+            説明情報を編集
+          </button>
         </div>
       )}
-      <dl className="lineage-detail__fields">
+      <dl className="details-list">
         <Field label="表示名" value={detail.displayName} />
         <Field label="データセットキー" value={detail.datasetKey} mono />
         <Field label="別名" value={detail.aliases.join(' / ')} />
@@ -203,17 +220,31 @@ function DatasetDetailView({
         <Field label="登録日時" value={formatTime(detail.createdAt)} />
         <Field label="説明" value={detail.description} />
       </dl>
-      <h4>バージョン <span>{detail.versionCount}</span></h4>
-      <ul className="lineage-detail__versions">
-        {detail.versions.map(version => (
-          <li key={version.id}>
-            <button type="button" onClick={() => onOpenVersion(version.id)}>
-              <strong>{version.version}</strong>
-              <span>{metadataText(version.metadata, 'documentedProcessDate') ?? '処理時期不明'}</span>
-            </button>
-          </li>
-        ))}
-      </ul>
+      <h3>バージョン <span className="muted">{detail.versionCount}</span></h3>
+      {detail.versions.length > 0 && (
+        <div className="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">バージョン</th>
+                <th scope="col">処理時期</th>
+              </tr>
+            </thead>
+            <tbody>
+              {detail.versions.map(version => (
+                <tr key={version.id}>
+                  <td>
+                    <button type="button" className="link-button mono break-word" onClick={() => onOpenVersion(version.id)}>
+                      {version.version}
+                    </button>
+                  </td>
+                  <td>{metadataText(version.metadata, 'documentedProcessDate') ?? <span className="muted">処理時期不明</span>}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </>
   )
 }
@@ -222,10 +253,17 @@ function RunDetail({ detail }: { detail: LineageRunDetail }) {
   const historicalTimeUnknown = detail.runtime.recordKind === 'historical-lineage-assertion'
     && detail.runtime.executionTimeStatus === 'unknown'
   const documentedProcessDate = metadataText(detail.runtime, 'documentedProcessDate')
+  const datasets = [
+    ...detail.inputs.map(item => ({ ...item, direction: '入力', key: `in:${item.versionId}` })),
+    ...detail.outputs.map(item => ({ ...item, direction: '出力', key: `out:${item.versionId}` })),
+  ]
   return (
     <>
-      <dl className="lineage-detail__fields">
-        <Field label="状態" value={lineageStatusLabel(detail.status)} />
+      <dl className="details-list">
+        <div>
+          <dt>状態</dt>
+          <dd><StatusBadge status={detail.status} /></dd>
+        </div>
         <Field label="処理" value={`${detail.jobNamespace} / ${detail.jobName}`} mono />
         <Field label="処理時期" value={documentedProcessDate} />
         {!historicalTimeUnknown && <Field label="開始日時" value={formatTime(detail.startedAt)} />}
@@ -241,11 +279,21 @@ function RunDetail({ detail }: { detail: LineageRunDetail }) {
         <Field label="入手元" value={detail.sources} json />
         <Field label="エラー" value={detail.errorMessage} />
       </dl>
-      <h4>入力 / 出力</h4>
-      <ul className="lineage-detail__io">
-        {detail.inputs.map(input => <li key={`in:${input.versionId}`}><span>入力</span>{input.namespace} / {input.name} @ {input.version}</li>)}
-        {detail.outputs.map(output => <li key={`out:${output.versionId}`}><span>出力</span>{output.namespace} / {output.name} @ {output.version}</li>)}
-      </ul>
+      <h3>入力 / 出力</h3>
+      {datasets.length > 0 && (
+        <div className="table-scroll">
+          <table>
+            <tbody>
+              {datasets.map(item => (
+                <tr key={item.key}>
+                  <th scope="row" className="lineage-detail__io-direction">{item.direction}</th>
+                  <td className="mono break-word">{item.namespace} / {item.name} @ {item.version}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </>
   )
 }
@@ -255,9 +303,15 @@ function isDataset(detail: LineageDetail): detail is DatasetDetail { return 'dat
 
 function EmbeddedNodeDetail({ node }: { node: LineageNodeSummary }) {
   const source = node.kind === 'source'
+  const status = node.status ?? node.latestRun?.state
   return (
-    <dl className="lineage-detail__fields">
-      <Field label="状態" value={lineageStatusLabel(node.status ?? node.latestRun?.state)} />
+    <dl className="details-list">
+      {lineageStatusLabel(status) && (
+        <div>
+          <dt>状態</dt>
+          <dd><StatusBadge status={status} /></dd>
+        </div>
+      )}
       <Field label="台帳登録" value={lineageCompletenessLabel(node.completeness)} />
       <Field label="更新日時" value={formatTime(node.updatedAt)} />
       {source && <Field label="入手方法" value={lineageSourceKindLabel(node.data.sourceKind)} />}
@@ -271,23 +325,28 @@ function EmbeddedNodeDetail({ node }: { node: LineageNodeSummary }) {
   )
 }
 
+/** 選んだ項目の詳細。広い画面ではグラフの右、900px 未満ではグラフの下に置く (lineage.css)。 */
 export function LineageDetailPanel({
   node, detail, loading, error, onClose, onOpenVersion, canEdit = false, onUpdateDataset,
 }: Props) {
   return (
     <aside className="lineage-detail" aria-label="選択項目の詳細">
-      <header>
+      <header className="lineage-detail__header">
         <div>
-          <span>{node ? LINEAGE_KIND_LABEL[node.kind] : '詳細'}</span>
-          <h3>{node?.label ?? '項目を選択'}</h3>
-          {node?.namespace && <p>{node.namespace}</p>}
+          <span className="lineage-kind" data-kind={node?.kind}>{node ? LINEAGE_KIND_LABEL[node.kind] : '詳細'}</span>
+          <h2>{node?.label ?? '項目を選択'}</h2>
+          {node?.namespace && <p className="muted mono break-word">{node.namespace}</p>}
         </div>
-        {node && <button type="button" className="ghost" onClick={onClose} aria-label="詳細を閉じる">✕</button>}
+        {node && (
+          <button type="button" className="icon-button" onClick={onClose} aria-label="詳細を閉じる" title="詳細を閉じる">
+            <X size={18} aria-hidden="true" />
+          </button>
+        )}
       </header>
 
-      {!node && <p className="lineage-detail__muted">グラフの項目を選ぶと、バージョン、保存場所、実行条件を表示します。</p>}
-      {loading && <p className="lineage-detail__muted">詳細を読み込み中…</p>}
-      {error && <p className="error" role="alert">{error}</p>}
+      {!node && <p className="muted">グラフの項目を選ぶと、バージョン、保存場所、実行条件を表示します。</p>}
+      {loading && <p className="muted">詳細を読み込み中…</p>}
+      {error && <p className="notice error" role="alert">{error}</p>}
       {node && !loading && !error && !detail && (
         <EmbeddedNodeDetail node={node} />
       )}

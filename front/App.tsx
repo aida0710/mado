@@ -1,12 +1,15 @@
-import { lazy, Suspense, type ReactNode } from 'react'
-import { Link, Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom'
+import { lazy, Suspense, type CSSProperties, type ReactNode } from 'react'
+import { Navigate, Route, Routes, useParams } from 'react-router-dom'
 import HomePage from './pages/HomePage'
 import StoragePage from './pages/StoragePage'
 import StorageLanding from './pages/StorageLanding'
 import SettingsPage from './pages/SettingsPage'
 import { PlayerDeckProvider, usePlayerDeck } from './lib/playerDeck'
 import { PinnedPreviewsProvider, usePinnedPreviews } from './lib/pinnedPreviews'
+import { useNavigation } from './lib/useNavigation'
 import { BottomDock } from './components/BottomDock'
+import { NavigationSidebar } from './components/shell/NavigationSidebar'
+import { TopBar } from './components/shell/TopBar'
 import './App.css'
 
 // NoteEditPage は Monaco エディタを抱える重量級ページ (~1MB)。
@@ -15,45 +18,10 @@ const NoteEditPage = lazy(() => import('./pages/NoteEditPage'))
 const LineagePage = lazy(() => import('./pages/LineagePage'))
 const LineageRegisterPage = lazy(() => import('./pages/LineageRegisterPage'))
 
-/* ── Tab — masthead 右側のナビ。
-   editorial: 小キャップ + tracking。アクティブは細い下線で示す
-   (背景塗りはやめて静謐さを優先)。                                     */
-function Tab({ to, label }: { to: string; label: string }) {
-  const { pathname } = useLocation()
-  const active = to === '/' ? pathname === '/' : pathname.startsWith(to)
-  return (
-    <Link
-      className={
-        'mado-tab inline-flex h-9 items-center px-1 ' +
-        'text-[11px] font-semibold uppercase tracking-[0.22em] ' +
-        'no-underline transition-colors duration-[160ms] ' +
-        'border-b-[1.5px] ' +
-        (active
-          ? 'border-ink-12 text-ink-12'
-          : 'border-transparent text-ink-7 hover:text-ink-11')
-      }
-      to={to}
-    >
-      {label}
-    </Link>
-  )
-}
-
 // connectionId が変わったときに StoragePage を再マウントしてインメモリ状態をすべてリセットする。
 function StoragePageWithKey() {
   const { connectionId } = useParams<{ connectionId: string }>()
   return <StoragePage key={connectionId} connectionId={connectionId!} />
-}
-
-function Tabs() {
-  return (
-    <nav className="mado-tabs flex items-stretch gap-4 sm:gap-6" aria-label="メインナビゲーション">
-      <Tab to="/"            label="Home" />
-      <Tab to="/storage"     label="Storage" />
-      <Tab to="/lineage"     label="DataLineage" />
-      <Tab to="/settings"    label="Settings" />
-    </nav>
-  )
 }
 
 function LegacyAccessRedirect() {
@@ -62,7 +30,7 @@ function LegacyAccessRedirect() {
 }
 
 // BottomDock (同期プレイヤー + ピン留め) は画面下部に fixed でドックされるため、
-// デッキにトラックがある / ピンがある間は本文の下端がドックに隠れないよう pb を
+// デッキにトラックがある / ピンがある間は本文の下端がドックに隠れないよう下の余白を
 // 広げる。usePlayerDeck()/usePinnedPreviews() は各 Provider の内側でしか使えない
 // ので、Provider に包まれるこの小さなラッパーで読む。
 function MainContent({ children }: { children: ReactNode }) {
@@ -70,66 +38,47 @@ function MainContent({ children }: { children: ReactNode }) {
   const { pins } = usePinnedPreviews()
   const docked = tracks.length > 0 || pins.length > 0
   return (
-    <main className={`mado-page-in pt-6 ${docked ? 'pb-64' : 'pb-12'}`}>
+    <main id="content" className="page" data-docked={docked ? 'true' : undefined}>
       {children}
     </main>
   )
 }
 
+/**
+ * 画面の枠。Mado Model Tracking と同じ形 (@mado/design-system の shell.css):
+ * 上部バー、左のサイドバー (1200px 以上は名前つき、900px 以上はアイコンだけ、
+ * それ未満は上部バーのメニューボタンから開くドロワー)、その右に画面。
+ */
 export default function App() {
+  const navigation = useNavigation()
   return (
     <PlayerDeckProvider>
       <PinnedPreviewsProvider>
-        <div className="mx-auto max-w-[1180px] px-4 sm:px-6">
-          {/* ── Masthead ─────────────────────────────────────────────────
-              newspaper の刊頭 (masthead) を意識:
-              ・左 = upright serif で "mado." (ピリオドはタイポ的アクセント)
-              ・右 = small-cap タブ
-              ・下に hairline rule (border-color はトークンの --color-rule)
-              を thin に置く。                                             */}
-          <header
-            className="mado-header flex flex-wrap items-center justify-between gap-x-4 gap-y-2 pt-6 pb-4 sm:pt-7"
-            style={{ borderBottom: '1px solid var(--rule)' }}
-          >
-            <Link
-              to="/"
-              className="group flex items-baseline gap-3 self-end text-ink-12 no-underline"
-              aria-label="mado ホームへ"
-            >
-              <img
-                src="/mado-icon.png"
-                alt=""
-                width={18}
-                height={18}
-                className="-mb-0.5 self-center opacity-80 transition-opacity group-hover:opacity-100"
-              />
-              <h1
-                className="m-0 font-serif font-medium text-[26px] leading-none tracking-[-0.02em] text-ink-12"
-                style={{ fontVariationSettings: "'opsz' 28" }}
-              >
-                <span>mado</span>
-                <span className="text-ink-9">.</span>
-              </h1>
-            </Link>
-            <div className="mado-nav-row flex items-center gap-5">
-              <Tabs />
+        <div
+          className="app-shell"
+          data-navigation={navigation.mode}
+          style={{ '--navigation-width': `${navigation.width}px` } as CSSProperties}
+        >
+          <TopBar navigation={navigation} />
+          <div className="app-body">
+            {navigation.mode !== 'drawer' && <NavigationSidebar navigation={navigation} />}
+            <div className="app-content">
+              <MainContent>
+                <Suspense fallback={<p className="state-message">読み込み中…</p>}>
+                  <Routes>
+                    <Route path="/"                  element={<HomePage />} />
+                    <Route path="/edit-note"         element={<NoteEditPage />} />
+                    <Route path="/settings/*"        element={<SettingsPage />} />
+                    <Route path="/storage"           element={<StorageLanding />} />
+                    <Route path="/storage/:connectionId/*" element={<StoragePageWithKey />} />
+                    <Route path="/lineage"            element={<LineagePage />} />
+                    <Route path="/lineage/register"   element={<LineageRegisterPage />} />
+                    <Route path="/access/*"           element={<LegacyAccessRedirect />} />
+                  </Routes>
+                </Suspense>
+              </MainContent>
             </div>
-          </header>
-
-          <MainContent>
-            <Suspense fallback={<p className="text-[13px] text-ink-7">読み込み中…</p>}>
-              <Routes>
-                <Route path="/"                  element={<HomePage />} />
-                <Route path="/edit-note"         element={<NoteEditPage />} />
-                <Route path="/settings/*"        element={<SettingsPage />} />
-                <Route path="/storage"           element={<StorageLanding />} />
-                <Route path="/storage/:connectionId/*" element={<StoragePageWithKey />} />
-                <Route path="/lineage"            element={<LineagePage />} />
-                <Route path="/lineage/register"   element={<LineageRegisterPage />} />
-                <Route path="/access/*"           element={<LegacyAccessRedirect />} />
-              </Routes>
-            </Suspense>
-          </MainContent>
+          </div>
           <BottomDock />
         </div>
       </PinnedPreviewsProvider>

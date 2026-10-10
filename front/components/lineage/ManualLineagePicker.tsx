@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
+import { Plus, X } from 'lucide-react'
 import { api } from '../../lib/api/client'
 import type { RegistryDatasetSummary } from '../../lib/api/types'
+import { isFromRowControl } from '../../lib/lineage/rowClick'
 
 export interface VersionChoice {
   id: string
@@ -9,6 +11,27 @@ export interface VersionChoice {
   namespace: string
   name: string
   version: string
+}
+
+// 選び終えた項目。ラベルの下に名前と技術名を出し、「変更」で選び直す。
+function PickedValue({ label, title, identity, onChange }: {
+  label: string
+  title: string
+  identity: string
+  onChange: () => void
+}) {
+  return (
+    <div className="field lineage-picker">
+      <span>{label}</span>
+      <div className="lineage-picked">
+        <div>
+          <strong>{title}</strong>
+          <span className="muted mono break-word">{identity}</span>
+        </div>
+        <button type="button" className="button small" onClick={onChange}>変更</button>
+      </div>
+    </div>
+  )
 }
 
 interface DatasetPickerProps {
@@ -46,19 +69,25 @@ export function DatasetPicker({ value, onChange, label = 'データセット' }:
 
   if (value) {
     return (
-      <div className="manual-picker__selected">
-        <div>
-          <strong>{value.displayName ?? value.name}</strong>
-          <span>{value.namespace} / {value.name}</span>
-        </div>
-        <button type="button" className="ghost" onClick={() => onChange(null)}>変更</button>
-      </div>
+      <PickedValue
+        label={label}
+        title={value.displayName ?? value.name}
+        identity={`${value.namespace} / ${value.name}`}
+        onChange={() => onChange(null)}
+      />
     )
   }
 
+  const choose = (item: RegistryDatasetSummary) => {
+    onChange(item)
+    setQuery('')
+    setResults([])
+    setLoading(false)
+  }
+
   return (
-    <div className="manual-picker">
-      <label className="manual-field">
+    <div className="lineage-picker">
+      <label className="field">
         <span>{label}</span>
         <input
           value={query}
@@ -72,19 +101,36 @@ export function DatasetPicker({ value, onChange, label = 'データセット' }:
           autoComplete="off"
         />
       </label>
-      {loading && <small>検索中…</small>}
-      {error && <p className="error" role="alert">{error}</p>}
+      {loading && <p className="muted lineage-picker__status">検索中…</p>}
+      {error && <p className="notice error" role="alert">{error}</p>}
       {results.length > 0 && (
-        <ul className="manual-picker__results">
-          {results.map(item => (
-            <li key={item.datasetId ?? `${item.namespace}/${item.name}`}>
-                  <button type="button" onClick={() => { onChange(item); setQuery(''); setResults([]); setLoading(false) }}>
-                <strong>{item.displayName ?? item.name}</strong>
-                <span>{item.namespace} / {item.name} · バージョン {item.versionCount}件</span>
-              </button>
-            </li>
-          ))}
-        </ul>
+        <div className="table-scroll lineage-picker__results">
+          <table className="responsive-table">
+            <thead>
+              <tr>
+                <th scope="col">データセット</th>
+                <th scope="col" className="numeric">バージョン</th>
+              </tr>
+            </thead>
+            <tbody>
+              {results.map(item => (
+                <tr
+                  key={item.datasetId ?? `${item.namespace}/${item.name}`}
+                  className="clickable-row"
+                  onClick={event => { if (!isFromRowControl(event)) choose(item) }}
+                >
+                  <td>
+                    <button type="button" className="link-button" onClick={() => choose(item)}>
+                      {item.displayName ?? item.name}
+                    </button>
+                    <small className="mono break-word">{item.namespace} / {item.name}</small>
+                  </td>
+                  <td className="numeric nowrap">{item.versionCount}件</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   )
@@ -123,25 +169,24 @@ export function VersionPicker({ value, onChange, label = 'データのバージ�
 
   if (value) {
     return (
-      <div className="manual-picker__selected">
-        <div>
-          <strong>{value.datasetLabel} · {value.version}</strong>
-          <span>{value.namespace} / {value.name}</span>
-        </div>
-        <button type="button" className="ghost" onClick={() => { onChange(null); setDataset(null) }}>変更</button>
-      </div>
+      <PickedValue
+        label={label}
+        title={`${value.datasetLabel} · ${value.version}`}
+        identity={`${value.namespace} / ${value.name}`}
+        onChange={() => { onChange(null); setDataset(null) }}
+      />
     )
   }
 
   return (
-    <div className="manual-version-picker">
+    <div>
       <DatasetPicker value={dataset} onChange={next => {
         setDataset(next)
         setVersions([])
         setLoading(next !== null)
       }} label={label} />
       {dataset && (
-        <label className="manual-field">
+        <label className="field">
           <span>バージョン</span>
           <select
             value=""
@@ -164,7 +209,7 @@ export function VersionPicker({ value, onChange, label = 'データのバージ�
           </select>
         </label>
       )}
-      {error && <p className="error" role="alert">{error}</p>}
+      {error && <p className="notice error" role="alert">{error}</p>}
     </div>
   )
 }
@@ -179,26 +224,37 @@ export function VersionListPicker({ values, onChange, label }: VersionListPicker
   const [candidate, setCandidate] = useState<VersionChoice | null>(null)
   const [pickerKey, setPickerKey] = useState(0)
   return (
-    <div className="manual-version-list">
+    <div className="lineage-version-list">
       <VersionPicker key={pickerKey} value={candidate} onChange={setCandidate} label={label} />
       {candidate && (
         <button
           type="button"
-          className="ghost"
+          className="button small"
           disabled={values.some(value => value.id === candidate.id)}
           onClick={() => {
             onChange([...values, candidate])
             setCandidate(null)
             setPickerKey(key => key + 1)
           }}
-        >追加</button>
+        >
+          <Plus size={14} aria-hidden="true" />
+          追加
+        </button>
       )}
       {values.length > 0 && (
-        <ul className="manual-version-list__selected">
+        <ul className="lineage-version-list__selected">
           {values.map(value => (
             <li key={value.id}>
-              <span><strong>{value.datasetLabel}</strong> · {value.version}</span>
-              <button type="button" onClick={() => onChange(values.filter(item => item.id !== value.id))}>外す</button>
+              <span><strong>{value.datasetLabel}</strong> · <span className="mono">{value.version}</span></span>
+              <button
+                type="button"
+                className="icon-button"
+                aria-label="外す"
+                title="外す"
+                onClick={() => onChange(values.filter(item => item.id !== value.id))}
+              >
+                <X size={16} aria-hidden="true" />
+              </button>
             </li>
           ))}
         </ul>

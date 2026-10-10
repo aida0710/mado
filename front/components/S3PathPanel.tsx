@@ -7,11 +7,12 @@
 // フルキー (完全なオブジェクトキー) を貼った場合も、それを prefix とした前方一致で
 // そのファイル 1 件がヒットする (= 単一ファイル検索)。
 //
-// 末尾 `/` (= 実在ディレクトリ指定) や bucket 直下の場合は「→ 開く」リンク + Enter で
+// 末尾 `/` (= 実在ディレクトリ指定) や bucket 直下の場合は「開く」リンク + Enter で
 // 直接そのページへ遷移できる。
 
 import { useEffect, useReducer, useRef, type KeyboardEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { ArrowRight, File, Folder, Link2 } from 'lucide-react'
 import type { z } from 'zod'
 import { api } from '../lib/api/client'
 import { StorageList } from '../lib/api/types'
@@ -53,11 +54,6 @@ function reducer(s: State, a: Action): State {
 }
 
 const SEARCH_DEBOUNCE_MS = 300
-
-const inputClass =
-  'flex-1 max-w-[480px] rounded-1 bg-paper px-3 py-1.5 text-[13px] focus:outline-none'
-const rowLinkClass =
-  'block overflow-hidden text-ellipsis whitespace-nowrap text-[12.5px] text-ink-12 no-underline hover:underline underline-offset-[3px]'
 
 export function S3PathPanel({ connectionId }: Props) {
   const [state, dispatch] = useReducer(reducer, initial)
@@ -125,68 +121,50 @@ export function S3PathPanel({ connectionId }: Props) {
   const hasMore = !!(result && (result.data.nextContinuation || result.data.nextStartAfter))
 
   return (
-    <section className="mt-3 mb-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <input
-          type="search"
-          className={inputClass}
-          style={{ border: '1px solid var(--color-rule-strong)', fontFamily: 'var(--font-mono)' }}
-          placeholder="s3://bucket/key を貼付 (前方一致・フルキーで単一ファイルも検索可)"
-          value={raw}
-          onChange={e => onChange(e.target.value)}
-          onKeyDown={onKeyDown}
-          aria-label="S3 パスで移動"
-          spellCheck={false}
-        />
-        {loading && <span className="text-[11px] text-ink-7">検索中…</span>}
+    <section className="s3-path">
+      <div className="s3-path-row">
+        <div className="storage-search">
+          <Link2 size={16} aria-hidden="true" />
+          <input
+            type="search"
+            placeholder="s3://bucket/key を貼付 (前方一致・フルキーで単一ファイルも検索可)"
+            value={raw}
+            onChange={e => onChange(e.target.value)}
+            onKeyDown={onKeyDown}
+            aria-label="S3 パスで移動"
+            spellCheck={false}
+          />
+          {loading && <span className="muted nowrap">検索中…</span>}
+        </div>
         {canOpenDirectly && openHref && (
-          <Link
-            to={openHref}
-            className="text-[12px] text-ink-9 no-underline hover:text-ink-12 hover:underline underline-offset-[3px]"
-          >
-            → {parsed!.bucket}/{parsed!.prefix} を開く
+          <Link to={openHref} className="s3-path-open">
+            <ArrowRight size={14} aria-hidden="true" />
+            {parsed!.bucket}/{parsed!.prefix} を開く
           </Link>
         )}
       </div>
 
-      {error && <p className="error mt-2">{error}</p>}
+      {error && <p className="notice error">{error}</p>}
 
       {isEmpty && !loading && !error && (
-        <p className="mt-3 text-[12px] text-ink-7">一致するパスがありません。</p>
+        <p className="muted s3-path-note">一致するパスがありません。</p>
       )}
 
       {result && (dirs.length > 0 || files.length > 0) && (
-        <ul
-          className="m-0 mt-3 list-none p-0"
-          style={{ borderTop: '1px solid var(--rule)' }}
-        >
+        <ul className="s3-path-results">
           {dirs.map(d => (
-            <li
-              key={d}
-              className="py-2 px-1 transition-colors hover:bg-ink-0"
-              style={{ borderBottom: '1px solid var(--rule)' }}
-            >
-              <Link
-                to={`/storage/${encodeURIComponent(connectionId)}/${encodeURIComponent(result.bucket)}/${encPath(d)}`}
-                className={rowLinkClass}
-                style={{ fontFamily: 'var(--font-mono)', letterSpacing: '0.005em' }}
-              >
-                <span aria-hidden>📁 </span>{relName(d)}
+            <li key={d}>
+              <Link to={`/storage/${encodeURIComponent(connectionId)}/${encodeURIComponent(result.bucket)}/${encPath(d)}`}>
+                <Folder size={15} aria-hidden="true" />
+                {relName(d)}
               </Link>
             </li>
           ))}
           {files.map(f => (
-            <li
-              key={f.key}
-              className="py-2 px-1 transition-colors hover:bg-ink-0"
-              style={{ borderBottom: '1px solid var(--rule)' }}
-            >
-              <Link
-                to={fileLinkToDirRedirect(connectionId, result.bucket, f.key)}
-                className={rowLinkClass}
-                style={{ fontFamily: 'var(--font-mono)', letterSpacing: '0.005em' }}
-              >
-                <span aria-hidden>📄 </span>{relName(f.key)}
+            <li key={f.key}>
+              <Link to={fileLinkToDirRedirect(connectionId, result.bucket, f.key)}>
+                <File size={15} aria-hidden="true" />
+                {relName(f.key)}
               </Link>
             </li>
           ))}
@@ -194,7 +172,7 @@ export function S3PathPanel({ connectionId }: Props) {
       )}
 
       {hasMore && (
-        <p className="mt-2 text-[11px] text-ink-7">
+        <p className="muted s3-path-note">
           結果が多すぎます。パスをもう少し具体的に入力してください。
         </p>
       )}

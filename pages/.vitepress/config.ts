@@ -4,8 +4,8 @@ const repository = 'https://github.com/aida0710/mado'
 const base = '/mado/'
 
 export default defineConfig({
-  title: 'mado',
-  titleTemplate: ':title · mado',
+  title: 'mado S3 Data Catalog',
+  titleTemplate: ':title · mado S3 Data Catalog',
   description: '複数のS3互換ストレージを横断して、ファイルの中身・容量・データの来歴を確認するWebツール。',
   lang: 'ja',
   base,
@@ -13,16 +13,16 @@ export default defineConfig({
   lastUpdated: true,
   sitemap: { hostname: 'https://aida0710.github.io/mado/' },
   head: [
-    ['link', { rel: 'icon', href: `${base}mado-icon.png`, type: 'image/png' }],
-    ['meta', { name: 'theme-color', content: '#faf9f5' }],
+    ['link', { rel: 'icon', href: `${base}mado-icon.svg`, type: 'image/svg+xml' }],
+    ['meta', { name: 'theme-color', content: '#151515' }],
     ['meta', { property: 'og:type', content: 'website' }],
     ['meta', { property: 'og:locale', content: 'ja_JP' }],
     ['meta', { property: 'og:image', content: 'https://aida0710.github.io/mado/screenshots/storage-directory.png' }],
     ['meta', { name: 'twitter:card', content: 'summary_large_image' }],
   ],
   themeConfig: {
-    logo: '/mado-icon.png',
-    siteTitle: 'mado.',
+    // 名前はテーマの ProductLogo.vue で、印と太さを付けて組む。
+    siteTitle: false,
     nav: [
       { text: 'Guide', link: '/guide/getting-started', activeMatch: '/guide/' },
       { text: 'Setup', link: '/setup/install', activeMatch: '/setup/' },
@@ -70,8 +70,8 @@ export default defineConfig({
     sidebarMenuLabel: '目次',
     returnToTopLabel: 'ページの先頭へ',
     footer: {
-      message: 'Apache License 2.0 · 窓のアイコン: Inmotus Design / Icons8',
-      copyright: 'mado documentation',
+      message: 'Apache License 2.0',
+      copyright: 'mado S3 Data Catalog',
     },
   },
   appearance: false,

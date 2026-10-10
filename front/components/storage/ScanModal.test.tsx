@@ -165,7 +165,7 @@ describe('ScanModal — 移送の見積もりタブ', () => {
 
     await waitFor(() => expect(api.estimate).toHaveBeenCalledWith('c1', 'b1', 'p/'))
     // 内訳側の走査ボタンは隠れる (パネルごと切り替わる)。
-    expect(screen.queryByRole('button', { name: '↻ 再走査' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '再走査' })).toBeNull()
   })
 
   it('見積もりタブから走査へ戻れる', async () => {

@@ -162,8 +162,8 @@ export function AuthGate({ children }: { children: ReactNode }) {
   const screenUser = session.screenUser
   const value = useMemo(() => ({ enabled: !disabled, user: screenUser, logout, reload }), [disabled, screenUser, logout, reload])
 
-  if (loading) return <div className="auth-splash">mado.</div>
-  if (error) return <div className="auth-splash auth-splash--error">{error}</div>
+  if (loading) return <div className="auth-splash" role="status">読み込み中…</div>
+  if (error) return <div className="auth-splash error" role="alert">{error}</div>
   const authPage = !disabled && config ? authPageFor({ config, session, onSessionChanged: reload }) : null
   // 残す画面が無ければ（起動時やサインアウトのあと）、ログイン画面だけを出す。
   if (authPage && !screenUser) return authPage

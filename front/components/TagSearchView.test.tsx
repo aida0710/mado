@@ -52,7 +52,7 @@ describe('TagSearchView', () => {
     await user.click(await screen.findByRole('button', { name: '処理前' }))
 
     expect(await screen.findByText('2 件')).toBeInTheDocument()
-    const list = screen.getByRole('list')
+    const list = screen.getByRole('table')
     expect(within(list).getByText('a/b/')).toBeInTheDocument()
     expect(within(list).getByText('(bucket root)')).toBeInTheDocument()
     // 種別が分かるようにラベルを添える。

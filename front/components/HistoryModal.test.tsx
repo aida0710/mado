@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { HistoryModal } from './HistoryModal'
@@ -13,7 +13,7 @@ function renderModal(overrides: Partial<Parameters<typeof HistoryModal>[0]> = {}
   const onClose = vi.fn()
   render(
     <HistoryModal
-      kicker="テスト · 履歴"
+      subtitle="テスト · 履歴"
       titleId="test-history-title"
       title="対象"
       currentBody={null}
@@ -31,7 +31,10 @@ describe('HistoryModal', () => {
     renderModal()
     expect(await screen.findByRole('heading', { name: '二版' })).toBeInTheDocument()
     expect(screen.getByText('bob')).toBeInTheDocument()
-    expect(screen.getByLabelText('latest')).toBeInTheDocument()
+    // 最新の版 (一覧の先頭) にだけ「最新」の印が付き、選択中になる。
+    expect(screen.getByText('最新')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /bob/ })).toHaveAttribute('aria-current', 'true')
+    expect(screen.getByRole('button', { name: /alice/ })).not.toHaveAttribute('aria-current')
   })
 
   it('別の版を選ぶとその本文に切り替わる', async () => {
@@ -40,6 +43,7 @@ describe('HistoryModal', () => {
     await userEvent.click(screen.getByRole('button', { name: /alice/ }))
     expect(await screen.findByRole('heading', { name: '初版' })).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: '二版' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /alice/ })).toHaveAttribute('aria-current', 'true')
   })
 
   it('選んだ版が現在の本文と同じなら「一致します」と出す', async () => {
@@ -61,7 +65,8 @@ describe('HistoryModal', () => {
     await screen.findByRole('heading', { name: '二版' })
     fireEvent.keyDown(window, { key: 'Escape' })
     expect(onClose).toHaveBeenCalledTimes(1)
-    await userEvent.click(screen.getByRole('button', { name: '履歴を閉じる' }))
+    // 背景のクリック用の見えないボタンも同じ名前を持つので、ダイアログの中の × を押す。
+    await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: '履歴を閉じる' }))
     expect(onClose).toHaveBeenCalledTimes(2)
   })
 })

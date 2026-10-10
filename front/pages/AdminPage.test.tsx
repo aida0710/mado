@@ -48,7 +48,7 @@ describe('AdminPage', () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ accounts: [] }), {
       status: 200, headers: { 'Content-Type': 'application/json' },
     }))
-    const { container } = render(
+    render(
       <AuthContext.Provider value={auth}>
         <MemoryRouter initialEntries={['/settings/access/service-accounts']}>
           <Routes><Route path="/settings/access/*" element={<AdminPage />} /></Routes>
@@ -58,7 +58,8 @@ describe('AdminPage', () => {
 
     expect(await screen.findByRole('heading', { name: 'Service Accountを追加' })).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Pipeline Service Accounts' })).not.toBeInTheDocument()
-    expect(container.querySelector('.admin-list')).not.toBeInTheDocument()
+    // Service Account がまだ無ければ、空の表は出さない。
+    expect(screen.queryByRole('table')).not.toBeInTheDocument()
   })
 
   it('Prometheus用のkeyはmetrics:readだけを付け、Namespaceを求めずに発行する', async () => {
@@ -109,14 +110,83 @@ describe('AdminPage', () => {
       </AuthContext.Provider>,
     )
 
-    const summaryName = await screen.findByText('相田')
-    await userEvent.click(summaryName)
-    const details = summaryName.closest('details')!
-    expect(within(details).getByLabelText('表示名')).toHaveValue('相田')
-    expect(within(details).getByLabelText('ユーザーID（ログインID）')).toHaveValue('aida')
-    expect(screen.getByText('aida@example.jp')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'パスワードを再発行' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '削除' })).toBeInTheDocument()
+    // 行をクリックすると、その下に編集欄が開く。
+    await userEvent.click(await screen.findByText('相田'))
+    const form = screen.getByRole('form', { name: '相田を編集' })
+    expect(within(form).getByLabelText('表示名')).toHaveValue('相田')
+    expect(within(form).getByLabelText('ユーザーID（ログインID）')).toHaveValue('aida')
+    expect(within(form).getByText('aida@example.jp')).toBeInTheDocument()
+    expect(within(form).getByRole('button', { name: 'パスワードを再発行' })).toBeInTheDocument()
+    expect(within(form).getByRole('button', { name: '削除' })).toBeInTheDocument()
+
+    // キーボードでは行の右端のボタンで開け閉めする。
+    const toggle = screen.getByRole('button', { name: '詳細を閉じる' })
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    await userEvent.click(toggle)
+    expect(screen.queryByRole('form', { name: '相田を編集' })).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: '詳細を表示' }))
+    expect(screen.getByRole('form', { name: '相田を編集' })).toBeInTheDocument()
+  })
+
+  it('ユーザーの削除は確認のダイアログで確定してから送る', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (_url, init) => new Response(
+      init?.method === 'DELETE' ? '{}' : JSON.stringify({
+        users: [{
+          id: 'user-1', username: 'aida', email: null, displayName: '相田',
+          status: 'active', roles: ['curator'], authMethods: ['local'],
+        }],
+      }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } },
+    ))
+    render(
+      <AuthContext.Provider value={auth}>
+        <MemoryRouter initialEntries={['/settings/access/users']}>
+          <Routes><Route path="/settings/access/*" element={<AdminPage />} /></Routes>
+        </MemoryRouter>
+      </AuthContext.Provider>,
+    )
+
+    await userEvent.click(await screen.findByText('相田'))
+    await userEvent.click(within(screen.getByRole('form', { name: '相田を編集' })).getByRole('button', { name: '削除' }))
+    const dialog = screen.getByRole('dialog', { name: 'ユーザーを削除' })
+    expect(dialog).toHaveTextContent('相田を削除しますか？この操作は取り消せません。')
+    expect(fetchMock).not.toHaveBeenCalledWith('/api/internal/users/user-1', expect.objectContaining({ method: 'DELETE' }))
+
+    await userEvent.click(within(dialog).getByRole('button', { name: '削除' }))
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      '/api/internal/users/user-1', expect.objectContaining({ method: 'DELETE' }),
+    ))
+    expect(await screen.findByText('相田を削除しました。')).toBeInTheDocument()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('ユーザーを名前・ユーザーID・メールアドレスと状態で絞り込める', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+      users: [
+        { id: 'user-1', username: 'aida', email: 'aida@example.jp', displayName: '相田', status: 'active', roles: ['curator'], authMethods: ['local'] },
+        { id: 'user-2', username: 'sato', email: 'sato@example.jp', displayName: '佐藤', status: 'disabled', roles: ['viewer'], authMethods: ['local'] },
+      ],
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    render(
+      <AuthContext.Provider value={auth}>
+        <MemoryRouter initialEntries={['/settings/access/users']}>
+          <Routes><Route path="/settings/access/*" element={<AdminPage />} /></Routes>
+        </MemoryRouter>
+      </AuthContext.Provider>,
+    )
+
+    await screen.findByText('相田')
+    await userEvent.type(screen.getByRole('searchbox', { name: 'ユーザーを検索' }), 'SATO')
+    expect(screen.queryByText('相田')).not.toBeInTheDocument()
+    expect(screen.getByText('佐藤')).toBeInTheDocument()
+
+    await userEvent.clear(screen.getByRole('searchbox', { name: 'ユーザーを検索' }))
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: '状態で絞り込む' }), 'active')
+    expect(screen.getByText('相田')).toBeInTheDocument()
+    expect(screen.queryByText('佐藤')).not.toBeInTheDocument()
+
+    await userEvent.type(screen.getByRole('searchbox', { name: 'ユーザーを検索' }), 'sato')
+    expect(screen.getByText('条件に合うユーザーはいません。')).toBeInTheDocument()
   })
 
   it('SSOユーザーの権限を読み取り専用にしてAuthentikの対応表を表示する', async () => {
@@ -138,9 +208,8 @@ describe('AdminPage', () => {
       </AuthContext.Provider>,
     )
 
-    const summaryName = await screen.findByText('SSO User')
-    await userEvent.click(summaryName)
-    const details = summaryName.closest('details')!
+    await userEvent.click(await screen.findByText('SSO User'))
+    const details = screen.getByRole('form', { name: 'SSO Userを編集' })
     expect(within(details).getByLabelText(/^権限/)).toBeDisabled()
     expect(within(details).getByText('SSO側で管理されるため、Madoからは変更できません。')).toBeInTheDocument()
 
@@ -183,8 +252,10 @@ describe('AdminPage', () => {
     expect(screen.getByText('時刻')).toBeInTheDocument()
     expect(screen.getByText('ユーザーを変更')).toBeInTheDocument()
     expect(screen.getByText('OK')).toBeInTheDocument()
+    expect(screen.getByText('OK')).toHaveClass('status-badge')
     await userEvent.click(screen.getByText('ユーザーを変更'))
     expect(screen.getByText('aida')).toBeInTheDocument()
     expect(screen.getByText('masaki')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '詳細を閉じる' })).toHaveAttribute('aria-expanded', 'true')
   })
 })

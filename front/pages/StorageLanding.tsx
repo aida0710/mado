@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { Plus } from 'lucide-react'
 import { api } from '../lib/api/client'
 import type { Connection } from '../lib/api/types'
 
@@ -28,16 +29,24 @@ export default function StorageLanding() {
       .catch(e => setError((e as Error).message))
   }, [navigate])
 
-  if (error) return <p className="error">{error}</p>
-  if (!empty) return <p className="text-[13px] text-ink-7">読み込み中…</p>
+  if (error) return <p className="notice error">{error}</p>
+  if (!empty) return <p className="state-message">読み込み中…</p>
   return (
-    <div className="empty-state">
-      <h2>接続がまだありません</h2>
-      <p>
-        ここに表示する S3 互換ストレージはまだ登録されていません。<br />
-        設定ページから一つ追加してみましょう。
-      </p>
-      <Link className="empty-state__cta" to="/settings">接続を追加</Link>
-    </div>
+    <>
+      <header className="page-header">
+        <div><h1>Storage</h1></div>
+      </header>
+      <div className="empty-state">
+        <h2>接続がまだありません</h2>
+        <p>
+          ここに表示する S3 互換ストレージはまだ登録されていません。<br />
+          設定ページから一つ追加してみましょう。
+        </p>
+        <Link className="button primary" to="/settings">
+          <Plus size={16} aria-hidden="true" />
+          接続を追加
+        </Link>
+      </div>
+    </>
   )
 }

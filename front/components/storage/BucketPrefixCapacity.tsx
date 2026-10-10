@@ -1,4 +1,4 @@
-// 容量メトリクス画面のバケットカードに付く、バケット直下のディレクトリ別の内訳。
+// 容量メトリクス画面のバケットに付く、バケット直下のディレクトリ別の内訳。
 //
 // 値はバケット全体と同じ完全走査で数えたもの (サイズ上位の直下ディレクトリだけ)。
 // 推移グラフは行を開いたときだけ取得する。1 バケットに数十行あり、全部の履歴を
@@ -6,6 +6,7 @@
 
 import { lazy, Suspense, useEffect, useId, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { ArrowRight, ChevronDown, ChevronRight } from 'lucide-react'
 import { api } from '../../lib/api/client'
 import type { CapacityPoint, CapacityPrefixSummary } from '../../lib/api/types'
 import { fmtCapacityBytes, fmtCapacityDelta } from '../../lib/format'
@@ -15,18 +16,12 @@ const CapacityHistoryChart = lazy(() => import('./CapacityHistoryChart'))
 
 /** 最初に見せる行数。容量の大きい順なので、上位だけで大半の容量を占めることが多い。 */
 const INITIAL_VISIBLE_PREFIXES = 5
+/** 表の列の数。開いた行の推移はこの幅いっぱいに出す。 */
+const COLUMN_COUNT = 5
 
-// <table> の table-fixed では、狭い画面で隠した列の幅が残ってディレクトリ名が潰れたので、
-// 行ごとの grid にして ARIA の role で表として読ませる。
-// 狭い画面では割合・前回から・オブジェクト数を落とし、名前と容量だけにする。
-const rowGridClass =
-  'grid grid-cols-[minmax(0,1fr)_6.5rem] items-center border-b border-rule ' +
-  'sm:grid-cols-[minmax(0,1fr)_7rem_9rem_7rem] md:grid-cols-[minmax(0,1fr)_7rem_9rem_11rem_7rem]'
-const headerCellClass = 'px-2 py-1.5 text-[9.5px] font-semibold uppercase tracking-[0.12em] text-ink-7'
-const numClass = 'whitespace-nowrap px-2 py-1.5 text-right font-mono text-[12px] tabular-nums'
-const shareCellClass = 'hidden px-2 py-1.5 sm:block'
-const deltaCellClass = `${numClass} hidden text-ink-7 md:block`
-const objectCountCellClass = `${numClass} hidden text-ink-7 sm:block`
+// 共通の表。自動の列幅 (table-layout: auto) なので、狭い画面で列を隠しても
+// 隠した列の幅は残らない。640px 未満は割合とオブジェクト数、900px 未満は前回からを
+// 隠し、名前と容量を残す (storage.css の .capacity-col-*)。
 
 interface Props {
   connectionId: string
@@ -47,7 +42,7 @@ export function BucketPrefixCapacity({
 
   if (prefixes.length === 0) {
     return (
-      <p className="mt-2 border-t border-rule pt-2 text-[11px] text-ink-7">
+      <p className="muted capacity-prefixes-empty">
         直下のディレクトリ別の内訳はありません（直下にディレクトリが無いか、内訳を保存する前の計測です）。
       </p>
     )
@@ -59,44 +54,52 @@ export function BucketPrefixCapacity({
   const restObjects = bucketObjectCount - prefixes.reduce((sum, prefix) => sum + prefix.objectCount, 0)
 
   return (
-    <section className="mt-2 border-t border-rule pt-2" aria-label={`${bucket}の直下のディレクトリ別の容量`}>
-      <div className="flex items-baseline justify-between gap-3 px-2">
-        <h4 className="text-[10.5px] font-semibold uppercase tracking-[0.18em] text-ink-7">直下のディレクトリ別</h4>
-        <p className="text-[11px] text-ink-7">容量の大きい{prefixes.length.toLocaleString('ja-JP')}件</p>
+    <section className="capacity-prefixes" aria-label={`${bucket}の直下のディレクトリ別の容量`}>
+      <div className="capacity-prefixes-heading">
+        <h4>直下のディレクトリ別</h4>
+        <p className="muted">容量の大きい{prefixes.length.toLocaleString('ja-JP')}件</p>
       </div>
-      <div role="table" className="mt-1" aria-label={`${bucket}の直下のディレクトリ`}>
-        <div role="row" className={rowGridClass}>
-          <span role="columnheader" className={headerCellClass}>ディレクトリ</span>
-          <span role="columnheader" className={`${headerCellClass} text-right`}>容量</span>
-          <span role="columnheader" className={`${headerCellClass} hidden sm:block`}>割合</span>
-          <span role="columnheader" className={`${headerCellClass} hidden text-right md:block`}>前回から</span>
-          <span role="columnheader" className={`${headerCellClass} hidden text-right sm:block`}>オブジェクト数</span>
-        </div>
-        {visible.map(prefix => (
-          <PrefixRow
-            key={prefix.prefix}
-            connectionId={connectionId}
-            bucket={bucket}
-            prefix={prefix}
-            share={bucketTotalBytes > 0 ? prefix.totalBytes / bucketTotalBytes : 0}
-            open={openPrefix === prefix.prefix}
-            onToggle={() => setOpenPrefix(current => current === prefix.prefix ? null : prefix.prefix)}
-            days={days}
-            intervalSeconds={intervalSeconds}
-          />
-        ))}
-        {hiddenCount === 0 && restBytes > 0 && (
-          <div role="row" className={`${rowGridClass} text-ink-7`}>
-            <span role="cell" className="truncate px-2 py-1.5 pl-6 text-[12px]">直下のファイル・上位に入らないディレクトリ</span>
-            <span role="cell" className={numClass}>{fmtCapacityBytes(restBytes)}</span>
-            <span role="cell" className={shareCellClass}><ShareBar share={bucketTotalBytes > 0 ? restBytes / bucketTotalBytes : 0} /></span>
-            <span role="cell" className={deltaCellClass}>—</span>
-            <span role="cell" className={objectCountCellClass}>{Math.max(0, restObjects).toLocaleString('ja-JP')}</span>
-          </div>
-        )}
+      <div className="table-scroll">
+        <table aria-label={`${bucket}の直下のディレクトリ`}>
+          <thead>
+            <tr>
+              <th scope="col">ディレクトリ</th>
+              <th scope="col" className="numeric">容量</th>
+              <th scope="col" className="capacity-col-share">割合</th>
+              <th scope="col" className="numeric capacity-col-delta">前回から</th>
+              <th scope="col" className="numeric capacity-col-objects">オブジェクト数</th>
+            </tr>
+          </thead>
+          <tbody>
+            {visible.map(prefix => (
+              <PrefixRow
+                key={prefix.prefix}
+                connectionId={connectionId}
+                bucket={bucket}
+                prefix={prefix}
+                share={bucketTotalBytes > 0 ? prefix.totalBytes / bucketTotalBytes : 0}
+                open={openPrefix === prefix.prefix}
+                onToggle={() => setOpenPrefix(current => current === prefix.prefix ? null : prefix.prefix)}
+                days={days}
+                intervalSeconds={intervalSeconds}
+              />
+            ))}
+            {hiddenCount === 0 && restBytes > 0 && (
+              <tr>
+                <td className="muted capacity-rest-name">直下のファイル・上位に入らないディレクトリ</td>
+                <td className="numeric mono nowrap">{fmtCapacityBytes(restBytes)}</td>
+                <td className="capacity-col-share">
+                  <ShareBar share={bucketTotalBytes > 0 ? restBytes / bucketTotalBytes : 0} />
+                </td>
+                <td className="numeric mono capacity-col-delta">—</td>
+                <td className="numeric mono capacity-col-objects">{Math.max(0, restObjects).toLocaleString('ja-JP')}</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
       </div>
       {prefixes.length > INITIAL_VISIBLE_PREFIXES && (
-        <button type="button" className="ghost mt-1.5 text-[11px]" onClick={() => setShowAll(value => !value)}>
+        <button type="button" className="button small capacity-prefixes-more" onClick={() => setShowAll(value => !value)}>
           {showAll ? `上位${INITIAL_VISIBLE_PREFIXES}件だけ表示` : `残り${hiddenCount.toLocaleString('ja-JP')}件も表示`}
         </button>
       )}
@@ -117,45 +120,48 @@ function PrefixRow({ connectionId, bucket, prefix, share, open, onToggle, days, 
   const trendId = useId()
   return (
     <>
-      <div role="row" className={`${rowGridClass} transition-colors hover:bg-ink-0`}>
-        <span role="cell" className="min-w-0 px-2 py-1.5">
-          <span className="flex min-w-0 items-baseline gap-2">
+      <tr className={open ? 'selected' : undefined}>
+        <td>
+          <span className="capacity-prefix-name">
             <button
               type="button"
-              className="flex min-w-0 items-baseline gap-1.5 text-left font-mono text-[12.5px] font-semibold text-ink-12"
+              className="capacity-prefix-toggle"
               aria-expanded={open}
               aria-controls={trendId}
               title="推移を表示"
               onClick={onToggle}
             >
-              <span aria-hidden className="w-3 shrink-0 text-ink-5">{open ? '▾' : '▸'}</span>
-              <span className="truncate">{prefix.prefix}</span>
+              {open
+                ? <ChevronDown size={14} aria-hidden="true" />
+                : <ChevronRight size={14} aria-hidden="true" />}
+              <span className="mono">{prefix.prefix}</span>
             </button>
             <Link
-              className="shrink-0 text-[11px] text-link hover:text-link-hover"
+              className="capacity-open-link"
               to={storageDirectoryHref(connectionId, bucket, prefix.prefix)}
               aria-label={`${prefix.prefix}を開く`}
             >
-              開く →
+              開く
+              <ArrowRight size={12} aria-hidden="true" />
             </Link>
           </span>
-        </span>
-        <span role="cell" className={`${numClass} font-semibold`}>{fmtCapacityBytes(prefix.totalBytes)}</span>
-        <span role="cell" className={shareCellClass}><ShareBar share={share} /></span>
-        <span role="cell" className={deltaCellClass}>
+        </td>
+        <td className="numeric mono nowrap">{fmtCapacityBytes(prefix.totalBytes)}</td>
+        <td className="capacity-col-share"><ShareBar share={share} /></td>
+        <td className="numeric mono nowrap capacity-col-delta">
           {prefix.previous ? fmtCapacityDelta({ current: prefix.totalBytes, previous: prefix.previous.totalBytes }) : '—'}
-        </span>
-        <span role="cell" className={objectCountCellClass}>{prefix.objectCount.toLocaleString('ja-JP')}</span>
-      </div>
+        </td>
+        <td className="numeric mono capacity-col-objects">{prefix.objectCount.toLocaleString('ja-JP')}</td>
+      </tr>
       {open && (
-        <div role="row" id={trendId} className="border-b border-rule px-2 pb-2">
-          <div role="cell">
+        <tr id={trendId} className="capacity-trend-row">
+          <td colSpan={COLUMN_COUNT}>
             <PrefixTrend
               connectionId={connectionId} bucket={bucket} prefix={prefix.prefix}
               days={days} intervalSeconds={intervalSeconds}
             />
-          </div>
-        </div>
+          </td>
+        </tr>
       )}
     </>
   )
@@ -164,11 +170,11 @@ function PrefixRow({ connectionId, bucket, prefix, share, open, onToggle, days, 
 function ShareBar({ share }: { share: number }) {
   const percent = Math.min(100, Math.max(0, share * 100))
   return (
-    <span className="flex items-center gap-2">
-      <span className="h-1.5 flex-1 bg-ink-1" aria-hidden>
-        <span className="block h-full bg-ink-9" style={{ width: `${percent}%` }} />
+    <span className="capacity-share">
+      <span className="storage-meter" aria-hidden="true">
+        <span style={{ width: `${percent}%` }} />
       </span>
-      <span className="w-12 text-right font-mono text-[11px] tabular-nums text-ink-7">{percent.toFixed(1)}%</span>
+      <span className="mono">{percent.toFixed(1)}%</span>
     </span>
   )
 }
@@ -191,13 +197,13 @@ function PrefixTrend({ connectionId, bucket, prefix, days, intervalSeconds }: {
     return () => { active = false }
   }, [connectionId, bucket, prefix, days])
 
-  if (error) return <p className="py-2 text-[11px] text-danger">{error}</p>
-  if (!points) return <div className="h-[120px] pt-4 text-[12px] text-ink-7">推移を読み込み中…</div>
+  if (error) return <p className="notice error">{error}</p>
+  if (!points) return <p className="capacity-chart-placeholder">推移を読み込み中…</p>
   if (points.length < 2) {
-    return <div className="flex h-14 items-center justify-center text-[12px] text-ink-7">2回計測するとグラフを表示します</div>
+    return <p className="capacity-chart-empty">2回計測するとグラフを表示します</p>
   }
   return (
-    <Suspense fallback={<div className="h-[120px] pt-4 text-[12px] text-ink-7">グラフを読み込み中…</div>}>
+    <Suspense fallback={<p className="capacity-chart-placeholder">グラフを読み込み中…</p>}>
       <CapacityHistoryChart points={points} intervalSeconds={intervalSeconds} capacityBytes={null} label={`${bucket}/${prefix}`} />
     </Suspense>
   )

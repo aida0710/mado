@@ -1,29 +1,26 @@
-import { useMemo } from 'react'
-import { Link } from 'react-router-dom'
+import { useMemo, type ReactNode } from 'react'
 import { useConnection } from '../lib/connectionContext'
 import { absoluteUrl } from '../lib/route'
-import { CopyMenu, type MenuItem } from './CopyMenu'
+import { StorageHeader } from './Breadcrumb'
+import type { MenuItem } from './CopyMenu'
 
-// Storage 配下の「バケットではないビュー」(タグ検索など) 用のパンくず。
-// バケット画面の Breadcrumb と同じ見た目・同じ並び (↑ / ⧉ / 接続名 › 現在地) に
+// Storage 配下の「バケットではないビュー」(タグ検索・容量メトリクス) の見出し。
+// バケット画面の Breadcrumb と同じ形 (パンくず / h1 / 接続先の切り替え・コピー・上へ) に
 // 揃えて、どの画面でも現在地の読み方が変わらないようにする。
 //
 // Breadcrumb と分けているのは、こちらが bucket / prefix を持たないため。
 // S3 上の場所ではないので S3 URL は無く、コピーできるのは Web URL だけ。
-const linkClass =
-  'text-ink-11 no-underline px-1.5 py-[2px] rounded-1 ' +
-  'font-mono text-[12.5px] ' +
-  'transition-colors hover:bg-ink-1'
-const sepClass = 'text-ink-5 px-[3px] font-serif select-none'
-
+// 上の階層はバケット一覧。
 export function ViewBreadcrumb({
-  connectionId, label, href,
+  connectionId, label, href, description,
 }: {
   connectionId: string
-  /** 現在地の表示名 (例: タグ検索) */
+  /** 現在地の表示名 (h1。例: タグ検索) */
   label: string
-  /** 現在地の URL。⧉ でコピーする Web URL の元にする */
+  /** 現在地の URL。コピーする Web URL の元にする */
   href: string
+  /** h1 の下の補足 */
+  description?: ReactNode
 }) {
   const connection = useConnection()
   const indexHref = `/storage/${encodeURIComponent(connectionId)}/`
@@ -32,34 +29,16 @@ export function ViewBreadcrumb({
     { kind: 'copy', label: 'Web URL をコピー', value: absoluteUrl(href) },
   ], [href])
 
+  // 現在地 (h1) はリンクにしない (自分自身へのリンクになるため)。
   return (
-    <nav className="my-2 flex flex-wrap items-center gap-1" aria-label="パンくず">
-      <Link
-        className={
-          'inline-flex h-7 w-7 items-center justify-center rounded-1 ' +
-          'text-ink-9 no-underline transition-colors ' +
-          'hover:bg-ink-1 hover:text-ink-12'
-        }
-        style={{ border: '1px solid var(--color-rule-strong)' }}
-        to={indexHref}
-        aria-label="バケット一覧へ"
-        title="バケット一覧へ"
-      >
-        <span aria-hidden>↑</span>
-      </Link>
-      <CopyMenu items={copyItems} trigger="⧉" ariaLabel="このページの URL をコピー" />
-      <Link
-        className={`${linkClass} font-sans font-medium`}
-        style={{ fontFamily: 'var(--font-sans)' }}
-        to={indexHref}
-      >
-        {connection.name}
-      </Link>
-      <span className={sepClass}>›</span>
-      {/* 現在地はリンクにしない (自分自身へのリンクになるため)。 */}
-      <span className={`${linkClass} font-sans font-medium`} style={{ fontFamily: 'var(--font-sans)' }}>
-        {label}
-      </span>
-    </nav>
+    <StorageHeader
+      crumbs={[{ label: connection.name, to: indexHref }]}
+      title={label}
+      description={description}
+      copyItems={copyItems}
+      copyLabel="このページの URL をコピー"
+      upHref={indexHref}
+      upLabel="バケット一覧へ"
+    />
   )
 }

@@ -8,27 +8,30 @@ describe('TagBadge', () => {
     expect(screen.getByText('重要')).toBeInTheDocument()
   })
 
-  // 色は面と罫に薄く乗せるだけ。ベタ塗りに戻すと彩度の高いユーザー指定色が
-  // インク調の UI の中で主役になってしまう。
-  it('色は面 12% / 罫 32% に薄めて使う', () => {
+  // 色は名前の前の点にだけ使う。地に塗ると彩度の高いユーザー指定色が
+  // 一覧の中で主役になってしまう。
+  it('色は名前の前の点にだけ使う', () => {
     render(<TagBadge tag={{ name: 'A', color: '#ff0000' }} />)
     const el = screen.getByText('A')
-    expect(el.style.backgroundColor).toBe('color-mix(in srgb, #ff0000 12%, var(--paper))')
-    expect(el.style.border).toBe('1px solid color-mix(in srgb, #ff0000 32%, var(--rule))')
+    expect(el.style.backgroundColor).toBe('')
+    const dot = el.querySelector<HTMLElement>('[aria-hidden="true"]')
+    expect(dot?.style.backgroundColor).toBe('rgb(255, 0, 0)')
   })
 
-  // 文字色はインクに固定。背景が薄いので明暗の出し分けは要らない。
-  it('文字色はタグの色に依存しない', () => {
+  // 地と文字は共通のラベル (.status-badge) の色に固定する。明暗の出し分けは要らない。
+  it('地と文字の色はタグの色に依存しない', () => {
     render(
       <>
         <TagBadge tag={{ name: 'dark', color: '#000000' }} />
         <TagBadge tag={{ name: 'light', color: '#ffffff' }} />
       </>,
     )
-    for (const name of ['dark', 'light']) {
-      const el = screen.getByText(name)
+    const [dark, light] = ['dark', 'light'].map(name => screen.getByText(name))
+    for (const el of [dark, light]) {
       expect(el.style.color).toBe('')
-      expect(el.className).toContain('text-ink-11')
+      expect(el.style.backgroundColor).toBe('')
+      expect(el.className).toContain('status-badge')
     }
+    expect(dark.className).toBe(light.className)
   })
 })

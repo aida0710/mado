@@ -1,5 +1,7 @@
-import {useCallback, useEffect, useMemo, useRef, useState} from 'react'
-import {Link, useSearchParams} from 'react-router-dom'
+import {useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode} from 'react'
+import {createPortal} from 'react-dom'
+import {Link, useNavigate, useSearchParams} from 'react-router-dom'
+import {Gauge, Tags} from 'lucide-react'
 import {api} from '../lib/api/client'
 import {ConnectionSwitcher} from '../components/ConnectionSwitcher'
 import {ReadmeSearchPanel} from '../components/ReadmeSearchPanel'
@@ -27,19 +29,6 @@ interface Props {
 const EMPTY_FAVORITES = new Set<string>()
 const EMPTY_BUCKETS: BucketRow[] = []
 
-const sectionTitleClass =
-    'mt-7 mb-3 text-[10.5px] font-semibold uppercase tracking-[0.22em] text-ink-7 first-of-type:mt-0'
-const listClass = 'm-0 list-none p-0'
-const liClass =
-    'flex min-w-0 items-baseline gap-3 px-1 py-3 transition-colors hover:bg-ink-0'
-// block: 親が flex コンテナでなくなった (タグ行と縦積みするラッパ div の中) ので、
-// 明示しないと inline のままで text-ellipsis が効かない。
-const linkClass =
-    'block min-w-0 overflow-hidden text-ellipsis whitespace-nowrap font-semibold ' +
-    'tracking-[-0.005em] text-ink-12 no-underline hover:underline underline-offset-[3px]'
-const subLinkClass =
-    'text-[12px] text-ink-9 no-underline hover:text-ink-12 hover:underline underline-offset-[3px]'
-
 export default function StorageIndex({connectionId}: Props) {
     const [searchParams] = useSearchParams()
     const indexHref = `/storage/${encodeURIComponent(connectionId)}/`
@@ -61,7 +50,7 @@ export default function StorageIndex({connectionId}: Props) {
     // loading を導出する。旧接続の一覧も新しい接続へ一瞬表示されない。
     const loading = refreshingBuckets || loadedConnectionId !== connectionId
 
-    // opts.refresh は ↻ からのみ true。通常のロードで貫通させると
+    // opts.refresh は再読み込みからのみ true。通常のロードで貫通させると
     // サーバーキャッシュの意味が無くなる。
     const refresh = useCallback((opts: { refresh?: boolean } = {}) => {
         const sid = ++sessionRef.current
@@ -167,24 +156,35 @@ export default function StorageIndex({connectionId}: Props) {
     if (searchParams.get('view') === 'tags' && tagsEnabled) {
         return (
             <section>
-                {/* バケット画面 (Breadcrumb + ConnectionSwitcher) と同じ並びに揃える。 */}
-                <div className="flex items-center justify-between gap-3">
-                    <ViewBreadcrumb connectionId={connectionId} label="タグ検索" href={`${indexHref}?view=tags`}/>
-                    <ConnectionSwitcher/>
-                </div>
+                {/* バケット画面と同じ見出し (パンくず / h1 / 接続先の切り替え・コピー・上へ)。 */}
+                <ViewBreadcrumb connectionId={connectionId} label="タグ検索" href={`${indexHref}?view=tags`}/>
                 <TagSearchView connectionId={connectionId}/>
             </section>
         )
     }
 
+    const bucketRow = (b: BucketRow, inUse: boolean) => (
+        <BucketTableRow
+            key={b.name}
+            connectionId={connectionId}
+            bucket={b}
+            inUse={inUse}
+            onToggle={() => toggleFavorite(b.name)}
+            allTags={allTags}
+            tagIds={bucketTags[b.name] ?? []}
+            onTagsChange={handleTagsChange}
+            tagsEnabled={tagsEnabled}
+        />
+    )
+
     return (
-        <section>
-            <header className="page-head">
-                <h2>Storage</h2>
-                {/* 右側の操作をひとまとめにして右寄せする。個別に並べると、
-                    狭い画面で CONN だけ次の行へ折り返ったとき行頭 (左) に落ち、
-                    そこから開くドロップダウンが画面外へはみ出す。 */}
-                <div className="ml-auto flex flex-wrap items-center justify-end gap-3">
+        <section className="storage-index">
+            <header className="page-header">
+                <div>
+                    <h1>Storage</h1>
+                </div>
+                {/* 右側の操作をひとまとめにして右寄せする。狭い画面では見出しの下へ回る。 */}
+                <div className="page-actions">
                     <CacheBanner
                         fetchedAt={bucketList?.cache ? new Date(bucketList.cache.fetchedAt) : null}
                         revalidating={revalidating}
@@ -195,81 +195,85 @@ export default function StorageIndex({connectionId}: Props) {
                 </div>
             </header>
 
-            <ReadmeSearchPanel connectionId={connectionId}/>
-            <S3PathPanel connectionId={connectionId}/>
+            {/* 探す手段 (README 全文検索・S3 パスで移動)。広い画面では横に並べる。 */}
+            <div className="storage-index-finders">
+                <ReadmeSearchPanel connectionId={connectionId}/>
+                <S3PathPanel connectionId={connectionId}/>
+            </div>
             {/* タグ検索は別ビューへのリンクにする。畳んだパネルとして
                 ここに積むと、README 検索・S3 パス貼付と合わせて一覧の前が混み合う。 */}
-            <nav className="mt-3 mb-4 flex flex-wrap items-center gap-x-4 gap-y-1">
-                <Link className={subLinkClass} to="?view=capacity">バケット容量メトリクスを見る</Link>
-                {tagsEnabled && <Link className={subLinkClass} to="?view=tags">タグ検索</Link>}
+            <nav className="storage-index-links">
+                <Link to="?view=capacity">
+                    <Gauge size={14} aria-hidden="true"/>
+                    バケット容量メトリクスを見る
+                </Link>
+                {tagsEnabled && (
+                    <Link to="?view=tags">
+                        <Tags size={14} aria-hidden="true"/>
+                        タグ検索
+                    </Link>
+                )}
             </nav>
 
-            {error && <p className="error">{error}</p>}
+            {error && <p className="notice error">{error}</p>}
             {loading && buckets.length === 0 && (
-                <p className="text-[13px] text-ink-7">loading…</p>
+                <p className="state-message">読み込み中…</p>
             )}
             {!loading && !error && buckets.length === 0 && (
-                <p className="text-[13px] text-ink-7">バケットが見つかりません。</p>
+                <p className="state-message">バケットが見つかりません。</p>
             )}
 
             {favoriteRows.length > 0 && (
-                <>
-                    <h3 className={sectionTitleClass}>現在使っているバケット</h3>
-                    <ul
-                        className={listClass}
-                        style={{borderTop: '1px solid var(--rule)'}}
-                    >
-                        {favoriteRows.map(b => (
-                            <BucketLi
-                                key={b.name}
-                                connectionId={connectionId}
-                                bucket={b}
-                                inUse
-                                onToggle={() => toggleFavorite(b.name)}
-                                allTags={allTags}
-                                tagIds={bucketTags[b.name] ?? []}
-                                onTagsChange={handleTagsChange}
-                                tagsEnabled={tagsEnabled}
-                            />
-                        ))}
-                    </ul>
-                </>
+                <BucketSection title="現在使っているバケット">
+                    {favoriteRows.map(b => bucketRow(b, true))}
+                </BucketSection>
             )}
 
             {otherRows.length > 0 && (
-                <>
-                    <h3 className={sectionTitleClass}>その他のバケット</h3>
-                    <ul
-                        className={listClass}
-                        style={{borderTop: '1px solid var(--rule)'}}
-                    >
-                        {otherRows.map(b => (
-                            <BucketLi
-                                key={b.name}
-                                connectionId={connectionId}
-                                bucket={b}
-                                inUse={false}
-                                onToggle={() => toggleFavorite(b.name)}
-                                allTags={allTags}
-                                tagIds={bucketTags[b.name] ?? []}
-                                onTagsChange={handleTagsChange}
-                                tagsEnabled={tagsEnabled}
-                            />
-                        ))}
-                    </ul>
-                </>
+                <BucketSection title="その他のバケット">
+                    {otherRows.map(b => bucketRow(b, false))}
+                </BucketSection>
             )}
         </section>
     )
 }
 
-function BucketLi({
-                      connectionId, bucket, inUse, onToggle, allTags, tagIds, onTagsChange, tagsEnabled,
-                  }: {
+/** バケットの表 1 つ分 (見出し + 共通の表)。使っているもの・その他で 2 つ並ぶ。 */
+function BucketSection({title, children}: { title: string; children: ReactNode }) {
+    return (
+        <section className="bucket-section">
+            <div className="section-heading">
+                <h2>{title}</h2>
+            </div>
+            <div className="table-scroll">
+                <table className="bucket-table">
+                    <thead>
+                    <tr>
+                        <th scope="col" className="bucket-col-use"><span className="sr-only">使用中</span></th>
+                        <th scope="col">バケット</th>
+                        <th scope="col" className="bucket-col-date">作成日</th>
+                        <th scope="col" className="bucket-col-actions"><span className="sr-only">操作</span></th>
+                    </tr>
+                    </thead>
+                    <tbody>{children}</tbody>
+                </table>
+            </div>
+        </section>
+    )
+}
+
+// 行の中で、それ自身の操作を持つもの (とその列)。ここを押したときは行を開かない。
+// チェックボックスや操作のメニューを押し損ねたときにバケットへ入ってしまわないよう、列ごと外す。
+const ROW_CONTROLS = 'a, button, input, label, .bucket-col-use, .bucket-col-actions'
+
+function BucketTableRow({
+                            connectionId, bucket, inUse, onToggle, allTags, tagIds, onTagsChange, tagsEnabled,
+                        }: {
     connectionId: string; bucket: BucketRow; inUse: boolean; onToggle: () => void
     allTags: Tag[]; tagIds: string[]; onTagsChange: (bucketName: string, tagIds: string[]) => void
     tagsEnabled: boolean
 }) {
+    const navigate = useNavigate()
     const [pickerOpen, setPickerOpen] = useState(false)
     const checkboxId = `use-${bucket.name}`
     const tags = tagsEnabled ? allTags.filter(t => tagIds.includes(t.id)) : []
@@ -283,58 +287,62 @@ function BucketLi({
         {kind: 'copy', label: 'Web URL をコピー', value: absoluteUrl(bucketHref)},
         {kind: 'copy', label: 'S3 URL をコピー', value: `s3://${bucket.name}/`},
     ], [bucketHref, bucket.name, tagsEnabled])
+
+    // 行のどこを押してもバケットへ入れるようにする (名前の文字列だけが当たり判定だと
+    // 狭くて押しづらい)。名前の列は <a> の当たり判定を列全体へ広げ (after:inset-0)、
+    // 中クリックや「新しいタブで開く」が効く本物のリンクのまま保つ。ほかの列 (作成日)
+    // はここで拾う。チェックボックスと操作のメニューはそれぞれの操作のまま。
+    const openFromRow = (event: MouseEvent<HTMLTableRowElement>) => {
+        if ((event.target as Element).closest(ROW_CONTROLS)) return
+        navigate(bucketHref)
+    }
+
     return (
-        <li className={`${liClass} relative`} style={{borderBottom: '1px solid var(--rule)'}}>
-            {/* チェックボックスと ⋯ は行リンクの上に出す (下の after:inset-0 が
-                行全体を覆うので、z を上げないとクリックを奪われる)。 */}
-            <label
-                className="use-toggle relative z-[1]"
-                htmlFor={checkboxId}
-                title={inUse ? '使用中から外す' : '現在使っているバケットに追加'}
-            >
-                <input
-                    id={checkboxId}
-                    type="checkbox"
-                    checked={inUse}
-                    onChange={onToggle}
-                    aria-label={`${bucket.name} を現在使っているバケットに${inUse ? '外す' : '追加'}`}
-                />
-            </label>
-            {/* タグは名前の右ではなく下の行に置く (EntryTable と同じ理由 —
-                右に並べると長いバケット名が truncate されて読めなくなる)。 */}
-            <div className="min-w-0 flex-1">
-                {/* 行のどこを押してもバケットへ入れるようにする (名前の文字列だけが
-                    当たり判定だと狭くて押しづらい)。onClick ハンドラではなく
-                    after:inset-0 で <a> の当たり判定を行全体へ広げる方式にして、
-                    中クリックや「新しいタブで開く」が効く本物のリンクのまま保つ。 */}
-                <Link className={`${linkClass} after:absolute after:inset-0`} to={bucketHref}>
-                    {bucket.name}
-                </Link>
-                {tags.length > 0 && (
-                    <div className="mt-1 flex flex-wrap gap-1">
-                        {tags.map(t => <TagBadge key={t.id} tag={t} />)}
+        <>
+            <tr className="bucket-row" onClick={openFromRow}>
+                <td className="bucket-col-use">
+                    <label
+                        className="bucket-use"
+                        htmlFor={checkboxId}
+                        title={inUse ? '使用中から外す' : '現在使っているバケットに追加'}
+                    >
+                        <input
+                            id={checkboxId}
+                            type="checkbox"
+                            checked={inUse}
+                            onChange={onToggle}
+                            aria-label={`${bucket.name} を現在使っているバケットに${inUse ? '外す' : '追加'}`}
+                        />
+                    </label>
+                </td>
+                <td className="relative">
+                    <div className="bucket-name">
+                        <Link className="after:absolute after:inset-0" to={bucketHref}>
+                            {bucket.name}
+                        </Link>
+                        {tags.length > 0 && (
+                            <span className="badge-group">
+                                {tags.map(t => <TagBadge key={t.id} tag={t}/>)}
+                            </span>
+                        )}
                     </div>
-                )}
-            </div>
-            {bucket.creationDate && (
-                <span
-                    className="font-mono text-[11.5px] text-ink-7 shrink-0"
-                    style={{letterSpacing: '0.01em'}}
-                >
-          {bucket.creationDate.slice(0, 10)}
-        </span>
-            )}
-            <span className="relative z-[1] shrink-0">
-                <CopyMenu items={items}/>
-            </span>
-            {pickerOpen && (
+                </td>
+                <td className="bucket-col-date mono">{bucket.creationDate?.slice(0, 10) ?? ''}</td>
+                <td className="bucket-col-actions">
+                    <CopyMenu items={items}/>
+                </td>
+            </tr>
+            {/* 表の外 (body) に出す: <tbody> の中に <div> を作らず、ダイアログの中の
+                クリックで行が開かないようにする。 */}
+            {pickerOpen && createPortal(
                 <TagPicker
                     connectionId={connectionId} bucket={bucket.name} kind="bucket" path="" label={bucket.name}
                     allTags={allTags} assignedTagIds={tagIds}
                     onChange={next => onTagsChange(bucket.name, next)}
                     onClose={() => setPickerOpen(false)}
-                />
+                />,
+                document.body,
             )}
-        </li>
+        </>
     )
 }

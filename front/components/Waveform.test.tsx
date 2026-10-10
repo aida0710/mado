@@ -1,6 +1,10 @@
-import { fireEvent, render } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { fireEvent, render, waitFor } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Waveform } from './Waveform'
+
+afterEach(() => {
+  delete document.documentElement.dataset.theme
+})
 
 beforeEach(() => {
   const ctx = {
@@ -49,5 +53,21 @@ describe('Waveform', () => {
     const barCalls = fillRect.mock.calls
     const maxX = Math.max(...barCalls.map(c => c[0] as number))
     expect(maxX).toBeLessThan(100)
+  })
+
+  it('テーマを切り替えると描き直す (canvas は CSS の変数の切り替えに追従しないため)', async () => {
+    const clearRect = vi.fn()
+    const ctx = {
+      clearRect, fillRect: vi.fn(), scale: vi.fn(), setTransform: vi.fn(), fillStyle: '',
+    }
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext')
+      .mockReturnValue(ctx as unknown as CanvasRenderingContext2D)
+
+    render(<Waveform peaks={[[-1, 1]]} progress={0.5} />)
+    const drawn = clearRect.mock.calls.length
+    expect(drawn).toBeGreaterThan(0)
+
+    document.documentElement.dataset.theme = 'dark'
+    await waitFor(() => expect(clearRect.mock.calls.length).toBeGreaterThan(drawn))
   })
 })

@@ -4,10 +4,11 @@
 // StorageBrowser から pagination / preview drawer / search を剥がした派生形と思えばよい。
 //
 // 行クリック → onInsert を発火 (親が Monaco の現在カーソル位置に挿入)。
-// ディレクトリ行末尾の「↓ 開く」 → 内部 state で prefix を切替えてそのサブディレクトリの
+// ディレクトリ行末尾の「開く」(矢印) → 内部 state で prefix を切替えてそのサブディレクトリの
 // 中身に進む。上部のパン屑で上位階層に戻れる。
 
 import { useEffect, useState } from 'react'
+import { ChevronRight, File, Folder } from 'lucide-react'
 import type { z } from 'zod'
 import { api } from '../lib/api/client'
 import type { StorageList } from '../lib/api/types'
@@ -93,7 +94,7 @@ export function InsertableFileList({ connectionId, bucket, prefix: initialPrefix
         </button>
         {crumbs.map((seg, i) => (
           <span key={i} className="filelist__crumb-wrap">
-            <span aria-hidden className="filelist__crumb-sep">/</span>
+            <span aria-hidden="true" className="filelist__crumb-sep">/</span>
             <button
               type="button"
               className="filelist__crumb"
@@ -107,11 +108,11 @@ export function InsertableFileList({ connectionId, bucket, prefix: initialPrefix
       </nav>
 
       {error ? (
-        <p className="filelist__error" role="alert">{error}</p>
+        <p className="filelist__message filelist__error" role="alert">{error}</p>
       ) : !data ? (
-        <p className="filelist__loading">読み込み中…</p>
+        <p className="filelist__message muted">読み込み中…</p>
       ) : data.directories.length === 0 && data.files.length === 0 ? (
-        <p className="filelist__empty">エントリなし</p>
+        <p className="filelist__message muted">エントリなし</p>
       ) : (
         <ul className="filelist__rows">
           {data.directories.map(d => {
@@ -125,17 +126,17 @@ export function InsertableFileList({ connectionId, bucket, prefix: initialPrefix
                   onClick={() => onInsert({ name: base, isDir: true, fullKey: d })}
                   title="クリックして本文に挿入"
                 >
-                  <span aria-hidden className="filelist__icon">📁</span>
-                  {base}/
+                  <Folder size={14} aria-hidden="true" />
+                  <span>{base}/</span>
                 </button>
                 <button
                   type="button"
-                  className="filelist__open"
+                  className="icon-button filelist__open"
                   onClick={() => setPrefix(d)}
                   title="このディレクトリへ潜る"
                   aria-label={`${base} を開く`}
                 >
-                  ↓ 開く
+                  <ChevronRight size={16} aria-hidden="true" />
                 </button>
               </li>
             )
@@ -150,8 +151,8 @@ export function InsertableFileList({ connectionId, bucket, prefix: initialPrefix
                   onClick={() => onInsert({ name: base, isDir: false, fullKey: f.key })}
                   title="クリックして本文に挿入"
                 >
-                  <span aria-hidden className="filelist__icon">📄</span>
-                  {base}
+                  <File size={14} aria-hidden="true" />
+                  <span>{base}</span>
                 </button>
               </li>
             )
@@ -160,7 +161,7 @@ export function InsertableFileList({ connectionId, bucket, prefix: initialPrefix
       )}
 
       {data && (data.nextContinuation || data.nextStartAfter) && (
-        <p className="filelist__hint">
+        <p className="filelist__hint muted">
           続きあり — エントリが多いです。末端まで潜ってから挿入することをお勧めします。
         </p>
       )}

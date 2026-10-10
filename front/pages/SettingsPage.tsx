@@ -1,5 +1,5 @@
-import { lazy, Suspense } from 'react'
-import { NavLink, Navigate, Route, Routes } from 'react-router-dom'
+import { lazy, Suspense, useLayoutEffect, useRef } from 'react'
+import { NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { About } from '../components/About'
 import { FeatureSettings } from '../components/FeatureSettings'
 import { SignatureSettings } from '../components/SignatureSettings'
@@ -17,36 +17,37 @@ const NAV_ITEMS = [
   { to: '/settings/features', label: 'Features' },
 ] as const
 
+// 見出しの下の横並びのタブ。左にはアプリのサイドバーがあるので、二本目の列は作らない。
+// 選択中の見た目は NavLink が付ける aria-current="page" で共通の .tab が受け持つ。
 function SettingsNav() {
   const { user } = useAuth()
+  const { pathname } = useLocation()
+  const navRef = useRef<HTMLElement>(null)
   const canAccess = user?.permissions.some(permission =>
     permission === 'users:manage' || permission === 'service_accounts:manage' || permission === 'audit:read'
   ) ?? false
+
+  // 狭い画面でタブが横にはみ出すときは、選んでいるタブが見えるところまでタブの列を送る。
+  // scrollIntoView はページごと動かすことがあるので、タブの列の scrollLeft だけを変える。
+  useLayoutEffect(() => {
+    const nav = navRef.current
+    const current = nav?.querySelector<HTMLElement>('[aria-current="page"]')
+    if (!nav || !current) return
+    const navBox = nav.getBoundingClientRect()
+    const tabBox = current.getBoundingClientRect()
+    if (tabBox.right > navBox.right) nav.scrollLeft += tabBox.right - navBox.right
+    else if (tabBox.left < navBox.left) nav.scrollLeft -= navBox.left - tabBox.left
+  }, [pathname])
+
   return (
-    <nav className="section-nav" aria-label="Settings">
+    <nav ref={navRef} className="tabs" aria-label="Settings">
       {NAV_ITEMS.map(item => (
-        <NavLink
-          key={item.to}
-          to={item.to}
-          className={({ isActive }) => `section-nav__link${isActive ? ' is-active' : ''}`}
-        >
+        <NavLink key={item.to} to={item.to} className="tab">
           {item.label}
         </NavLink>
       ))}
-      {canAccess && (
-        <NavLink
-          to="/settings/access"
-          className={({ isActive }) => `section-nav__link${isActive ? ' is-active' : ''}`}
-        >
-          Access
-        </NavLink>
-      )}
-      <NavLink
-        to="/settings/about"
-        className={({ isActive }) => `section-nav__link${isActive ? ' is-active' : ''}`}
-      >
-        About
-      </NavLink>
+      {canAccess && <NavLink to="/settings/access" className="tab">Access</NavLink>}
+      <NavLink to="/settings/about" className="tab">About</NavLink>
     </nav>
   )
 }
@@ -54,7 +55,7 @@ function SettingsNav() {
 function FeaturesPage() {
   const tagsEnabled = useTagsEnabled()
   return (
-    <div className="settings-section-stack">
+    <div className="settings-stack">
       {tagsEnabled && <TagsSettings />}
       <FeatureSettings />
     </div>
@@ -63,28 +64,26 @@ function FeaturesPage() {
 
 export default function SettingsPage() {
   return (
-    <section>
-      <header className="page-head"><h2>Settings</h2></header>
-      <div className="section-shell">
-        <SettingsNav />
-        <div className="section-shell__content">
-          <Routes>
-            <Route index element={<Navigate to="connections" replace />} />
-            <Route path="account" element={<SignatureSettings />} />
-            <Route path="connections" element={<ConnectionsPage />} />
-            <Route path="connections/new" element={<ConnectionEditorPage />} />
-            <Route path="connections/:connectionId" element={<ConnectionEditorPage />} />
-            <Route path="features" element={<FeaturesPage />} />
-            <Route path="access/*" element={
-              <Suspense fallback={<p className="text-[13px] text-ink-7">読み込み中…</p>}>
-                <AdminPage />
-              </Suspense>
-            } />
-            <Route path="about" element={<About />} />
-            <Route path="*" element={<Navigate to="connections" replace />} />
-          </Routes>
-        </div>
-      </div>
-    </section>
+    <div className="settings-page">
+      <header className="page-header">
+        <div><h1>Settings</h1></div>
+      </header>
+      <SettingsNav />
+      <Routes>
+        <Route index element={<Navigate to="connections" replace />} />
+        <Route path="account" element={<SignatureSettings />} />
+        <Route path="connections" element={<ConnectionsPage />} />
+        <Route path="connections/new" element={<ConnectionEditorPage />} />
+        <Route path="connections/:connectionId" element={<ConnectionEditorPage />} />
+        <Route path="features" element={<FeaturesPage />} />
+        <Route path="access/*" element={
+          <Suspense fallback={<p className="state-message">読み込み中…</p>}>
+            <AdminPage />
+          </Suspense>
+        } />
+        <Route path="about" element={<About />} />
+        <Route path="*" element={<Navigate to="connections" replace />} />
+      </Routes>
+    </div>
   )
 }

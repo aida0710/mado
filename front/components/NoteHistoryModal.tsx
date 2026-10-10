@@ -9,16 +9,16 @@ interface Props {
   onClose: () => void
 }
 
-// Team note (postgres notes テーブル) の編集履歴モーダル。
+// Team note (postgres notes テーブル) の編集履歴ダイアログ。
 // 取得元と見出しだけがここの責務で、表示は HistoryModal と共通。
 export function NoteHistoryModal({ slug, currentBody, onClose }: Props) {
   const loadVersions = useCallback(() => api.noteHistory(slug).then(r => r.versions), [slug])
   const loadVersion = useCallback((id: number) => api.noteHistoryVersion(slug, id), [slug])
   return (
     <HistoryModal
-      kicker="Team note · 履歴"
+      title="Team note の履歴"
       titleId="note-history-title"
-      title={slug}
+      subtitle={slug}
       currentBody={currentBody}
       onClose={onClose}
       loadVersions={loadVersions}

@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react'
+import { LogOut } from 'lucide-react'
 import { fetchApi } from '../lib/api/http'
 import { getEditorName, setEditorName } from '../lib/editorName'
 import { useAuth } from '../lib/auth-context'
@@ -95,46 +96,68 @@ export function SignatureSettings() {
     }
   }
 
+  const canSave = !saving && signatureName.trim() !== '' && (!auth.enabled || (displayName.trim() !== '' && username.trim() !== ''))
+
   return (
-    <section className="mt-7">
+    <section className="account-settings settings-column">
       <SettingsSectionHeader title="アカウントと署名の管理" />
 
-      <form className="admin-form account-profile" onSubmit={event => { event.preventDefault(); void commit() }}>
+      <form className="account-form" onSubmit={event => { event.preventDefault(); void commit() }}>
         {auth.enabled && (
           <>
-            <label className="admin-field"><span>表示名</span><input value={displayName} onChange={event => { setDisplayName(event.target.value); setSaved(false) }} maxLength={128} autoComplete="name" required /></label>
-            <label className="admin-field"><span>ユーザーID（ログインID）</span><input value={username} onChange={event => { setUsername(event.target.value); setSaved(false) }} pattern="[A-Za-z0-9][A-Za-z0-9_.-]{0,63}" autoComplete="username" required /></label>
-            {auth.user?.email && <div className="account-readonly"><span>メールアドレス</span><strong>{auth.user.email}</strong><small>{auth.user.authMethods?.includes('sso') ? 'SSO側で管理されるため、Madoからは変更できません。' : '認証識別子のため、Madoからは変更できません。'}</small></div>}
+            <label className="field">
+              <span>表示名</span>
+              <input value={displayName} onChange={event => { setDisplayName(event.target.value); setSaved(false) }} maxLength={128} autoComplete="name" required />
+            </label>
+            <label className="field">
+              <span>ユーザーID（ログインID）</span>
+              <input value={username} onChange={event => { setUsername(event.target.value); setSaved(false) }} pattern="[A-Za-z0-9][A-Za-z0-9_.-]{0,63}" autoComplete="username" required />
+            </label>
+            {auth.user?.email && (
+              <div className="field readonly-field">
+                <span>メールアドレス</span>
+                <strong className="mono">{auth.user.email}</strong>
+                <small className="muted">
+                  {auth.user.authMethods?.includes('sso') ? 'SSO側で管理されるため、Madoからは変更できません。' : '認証識別子のため、Madoからは変更できません。'}
+                </small>
+              </div>
+            )}
           </>
         )}
-        <label className="admin-field"><span>署名</span><input value={signatureName} onChange={event => { setSignatureName(event.target.value); setSaved(false) }} maxLength={128} placeholder="e.g. tanaka" autoComplete="nickname" aria-label="署名名" required /></label>
-        <div className="account-profile__actions">
-          <button type="submit" disabled={saving || !signatureName.trim() || (auth.enabled && (!displayName.trim() || !username.trim()))}>{saving ? '保存中…' : '保存'}</button>
-          {saved && <span>保存しました</span>}
+        <label className="field">
+          <span>署名</span>
+          <input value={signatureName} onChange={event => { setSignatureName(event.target.value); setSaved(false) }} maxLength={128} placeholder="e.g. tanaka" autoComplete="nickname" aria-label="署名名" required />
+          <small className="muted">README・共有ノートの編集者として、このアカウントの履歴に記録されます。</small>
+        </label>
+        <div className="form-submit-row">
+          <button type="submit" className="button primary" disabled={!canSave}>{saving ? '保存中…' : '保存'}</button>
+          {saved && <span className="form-submit-row__status" role="status">保存しました</span>}
         </div>
       </form>
-      {error && <p className="error" role="alert">{error}</p>}
-      <p className="px-1 text-[12px] text-ink-7">
-        README・共有ノートの編集者として、このアカウントの履歴に記録されます。
-      </p>
+      {error && <p className="notice error" role="alert">{error}</p>}
 
       {auth.enabled && (
         <>
-          {auth.user?.authMethods?.includes('local') !== false && <details className="account-password">
-            <summary>パスワードを変更</summary>
-            <form className="admin-form" onSubmit={changePassword}>
-              <label className="admin-field"><span>現在のパスワード</span><input name="currentPassword" type="password" autoComplete="current-password" required /></label>
-              <label className="admin-field"><span>新しいパスワード（12文字以上）</span><input name="newPassword" type="password" autoComplete="new-password" minLength={12} required /></label>
-              <label className="admin-field"><span>新しいパスワード（確認）</span><input name="confirmation" type="password" autoComplete="new-password" minLength={12} required /></label>
-              <button type="submit" disabled={passwordBusy}>{passwordBusy ? '変更中…' : '変更'}</button>
-            </form>
-            {passwordNotice && <p className="account-password__notice">{passwordNotice}</p>}
-          </details>}
+          {auth.user?.authMethods?.includes('local') !== false && (
+            <details className="account-password">
+              <summary>パスワードを変更</summary>
+              <form className="account-form" onSubmit={changePassword}>
+                <label className="field"><span>現在のパスワード</span><input name="currentPassword" type="password" autoComplete="current-password" required /></label>
+                <label className="field"><span>新しいパスワード（12文字以上）</span><input name="newPassword" type="password" autoComplete="new-password" minLength={12} required /></label>
+                <label className="field"><span>新しいパスワード（確認）</span><input name="confirmation" type="password" autoComplete="new-password" minLength={12} required /></label>
+                <div className="form-submit-row">
+                  <button type="submit" className="button primary" disabled={passwordBusy}>{passwordBusy ? '変更中…' : '変更'}</button>
+                  {passwordNotice && <span className="form-submit-row__status" role="status">{passwordNotice}</span>}
+                </div>
+              </form>
+            </details>
+          )}
           <div className="account-signout">
-            <button type="button" className="ghost" onClick={() => void logout()} disabled={loggingOut}>
+            <button type="button" className="button" onClick={() => void logout()} disabled={loggingOut}>
+              <LogOut size={14} aria-hidden="true" />
               {loggingOut ? 'サインアウト中…' : 'サインアウト'}
             </button>
-            {logoutError && <p className="error" role="alert">{logoutError}</p>}
+            {logoutError && <p className="notice error" role="alert">{logoutError}</p>}
           </div>
         </>
       )}

@@ -1,6 +1,6 @@
 import { MarkerType, type Edge, type Node } from '@xyflow/react'
 import type { LineageGraph, LineageNodeKind, LineageNodeSummary } from '../api/types'
-import { lineageStatusLabel } from './labels'
+import { lineageStatusLabel, lineageStatusTone, type LineageStatusTone } from './labels'
 
 export type VisibleLineageNodeKind = Exclude<LineageNodeKind, 'location'>
 
@@ -10,6 +10,7 @@ export type LineageNodeData = Record<string, unknown> & {
   title: string
   subtitle: string | null
   status: string | null
+  statusTone: LineageStatusTone | null
   meta: string | null
 }
 
@@ -29,11 +30,11 @@ function subtitleOf(node: LineageNodeSummary): string | null {
   return stringData(node, 'datasetName') ?? stringData(node, 'jobName')
 }
 
-function statusOf(node: LineageNodeSummary): string | null {
-  return lineageStatusLabel(node.status
+function rawStatusOf(node: LineageNodeSummary): string | null {
+  return node.status
     ?? node.latestRun?.state
     ?? stringData(node, 'status')
-    ?? stringData(node, 'state'))
+    ?? stringData(node, 'state')
 }
 
 function metaOf(node: LineageNodeSummary): string | null {
@@ -64,7 +65,8 @@ export function toFlowElements(graph: LineageGraph): {
         kind: node.kind,
         title: node.label,
         subtitle: subtitleOf(node),
-        status: statusOf(node),
+        status: lineageStatusLabel(rawStatusOf(node)),
+        statusTone: lineageStatusTone(rawStatusOf(node)),
         meta: metaOf(node),
       },
     })),
