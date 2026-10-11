@@ -46,15 +46,15 @@ docker compose version
 ## ソースと設定ファイルを用意する
 
 ```bash
-git clone https://github.com/aida0710/mado.git
-cd mado
+git clone https://github.com/aida0710/mado-s3-datacatalog.git
+cd mado-s3-datacatalog
 cp .env.example .env
 openssl rand -hex 32
 ```
 
 最後のコマンドで生成した値を、`.env` の `ENCRYPTION_KEY` に設定します。このキーは保存したS3の認証情報の暗号化に使うため、運用開始後も保管してください。
 
-`.env.example` の `AUTH_MODE=local` は、Local Userで試す設定です。DataLineageを使う場合は、互換Dataset RegistryとそのBearer token、必要に応じてMarquezを別途用意します。Registryの仕様は[API契約](https://github.com/aida0710/mado/blob/main/docs/registry-api-contract.md)を参照してください。
+`.env.example` の `AUTH_MODE=local` は、Local Userで試す設定です。DataLineageを使う場合は、互換Dataset RegistryとそのBearer token、必要に応じてMarquezを別途用意します。Registryの仕様は[API契約](https://github.com/aida0710/mado-s3-datacatalog/blob/main/docs/registry-api-contract.md)を参照してください。
 
 ## 開発環境を起動する
 
@@ -106,4 +106,4 @@ docker compose -f compose.prod.yaml up -d --build
 
 UIは `127.0.0.1:8080`、OpenLineage送信専用の入口は `127.0.0.1:8081` です。UIにはintranet内のTLS proxyを接続します。Pipelineの送信先を公開する場合は、別のTLS hostnameから8081へ接続します。
 
-既存DBの更新にはmigrationの適用順があります。[DBの更新手順](https://github.com/aida0710/mado/blob/main/db/README.md)に従ってください。リリースbundleを使う場合は[bundleの導入手順](https://github.com/aida0710/mado/blob/main/deploy/release/README.md)を参照します。
+既存DBの更新にはmigrationの適用順があります。[DBの更新手順](https://github.com/aida0710/mado-s3-datacatalog/blob/main/db/README.md)に従ってください。リリースbundleを使う場合は[bundleの導入手順](https://github.com/aida0710/mado-s3-datacatalog/blob/main/deploy/release/README.md)を参照します。

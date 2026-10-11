@@ -45,7 +45,7 @@ gh workflow run release.yml --ref v1.0.0 -f tag=v1.0.0
 bundleの真正性は次で確認できる。
 
 ```bash
-gh attestation verify mado-v1.0.0.tar.gz --repo aida0710/mado
+gh attestation verify mado-v1.0.0.tar.gz --repo aida0710/mado-s3-datacatalog
 sha256sum -c mado-v1.0.0.tar.gz.sha256
 ```
 

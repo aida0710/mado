@@ -58,4 +58,4 @@ npm run dev --prefix pages
 npm run build --prefix pages
 ```
 
-公開前の確認には `npm run preview --prefix pages` を使います。画像の撮影・更新方法は[ドキュメントの保守手順](https://github.com/aida0710/mado/blob/main/pages/README.md)に記載しています。
+公開前の確認には `npm run preview --prefix pages` を使います。画像の撮影・更新方法は[ドキュメントの保守手順](https://github.com/aida0710/mado-s3-datacatalog/blob/main/pages/README.md)に記載しています。

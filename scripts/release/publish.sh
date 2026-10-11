@@ -26,7 +26,7 @@ remote_main=$(git -C "$root" rev-parse refs/remotes/origin/main)
 }
 
 runs=$(gh api --paginate \
-  "repos/aida0710/mado/actions/workflows/ci.yml/runs?head_sha=$head_sha&per_page=100" \
+  "repos/aida0710/mado-s3-datacatalog/actions/workflows/ci.yml/runs?head_sha=$head_sha&per_page=100" \
   | jq -s '[.[].workflow_runs[]]')
 printf '%s' "$runs" | jq -e --arg sha "$head_sha" '
   any(.[]; .head_sha == $sha and .head_branch == "main" and

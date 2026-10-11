@@ -43,8 +43,8 @@ import { entries, features } from './homeContent'
 
     <footer class="home-footer">
       <span>mado S3 Data Catalog</span>
-      <a href="https://github.com/aida0710/mado">GitHub</a>
-      <a href="https://github.com/aida0710/mado/blob/main/LICENSE">Apache License 2.0</a>
+      <a href="https://github.com/aida0710/mado-s3-datacatalog">GitHub</a>
+      <a href="https://github.com/aida0710/mado-s3-datacatalog/blob/main/LICENSE">Apache License 2.0</a>
     </footer>
   </div>
 </template>

@@ -11,8 +11,8 @@ describe('About', () => {
     expect(screen.queryByRole('heading', { name: 'About' })).not.toBeInTheDocument()
     expect(screen.queryByText(/オブジェクトストレージを横断的に/)).not.toBeInTheDocument()
     expect(screen.getByText(/^v\d+\.\d+\.\d+$/)).toBeInTheDocument()
-    const repo = screen.getByRole('link', { name: /github\.com\/aida0710\/mado/ })
-    expect(repo).toHaveAttribute('href', 'https://github.com/aida0710/mado')
+    const repo = screen.getByRole('link', { name: /github\.com\/aida0710\/mado-s3-datacatalog/ })
+    expect(repo).toHaveAttribute('href', 'https://github.com/aida0710/mado-s3-datacatalog')
   })
 
   it('コミット情報が無ければリンクにせず文字だけ出す', () => {

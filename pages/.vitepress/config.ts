@@ -1,7 +1,7 @@
 import { defineConfig } from 'vitepress'
 
-const repository = 'https://github.com/aida0710/mado'
-const base = '/mado/'
+const repository = 'https://github.com/aida0710/mado-s3-datacatalog'
+const base = '/mado-s3-datacatalog/'
 
 export default defineConfig({
   title: 'mado S3 Data Catalog',
@@ -11,13 +11,13 @@ export default defineConfig({
   base,
   cleanUrls: true,
   lastUpdated: true,
-  sitemap: { hostname: 'https://aida0710.github.io/mado/' },
+  sitemap: { hostname: 'https://aida0710.github.io/mado-s3-datacatalog/' },
   head: [
     ['link', { rel: 'icon', href: `${base}mado-icon.svg`, type: 'image/svg+xml' }],
     ['meta', { name: 'theme-color', content: '#151515' }],
     ['meta', { property: 'og:type', content: 'website' }],
     ['meta', { property: 'og:locale', content: 'ja_JP' }],
-    ['meta', { property: 'og:image', content: 'https://aida0710.github.io/mado/screenshots/storage-directory.png' }],
+    ['meta', { property: 'og:image', content: 'https://aida0710.github.io/mado-s3-datacatalog/screenshots/storage-directory.png' }],
     ['meta', { name: 'twitter:card', content: 'summary_large_image' }],
   ],
   themeConfig: {

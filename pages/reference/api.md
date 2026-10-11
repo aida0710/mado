@@ -31,7 +31,7 @@ curl --fail-with-body \
   --data-binary @event.json
 ```
 
-`MADO_LINEAGE_URL` は公開API用hostnameのorigin、`MADO_LINEAGE_KEY` は `lineage:write` のkeyです。許可されたnamespaceのイベントを送信します。イベント形式と登録の扱いは[Lineageの仕様](https://github.com/aida0710/mado/blob/main/docs/lineage.md)に記載しています。
+`MADO_LINEAGE_URL` は公開API用hostnameのorigin、`MADO_LINEAGE_KEY` は `lineage:write` のkeyです。許可されたnamespaceのイベントを送信します。イベント形式と登録の扱いは[Lineageの仕様](https://github.com/aida0710/mado-s3-datacatalog/blob/main/docs/lineage.md)に記載しています。
 
 ## Prometheusで容量メトリクスを取得する
 
@@ -57,7 +57,7 @@ scrape_configs:
       - targets: ['mado.example.com']
 ```
 
-`mado.example.com` を実際のUI用hostnameへ置き換えます。返すメトリクスの一覧は[容量メトリクスの仕様](https://github.com/aida0710/mado/blob/main/deploy/mdx/README.md#prometheus-metrics)を参照してください。
+`mado.example.com` を実際のUI用hostnameへ置き換えます。返すメトリクスの一覧は[容量メトリクスの仕様](https://github.com/aida0710/mado-s3-datacatalog/blob/main/deploy/mdx/README.md#prometheus-metrics)を参照してください。
 
 ## 使わなくなったkeyは失効する
 

@@ -1,6 +1,6 @@
 # madoのGitHub Pages
 
-公開先: https://aida0710.github.io/mado/
+公開先: https://aida0710.github.io/mado-s3-datacatalog/
 
 VitePressで日本語の利用ガイド・管理設定・リファレンスを生成する。色・書体はアプリと同じ`@mado/design-system`の変数を使い、上部バーとサイドバーはアプリと同じ暗い枠にする（`.vitepress/theme/style.css`）。本文はMarkdown、トップページは`.vitepress/theme/Home.vue`、紹介する機能と入口は`.vitepress/theme/homeContent.ts`に置く。タブのアイコン`public/mado-icon.svg`はアプリの`front/public/mado-icon.svg`と同じファイルで、変えるときは両方を替える。
 
@@ -15,7 +15,7 @@ npm run build --prefix pages
 npm run preview --prefix pages
 ```
 
-プレビューのURLは `http://127.0.0.1:4173/mado/`。再ビルド後はpreviewを再起動して、新しいassetsを読み込ませる。`pages/.vitepress/dist/`が静的サイトの出力。`main`の`pages/**`または公開workflowの変更で、GitHub Actionsが公開する。Pull Requestではビルドだけ実行する。
+プレビューのURLは `http://127.0.0.1:4173/mado-s3-datacatalog/`。再ビルド後はpreviewを再起動して、新しいassetsを読み込ませる。`pages/.vitepress/dist/`が静的サイトの出力。`main`の`pages/**`または公開workflowの変更で、GitHub Actionsが公開する。Pull Requestではビルドだけ実行する。
 
 ## スクリーンショットを撮り直す
 

@@ -16,7 +16,7 @@ madoはLocal UserとOIDC SSOに対応しています。ユーザーの役割を�
 
 Local Userの自己登録はありません。初期Adminは[導入手順](./install.md#初期adminを作成する)のコマンドで作成します。
 
-SSOではissuer、client ID、client secret、redirect URIを設定します。Authentikを使う場合の登録値、groupとroleの対応、logout設定は[OIDC連携の手順](https://github.com/aida0710/mado/blob/main/docs/authentik.md)を参照してください。
+SSOではissuer、client ID、client secret、redirect URIを設定します。Authentikを使う場合の登録値、groupとroleの対応、logout設定は[OIDC連携の手順](https://github.com/aida0710/mado-s3-datacatalog/blob/main/docs/authentik.md)を参照してください。
 
 ## ロールを割り当てる
 
